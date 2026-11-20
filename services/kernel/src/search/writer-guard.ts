@@ -81,7 +81,6 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
 import type { SearchNativePublicationCompletionReader, SearchPublicFilterCost } from './semantic-source-port.ts';
-import type { GenerationPublicationPin } from './generation-publication-pin.ts';
 
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
@@ -948,11 +947,6 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
 
 // The generation owner installs the current native completion reader on its existing writer.
 const publicationReaders = new WeakMap<SearchWriterPublicationGuard, SearchNativePublicationCompletionReader>();
-// Associate this held result with the native Source proof read by this invocation.
-const heldPublicationSources = new WeakMap<object, GenerationPublicationPin>();
-export function nativeSourceForHeldPublication(result: object): GenerationPublicationPin | undefined {
-  return heldPublicationSources.get(result);
-}
 export function bindSearchWriterPublicationReader(
   guard: SearchWriterPublicationGuard,
   reader: SearchNativePublicationCompletionReader,
@@ -1260,7 +1254,7 @@ export function createSearchWriterGuard(options: {
         if ('reason' in completion && completion.reason === 'deadline') throw new PublicationPending('deadline');
         return pendingPublication();
       }
-      return completion.publication;
+      return;
     }
     const proof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
     publicationDeadline(context);
@@ -1441,22 +1435,6 @@ export function createSearchWriterGuard(options: {
     });
     return result.value;
   }
-  async function confirmDrainedPublication(
-    input: SearchWriterPublicationFence,
-    context: PublicFilterConsumerContext,
-    cost: PublicationCost,
-  ) {
-    const publication = await publicationSource(input, context, cost);
-    await publicationPhysical(input, context);
-    const row = await withReadTransaction(
-      options.pool,
-      (tx) => publicationRetained(tx, input, context),
-      context.deadline,
-    );
-    publicationDeadline(context);
-    if (row.publication_home !== 4096) return pendingPublication();
-    return publication;
-  }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
@@ -1536,10 +1514,8 @@ export function createSearchWriterGuard(options: {
         );
         publicationDeadline(context);
         if (before.publication_home === 4096) {
-          const source = await confirmDrainedPublication(input, context, cost);
-          const result = { status: 'drained' as const, fence: input, cost };
-          if (source) heldPublicationSources.set(result, source);
-          return result;
+          await publicationSource(input, context, cost);
+          return { status: 'drained' as const, fence: input, cost };
         }
         const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
         publicationDeadline(context);
@@ -1578,10 +1554,16 @@ export function createSearchWriterGuard(options: {
     adoptPublication(value, context) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
-        const publication = await confirmDrainedPublication(input, context, cost);
-        const result = { status: 'held' as const, fence: input, cost };
-        if (publication) heldPublicationSources.set(result, publication);
-        return result;
+        await publicationSource(input, context, cost);
+        await publicationPhysical(input, context);
+        const row = await withReadTransaction(
+          options.pool,
+          (tx) => publicationRetained(tx, input, context),
+          context.deadline,
+        );
+        publicationDeadline(context);
+        if (row.publication_home !== 4096) return pendingPublication();
+        return { status: 'held' as const, fence: input, cost };
       });
     },
     releasePublication(value, context) {

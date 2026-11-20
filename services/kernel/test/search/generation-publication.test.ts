@@ -297,7 +297,7 @@ test('native complete pages retain their cursor and empty filtered pages advance
   }
 });
 
-test('scheduled preparation resumes its stored publication and advances four metered native turns', async () => {
+test('ordinary maintenance resumes its stored publication and advances four metered native turns', async () => {
   await bootstrapRelease(pool, bundledRelease);
   const f = await fixture(
     {
@@ -333,20 +333,12 @@ test('scheduled preparation resumes its stored publication and advances four met
     },
     publication: f.operations,
   } as unknown as DefaultPublicFilterRuntime;
-  const mappingRequests: string[] = [];
-  const schedulerSearch: typeof search = {
-    ...search,
-    request(method, path, ...args) {
-      if (path.endsWith('/_mapping')) mappingRequests.push(method);
-      return search.request(method, path, ...args);
-    },
-  };
   const start = (selected = runtime) =>
     createPublicPreparation({
       pool,
       work,
       prefix: f.prefix,
-      search: schedulerSearch,
+      search,
       source: {} as PublicPreparationOptions['source'],
       listing: {} as PublicPreparationOptions['listing'],
       runtime: selected,
@@ -397,22 +389,16 @@ test('scheduled preparation resumes its stored publication and advances four met
     const next = await read();
     expect(next.locator).toMatchObject({ publication: retained, phase: 'native' });
     expect(BigInt(next.revision)).toBe(BigInt(before.revision) + 8n);
-    const continuation = await pool.query('SELECT status,queue_name FROM dbos.workflow_status WHERE workflow_uuid=$1', [
-      `search.publicPreparation:${id}:${next.revision}:population`,
+    const continuation = await pool.query('SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1', [
+      `search.publicPreparation:${id}:${next.revision}`,
     ]);
-    expect(continuation.rows).toEqual([{ status: 'ENQUEUED', queue_name: 'workflows' }]);
+    expect(continuation.rows).toEqual([{ status: 'ENQUEUED' }]);
     expect(await readHome()).toBeGreaterThan(previousHome);
     expect((await subjectGenerations(search, f.prefix)).active).toBe(1);
 
     await maintenance.stop();
     const claimed = await store.claim(id, next.revision, Date.now() + 30_000);
     if (!claimed) throw new Error('The original publication successor was not ready');
-    await store.retain(state, Date.now() + 60_000);
-    await store.due();
-    const leased = await pool.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=$1', [
-      `search.publicPreparation:${id}:${claimed.revision}:population`,
-    ]);
-    expect(leased.rows).toEqual([]);
     const activation = await store.advance(claimed, { ...next.locator, phase: 'activate' });
     if (!activation) throw new Error('The original publication activation could not be retained');
     const repaired: string[] = [];
@@ -428,14 +414,13 @@ test('scheduled preparation resumes its stored publication and advances four met
     });
     await maintenance.run(id, activation);
     expect(repaired).toEqual(Array.from({ length: 4 }, () => retained));
-    expect(mappingRequests).toEqual([]);
     const pending = await read();
     expect(BigInt(pending.revision)).toBe(BigInt(activation) + 8n);
     expect(pending.locator).toMatchObject({ phase: 'activate', publication: retained });
-    const ready = await pool.query('SELECT status,queue_name FROM dbos.workflow_status WHERE workflow_uuid=$1', [
-      `search.publicPreparation:${id}:${pending.revision}:population`,
+    const ready = await pool.query('SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1', [
+      `search.publicPreparation:${id}:${pending.revision}`,
     ]);
-    expect(ready.rows).toEqual([{ status: 'ENQUEUED', queue_name: 'workflows' }]);
+    expect(ready.rows).toEqual([{ status: 'ENQUEUED' }]);
   } finally {
     await maintenance.stop();
     await pool.query('DELETE FROM search.public_preparation WHERE partition_no=0 AND id=$1', [id]);

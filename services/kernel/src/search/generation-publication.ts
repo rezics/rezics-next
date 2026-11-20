@@ -3,11 +3,7 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
-import {
-  bindSearchWriterPublicationReader,
-  nativeSourceForHeldPublication,
-  readSearchWriterGenerationActions,
-} from './writer-guard.ts';
+import { bindSearchWriterPublicationReader, readSearchWriterGenerationActions } from './writer-guard.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -61,7 +57,6 @@ import { discoveryAlias } from './indices.ts';
 import {
   discoveryIndexName,
   discoveryIndexUuid,
-  markSubjectCalendarReady,
   subjectAlias,
   subjectIndexName,
   subjectGenerations,
@@ -375,7 +370,6 @@ export function createSearchGenerationPublication(
     if ((await discoveryIndexUuid(search, consumer.physicalTarget)) !== consumer.incarnation)
       throw new Pending('incarnation_changed');
     let incarnation = consumer.incarnation;
-    let activeSubjectGeneration: number | null = null;
     if (target.family === 'discovery') {
       const generations = await discoveryGenerations(pool, target.prefix);
       const row = generations.find((row) => row.generation === target.generation);
@@ -399,7 +393,6 @@ export function createSearchGenerationPublication(
       incarnation = row.incarnation;
     } else {
       const generations = await subjectGenerations(search, target.prefix);
-      activeSubjectGeneration = generations.active;
       if (
         !generations.generations.includes(target.generation) ||
         (await readSubjectSortFormat(search, target.prefix, target.generation)) !== SUBJECT_SORT_FORMAT
@@ -407,7 +400,7 @@ export function createSearchGenerationPublication(
         throw new Pending('registration_missing');
     }
     check(context);
-    return { ...target, incarnation, activeSubjectGeneration };
+    return { ...target, incarnation };
   }
   function publicationCapture(
     capture: PublicCanonicalCaptureInput,
@@ -430,17 +423,8 @@ export function createSearchGenerationPublication(
     if (definition.meaning.digest !== meaning.digest)
       throw new Pending('registration_missing');
   }
-  async function adopt(
-    job: Job,
-    context: PublicFilterConsumerContext,
-    meter: Meter,
-    options: {
-      confirmSource?: boolean;
-      heldSource?: GenerationPublicationPin | undefined;
-      physical?: Awaited<ReturnType<typeof native>> | undefined;
-    } = {},
-  ) {
-    const current = options.physical ?? (await native(job.consumer, context));
+  async function adopt(job: Job, context: PublicFilterConsumerContext, meter: Meter, needObservation = false) {
+    const current = await native(job.consumer, context);
     if (
       current.incarnation !== job.native_incarnation ||
       !same(
@@ -458,13 +442,10 @@ export function createSearchGenerationPublication(
     );
     add(meter, custody.cost);
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
-    const resolved =
-      binding.readDefinition && job.observation
-        ? await binding.readDefinition({ source, id: job.consumer.readDefinition }, context)
-        : await binding.resolve(
-            { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
-            context,
-          );
+    const resolved = await binding.resolve(
+      { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
+      context,
+    );
     add(meter, resolved.cost);
     if (resolved.status !== 'resolved')
       throw new Pending(resolved.reason === 'deadline' ? 'deadline' : 'source_pending');
@@ -476,19 +457,15 @@ export function createSearchGenerationPublication(
       !same(resolved.definition.dependencyKeys, custody.definition.dependencyKeys)
     )
       throw new Pending('source_pending');
-    if (!options.confirmSource) return;
-    let pin = options.heldSource;
-    if (!pin) {
-      const completion = await readPublicationCompletion({ job: job.job }, context);
-      add(meter, completion.cost);
-      if (completion.status !== 'complete') throw new Pending('source_pending');
-      pin = publicationPinFromNative(completion.publication);
-    }
-    if (pin.job !== job.job || !same(pin.queried.consumer, job.consumer)) throw new Pending('source_pending');
+    if (!needObservation) return;
+    const completion = await readPublicationCompletion({ job: job.job }, context);
+    add(meter, completion.cost);
+    if (completion.status !== 'complete') throw new Pending('source_pending');
+    const pin = publicationPinFromNative(completion.publication);
     const retained = jobPin(job);
     if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
     if (!retained) persistPin(job, pin);
-    return pin.queried;
+    return completion.publication.queried;
   }
   async function completeSource(
     job: Job,
@@ -507,7 +484,7 @@ export function createSearchGenerationPublication(
     add(meter, custody.cost);
     if (!('definition' in custody)) throw new Pending('source_pending');
     const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
-    if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE))
+    if (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE)
       return { complete: false, advanced: false, sourceAdvanced: false };
     const completion = await advanceNativeGenerationSource(
       {
@@ -526,8 +503,7 @@ export function createSearchGenerationPublication(
         consumer: job.consumer,
         capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
         ...(job.observation ? { observation: job.observation } : {}),
-        inputLimit: remainingInputs,
-        enrollmentOnly,
+        ...(enrollmentOnly ? { enrollmentInputLimit: remainingInputs } : {}),
       },
       context,
     );
@@ -536,11 +512,9 @@ export function createSearchGenerationPublication(
       const pin = publicationPinFromNative(completion.publication);
       const retained = jobPin(job);
       if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
-      if (!retained || !job.observation) {
-        if (!retained) persistPin(job, pin);
-        if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
-        await save(client, job, meter);
-      }
+      if (!retained) persistPin(job, pin);
+      if (!job.observation) job.observation = completion.publication.queried.snapshot.observation;
+      await save(client, job, meter);
     }
     return {
       complete: completion.status === 'complete',
@@ -589,10 +563,6 @@ export function createSearchGenerationPublication(
     add(meter, result.cost);
     if (result.status !== 'held') throw new Pending(result.reason);
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
-    return nativeSourceForHeldPublication(result);
-  }
-  async function adoptHeld(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
-    return adopt(job, context, meter, { confirmSource: true, heldSource: await held(job, context, meter) });
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
     const result = await client.query(
@@ -686,14 +656,8 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
-              const physical =
-                phase === 'activate' && target.family === 'subjects' && job.phase !== 'active'
-                  ? await native(job.consumer, context)
-                  : undefined;
-              // The native inventory already proves absence during cold preparation. An existing
-              // alias still needs exact options and target readback, as does every switch or rollback.
               const current =
-                phase === 'activate' && (job.phase === 'active' || (physical?.activeSubjectGeneration ?? null) !== null)
+                phase === 'activate' && (target.family === 'subjects' || job.phase === 'active')
                   ? await aliasTarget(job, context, meter)
                   : null;
               if (job.phase !== 'active' && newerSubjectAlias(job, current)) throw new Pending('source_pending');
@@ -703,7 +667,7 @@ export function createSearchGenerationPublication(
                 await native(job.consumer, context);
               } else {
                 try {
-                  await adopt(job, context, meter, { physical });
+                  await adopt(job, context, meter);
                 } catch (error) {
                   if (
                     error instanceof Pending &&
@@ -821,23 +785,6 @@ export function createSearchGenerationPublication(
     meter.frontierWrites += inserted.rowCount ?? 0;
     if (inserted.rowCount !== expected) throw new Pending('source_pending');
   }
-  async function rewindSubjectHome(job: Job, home: number, client: PoolClient, meter: Meter) {
-    const removed = await client.query(
-      'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
-      [home, job.job],
-    );
-    meter.frontierWrites += removed.rowCount ?? 0;
-    job.phase = 'subject';
-    job.home = home;
-    job.after_route = null;
-    job.after_id = null;
-    await save(client, job, meter);
-  }
-
-  function advancedUnderSubjectFence(job: Job, before: Home, epoch: number | null, position: bigint) {
-    return job.family === 'subjects' && job.fenced_pass && before.epoch === epoch && BigInt(before.position) < position;
-  }
-
   async function remember(
     job: Job,
     before: Home,
@@ -853,10 +800,8 @@ export function createSearchGenerationPublication(
       [before.partition, job.job, job.pass],
     );
     const changed = old && !same(old, before);
-    // With no cursor, the Subject scan is already about to replay this home from its first key.
-    const sameOwnerAdvance = old && advancedUnderSubjectFence(job, old, before.epoch, BigInt(before.position));
-    const startsSubjectHome =
-      job.family === 'subjects' && job.phase === 'subject' && !job.after_id && (!job.fenced_pass || sameOwnerAdvance);
+    // With no cursor, the ordinary Subject scan is already about to replay this home from its first key.
+    const startsSubjectHome = job.family === 'subjects' && job.phase === 'subject' && !job.after_id && !job.fenced_pass;
     const replayed =
       changed &&
       verifyChanged !== undefined &&
@@ -864,10 +809,6 @@ export function createSearchGenerationPublication(
       BigInt(old.position) < BigInt(before.position) &&
       (await verifyChanged());
     if (changed && !startsSubjectHome && !replayed) {
-      if (sameOwnerAdvance) {
-        await rewindSubjectHome(job, before.partition, client, meter);
-        return 'rewound';
-      }
       console.warn('Search publication trace', { gate: 'remember', home: before.partition, old, before });
       const deleted = await client.query(
         'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
@@ -898,7 +839,7 @@ export function createSearchGenerationPublication(
       );
       meter.frontierWrites += stored.rowCount ?? 0;
     }
-    return replayed === true ? 'verified' : 'retained';
+    return replayed === true;
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -1059,7 +1000,7 @@ export function createSearchGenerationPublication(
           return;
         }
         const before = await head(job.home, context);
-        if ((await remember(job, before, client, meter)) === 'rewound') return;
+        await remember(job, before, client, meter);
         const after = cursor(job);
         let ids: readonly string[],
           next: SearchPublicFilterSourceKeyCursor | null,
@@ -1088,10 +1029,6 @@ export function createSearchGenerationPublication(
             console.warn('Search publication trace', {
               gate: 'source-head', before, partition: page.partition, epoch: page.epoch, position: page.position.toString(),
             });
-            // A same-owner advance only invalidates this page. Read it again
-            // from its first key under the held fence before witnessing it.
-            if (page.partition === before.partition && advancedUnderSubjectFence(job, before, page.epoch, page.position))
-              return rewindSubjectHome(job, before.partition, client, meter);
             throw new Pending('source_pending');
           }
           ids = page.ids;
@@ -1137,8 +1074,6 @@ export function createSearchGenerationPublication(
         const observed = await head(job.home, context);
         if (!same(before, observed)) {
           console.warn('Search publication trace', { gate: 'post-reconcile-head', before, observed });
-          if (advancedUnderSubjectFence(job, before, observed.epoch, BigInt(observed.position)))
-            return rewindSubjectHome(job, before.partition, client, meter);
           throw new Pending('source_pending');
         }
         job.after_route = next?.route ?? null;
@@ -1272,12 +1207,10 @@ export function createSearchGenerationPublication(
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
         const verifyChanged =
-          job.family === 'subjects'
+          job.family === 'subjects' && !job.fenced_pass
             ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
             : undefined;
-        const remembered = await remember(job, before, client, meter, verifyChanged);
-        if (remembered === 'rewound') return;
-        if (remembered === 'verified') continue;
+        if (await remember(job, before, client, meter, verifyChanged)) continue;
         const discoveryKeys =
           job.family === 'discovery'
             ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
@@ -1357,13 +1290,6 @@ export function createSearchGenerationPublication(
               row.claim_revision === '0'
             : same(row, await head(row.partition, context));
         if (matches) continue;
-        if (
-          current_position !== null &&
-          row.account_revision === '0' &&
-          row.claim_revision === '0' &&
-          advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position))
-        )
-          return rewindSubjectHome(job, row.partition, client, meter);
         await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
           row.partition,
           job.job,
@@ -1647,11 +1573,7 @@ export function createSearchGenerationPublication(
               if ('reason' in result) throw new Pending(result.reason);
               if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
               if (result.status === 'draining') return preparing('activate', result.advanced);
-              const source = nativeSourceForHeldPublication(result);
-              if (source) {
-                const retained = jobPin(job);
-                if (!retained || !sameGenerationPublicationPin(retained, source)) throw new Pending('source_pending');
-              } else await held(job, context, meter);
+              await held(job, context, meter);
               // Revisit the real finite key population under the continuously held writer/copy barrier.
               job.fenced_pass = true;
               job.pass = (BigInt(job.pass) + 1n).toString();
@@ -1662,38 +1584,30 @@ export function createSearchGenerationPublication(
               await save(client, job, meter);
               return preparing('step', true);
             }
+            await held(job, context, meter);
+            const queried = await adopt(job, context, meter, true);
+            if (!queried) throw new Pending('source_pending');
+            if (!job.observation) {
+              job.observation = queried.snapshot.observation;
+              await save(client, job, meter);
+            }
+            const previous = job.phase === 'intent' ? job.previous_target : await aliasTarget(job, context, meter);
+            if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
             if (job.phase !== 'intent') {
-              const queried = await adoptHeld(job, context, meter);
-              if (!queried) throw new Pending('source_pending');
-              if (!job.observation) job.observation = queried.snapshot.observation;
-              const previous = await aliasTarget(job, context, meter);
-              if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
               job.previous_target = previous;
               job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
               job.activated_at = config.clock().toISOString();
               job.phase = 'intent';
               await save(client, job, meter);
-              return preparing('activate', true);
             }
-            if (newerSubjectAlias(job, job.previous_target)) throw new Pending('source_pending');
+            if (job.family === 'subjects')
+              await publishSubjectActivationMetadata(search, job.physical_target, job.activated_at);
             const before = await aliasTarget(job, context, meter);
             if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
-            if (before !== job.physical_target || job.family === 'subjects') await adoptHeld(job, context, meter);
-            if (job.family === 'subjects') {
-              const activationSearch: OpenSearch = {
-                ...search,
-                request: (method, path, body) => engine(context, meter, method, path, body),
-              };
-              await markSubjectCalendarReady(
-                activationSearch,
-                job.prefix,
-                Number(job.generation),
-                job.native_incarnation,
-              );
-              await publishSubjectActivationMetadata(activationSearch, job.physical_target, job.activated_at);
-            }
             if (before !== job.physical_target) {
+              await held(job, context, meter);
+              await adopt(job, context, meter, true);
               await observedWrite(
                 () =>
                   search.request('POST', '/_aliases', {
@@ -1705,10 +1619,9 @@ export function createSearchGenerationPublication(
                 async () => (await aliasTarget(job, context, meter)) === job.physical_target,
                 'Generation publication alias could not be established',
               );
-              // The retained intent and fence own confirmation on the next metered turn.
-              if (job.family === 'subjects') return preparing('activate', true);
             }
-            if (job.family === 'discovery') await adoptHeld(job, context, meter);
+            await held(job, context, meter);
+            await adopt(job, context, meter, true);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.
             if (job.family === 'discovery') {

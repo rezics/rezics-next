@@ -1,4 +1,3 @@
-import { hasVerifiedReleaseDigest } from '../semantic/definition-release-read.ts';
 import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -112,7 +111,7 @@ export function composeSemanticAdapters(): void {
           createSource: createNativePublicFilterSource,
           readDefinition: readNativePublicFilterSourceDefinition,
         },
-        search: createSearchSourceBindingAdapter(hasVerifiedReleaseDigest),
+        search: createSearchSourceBindingAdapter(),
         access: sourceBindingAccessPort(),
       }),
     );

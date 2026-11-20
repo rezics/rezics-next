@@ -38,8 +38,6 @@ export type PublicFilterConsumerCaptureInput = Readonly<
     text: TextNode | undefined;
     /** Requested public slots, independent of derived native batch size. Legacy callers default to size. */
     pageSize?: number;
-    /** Full native catalogue publication includes the fixed text/order coverage scope. */
-    catalogueCoverage?: true;
   }
 >;
 

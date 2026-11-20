@@ -354,20 +354,12 @@ export async function markSubjectCalendarReady(
   search: OpenSearch,
   prefix: string,
   generation: number,
-  expectedIncarnation?: string,
 ): Promise<string> {
   const index = subjectIndexName(prefix, generation);
   const before = await readSubjectMapping(search, prefix, generation);
   if (before.calendarFormat !== 1)
     throw new SearchUnavailableError('Subject generation does not have the calendar projection');
   const incarnation = await readSubjectIndexUuid(search, prefix, generation);
-  if (expectedIncarnation !== undefined && incarnation !== expectedIncarnation)
-    throw new SearchUnavailableError('Subject calendar readiness requires the retained physical generation');
-  const readyForIncarnation = (metadata: Record<string, unknown>) =>
-    metadata.calendar_range_format === 1 &&
-    metadata.calendar_range_ready === 1 &&
-    metadata.calendar_range_incarnation === incarnation;
-  if (readyForIncarnation(before.metadata)) return incarnation;
   const metadata = {
     ...before.metadata,
     calendar_range_format: 1,
@@ -380,7 +372,8 @@ export async function markSubjectCalendarReady(
       const observed = await readSubjectMapping(search, prefix, generation);
       return (
         observed.calendarFormat === 1 &&
-        readyForIncarnation(observed.metadata) &&
+        observed.metadata.calendar_range_ready === 1 &&
+        observed.metadata.calendar_range_incarnation === incarnation &&
         (await readSubjectIndexUuid(search, prefix, generation)) === incarnation
       );
     },

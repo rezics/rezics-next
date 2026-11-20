@@ -13,7 +13,13 @@ import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { SearchUnavailableError } from './opensearch.ts';
-import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
+import {
+  createSubjectIndex,
+  markSubjectCalendarReady,
+  readSubjectCalendarMappingFormat,
+  subjectIndexName,
+  subjectGenerations,
+} from './indices.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
   createPublicPreparationStore,
@@ -140,6 +146,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     };
     const search = searchWithin(context.deadline);
     const index = subjectIndexName(options.prefix, state.generation);
+    const calendarFormat = await readSubjectCalendarMappingFormat(search, options.prefix, state.generation);
     if ((await indexUuid(search, index)) !== state.uuid) return advance(state, 5000);
     // Resume the original native job directly. Re-registering from today's Source definition
     // can replace its consumer and strand a retained fence or ambiguous alias intent.
@@ -213,6 +220,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         ready && reconciliation.sourceAdvanced === true,
       );
     }
+    if (calendarFormat === 1) await markSubjectCalendarReady(search, options.prefix, state.generation);
     const activated = await options.runtime.publication.activate(job, context);
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
@@ -222,7 +230,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       return advance(
         next,
         activated.advanced ? 0 : 1000,
-        activated.advanced === true,
+        activated.advanced === true && next.phase === 'activate',
         activated.sourceAdvanced === true,
       );
     }

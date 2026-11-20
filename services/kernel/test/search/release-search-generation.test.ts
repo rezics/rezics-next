@@ -14,12 +14,10 @@ test('calendar readiness belongs to the completed physical incarnation', async (
     mappings: Record<string, unknown> & { _meta: Record<string, unknown> };
   };
   let uuid = 'physical-a';
-  let writes = 0;
   const search = {
     async request(method: string, path: string, body?: unknown) {
       if (path.endsWith('/_mapping')) {
         if (method === 'PUT') {
-          writes++;
           const metadata = (body as { _meta: Record<string, unknown> })._meta;
           definition.mappings._meta = metadata;
           return { status: 200, body: { acknowledged: true } };
@@ -34,12 +32,7 @@ test('calendar readiness belongs to the completed physical incarnation', async (
   expect(await readSubjectCalendarMappingFormat(search, 'test-', 2)).toBe(1);
   expect(await readSubjectCalendarFormat(search, 'test-', 2)).toBeNull();
   expect(await markSubjectCalendarReady(search, 'test-', 2)).toBe(uuid);
-  expect(await markSubjectCalendarReady(search, 'test-', 2)).toBe(uuid);
-  expect(writes).toBe(1);
   expect(await readSubjectCalendarFormat(search, 'test-', 2)).toBe(1);
   uuid = 'physical-b';
   expect(await readSubjectCalendarFormat(search, 'test-', 2)).toBeNull();
-  expect(await markSubjectCalendarReady(search, 'test-', 2)).toBe(uuid);
-  expect(writes).toBe(2);
-  expect(await readSubjectCalendarFormat(search, 'test-', 2)).toBe(1);
 });

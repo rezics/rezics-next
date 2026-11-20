@@ -57,7 +57,6 @@ import {
   PublicFilterSourceDefinitionError,
   advanceNativePublicFilterPreparation,
   joinNativePublicFilterRepair,
-  nativeSubjectPublicationRepairEvidence,
   readNativePublicFilterAccountRepair,
   readNativePublicFilterRepairStart,
 } from '../semantic/public-filter-source-binding.ts';
@@ -142,7 +141,6 @@ export function composeSearchNativePorts(): SearchNativePorts {
     readIdentityMappings,
     readIdentitySourceProjection,
     prepareRetainedIdentitySourceProjections,
-    nativeSubjectPublicationRepairEvidence,
     readNativePublicFilterAccountRepair,
     readNativePublicFilterPublicationCompletion,
     readNativePublicFilterRepairStart,

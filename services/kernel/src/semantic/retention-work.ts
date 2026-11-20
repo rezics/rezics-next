@@ -1,4 +1,4 @@
-import { noEffect, runCommand } from '../command/command.ts';
+import { runCommand } from '../command/command.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext } from '../work/registry.ts';
 import { semanticRetention } from './retention.ts';
@@ -35,8 +35,7 @@ export async function registerRecordRetentionWork({ pool, client, clock }: WorkC
           await tx.query('UPDATE semantic.record_retention_schedule SET after_home=$1 WHERE partition_no=0', [
             result.rows.at(-1)?.partition_no ?? -1,
           ]);
-          // The scheduler cursor records work selection only.
-          return noEffect(result.rows.map((row) => row.partition_no));
+          return { value: result.rows.map((row) => row.partition_no), events: [] };
         })
       ).value,
     { name: 'semantic.recordRetention.homes' },

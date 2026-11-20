@@ -22,7 +22,6 @@ type SemanticPublicFilterBindingApi = Pick<
   | 'PublicFilterSourceDefinitionError'
   | 'advanceNativePublicFilterPreparation'
   | 'joinNativePublicFilterRepair'
-  | 'nativeSubjectPublicationRepairEvidence'
   | 'readNativePublicFilterAccountRepair'
   | 'readNativePublicFilterRepairStart'
 >;

@@ -19,14 +19,11 @@ import { validateSearchAfter } from './query-payload.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compileText } from './text.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
-import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
+import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
 
-function captureKeys(
-  meaning: PublicFilterProjectionMeaning,
-  input: SourceBindingCaptureInput,
-  verifiedDigest: Parameters<typeof hasExactPublicFilterMeaning>[1],
-) {
-  if (!hasExactPublicFilterMeaning(meaning, verifiedDigest)) throw new TypeError('Unknown projection meaning');
+function captureKeys(meaning: PublicFilterProjectionMeaning, input: SourceBindingCaptureInput) {
+  if (!hasExactPublicFilterMeaning(meaning))
+    throw new TypeError('Unknown projection meaning');
   if ('purpose' in input) return suggestionKeys(input);
   if ('representation' in input) return discoveryKeys(meaning, input);
   return searchKeys(meaning, input as PublicFilterConsumerCaptureInput);
@@ -45,7 +42,6 @@ function searchKeys(
     !['id', 'name', 'relevance', 'collections', 'rating'].includes(input.sort)
   )
     throw new TypeError('Complete capture input is required');
-  validateCatalogueCoverage(input);
   if (input.sort !== 'rating') validateSearchAfter(input);
   if (input.filterDocument !== undefined) {
     for (const node of walkFilter(input.filterDocument))
@@ -129,12 +125,9 @@ function discoveryKeys(
 }
 
 /** Search-owned planning and custody producers consumed by the Semantic application. */
-export function createSearchSourceBindingAdapter(
-  verifiedDigest?: Parameters<typeof hasExactPublicFilterMeaning>[1],
-): PublicFilterSearchBindingPort {
+export function createSearchSourceBindingAdapter(): PublicFilterSearchBindingPort {
   return Object.freeze({
-    deriveDependencyKeys: (meaning: PublicFilterProjectionMeaning, input: SourceBindingCaptureInput) =>
-      captureKeys(meaning, input, verifiedDigest),
+    deriveDependencyKeys: captureKeys,
     catalogue: publicFilterCatalogue,
     encodeConsumer: encodePublicFilterNativeState,
     encodeState: encodePublicFilterNativeState,
