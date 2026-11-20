@@ -1193,15 +1193,15 @@ test('native Source replays its original creation window after the same home adv
       if (next.status !== 'progress' && next.status !== 'complete')
         throw new Error(`Original Source continuation ${turn}: ${next.reason}`);
       const stepRequest = { ...read, predecessor: frontier };
-      const row =
-        next.frontier &&
-        (
-          await f.db.pool.query<{ state: string }>(
-            `SELECT state FROM semantic.public_filter_repair_step
+      const row = next.frontier
+        ? (
+            await f.db.pool.query<{ state: string }>(
+              `SELECT state FROM semantic.public_filter_repair_step
          WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)`,
-            [request.bootstrap.slice(2), execution, next.frontier],
-          )
-        ).rows[0];
+              [request.bootstrap.slice(2), execution, next.frontier],
+            )
+          ).rows[0]
+        : undefined;
       const window =
         row &&
         decodePublicFilterNativeState<{
@@ -1236,7 +1236,7 @@ test('native Source replays its original creation window after the same home adv
             () =>
               readPublicFilterCreationPrefix(
                 f.db.pool,
-                { ...prefixInput, through: retainedThrough },
+                { ...prefixInput, ...(retainedThrough === undefined ? {} : { through: retainedThrough }) },
                 readContext(),
                 meter,
               ),
