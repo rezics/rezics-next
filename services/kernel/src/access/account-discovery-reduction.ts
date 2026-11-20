@@ -408,14 +408,15 @@ export async function enrollAccountDiscoveryHome(
 export const accountDiscoveryEnrollmentGroupSize = 16;
 export const accountDiscoveryEnrollmentProbeInputs = 8;
 
-/** Enroll complete new mixed homes under their native writer locks. Existing
+/** Enroll complete new homes under their native writer locks. Existing
  * pins or receipts leave the group untouched for the retained single-home path.
  */
 export async function enrollNewAccountDiscoveryHomes(
   pool: Pool,
-  input: EnrollmentInput & Readonly<{ partitions: readonly number[] }>,
+  input: EnrollmentInput & Readonly<{ partitions: readonly number[]; accounts?: boolean }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<readonly AccountDiscoveryEnrollment[] | null> {
+  const accounts = input.accounts ?? true;
   const partitions = [...input.partitions];
   if (
     partitions.length < 1 ||
@@ -521,7 +522,7 @@ export async function enrollNewAccountDiscoveryHomes(
             partition,
             epoch,
             { source: source!, creation, enqueue },
-            { account, claim },
+            { account: accounts ? account : null, claim: accounts ? claim : null },
             keyDigest,
           );
           return { partition, epoch, creation, account: account!, claim: claim!, source: source!, enqueue, receipt };
@@ -532,7 +533,8 @@ export async function enrollNewAccountDiscoveryHomes(
              (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
               source_position,native_revision,native_claim_revision,key_digest,creation_consumer,
               key_after,complete,creation_position,native_enqueue_revision,receipt)
-           SELECT h.partition,$2,$3,$4,$5::text::uuid,h.epoch,h.source,h.account,h.claim,$6,$7,$8,
+           SELECT h.partition,$2,$3,$4,$5::text::uuid,h.epoch,h.source,
+             CASE WHEN $9::boolean THEN h.account END,CASE WHEN $9::boolean THEN h.claim END,$6,$7,$8,
              true,h.creation,h.enqueue,h.receipt
            FROM jsonb_to_recordset($1::jsonb)
              h(partition integer,epoch integer,source bigint,account bigint,claim bigint,
@@ -547,6 +549,7 @@ export async function enrollNewAccountDiscoveryHomes(
             keyDigest,
             creationConsumer,
             keys.at(-1) ?? null,
+            accounts,
           ],
         );
         if (inserted.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);

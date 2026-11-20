@@ -2991,12 +2991,10 @@ export function createNativePublicFilterSourceBinding(
           consumer: ports.search.encodeConsumer(consumer),
           accounts: 'representation' in capture,
         };
-        const keys = publicFilterCoverageKeys(
-          resolved.definition.dependencyKeys,
-          'catalogueCoverage' in capture && capture.catalogueCoverage === true,
-        );
+        const catalogue = 'catalogueCoverage' in capture && capture.catalogueCoverage === true;
+        const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys, catalogue);
         const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
-        const grouped = baseline.accounts ? ports.access.newAccountEnrollment : undefined;
+        const grouped = baseline.accounts || catalogue ? ports.access.newAccountEnrollment : undefined;
         if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
           if (cut.row.coverage_generation === null) await beginPublicFilterCoverageBaseline(db, baseline, deadline);
@@ -3013,17 +3011,10 @@ export function createNativePublicFilterSourceBinding(
             readDefinition: baseline.definition,
             keys: compilerKeys,
             keyLimit: page.keyLimit,
+            accounts: baseline.accounts,
           };
           const enrollment = (partition: number) =>
-            ports.access.enrollAccountHome(
-              db,
-              {
-                partition,
-                ...nativeInput,
-                accounts: baseline.accounts,
-              },
-              { deadline },
-            );
+            ports.access.enrollAccountHome(db, { partition, ...nativeInput }, { deadline });
           let failure: PromiseRejectedResult | undefined;
           while (receipts.length < page.homes) {
             const start = cut.row.account_after + receipts.length;
@@ -3031,7 +3022,7 @@ export function createNativePublicFilterSourceBinding(
             const count = Math.min(remaining, grouped?.groupSize ?? 3);
             const partitions = Array.from({ length: count }, (_, i) => start + i);
             const fresh =
-              grouped && compilerKeys.length <= page.keyLimit
+              grouped && count > 1 && compilerKeys.length <= page.keyLimit
                 ? await grouped.enroll(db, { ...nativeInput, partitions }, { deadline })
                 : null;
             if (fresh) {
