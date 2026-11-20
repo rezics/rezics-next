@@ -696,6 +696,13 @@ BEGIN
       originals := array_append(originals,previous_target);
     END IF;
   ELSE
+    -- An inserted self mapping is already its own terminal. The row's route
+    -- constraint binds the original UUID to the same home as its control.
+    IF TG_OP='INSERT' AND NEW.original=NEW.terminal AND NEW.control_partition=NEW.route/16 THEN
+      INSERT INTO semantic.partition_subjects(partition_no,canonical_generation) VALUES(NEW.control_partition,1)
+        ON CONFLICT(partition_no) DO UPDATE SET canonical_generation=partition_subjects.canonical_generation+1;
+      RETURN NULL;
+    END IF;
     IF TG_OP<>'INSERT' THEN
       originals := originals || ARRAY[OLD.original,OLD.terminal];
       controls := array_append(controls,OLD.control_partition);
@@ -766,6 +773,13 @@ CREATE FUNCTION semantic.capture_canonical_subject_population() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  -- Updating a Subject within its home used to remove and re-add its count.
+  -- Both generation increments remain visible at commit, with one row write.
+  IF TG_OP='UPDATE' AND OLD.route/16=NEW.route/16 THEN
+    UPDATE semantic.partition_subjects SET canonical_generation=canonical_generation+2
+      WHERE partition_no=NEW.route/16 AND canonical_count>0;
+    IF FOUND THEN RETURN NULL; END IF;
+  END IF;
   IF TG_OP <> 'INSERT' THEN
     UPDATE semantic.partition_subjects
       SET canonical_count=canonical_count-1,canonical_generation=canonical_generation+1

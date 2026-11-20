@@ -157,6 +157,18 @@ test('default Content dispatch requires a complete native rebuild before acknowl
            WHERE route=$1 AND subject_id=$2`,
           [route, subject],
         );
+        const home = await tx.query(
+          `SELECT canonical_count::text AS count, canonical_generation::text AS generation,
+              (SELECT n_tup_upd::int FROM pg_stat_xact_user_tables
+               WHERE relid='semantic.partition_subjects'::regclass) AS writes
+           FROM semantic.partition_subjects WHERE partition_no=$1`,
+          [partition],
+        );
+        expect(home.rows[0]).toEqual({
+          count: initial.count,
+          generation: String(BigInt(initial.generation) + 2n),
+          writes: 1,
+        });
         throw new Error('abort canonical change');
       }),
     ).rejects.toThrow('abort canonical change');
