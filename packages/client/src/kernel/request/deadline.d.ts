@@ -2,3 +2,5 @@
 export declare function withRequestDeadline<T>(deadline: number, run: () => T): T;
 /** Returns the request deadline, or starts a fresh budget from `now` outside request work. */
 export declare function deadlineFor(budgetMs: number, now?: () => number): number;
+/** Starts a local budget capped by any active caller deadline. */
+export declare function cappedDeadlineFor(budgetMs: number, now?: () => number): number;

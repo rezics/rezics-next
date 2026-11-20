@@ -50,7 +50,7 @@ export type ContextParentAnchor = Readonly<{
     resourceType?: string;
     validate(client: ContextQueryClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
-export type ContextPublicEligibilityPrepare<E> = Readonly<{
+export type ContextPublicEligibilityPrepare<_E> = Readonly<{
     pool: Pool;
     resource: ContextResource;
 }>;
@@ -140,7 +140,6 @@ export type ContextAccessPort = Readonly<{
     }>): Promise<void>;
     readSourceDisposition(tx: CommandTransaction, store: string, key: string): Promise<ContextSourceDisposition>;
     recordSourceDisposition(tx: CommandTransaction, store: string, recordKey: string, disposition: Exclude<ContextSourceDisposition, null>): void;
-    recordSourceCommit(tx: CommandTransaction, transactionId: string): Promise<void>;
 }>;
 /** Process binding for standalone compatibility calls; application instances receive their port directly. */
 export declare function bindContextAccess(port: ContextAccessPort): ContextAccessPort;

@@ -9,7 +9,7 @@ export type Effect = {
     name: string;
     types: string[];
     delivery?: undefined;
-    queue?: typeof MEDIA_QUEUE;
+    queue?: typeof MEDIA_QUEUE | 'governance';
     run(event: CloudEvent): Promise<void>;
     admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
@@ -25,6 +25,7 @@ type RegisteredEffect = Effect | NativeEffect;
 type RegisteredEffects = {
     enqueue(envelopes: readonly Envelope[]): Promise<void>;
     admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
+    scanPriority?: NonNullable<Relay['scanPriority']>;
 };
 type WorkOptions = {
     databaseUrl: string;

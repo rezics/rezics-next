@@ -3,7 +3,7 @@ import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { type BuiltinCollectionView } from './builtin-runtime.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import type { ContributionAttribution } from '../access/public-identity.ts';
-import type { Actor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type CollectionPresentation } from './collection-presentation.ts';
 import { type CollectionMetadataHistoryDetail, type CollectionMetadataHistoryPage } from './collection-metadata-history.ts';
@@ -167,6 +167,7 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         limit?: number;
     }, deadline?: number) => Promise<CollectionMetadataHistoryPage>;
     readCollectionMetadataHistoryChange: (viewer: Actor, id: string, revision: number, deadline?: number) => Promise<CollectionMetadataHistoryDetail>;
+    requireCollectionStructureHistoryAuthority: (viewer: AccountActor, id: string, deadline: number) => Promise<void>;
     readRule: (viewer: Actor, id: string, deadline?: number) => Promise<import("./collection-rules.ts").SavedCollectionRule>;
     listCollections: {
         (viewer: Actor, options: CuratorPageOptions, preview?: {

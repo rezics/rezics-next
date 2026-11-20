@@ -1,5 +1,5 @@
 import { type CommandTransaction } from '../command/command.ts';
-import { type ContextAccessPort, type ContextRoleOccurrenceInput } from './context-access-port.ts';
+import type { ContextRoleOccurrenceInput } from './context-access-port.ts';
 export type ContextRoleEnrollmentResult = Readonly<{
     state: 'enrolled';
     contextKey: string;
@@ -15,4 +15,4 @@ export type ContextRoleEnrollmentResult = Readonly<{
 export declare function enrollContextRoleProvenance(tx: CommandTransaction, input: Readonly<{
     route: number;
     occurrence: ContextRoleOccurrenceInput;
-}>, accessPort?: ContextAccessPort): Promise<ContextRoleEnrollmentResult>;
+}>): Promise<ContextRoleEnrollmentResult>;

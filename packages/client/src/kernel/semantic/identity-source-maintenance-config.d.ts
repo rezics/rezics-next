@@ -14,7 +14,7 @@ export declare function identitySourceConsumerDirectoryPlan(allowance: NativeSte
 }>;
 /** Parse ceilings for independent Source work. These are never additive original
  * funding: the selected History route requires Accounts' private prepaid partition. */
-export declare function readIdentitySourceMaintenanceConfig(env: Environment): IdentitySourceMaintenanceConfig;
+export declare function readIdentitySourceMaintenanceConfig(env: Environment, independentSearchWriter?: boolean): IdentitySourceMaintenanceConfig;
 /** Arithmetic for owner adoption only. This result cannot admit a Source callback,
  * authenticate an original, increase a child ceiling or create a private grant. */
 export declare function composeIdentitySourceOriginalCosts(parts: Readonly<{

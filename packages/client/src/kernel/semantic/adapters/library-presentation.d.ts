@@ -4,7 +4,7 @@ import type { AuthoritativeTime } from '../../command/command.ts';
 import { type Access, type AccessContext, type Actor } from '../../request/access.ts';
 import type { IdentityMapping } from '../contract/index.ts';
 import type { SummaryReaderDependencies } from '../summaries.ts';
-import type { LibrarySemanticObservationCapability, LibrarySemanticObservationResult } from '../../library/contract/semantic-observation.ts';
+import type { LibrarySemanticObservationCapability } from '../../library/contract/semantic-observation.ts';
 import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
 export type LibrarySubjectIdentityContext = Readonly<{
     pool: Pool;
@@ -23,7 +23,7 @@ export declare function createLibrarySubjectIdentityAdapter(observations: Librar
 export declare function observeLibrarySubjectSummaries(observations: LibrarySemanticObservationCapability, deps: SummaryReaderDependencies, ids: readonly string[]): Promise<Readonly<{
     value: Readonly<{
         summaries: ReadonlyMap<string, unknown | null>;
-        current(): Promise<LibrarySemanticObservationResult<boolean>>;
+        current(): Promise<import("../contract/library-observation.ts").LibrarySemanticObservationResult<boolean>>;
     }>;
     work: WorkDimensions;
 }>>;

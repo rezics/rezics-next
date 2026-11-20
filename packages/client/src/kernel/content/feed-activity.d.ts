@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type KernelClock } from '../clock.ts';
+import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 export type FeedActivityTarget = Readonly<{
     type: 'subject' | 'collection' | 'space';

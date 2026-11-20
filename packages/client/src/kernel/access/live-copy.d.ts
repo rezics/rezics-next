@@ -48,6 +48,16 @@ export type LiveCopyAdmissions = {
     readonly nativeAdmissions: unique symbol;
 };
 export declare function liveCopyLocator(copy: LiveCopy): LiveCopyLocator;
+/** Advance from the observed listing frontier only while it is still current. */
+export declare function advanceListingBootstrap(tx: OperationalTransaction, partition: number, frontier: {
+    after_route: number;
+    after_subject: string;
+    after_collection: string;
+}, next: {
+    route: number;
+    subject_id: string;
+    collection_id: string;
+} | null): Promise<void>;
 /** Exact original native event role basis; no caller/event-JSON role inference. */
 export declare function liveCopyEventRoles(tx: Client, input: {
     partition: number;

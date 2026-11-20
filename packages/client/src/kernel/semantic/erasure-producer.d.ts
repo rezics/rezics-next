@@ -1,4 +1,5 @@
 import { type CommandTransaction } from '../command/command.ts';
+import { type IdentityJobRef } from './identity-adapters/identity-epoch-contract.ts';
 export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 /** Explicit account input of a native platform producer, in the producer's own home/transaction.
  * No account registry or business payload is copied. Deferred source hooks attach exact record ordinals.
@@ -21,6 +22,10 @@ export declare function identityErasureRoles(pool: import('pg').Pool, jobId: str
 export declare function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonly SemanticCopyRole[], options?: Readonly<{
     exposeCaptureOrigin: boolean;
 }>): void;
+/** Fixed Search steps on the job home inherit the admission's provenance. Foreign steps
+ * carry the job roles on their own source transaction. Both still bind roles for native records.
+ */
+export declare function bindSearchIdentityJobRoles(tx: CommandTransaction, job: IdentityJobRef, roles: readonly SemanticCopyRole[]): void;
 /** Bind a Source receipt to this executor's real fence. A deferred native constraint
  * checks the same-transaction write basis after the executor appends its commit.
  */

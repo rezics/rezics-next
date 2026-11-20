@@ -13,10 +13,12 @@ export type SearchRequestOptions = {
     /** Internal owner cancellation; callers still await the request's terminal result. */
     signal?: AbortSignal;
 };
+/** An instrumented transport can attach iterator counts from a checked profile of the same PIT query. */
 export type OpenSearch = {
     request<T = unknown>(method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD', path: string, body?: unknown, options?: SearchRequestOptions): Promise<{
         status: number;
         body: T;
+        measuredIteratorSteps?: number;
     }>;
     bulk<T = unknown>(lines: readonly unknown[], options?: {
         query?: SearchQuery;

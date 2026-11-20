@@ -22,7 +22,7 @@ export declare function withQueryAccounting<T>(accounting: QueryAccounting, run:
 /** An owner with its own query meter returns its measured cost to the caller. */
 export declare function withoutQueryAccounting<T>(run: () => Promise<T>): Promise<T>;
 export declare function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
-type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction'>;
+type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction' | 'mode'>;
 /** Opt in to one finite physical checkout for native read work. */
 export declare function withBoundedReadConnection<T>(pool: Pool, deadline: number, read: (client: PoolClient) => Promise<T>, options?: BoundedReadOptions): Promise<T>;
 /** Bound a native transaction without changing the identity of its original Pool. */

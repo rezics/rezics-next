@@ -86,5 +86,11 @@ export declare function advanceErasureCompletion(deps: {
 }, accountId: string): Promise<import("../command/command.ts").CommandOutcome<boolean>>;
 /** The terminal workflow survives retries and completion is independent of retained DBOS history. */
 export declare const erasureWorkModule: WorkModule;
+/** Commit the locator batch before the relay enqueues any workflow. */
+export declare function openLocatorWork(pool: Pool, rows: readonly {
+    workflow_id: string;
+    effect: string;
+}[]): Promise<void>;
+export declare function completeLocatorWork(pool: Pool, workflowId: string): Promise<void>;
 /** Explicit platform resolution, after the owner has handled the copy. The caller emits its command event. */
 export declare function resolveLocatorWork(tx: CommandTransaction, workflowId: string): Promise<void>;
