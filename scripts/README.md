@@ -535,7 +535,13 @@ run and requires that run's retained prepared-input receipt, so a later group fa
 leave a usable workspace pass. A reused outcome names that run and revision in the group report.
 
 The groups still go through admission, install and toolchain checks. Web's native release check and the
-control-plane Gate run on the current candidate, as do mutating and live commands. Legacy aggregate
+control-plane Gate run on the current candidate, as do unrecognized check recipes and live commands.
+Gate adds repository-local peer sources and fixtures used by each audited recipe to its declared package
+closure. Update those bindings when a recipe starts reading outside its workspace and declared dependencies.
+Auth Pages binds Auth service source, Kernel's handle policy and access contract, and its shared Web fixtures.
+The stable Auth Pages recipe can reuse a pass from a clean start. The post-check key permits the locale,
+route and build outputs that this recipe creates, and existing outputs or workspace dotenv overrides
+require a fresh check. Browser workspace checks also bind the installed Chromium files. Legacy aggregate
 reports, streamed progress and generic check-results rows lack the workspace source and completion binding
 needed by this path. An eligible workspace needs a physical pass to establish that binding.
 

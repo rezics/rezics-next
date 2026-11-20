@@ -14,7 +14,7 @@ import {
   statSync,
 } from 'node:fs';
 import { release } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import {
   CHECK_RESULT_SCHEMA,
   CheckResults,
@@ -62,19 +62,71 @@ const sharedPaths = [
   '.github/workflows',
 ];
 const crossWorkspaceInputs: Record<string, string[]> = {
+  'apps/auth': [
+    'services/auth/package.json',
+    'services/auth/src',
+    'services/kernel/package.json',
+    'services/kernel/src/access/handle-policy.ts',
+    'services/kernel/src/access/contract',
+    'apps/web/package.json',
+    'apps/web/scripts/message-imports.ts',
+    'apps/web/tests/native/auth-page-app.ts',
+    'apps/web/tests/native/lifecycle.ts',
+    'apps/web/tests/native/native-auth-security-fixture.ts',
+    'apps/web/tests/native/vite-environment.ts',
+    'apps/web/tests/native/web-document-modules.ts',
+    'apps/web/tests/support/server-custody.ts',
+    'packages/definitions',
+  ],
   // UI and the service suites include repository-wide source or placement assertions.
   'packages/ui': ['apps', 'services', 'packages'],
   'services/kernel': ['apps', 'services', 'packages', 'docs', 'tools', '.reference'],
-  'services/auth': ['apps/auth', 'services/kernel', 'docs'],
+  'services/auth': ['apps/auth', 'apps/web', 'services/importer', 'services/kernel', 'docs', 'Taskfile.yml'],
   'packages/definitions': [
     'services/kernel',
     'apps/web/src/kernel/recorded/definitions-active.json',
     'apps/web/src/kernel/recorded/definitions-release.json',
   ],
-  'packages/editor': ['apps/web/scripts/check-placement.ts', 'apps/web/tests'],
+  'packages/editor': ['apps/web'],
   'packages/conversion': ['services/importer', 'services/kernel'],
   'services/importer': ['packages/conversion', 'services/kernel', 'apps/web/package.json'],
 };
+
+// These checks call other package scripts. Qualify their exact recipes and lifecycle hooks.
+const scriptsWithInputs: Record<string, Record<string, string>> = {
+  'apps/auth': {
+    check:
+      'oxfmt --check . && bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json && bun run test && bun run build',
+    generate: 'bun scripts/generate.ts',
+    'generate:routes': 'vite build --config vite.config.ts --mode development --emptyOutDir false',
+    test: 'bun scripts/isolated.ts bun test',
+    build: 'vite build --config vite.config.ts',
+  },
+  'packages/editor': {
+    check: 'oxfmt --check . && bun check --no-script -p tsconfig.json && bun run typecheck && bun run test',
+    typecheck: 'bun check --no-script -p tsconfig.sources.json',
+    test: 'bun ../ui/scripts/isolated.ts bun test',
+  },
+  'packages/ui': {
+    check: 'oxfmt --check . && bun check --no-script -p tsconfig.json && bun run test #bun test',
+    test: 'bun scripts/isolated.ts bun test',
+  },
+};
+
+const authOutputs = [
+  'apps/auth/project.inlang/.gitignore',
+  'apps/auth/project.inlang/.meta.json',
+  'apps/auth/project.inlang/README.md',
+  'apps/auth/project.inlang/cache',
+  'apps/auth/src/paraglide',
+  'apps/auth/src/routeTree.gen.ts',
+  'apps/auth/dist',
+  'apps/auth/.output',
+  'apps/auth/.wrangler',
+  'apps/auth/.cloudflare',
+  'apps/auth/.tanstack',
+];
+const browserWorkspaces = new Set(['apps/auth', 'packages/ui', 'packages/editor']);
 
 type Source = { run: string; revision: string; sourceSha256: string };
 type Producer = Source & { preparedSha256: string };
@@ -144,14 +196,14 @@ function scopes(root: string, directory: string): string[] {
 }
 
 // Hash the files the admitted process can read, including an overlay and any prepared workspace files Git ignores.
-function inputDigest(root: string, paths: string[]): string {
+function inputDigest(root: string, paths: string[], outputs: string[]): string {
   const hash = createHash('sha256');
   // Some workspace assertions enumerate tracked source using Git even when the working bytes match.
   hash.update(JSON.stringify(gitList(root, ['ls-files', '--stage', '-z', '--', ...paths])));
   const buffer = Buffer.allocUnsafe(1024 * 1024);
   const seen = new Set<string>();
   function visit(path: string) {
-    if (seen.has(path)) return;
+    if (seen.has(path) || outputs.includes(path)) return;
     seen.add(path);
     const absolute = join(root, path);
     let stat;
@@ -218,7 +270,49 @@ export function openGateWorkspaceResults(root: string, env: Environment, source?
 
 export function workspaceResultReusable(workspace: Workspace, command: string[]): boolean {
   // Native release and live checks need a current physical result.
-  return workspace.directory !== 'apps/web' && reusableCommand([...command, workspace.checkScript]);
+  if (workspace.directory === 'apps/web' || command.length !== 3 || command.join(' ') !== 'bun run check') return false;
+  const scripts = scriptsWithInputs[workspace.directory];
+  if (scripts) return workspace.checkScript === scripts.check;
+  if (!reusableCommand([...command, workspace.checkScript])) return false;
+  if (workspace.directory === 'services/auth' || workspace.directory === 'services/kernel') {
+    return workspace.checkScript === 'bun scripts/check.ts';
+  }
+  const supported = ['oxfmt --check .', 'bun check --no-script -p tsconfig.json', 'bun test'];
+  if (workspace.directory === 'packages/composition' || workspace.directory === 'packages/document') {
+    supported.push('bun scripts/schema.ts --check');
+  }
+  return workspace.checkScript.split(' && ').every((step) => supported.includes(step));
+}
+
+function hasKnownScripts(root: string, workspace: Workspace): boolean {
+  const { scripts } = JSON.parse(readFileSync(join(root, workspace.directory, 'package.json'), 'utf8'));
+  const expected = scriptsWithInputs[workspace.directory] ?? { check: workspace.checkScript };
+  return Object.entries(expected).every(
+    ([name, recipe]) => scripts?.[name] === recipe && !(`pre${name}` in scripts) && !(`post${name}` in scripts),
+  );
+}
+
+function authCanReuse(root: string, env: Environment, phase: 'before' | 'after'): boolean {
+  if (env.REZICS_SIGN_IN_WALK === '1') return false;
+  // Workspace dotenv files can enable the live walk after Gate has started.
+  if (readdirSync(join(root, 'apps/auth')).some((name) => /^\.env(?:\.(?!example$).*|$)/.test(name))) return false;
+  // Only discard output produced by this check. Existing generated files may affect its initial format/build steps.
+  return phase === 'after' || authOutputs.every((path) => !lstatSync(join(root, path), { throwIfNoEntry: false }));
+}
+
+function statIdentity(path: string) {
+  const { dev, ino, size, ctimeMs } = statSync(path);
+  return [path, dev, ino, size, ctimeMs];
+}
+
+function browserIdentity(path: string | undefined) {
+  if (!path || !isAbsolute(path)) return;
+  // Check-host provisioning installs Chromium here. Bind the native binaries as well as the lockfile.
+  const files = [
+    ...new Bun.Glob('{chromium-*,chromium_headless_shell-*,ffmpeg-*}/**/*').scanSync({ cwd: path }),
+  ].sort();
+  if (!files.some((file) => /\/chrome-headless-shell$/.test(file))) return;
+  return digest(files.map((file) => statIdentity(realpathSync(join(path, file)))));
 }
 
 function hostTools(root: string, env: Environment): string {
@@ -227,12 +321,9 @@ function hostTools(root: string, env: Environment): string {
     .join(':');
   return digest([
     release(),
-    ...['sh', 'node', 'git', 'python3', 'docker', 'unshare', 'ip'].map((name) => {
+    ...['sh', 'node', 'git', 'python3', 'docker', 'unshare', 'ip', 'openssl', 'ps', 'go-task', 'task'].map((name) => {
       const found = Bun.which(name, { PATH });
-      if (!found) return [name, null];
-      const path = realpathSync(found);
-      const { dev, ino, size, ctimeMs } = statSync(path);
-      return [name, path, dev, ino, size, ctimeMs];
+      return [name, found ? statIdentity(realpathSync(found)) : null];
     }),
   ]);
 }
@@ -276,7 +367,7 @@ export class GateWorkspaceResults {
         digest(environment),
         hostTools(root, env),
         runtime,
-        Boolean(env.KERNEL_CHECK_AFFECTED),
+        env,
         db,
       );
     } catch (error) {
@@ -295,27 +386,35 @@ export class GateWorkspaceResults {
     private readonly environment: string,
     private readonly tools: string,
     private readonly runtime: ReturnType<typeof repositoryBun>,
-    private readonly scopedKernel: boolean,
+    private readonly env: Environment,
     private readonly db: Database,
   ) {
     this.results = new CheckResults(db);
   }
 
-  key(workspace: Workspace, command: string[]): string | undefined {
+  key(workspace: Workspace, command: string[], phase: 'before' | 'after' = 'before'): string | undefined {
+    const authPages = workspace.directory === 'apps/auth';
     if (
       !workspaceResultReusable(workspace, command) ||
-      (this.scopedKernel && workspace.directory === 'services/kernel')
+      !hasKnownScripts(this.root, workspace) ||
+      (this.env.KERNEL_CHECK_AFFECTED && workspace.directory === 'services/kernel') ||
+      (authPages && !authCanReuse(this.root, this.env, phase))
     )
       return;
-    const source = inputDigest(this.root, scopes(this.root, workspace.directory));
+    const browser = browserWorkspaces.has(workspace.directory)
+      ? browserIdentity(this.env.PLAYWRIGHT_BROWSERS_PATH)
+      : '';
+    if (browser === undefined) return;
+    const source = inputDigest(this.root, scopes(this.root, workspace.directory), authPages ? authOutputs : []);
     return checkResultFingerprint(
       {
         command,
         toolchain: { bun: this.runtime.version, bunRevision: this.runtime.revision },
       },
       workspace.directory,
-      [['prepared-workspace-v1', source]],
+      [['prepared-workspace-v2', source]],
       [
+        ['browser', browser],
         ['environment', this.environment],
         ['host-tools', this.tools],
       ],
