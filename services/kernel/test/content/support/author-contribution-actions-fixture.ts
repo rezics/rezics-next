@@ -17,11 +17,15 @@ export async function createAuthorContributionActionsFixture() {
       },
       200,
     );
-    const conceptId = await f.subject('Native contribution discussion board');
     const discussionBoard = (
       await f.checked('POST', '/v1/boards', {
         bearer: f.author.bearer,
-        body: { conceptId, title: 'Contribution discussions', purpose: 'discussion', visibility: 'published' },
+        body: {
+          conceptId: f.boardConceptId,
+          title: 'Contribution discussions',
+          purpose: 'discussion',
+          visibility: 'published',
+        },
       })
     ).board.id as string;
     for (const person of [f.author, f.other])
