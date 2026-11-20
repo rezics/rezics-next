@@ -47,6 +47,7 @@ const CONNECTION_FAILED = 'Connection failed repeatedly';
 const STREAM = 'stream disconnected before the turn finished';
 const WEBSOCKET = 'failed to connect to Responses WebSocket';
 const OTHER = "unexpected argument '-C'";
+const PROOF_COMMAND = ['bun', 'test', 'fixture.test.ts'];
 
 const tlsCli = `#!/usr/bin/env bun
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -163,7 +164,7 @@ function settleHarness(script?: string) {
 }
 
 function runningAttempt(h: ReturnType<typeof harness>, stderr: string, logEvents: unknown[] = []): Attempt {
-  const task = h.tasks.dispatch(h.briefFile);
+  const task = h.tasks.dispatch(h.writeBrief(`Simulate independent worker ${randomUUID()}.`));
   const startedAt = new Date().toISOString();
   const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number): Attempt => ({
     taskId: task.id,
@@ -220,7 +221,7 @@ function registeredProofAttempt(h: ReturnType<typeof harness>): {
     .query('INSERT INTO manager_sessions VALUES (?,?)')
     .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
   const sourceBrief = brief();
-  sourceBrief.acceptance.command = ['bun', 'test', 'original.test.ts'];
+  sourceBrief.acceptance.command = [...PROOF_COMMAND];
   const source = h.store.createTask(
     sourceBrief,
     { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
@@ -296,7 +297,7 @@ function writeOwnedWrapperResult(
       custodyVersion: 1,
       id: checkId,
       cwd: h.root,
-      argv: ['bun', 'test', 'original.test.ts'],
+      argv: PROOF_COMMAND,
       ownership: { taskId, attempt: 1 },
       status,
       ...(status === 'finished' ? { exitCode: 0 } : {}),

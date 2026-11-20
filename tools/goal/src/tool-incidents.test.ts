@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Attempt } from './types.ts';
@@ -53,15 +54,19 @@ function incidentAttempt(taskId: string, attempt: number, blocker: string | null
   };
 }
 
+function dispatchIncidentAttempt(h: ReturnType<typeof harness>, blocker: string | null): Attempt {
+  const task = h.tasks.dispatch(h.writeBrief(`Simulate independent incident worker ${randomUUID()}.`));
+  return h.store.nextAttempt({ taskId: task.id, attempt: task.currentAttempt }, (number) =>
+    incidentAttempt(task.id, number, blocker),
+  );
+}
+
 function seedIncident(h: ReturnType<typeof harness>, now: number, errorLine: string) {
-  const tasks = Array.from({ length: 3 }, () => h.tasks.dispatch(h.briefFile));
   const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
-  const refs = tasks.map((task) => {
-    const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) =>
-      incidentAttempt(task.id, number, errorLine),
-    );
-    const ref = { taskId: task.id, attempt: attempt.attempt };
-    const logPath = join(h.root, '.temp', 'goal', 'runs', task.id, `${attempt.attempt}.jsonl`);
+  const refs = Array.from({ length: 3 }, () => {
+    const { taskId, attempt } = dispatchIncidentAttempt(h, errorLine);
+    const ref = { taskId, attempt };
+    const logPath = join(h.settings.stateDirectory, 'runs', taskId, `${attempt}.jsonl`);
     mkdirSync(dirname(logPath), { recursive: true });
     writeFileSync(logPath, '{"type":"item.started"}\n');
     h.store.updateAttempt(ref, (current) => {
@@ -81,14 +86,11 @@ test('an empty worker-ended prefix is not fingerprinted and does not open an inc
   expect(blockerFingerprint({ blocker: null, result: 'Worker ended without a success report (killed):' })).toBe('');
   const h = harness();
   try {
-    const task = h.tasks.dispatch(h.briefFile);
-    const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) =>
-      incidentAttempt(task.id, number, empty),
-    );
+    const attempt = dispatchIncidentAttempt(h, empty);
     expect(
       recordToolBlockerFailure(
         h.store,
-        h.store.task(task.id),
+        h.store.task(attempt.taskId),
         attempt,
         h.settings,
         new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory),
@@ -109,14 +111,12 @@ test('typing settlements on several tasks open no shared incident', () => {
       'Last check-host run failed its typecheck.',
     ])
       for (let index = 0; index < 3; index++) {
-        const task = h.tasks.dispatch(h.briefFile);
-        const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) => ({
-          ...incidentAttempt(task.id, number, null),
-          failureKind: 'tool',
-          exitCode: 0,
-          result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n(check log unavailable)`,
-        }));
-        expect(recordToolBlockerFailure(h.store, h.store.task(task.id), attempt, h.settings, inbox)).toEqual({
+        const ref = dispatchIncidentAttempt(h, null);
+        const attempt = h.store.updateAttempt(ref, (current) => {
+          current.failureKind = 'tool';
+          current.result = `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n(check log unavailable)`;
+        });
+        expect(recordToolBlockerFailure(h.store, h.store.task(ref.taskId), attempt, h.settings, inbox)).toEqual({
           incident: null,
           opened: false,
         });
@@ -132,7 +132,6 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     now = Date.now(),
     errorLine = 'ENOSPC: shared cache read failed';
   try {
-    const tasks = Array.from({ length: 3 }, () => h.tasks.dispatch(h.briefFile));
     writeFileSync(join(h.root, 'README.md'), `${errorLine}\n`);
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     let failFirstDelivery = true;
@@ -145,21 +144,9 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
         inbox.deliver(event);
       },
     };
-    const refs = tasks.map((task) => {
-      const ref = { taskId: task.id, attempt: 0 };
-      h.store.nextAttempt(
-        ref,
-        (attempt) =>
-          ({
-            taskId: task.id,
-            attempt,
-            state: 'exited',
-            failureKind: 'tool',
-            blocker: errorLine,
-            result: errorLine,
-          }) as unknown as Attempt,
-      );
-      return { taskId: task.id, attempt: 1 };
+    const refs = Array.from({ length: 3 }, () => {
+      const { taskId, attempt } = dispatchIncidentAttempt(h, errorLine);
+      return { taskId, attempt };
     });
     const observe = (ref: (typeof refs)[number]) =>
       recordToolBlockerFailure(h.store, h.store.task(ref.taskId), h.store.attempt(ref), h.settings, flakyInbox, now);
@@ -178,7 +165,7 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
 
     await new WorkerJob(h.tasks, { enqueue() {} }, flakyInbox).recoverOrphans({ adoptRunning: false });
     expect(listOpenToolIncidents(h.store)).toHaveLength(1);
-    expect(tasks.map((task) => h.store.task(task.id).currentAttempt)).toEqual([1, 1, 1]);
+    expect(refs.map((ref) => h.store.task(ref.taskId).currentAttempt)).toEqual(refs.map((ref) => ref.attempt));
     expect(listOpenToolIncidents(h.store)[0]).toMatchObject({
       id: incident.id,
       probe: incident.probe,
@@ -189,7 +176,7 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     expect(messages).toHaveLength(1);
     expect(messages[0]?.event).toMatchObject({ managerId: h.settings.integration.supermanager, kind: 'blocker' });
     expect(messages[0]?.event.summary).toContain(`${incident.id}: ${errorLine}`);
-    expect(messages[0]?.event.summary).toContain(`Example tasks: ${tasks[0]!.id}#1`);
+    expect(messages[0]?.event.summary).toContain(`Example tasks: ${refs[0]!.taskId}#${refs[0]!.attempt}`);
     expect(messages[0]?.event.summary).toContain(`Source location (git grep): README.md:1:${errorLine}`);
   } finally {
     h.dispose();
