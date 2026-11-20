@@ -387,8 +387,17 @@
       "id": "kernel-economy-core",
       "kind": "core",
       "owner": "economy",
-      "paths": ["services/kernel/src/economy/exchange/**", "services/kernel/src/economy/settlement/**"],
-      "publicEntries": ["services/kernel/src/economy/exchange/order-book.ts"],
+      "paths": [
+        "services/kernel/src/economy/exchange/**",
+        "services/kernel/src/economy/market/**",
+        "services/kernel/src/economy/settlement/**"
+      ],
+      "publicEntries": [
+        "services/kernel/src/economy/exchange/order-book.ts",
+        "services/kernel/src/economy/market/trade.ts",
+        "services/kernel/src/economy/settlement/funding.ts",
+        "services/kernel/src/economy/settlement/posting.ts"
+      ],
       "allowedDependencies": ["kernel-economy-contract"],
       "capabilities": ["economy-matching"]
     },

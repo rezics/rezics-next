@@ -27,6 +27,11 @@ actor and any authenticated principal. The check uses the route's `x-action` sco
 authorization and domain reads. Anonymous and ungranted account callers receive the same `403 platform_closed`.
 Public routes do not read the exposure catalogue. Gate state is read for each request and is never cached.
 
+Economy is a grant-only group. Route admission, operation discovery and viewer actions require the actor's direct,
+current `gate:economy` identity grant on the Global Context, plus the regular native authorization and client scope.
+The account grant uses one temporal full-key probe. The group remains closed to platform-wide opening and to
+wildcard and broad-account grant admission. Govern individual grants through the ordinary Global access controls.
+
 Entries that are not mounted routes apply the same rule through `admitGroup` (`admission.ts`), which `admitExposure`
 also calls: an open group admits everyone, a closed one only an account holding `gate:<group>` or `gate:any` on the
 Global Context. The `organizations` group closes organization creation. The Auth host's account-operation approval for
