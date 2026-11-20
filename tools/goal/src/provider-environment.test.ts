@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { connectPool, StdioAppServer, type AppServer } from './app-server.ts';
@@ -8,7 +8,10 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { runWorkerCommand } from './worker-commands.ts';
-import { workerEnvironment } from './launch.ts';
+import { launchCommand, workerEnvironment } from './launch.ts';
+import { historicalManager } from '../test-support/historical-manager.ts';
+import { ManagerSessionTransport } from './manager-session-transport.ts';
+import { defaultPolicy } from './policy.ts';
 import type { Attempt, Pool } from './types.ts';
 import { harness, markdown, temporaryDirectory } from './test-support.ts';
 import { openDb } from './db.ts';
@@ -315,7 +318,7 @@ function stoppedAttempt(h: ReturnType<typeof harness>, taskId: string) {
   return ref;
 }
 
-test('Codex manager launch, host recovery, viewer tools and authenticated retry preserve the provider session', async () => {
+test('Codex viewer attachment, host recovery, viewer tools and authenticated retry preserve the provider session', async () => {
   const h = harness();
   const capturePath = join(h.settings.stateDirectory, 'provider-environment.jsonl');
   const executable = writeCodex(join(h.settings.stateDirectory, 'bin'));
@@ -371,17 +374,25 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
     supermanager: 'root',
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
   };
-  let first: ManagerSessions | undefined;
-  let recovered: ManagerSessions | undefined;
+  const recovered = new ManagerSessions(h.store.db, inbox, services);
+  const transport = new ManagerSessionTransport(services, defaultPolicy.appServer, h.settings.stateDirectory, () => {});
   try {
     await withEnvironment(parent, async () => {
-      first = new ManagerSessions(h.store.db, inbox, services);
-      const started = await first.start(spec);
-      if (started.kind === 'resident-supermanager') throw new Error('expected a managed Codex session');
-      expect(started.status).toBe('running');
-      const originalThread = started.threadId!;
-      expect(originalThread).toMatch(/^thread-/);
-      expect(started.goalState).toMatchObject({ status: 'active', tokenBudget: 1000 });
+      const originalThread = `thread-${randomUUID()}`;
+      const activeTurnId = `turn-${randomUUID()}`;
+      const started = historicalManager(h.store.db, h.root, {
+        ...spec,
+        status: 'running',
+        threadId: originalThread,
+        activeTurnId,
+        countedTurn: activeTurnId,
+        goalState: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 },
+      });
+      appendFileSync(
+        capturePath,
+        JSON.stringify({ kind: 'codex-turn', threadId: originalThread, turnId: activeTurnId }) + '\n',
+      );
+      await transport.registerCodexViewer(started, originalThread, await transport.client(started.pool));
       const oldViewer = captured(capturePath).find((value) => value.kind === 'codex-viewer');
       expect(oldViewer).toBeDefined();
       expectCleanCodexProcess(oldViewer!.env, codexHome, ownerName);
@@ -395,19 +406,18 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
         goalState: { status: 'complete', tokensUsed: 250, timeUsedSeconds: 5, tokenBudget: 500 },
       };
       const history = [previous];
-      const persisted = { ...started, history };
-      h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(JSON.stringify(persisted), ownerName);
+      h.store.db
+        .query('UPDATE manager_sessions SET state=? WHERE id=?')
+        .run(JSON.stringify({ ...started, history }), ownerName);
       const rootSession = randomUUID();
-      await first.registerResidentSupermanager('root', rootSession);
-      expect(first.get('root')).toMatchObject({
+      await recovered.registerResidentSupermanager('root', rootSession, { provider: 'claude' });
+      expect(recovered.get('root')).toMatchObject({
         kind: 'resident-supermanager',
         threadId: rootSession,
         status: 'running',
       });
-      await first.close();
-      first = undefined;
+      await transport.close();
 
-      recovered = new ManagerSessions(h.store.db, inbox, services);
       await recovered.recover();
       const current = recovered.get(ownerName);
       expect(current).toMatchObject({
@@ -415,6 +425,7 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
         goal: ownerName,
         budget: 1000,
         threadId: originalThread,
+        activeTurnId,
         history,
         status: 'running',
       });
@@ -435,11 +446,9 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       expect(toolEnvironment?.CODEX_THREAD_ID).toBe(originalThread);
       expect(toolEnvironment?.CLAUDE_CODE_SESSION_ID).toBeUndefined();
       expect(authenticatedManager(h.store.db, toolEnvironment!)).toEqual({ id: ownerName, sessionId: originalThread });
-      expect(
-        records.some(
-          (value) => value.kind === 'codex-rpc' && value.method === 'thread/start' && value.params?.manager === 'root',
-        ),
-      ).toBe(false);
+      expect(records.filter((value) => value.method === 'thread/start' || value.method === 'turn/start')).toHaveLength(
+        0,
+      );
       expect(calls).toHaveLength(2);
 
       const task = h.tasks.dispatch(h.briefFile);
@@ -484,7 +493,7 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
 
       await runWorkerCommand('retry', [task.id, '--brief', amendmentPath], {
         runtime: runtimeFor(h),
-        env: ownerEnvironment,
+        env: toolEnvironment!,
         print() {},
       });
       const retried = h.store.task(task.id);
@@ -496,8 +505,8 @@ test('Codex manager launch, host recovery, viewer tools and authenticated retry 
       expect(h.store.retryIntent(ref)).toMatchObject({ status: 'pending' });
     });
   } finally {
-    await recovered?.close();
-    await first?.close();
+    await recovered.close();
+    await transport.close();
     h.dispose();
   }
 }, 20_000);
@@ -520,15 +529,15 @@ function environment() {
   for (const key of keys) if (process.env[key] !== undefined) value[key] = process.env[key];
   return value;
 }
-const sessionFlag = args.includes('--session-id') ? '--session-id' : '--resume';
-const sessionId = args[args.indexOf(sessionFlag) + 1];
+const resume = args.indexOf('--resume');
+const sessionId = resume === -1 ? crypto.randomUUID() : args[resume + 1];
 appendFileSync(process.env.FAKE_PROVIDER_CAPTURE, JSON.stringify({ kind: 'claude-provider', argv: args, env: environment() }) + String.fromCharCode(10));
 const code = "const fs=require('node:fs');const keys=" + JSON.stringify(keys) + ";const env={};for(const key of keys)if(process.env[key]!==undefined)env[key]=process.env[key];fs.appendFileSync(process.env.FAKE_PROVIDER_CAPTURE,JSON.stringify({kind:'claude-tool',env})+String.fromCharCode(10))";
 const result = spawnSync(process.execPath, ['-e', code], { env: { ...process.env, CLAUDE_CODE_SESSION_ID: sessionId } });
 if (result.status !== 0) process.exit(result.status || 1);
 `;
 
-test('Claude fresh and resumed provider processes receive the configured account without Codex or caller session markers', async () => {
+test('Claude fresh worker and resumed operator processes receive the configured account without Codex or caller session markers', async () => {
   const temporary = temporaryDirectory();
   const capturePath = join(temporary.path, 'claude-provider.jsonl');
   const bin = join(temporary.path, 'bin');
@@ -542,7 +551,6 @@ test('Claude fresh and resumed provider processes receive the configured account
   const parent = hostileEnvironment(capturePath, codexHome, claudeHome);
   parent.PATH = `${bin}:${parent.PATH}`;
   const dbPath = join(temporary.path, 'state.sqlite');
-  const { openDb } = await import('./db.ts');
   const db = openDb(dbPath);
   const inbox = new SqliteManagerInbox(db, temporary.path);
   const calls: string[][] = [];
@@ -550,11 +558,8 @@ test('Claude fresh and resumed provider processes receive the configured account
   const services = {
     command: ['goal'],
     windows: {
-      register(_id: string, argv: string[], cwd: string) {
-        calls.push(argv);
-        const result = spawnSync(argv[0]!, argv.slice(1), { cwd, env: parent, encoding: 'utf8', timeout: 10_000 });
-        if (result.status !== 0) throw new Error(result.stderr || result.error?.message || 'fake Claude launch failed');
-        return '@claude';
+      register() {
+        throw new Error('The existing operator session must not register a new viewer');
       },
       respawn(_id: string, argv: string[], cwd: string) {
         calls.push(argv);
@@ -585,36 +590,80 @@ test('Claude fresh and resumed provider processes receive the configured account
   try {
     await withEnvironment(parent, async () => {
       managers = new ManagerSessions(db, inbox, services);
-      const started = await managers.start(spec);
-      expect(started.status).toBe('running');
-      const session = started.threadId!;
-      expect(calls).toHaveLength(1);
+      const retired = spawnSync(
+        process.execPath,
+        [
+          join(import.meta.dir, 'fixtures/cli-runtime.ts'),
+          'manager',
+          'start',
+          spec.id,
+          '--engine',
+          'claude',
+          '--budget',
+          String(spec.budget),
+        ],
+        {
+          env: { ...parent, FAKE_GOAL_STATE: temporary.path, FAKE_GOAL_MAIN: temporary.path },
+          encoding: 'utf8',
+          timeout: 10_000,
+        },
+      );
+      expect(retired.status).toBe(1);
+      expect(retired.stderr).toContain('Managed manager launches and assignments are retired');
+      expect(captured(capturePath)).toHaveLength(0);
+
+      const pool: Pool = {
+        name: spec.pool.id,
+        cli: 'claude',
+        classes: ['claude'],
+        configDirectory: claudeHome,
+        command: claude,
+        allowanceKey: spec.pool.id,
+        policy: { weight: 1, reservePercent: 0, allowUnknown: true, maxAgeMs: 60_000 },
+      };
+      const [command, argv] = launchCommand({
+        pool,
+        profile: { cli: 'claude', model: 'claude-opus-5-5', effort: 'low', poolClass: 'claude' },
+        worktree: spec.cwd,
+        prompt: spec.brief,
+      });
+      const result = spawnSync(command, argv, {
+        cwd: spec.cwd,
+        env: workerEnvironment(pool, {}, parent),
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
       const fresh = captured(capturePath).find((value) => value.kind === 'claude-provider');
-      expect(fresh?.argv).toContain('--session-id');
-      expect(fresh?.argv).toContain(session);
-      expect(fresh?.env).toMatchObject({ CLAUDE_CONFIG_DIR: claudeHome, GOAL_MANAGER: spec.id });
+      expect(fresh?.argv).not.toContain('--resume');
+      expect(fresh?.env).toMatchObject({ CLAUDE_CONFIG_DIR: claudeHome });
+      expect(fresh?.env.GOAL_MANAGER).toBeUndefined();
       expect(fresh?.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
       expect(fresh?.env.CLAUDE_CUSTOM_RUNTIME_HINT).toBeUndefined();
       expect(fresh?.env.CODEX_THREAD_ID).toBeUndefined();
       expect(fresh?.env.CODEX_SESSION_ID).toBeUndefined();
       const tool = captured(capturePath).find((value) => value.kind === 'claude-tool')?.env as NodeJS.ProcessEnv;
-      expect(tool.CLAUDE_CODE_SESSION_ID).toBe(session);
+      expect(tool.CLAUDE_CODE_SESSION_ID).toMatch(/^[a-f0-9-]{36}$/);
       expect(tool.CLAUDE_CONFIG_DIR).toBe(claudeHome);
       expect(tool.CODEX_THREAD_ID).toBeUndefined();
-      expect(authenticatedManager(db, tool)).toEqual({ id: spec.id, sessionId: session });
+      expect(authenticatedManager(db, tool)).toBeUndefined();
 
+      const session = randomUUID();
+      historicalManager(db, spec.cwd, { ...spec, status: 'running', threadId: session });
       alive = false;
       inbox.deliver({ managerId: spec.id, kind: 'instruction', summary: 'Continue the existing manager session.' });
       await managers.wake(spec.id);
-      expect(calls).toHaveLength(2);
-      expect(calls[1]).toContain('--resume');
-      expect(calls[1]).toContain(session);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain('--resume');
+      expect(calls[0]).toContain(session);
       const all = captured(capturePath).filter((value) => value.kind === 'claude-provider');
       expect(all).toHaveLength(2);
       expect(all[1]?.env).toMatchObject({ CLAUDE_CONFIG_DIR: claudeHome, GOAL_MANAGER: spec.id });
       expect(all[1]?.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
       expect(all[1]?.env.CLAUDE_CUSTOM_RUNTIME_HINT).toBeUndefined();
       expect(all[1]?.env.CODEX_THREAD_ID).toBeUndefined();
+      expect(all[1]?.env.CODEX_SESSION_ID).toBeUndefined();
       const resumedTool = captured(capturePath)
         .filter((value) => value.kind === 'claude-tool')
         .at(-1)?.env as NodeJS.ProcessEnv;
@@ -649,7 +698,7 @@ test('manager recovery, wake races and interruption races forward the configured
       return client.request<T>(method, params);
     },
     onNotification: (listener) => client.onNotification(listener),
-    close: () => client.close(),
+    close() {},
   };
   const inbox = new SqliteManagerInbox(db, temporary.path);
   const managers = new ManagerSessions(db, inbox, {
@@ -660,7 +709,14 @@ test('manager recovery, wake races and interruption races forward the configured
   });
   try {
     await client.initialize();
-    const started = await managers.start({
+    const threadId = 'existing-operator-thread';
+    const activeTurnId = 'existing-operator-turn';
+    const started = historicalManager(db, temporary.path, {
+      status: 'running',
+      threadId,
+      activeTurnId,
+      countedTurn: activeTurnId,
+      waitingForInbox: false,
       id: 'configured-owner',
       goal: 'configured-owner',
       objective: 'Keep the configured settings on every resume',
@@ -674,14 +730,22 @@ test('manager recovery, wake races and interruption races forward the configured
       supermanager: 'root',
       limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
     });
-    await managers.flush();
+    await client.request('thread/goal/set', { threadId, status: 'active', tokenBudget: started.budget });
+    await client.request('test/notify', {
+      method: 'turn/started',
+      params: { threadId, turn: { id: activeTurnId, status: 'inProgress' } },
+    });
     await managers.recover();
+    expect(managers.get(started.id)).toMatchObject({ threadId, activeTurnId });
+    expect(captured(log).filter((record) => record.method === 'turn/start')).toHaveLength(0);
     failNext = 'turn/steer';
     inbox.deliver({ managerId: started.id, kind: 'instruction', summary: 'Continue after the turn race' });
     await managers.wake(started.id);
     await managers.flush();
+    expect(failNext).toBeUndefined();
     failNext = 'turn/interrupt';
     await managers.stop(started.id);
+    expect(failNext).toBeUndefined();
     const requests = captured(log);
     const resumes = requests.filter((record) => record.method === 'thread/resume');
     expect(resumes).toHaveLength(3);
@@ -694,13 +758,14 @@ test('manager recovery, wake races and interruption races forward the configured
         model: 'gpt-6.1-sol',
         config,
       });
-    const starts = requests.filter((record) => record.method === 'thread/start');
-    expect(starts).toHaveLength(1);
-    expect(starts[0]?.params.config).toEqual(config);
+    expect(
+      requests.filter((record) => record.method === 'thread/start' || record.method === 'turn/start'),
+    ).toHaveLength(0);
     expect(managers.get(started.id)).toMatchObject({ threadId: started.threadId, budget: 1000, compactTokens: 200000 });
     expect(requests.some((record) => /compact/i.test(record.method))).toBe(false);
   } finally {
     await managers.close();
+    await client.close();
     db.close();
     temporary.close();
   }

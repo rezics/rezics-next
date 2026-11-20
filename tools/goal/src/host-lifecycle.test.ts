@@ -845,7 +845,7 @@ test('recovery restores all five stale viewers without losing drafts or starting
   const rebindings: { id: string; argv: string[]; cwd: string }[] = [];
   const viewers = new Map<string, { argv: string[]; cwd: string; dead: boolean; draft: string }>();
   const replacements = new Map<string, { argv: string[]; cwd: string; dead: boolean; draft: string }>();
-  const threadStarts: string[] = [];
+  const activeTurns = new Map<string, string>();
   const turnStarts: { threadId: string; turnId: string }[] = [];
   const requests: { method: string; params: any; pool: string }[] = [];
   const listeners = new Map<string, (notification: Notification) => void>();
@@ -887,11 +887,6 @@ test('recovery restores all five stale viewers without losing drafts or starting
       endpoint: endpoints.get(pool.codexHome)!,
       async request<T>(method: string, params: any): Promise<T> {
         requests.push({ method, params, pool: pool.codexHome });
-        if (method === 'thread/start') {
-          const threadId = `thread-${threadStarts.length + 1}`;
-          threadStarts.push(threadId);
-          return { thread: { id: threadId } } as T;
-        }
         if (method === 'thread/goal/set') {
           goalStatuses.set(params.threadId, params.status);
           return {
@@ -901,14 +896,15 @@ test('recovery restores all five stale viewers without losing drafts or starting
         if (method === 'turn/start') {
           const turnId = `turn-${turnStarts.length + 1}`;
           turnStarts.push({ threadId: params.threadId, turnId });
+          activeTurns.set(params.threadId, turnId);
           return { turn: { id: turnId } } as T;
         }
         if (method === 'thread/resume') {
-          const active = turnStarts.findLast((turn) => turn.threadId === params.threadId);
+          const active = activeTurns.get(params.threadId);
           return {
             thread: {
               id: params.threadId,
-              turns: active ? [{ id: active.turnId, status: 'inProgress' }] : [],
+              turns: active ? [{ id: active, status: 'inProgress' }] : [],
             },
           } as T;
         }
@@ -952,26 +948,33 @@ test('recovery restores all five stale viewers without losing drafts or starting
     supermanager: 'supermanager',
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
   }));
-  const first = new ManagerSessions(db, inbox, services);
-  let recovered: ManagerSessions | undefined;
+  const recovered = new ManagerSessions(db, inbox, services);
+  const transport = new ManagerSessionTransport(services, defaultPolicy.appServer, f.path, () => {});
   try {
-    const started = new Map<string, { threadId: string; turnId: string }>();
     for (const spec of specs) {
-      const state = await first.start(spec);
-      started.set(spec.id, { threadId: state.threadId!, turnId: state.activeTurnId! });
+      const threadId = `thread-${spec.id}`;
+      const turnId = `operator-turn-${spec.id}`;
+      const state = historicalManager(db, f.path, {
+        ...spec,
+        status: 'running',
+        threadId,
+        activeTurnId: turnId,
+        countedTurn: turnId,
+        waitingForInbox: false,
+        goalState: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 },
+      });
+      activeTurns.set(threadId, turnId);
+      await transport.registerCodexViewer(state, threadId, await transport.client(state.pool));
     }
-    expect(threadStarts).toHaveLength(5);
-    expect(turnStarts).toHaveLength(5);
-    await first.close();
+    viewers.get('semantic')!.dead = true;
+    await transport.close();
     endpoints.set(poolOne.codexHome, 'ws://127.0.0.1:41015');
     endpoints.set(poolTwo.codexHome, 'ws://127.0.0.1:41061');
-    recovered = new ManagerSessions(db, inbox, services);
     await recovered.recover();
     for (const spec of specs) {
-      const prior = started.get(spec.id)!;
       expect(recovered.get(spec.id)).toMatchObject({
-        threadId: prior.threadId,
-        activeTurnId: prior.turnId,
+        threadId: `thread-${spec.id}`,
+        activeTurnId: `operator-turn-${spec.id}`,
         waitingForInbox: false,
         goalState: { status: 'active' },
       });
@@ -980,14 +983,15 @@ test('recovery restores all five stale viewers without losing drafts or starting
     }
     expect(registrations).toHaveLength(5);
     expect(rebindings).toHaveLength(5);
-    expect(threadStarts).toHaveLength(5);
-    expect(turnStarts).toHaveLength(5);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(0);
+    expect(turnStarts).toHaveLength(0);
     expect(requests.filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
 
     await recovered.recover();
     expect(rebindings).toHaveLength(5);
-    expect(turnStarts).toHaveLength(5);
-    const webThread = started.get('web')!;
+    expect(turnStarts).toHaveLength(0);
+    const webThread = { threadId: 'thread-web', turnId: 'operator-turn-web' };
+    activeTurns.delete(webThread.threadId);
     listeners.get(poolOne.codexHome)?.({
       method: 'turn/completed',
       params: { threadId: webThread.threadId, turn: { id: webThread.turnId, status: 'completed' } },
@@ -1019,16 +1023,17 @@ test('recovery restores all five stale viewers without losing drafts or starting
     await recovered.flush();
     expect(recovered.get('web')).toMatchObject({
       threadId: webThread.threadId,
-      activeTurnId: 'turn-6',
+      activeTurnId: 'turn-1',
       waitingForInbox: false,
     });
-    expect(threadStarts).toHaveLength(5);
-    expect(turnStarts).toHaveLength(6);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(0);
+    expect(turnStarts).toEqual([{ threadId: webThread.threadId, turnId: 'turn-1' }]);
     expect(inbox.notifications('web')).toHaveLength(0);
 
+    activeTurns.delete(webThread.threadId);
     listeners.get(poolOne.codexHome)?.({
       method: 'turn/completed',
-      params: { threadId: webThread.threadId, turn: { id: 'turn-6', status: 'completed' } },
+      params: { threadId: webThread.threadId, turn: { id: 'turn-1', status: 'completed' } },
     });
     await recovered.flush();
     viewers.delete('web');
@@ -1037,8 +1042,8 @@ test('recovery restores all five stale viewers without losing drafts or starting
     expect(registrations).toHaveLength(5);
     expect(viewers.has('web')).toBe(false);
   } finally {
-    await recovered?.close();
-    await first.close();
+    await recovered.close();
+    await transport.close();
     db.close();
     f.close();
   }
@@ -1090,7 +1095,6 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
       endpoint,
       async request<T>(method: string, params: any): Promise<T> {
         requests.push({ method, params });
-        if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
         if (method === 'thread/goal/set') {
           goalStatus = params.status;
           return { goal: { status: goalStatus, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } } as T;
@@ -1136,13 +1140,27 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
     limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
   };
   const first = new ManagerSessions(db, inbox, services);
+  const transport = new ManagerSessionTransport(services, defaultPolicy.appServer, f.path, () => {});
   let recovered: ManagerSessions | undefined;
   try {
-    const started = await first.start(spec);
-    const threadId = started.threadId!;
+    const threadId = 'thread-accounts';
+    const initialTurnId = 'initial-operator-turn';
+    const state = historicalManager(db, f.path, {
+      ...spec,
+      status: 'running',
+      threadId,
+      activeTurnId: initialTurnId,
+      countedTurn: initialTurnId,
+      waitingForInbox: false,
+      goalState: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 },
+    });
+    activeTurn = { id: initialTurnId, status: 'inProgress' };
+    await transport.registerCodexViewer(state, threadId, await transport.client(state.pool));
+    await transport.close();
+    await first.recover();
     notify?.({
       method: 'turn/completed',
-      params: { threadId, turn: { id: started.activeTurnId, status: 'completed' } },
+      params: { threadId, turn: { id: initialTurnId, status: 'completed' } },
     });
     activeTurn = null;
     await first.flush();
@@ -1165,6 +1183,7 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
       turnDisposition: { threadId, turnId: 'operator-turn', status: 'inProgress', intent: 'controller-park' },
     });
     await first.close();
+    const recoveryOffset = requests.length;
     endpoint = 'ws://127.0.0.1:10002';
     recovered = new ManagerSessions(db, inbox, services);
     await recovered.recover();
@@ -1175,8 +1194,13 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
       goalState: { status: 'paused' },
     });
     expect(requests.filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
-    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(0);
-    expect(turnStarts).toHaveLength(1);
+    const resumedThreads = () =>
+      requests
+        .slice(recoveryOffset)
+        .filter((request) => request.method === 'thread/resume')
+        .map((request) => request.params.threadId);
+    expect(resumedThreads()).toEqual([threadId]);
+    expect(turnStarts).toHaveLength(0);
     expect(registrations).toHaveLength(1);
     expect(rebindings).toHaveLength(1);
     expect(rebindings[0]!.argv).toContain(threadId);
@@ -1191,8 +1215,9 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
       turnDisposition: { threadId, turnId: 'operator-turn', status: 'inProgress', intent: 'work' },
     });
     expect(requests.filter((request) => request.method === 'thread/items/list')).toHaveLength(2);
-    expect(requests.filter((request) => request.method === 'thread/resume')).toHaveLength(1);
+    expect(resumedThreads()).toEqual([threadId, threadId]);
     expect(requests.filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
+    expect(turnStarts).toHaveLength(0);
     activeTurn = null;
     notify?.({
       method: 'turn/completed',
@@ -1211,16 +1236,13 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
     inbox.deliver({ managerId: 'accounts', kind: 'instruction', summary: 'Continue the same manager thread' });
     await recovered.wake('accounts');
     await recovered.flush();
-    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: 'turn-2', waitingForInbox: false });
-    expect(turnStarts).toEqual([
-      { threadId, turnId: 'turn-1' },
-      { threadId, turnId: 'turn-2' },
-    ]);
-    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(recovered.get('accounts')).toMatchObject({ threadId, activeTurnId: 'turn-1', waitingForInbox: false });
+    expect(turnStarts).toEqual([{ threadId, turnId: 'turn-1' }]);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(0);
     expect(inbox.notifications('accounts')).toHaveLength(0);
 
     activeTurn = null;
-    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-2', status: 'completed' } } });
+    notify?.({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-1', status: 'completed' } } });
     await recovered.flush();
     viewers.delete('accounts');
     await recovered.recover();
@@ -1229,6 +1251,7 @@ test('recovery reclaims a parked operator turn without starting a replacement tu
   } finally {
     await recovered?.close();
     await first.close();
+    await transport.close();
     db.close();
     f.close();
   }
