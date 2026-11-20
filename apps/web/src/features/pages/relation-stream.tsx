@@ -683,11 +683,12 @@ function StreamState({
   const showRestart = base && (stopped || (visibleError && !retryWait) || !section.ok || readerUnavailable);
   return (
     <section
+      id={node}
       data-slot="relation-stream"
       data-node={node}
       aria-labelledby={`${node}-title`}
       aria-busy={visiblePending}
-      className="min-w-0 space-y-4"
+      className="min-w-0 space-y-4 scroll-mt-32"
     >
       <StreamHeading
         level={headingLevel}
