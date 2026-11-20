@@ -7,7 +7,7 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { attachCollectionListFacts } from '../../src/library/collection-list-facts.ts';
 import { fullMembers } from '../../src/library/views.ts';
 import { testTokens } from '../support/test-kernel.ts';
-import { capture } from '../support/growth.ts';
+import { captureWithFoldedCost } from '../support/growth.ts';
 import detailSQL from '../../src/semantic/read-subject.sql';
 import factsSQL from '../../src/semantic/list-presentation-subjects.sql';
 import { citedValue } from '../semantic/support/list-presentation-fixture.ts';
@@ -34,7 +34,7 @@ bunTest.serial(
       });
       const plain = await f.create('schema:Person');
       const collection = await f.collection([book, film, recipe, plain, book], 'public', 'schema:Recipe');
-      const measured = await capture(f.db, () => pageResult());
+      const measured = await captureWithFoldedCost(f.db, () => pageResult());
       async function pageResult() {
         return page(await f.get(collection.id));
       }
