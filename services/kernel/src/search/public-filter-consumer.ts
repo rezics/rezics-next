@@ -26,7 +26,7 @@ import {
   composedBookCapture,
   composedBookIdentities,
   bookPageObservation,
-  restoreComposedBookCut,
+  restoreBookPageCut,
 } from './composed-book-reads.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -1333,6 +1333,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     prefix: PublicFilterConsumerRefill | undefined,
     previous: string | null,
     ceiling: number,
+    restoredBookPage: boolean,
   ) {
     if (
       page.queried &&
@@ -1362,7 +1363,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page.id = id;
     page.queried = q;
     page.use = use;
-    const observed = await observe(q, null, undefined, page.m, page.context, page);
+    const observed = await observe(q, null, undefined, page.m, page.context, page, restoredBookPage);
     if (!observationIsDisclosableFromUnknown(observed)) throw new ConsumerFailure('source_pending');
     page.start = observed.start;
   }
@@ -1605,7 +1606,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     context: PublicFilterConsumerContext,
     restorePage = false,
   ) {
-    const restored = restorePage ? await restoreComposedBookCut(binding, q, context) : undefined;
+    const restored = restorePage ? await restoreBookPageCut(binding, q, context) : undefined;
     const joined =
       restored?.status === 'joined' && restored.bookPopulation
         ? m.takePreparation(restored)
@@ -1630,18 +1631,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m: Meter,
     context: PublicFilterConsumerContext,
     page?: Page,
+    restoredBookStart = false,
   ) {
     const request =
       start === null
         ? { kind: 'population' as const, queried: q, start, context }
         : { kind: 'population' as const, queried: q, start, execution: execution!, context };
+    // A cursor restores its cut without running capture. The native START
+    // supplies that page's preparation inputs before any engine candidates.
+    const charge = restoredBookStart ? m.takePreparation : m.take;
     const pageObservation = page?.id
-      ? bookPageObservation(config.source, page.bookPopulation, page.id, request, m.take)
+      ? bookPageObservation(config.source, page.bookPopulation, page.id, request, charge)
       : undefined;
     const read = () => config.source.readPrivacyReductionHeads(request);
     const observed = pageObservation
       ? await pageObservation
-      : m.take(await (page?.id && start === null ? withPublicFilterCoverageStart(context, page.id, read) : read()));
+      : charge(await (page?.id && start === null ? withPublicFilterCoverageStart(context, page.id, read) : read()));
     if (observed.status !== 'observed') throw new ConsumerFailure('source_pending');
     if (observed.coverage !== 'all_native_homes' || !observed.routingComplete)
       throw new ConsumerFailure('routing_incomplete');
@@ -2728,8 +2733,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
-      const cut = bookCut ?? (await join(q, undefined, m, context, !!page && !!prefix));
+      const cut = bookCut ?? (await join(q, undefined, m, context, !!page && !!prefix && !mixed));
       const plan = cut.definition.capture;
+      let restoredBookPage = false;
       if (
         page &&
         !bookCut &&
@@ -2738,6 +2744,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in plan &&
         plan.bookTypeList
       ) {
+        restoredBookPage = prefix !== undefined;
         // A resumed page obtains its original immutable plan from native custody.
         // Each refill uses that plan and FINAL verifies every durable execution.
         page.bookCut = { definition: cut.definition, covered: cut.covered, bookPopulation: cut.bookPopulation };
@@ -2790,7 +2797,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
       if (page) {
-        await beginPage(page, q, use, prefix, previousEncoded, allowance);
+        await beginPage(page, q, use, prefix, previousEncoded, allowance, restoredBookPage);
       }
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
       if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();
