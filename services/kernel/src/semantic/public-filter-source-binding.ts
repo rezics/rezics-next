@@ -11,10 +11,11 @@ import {
   retainedPublicFilterProjectionDependenciesCurrent,
 } from './public-filter-projection.ts';
 import { systemClock } from '../clock.ts';
-import { runCommand, noEffect, currentCommand } from '../command/command.ts';
+import { runCommand, noEffect, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readRelease } from './definition-release-read.ts';
+import { withReadTransaction } from './read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -890,7 +891,7 @@ class BindingError extends PublicFilterSourceDefinitionError {}
  */
 export async function readNativePublicFilterSourceDefinition(
   id: string,
-  db: Pool,
+  db: CommandTransaction,
   routeDigest: string,
   search: NativeSourceBindingPorts['search'],
   maxBytes = Number.MAX_SAFE_INTEGER,
@@ -1030,7 +1031,7 @@ export function createNativePublicFilterSourceBinding(
       throw error;
     }
   }
-  async function loadDefinition(id: string, db: Pool): Promise<PublicFilterSourceDefinition> {
+  async function loadDefinition(id: string, db: CommandTransaction): Promise<PublicFilterSourceDefinition> {
     return (await readNativePublicFilterSourceDefinition(id, db, routeDigest, ports.search)).definition;
   }
   const readers = new Map<string, PublicFilterSource>();
@@ -1082,7 +1083,7 @@ export function createNativePublicFilterSourceBinding(
   type BootstrapRow = NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>;
   async function loadBootstrap(
     locator: string,
-    db: Pool,
+    db: CommandTransaction,
     knownDefinition?: PublicFilterSourceDefinition,
     captured?: BootstrapRow,
   ) {
@@ -4528,7 +4529,10 @@ export function createNativePublicFilterSourceBinding(
         input.definition,
       );
     const retained = await run(context, async (cost, db) => {
-      const cut = await loadBootstrap(input.bootstrap, db);
+      // Finish the original Source read before Search registration or Access enrollment takes a checkout.
+      const cut = input.subjectEnrollment
+        ? await withReadTransaction(db, (client) => loadBootstrap(input.bootstrap, client), context.deadline)
+        : await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
       const expected = input.subjectEnrollment;
       if (
