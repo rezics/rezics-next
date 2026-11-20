@@ -286,10 +286,20 @@ type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['be
 }>) | Readonly<{
     bootstrap: string;
     inputLimit?: number;
+    subjectEnrollment?: Readonly<{
+        consumer: PublicFilterConsumer;
+        source: PublicFilterSourceDefinition['source'];
+        registration: {
+            partition: number;
+            id: string;
+        };
+        capturingOnly?: true;
+    }>;
 }>;
 export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult, {
     status: 'begun';
 }> & {
+    enrollmentAdvanced?: true;
     freshBook?: Readonly<{
         unopened(): Promise<{
             unopened: boolean;
@@ -307,9 +317,11 @@ export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult
     enrollmentAdvanced: boolean;
     cost: PublicFilterCost;
 }>;
+type SubjectRepairWriterObligation = Pick<PublicFilterProjectionObservation, 'subject' | 'partition' | 'epoch' | 'position'>;
 type NativeRepairEvidence = Readonly<{
     repairs: readonly PublicSourceRepair[];
     account: AccountDiscoveryRepairObservation | null;
+    subject?: SubjectRepairWriterObligation;
 }>;
 export declare function nativePublicFilterRepairEvidence(binding: PublicFilterSourceBinding, step: Extract<NativeSourceRepairStepVerification, {
     status: 'verified';

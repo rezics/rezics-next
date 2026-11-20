@@ -607,6 +607,7 @@ type RepairVerificationProgress = {
     home: number;
     subject: string | null;
     done: boolean;
+    superseded?: RepairWinnerCoordinate;
   } | null;
 };
 type RepairWinnerCoordinate = { subject: string; page: number | null; item: number | null };

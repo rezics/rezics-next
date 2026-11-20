@@ -49,11 +49,12 @@ export declare function enrollAccountDiscoveryHome(pool: Pool, input: Enrollment
 }>): Promise<AccountDiscoveryEnrollment>;
 export declare const accountDiscoveryEnrollmentGroupSize = 16;
 export declare const accountDiscoveryEnrollmentProbeInputs = 8;
-/** Enroll complete new mixed homes under their native writer locks. Existing
+/** Enroll complete new homes under their native writer locks. Existing
  * pins or receipts leave the group untouched for the retained single-home path.
  */
 export declare function enrollNewAccountDiscoveryHomes(pool: Pool, input: EnrollmentInput & Readonly<{
     partitions: readonly number[];
+    accounts?: boolean;
 }>, context: Readonly<{
     deadline: number;
 }>): Promise<readonly AccountDiscoveryEnrollment[] | null>;
