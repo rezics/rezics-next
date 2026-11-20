@@ -28,7 +28,7 @@ test('a retry whose reshaped brief waits for an unintegrated task holds, keeps i
     await job.drain();
     await h.tasks.stop(task.id);
     const own = git(h.store.task(task.id).worktree, 'rev-parse', 'HEAD');
-    const dependency = h.tasks.dispatch(h.briefFile);
+    const dependency = h.tasks.dispatch(h.writeBrief('Complete the prerequisite worker task.'));
     const reshaped = join(h.root, '.temp/goal/reshaped.md');
     writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
     await job.start(task.id, { brief: reshaped });
@@ -72,7 +72,7 @@ test('a task stopped after its worker exited can be held behind an unmerged task
       t.state = 'stopped';
     });
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('exited');
-    const dependency = h.tasks.dispatch(h.briefFile);
+    const dependency = h.tasks.dispatch(h.writeBrief('Complete the prerequisite worker task.'));
     const reshaped = join(h.root, '.temp/goal/reshaped.md');
     writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
     await job.start(task.id, { brief: reshaped });
@@ -162,7 +162,7 @@ test('a reshape that only records a held contract does not wait for host capacit
     await h.tasks.stop(task.id);
     // A host with no free worker slot.
     writeFileSync(join(h.tasks.settings.stateDirectory, 'capacity.json'), JSON.stringify({ maxWorkers: 0 }));
-    const dependency = h.tasks.dispatch(h.briefFile);
+    const dependency = h.tasks.dispatch(h.writeBrief('Complete the prerequisite worker task.'));
     const reshaped = join(h.root, '.temp/goal/reshaped.md');
     writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
     await Promise.race([
@@ -184,7 +184,7 @@ test('a held task whose current attempt stopped can be cancelled', async () => {
     await job.start(task.id);
     await job.drain();
     await h.tasks.stop(task.id);
-    const dependency = h.tasks.dispatch(h.briefFile);
+    const dependency = h.tasks.dispatch(h.writeBrief('Complete the prerequisite worker task.'));
     const reshaped = join(h.root, '.temp/goal/reshaped.md');
     writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
     await job.start(task.id, { brief: reshaped });
