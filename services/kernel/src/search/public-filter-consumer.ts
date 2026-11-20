@@ -3,6 +3,7 @@ import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './pu
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { hasDispatchableRepairCoverage, type RepairCoverageScope } from './public-filter-repair-coverage.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
+import { encodeRepairIntent, encodeStagedRepairWork } from './public-filter-repair-encoding.ts';
 import type {
   NativePublicFilterPublication,
   NativePublicFilterPublicationCompletion,
@@ -799,6 +800,16 @@ type ConsumerWork = {
   charged: number;
   adopted: boolean;
 };
+function encodeWork(work: ConsumerWork): string {
+  return work.repair || work.repairPage?.repairs.length ? encodeStagedRepairWork(work) : encodeState(work);
+}
+function decodeWork(encoded: string): ConsumerWork {
+  try {
+    return decodeNative<ConsumerWork>(encoded);
+  } catch {
+    throw new ConsumerFailure('observation_lost');
+  }
+}
 function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceBootstrap, 'definition'> {
   return {
     id: bootstrap.id,
@@ -1513,7 +1524,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         )
       ).rows[0];
       if (!row?.consumer_work) throw new ConsumerFailure('observation_lost');
-      const work = decodeState<ConsumerWork>(row.consumer_work);
+      const work = decodeWork(row.consumer_work);
       if (work.bootstrap.id !== bootstrap || !isDeepStrictEqual(work.bootstrap.consumer, job.consumer))
         throw new ConsumerFailure('registration_missing');
       return { work, encoded: row.consumer_work, registration: row.registration };
@@ -1529,7 +1540,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           )
         ).rows[0];
     if (!row?.consumer_work) throw new ConsumerFailure('observation_lost');
-    const work = decodeState<ConsumerWork>(row.consumer_work);
+    const work = decodeWork(row.consumer_work);
     if (!isDeepStrictEqual(work.bootstrap.consumer, job.consumer)) throw new ConsumerFailure('registration_missing');
     return { work, encoded: row.consumer_work, registration };
   }
@@ -1541,7 +1552,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page?: Page,
     phase?: 'claim' | 'savePit' | 'saveReservation' | 'saveWindow',
   ) {
-    const encoded = encodeState(work);
+    const encoded = encodeWork(work);
     if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
     const q = work.queried ?? work.materializing;
     const values = [
@@ -2402,7 +2413,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           encoded,
           work.bootstrap.id,
           q.snapshot.observation,
-          encodeState(work),
+          encodeWork(work),
         ]);
       if (transfer) {
         if (!(await transfer)) return m.unavailable('source_pending');
@@ -2538,7 +2549,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               )
             ).rows[0];
       if (old?.consumer_work) {
-        const retained = decodeState<ConsumerWork>(old.consumer_work);
+        const retained = decodeWork(old.consumer_work);
         if (mixedPage)
           mixedPage.captureWitness = {
             stage: retained.bootstrap.coveragePublication ? 'published-coverage' : 'retained-population-bootstrap',
@@ -2979,7 +2990,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     previous: string | null,
     m: Meter,
   ): Promise<string> {
-    const next = encodeState(work);
+    const next = encodeWork(work);
     if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
     const q = work.queried!;
     const saved = await repairSave.run(m.pool, {
@@ -3170,7 +3181,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             context,
             charge,
           );
-          const body = encodeNative(intent);
+          const body = encodeRepairIntent(intent);
+          if (Buffer.byteLength(body) > 1048576) return m.unavailable('source_pending');
           const saved = await repairPageSave.run(m.pool, {
             ...keys,
             has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
@@ -3516,7 +3528,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             )
           ).rows[0];
           if (row?.consumer_work)
-            await binding.abort({ bootstrap: decodeState<ConsumerWork>(row.consumer_work).bootstrap.id }, context);
+            await binding.abort({ bootstrap: decodeWork(row.consumer_work).bootstrap.id }, context);
         }
       });
     },
@@ -3608,7 +3620,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!q || q.snapshot.kind !== 'prepared' || encoded) {
         let capture: PublicFilterConsumerCapture;
         if (encoded) {
-          const work = decodeState<ConsumerWork>(encoded);
+          const work = decodeWork(encoded);
           if (
             !isDeepStrictEqual(retained.definition.capture, input.capture) ||
             !isDeepStrictEqual(work.registration, retained.registration) ||

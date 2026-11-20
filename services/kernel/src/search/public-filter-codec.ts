@@ -1,15 +1,23 @@
 // A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
 type Tree = [string, unknown?];
-export function tree(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): Tree {
+type ScalarTag = 'scalar' | 'value';
+export function tree(value: unknown, scalarTag: ScalarTag = 'scalar'): Tree {
+  return pack(value, scalarTag);
+}
+function pack(value: unknown, scalarTag: ScalarTag, references?: ReadonlyMap<object, number>): Tree {
   if (value === undefined) return ['undefined'];
   if (typeof value === 'bigint') return ['bigint', value.toString()];
-  if (Array.isArray(value)) return ['array', value.map((child) => tree(child, scalarTag))];
+  if (typeof value === 'object' && value !== null) {
+    const reference = references?.get(value);
+    if (reference !== undefined) return ['reference', reference];
+  }
+  if (Array.isArray(value)) return ['array', value.map((child) => pack(child, scalarTag, references))];
   if (value !== null && typeof value === 'object')
     return [
       'object',
       Object.keys(value)
         .sort()
-        .map((key) => [key, tree((value as Record<string, unknown>)[key], scalarTag)]),
+        .map((key) => [key, pack((value as Record<string, unknown>)[key], scalarTag, references)]),
     ];
   requireValue(
     value === null ||
@@ -19,16 +27,21 @@ export function tree(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): 
   );
   return [scalarTag, value];
 }
-function untree(value: Tree): unknown {
+function untree(value: Tree, references: readonly unknown[] = []): unknown {
   switch (value[0]) {
     case 'undefined':
       return undefined;
     case 'bigint':
       return BigInt(value[1] as string);
+    case 'reference': {
+      const index = value[1];
+      requireValue(typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 && index < references.length);
+      return references[index];
+    }
     case 'array':
-      return (value[1] as Tree[]).map(untree);
+      return (value[1] as Tree[]).map((entry) => untree(entry, references));
     case 'object':
-      return Object.fromEntries((value[1] as [string, Tree][]).map(([key, entry]) => [key, untree(entry)]));
+      return Object.fromEntries((value[1] as [string, Tree][]).map(([key, entry]) => [key, untree(entry, references)]));
     case 'value': // Existing consumer_work encoding.
     case 'scalar':
       return value[1];
@@ -37,7 +50,41 @@ function untree(value: Tree): unknown {
   }
 }
 export const encode = (value: unknown) => JSON.stringify(tree(value));
-export const decode = <T>(value: string): T => untree(JSON.parse(value) as Tree) as T;
+
+/** Opt-in sharing preserves the full canonical content, including values decoded separately from legacy rows. */
+export function encodeWithReferences(
+  value: unknown,
+  bodies: readonly object[],
+  scalarTag: ScalarTag = 'scalar',
+): string {
+  if (bodies.length < 2) return JSON.stringify(tree(value, scalarTag));
+  const references = new Map<object, number>();
+  const indexes = new Map<string, number>();
+  const table: Tree[] = [];
+  for (const body of new Set(bodies)) {
+    const packed = tree(body, scalarTag);
+    const key = JSON.stringify(packed);
+    let index = indexes.get(key);
+    if (index === undefined) {
+      index = table.length;
+      table.push(packed);
+      indexes.set(key, index);
+    }
+    references.set(body, index);
+  }
+  if (table.length === bodies.length) return JSON.stringify(tree(value, scalarTag));
+  return JSON.stringify(['references', [table, pack(value, scalarTag, references)]]);
+}
+
+export function decode<T>(value: string): T {
+  const packed = JSON.parse(value) as Tree;
+  if (packed[0] !== 'references') return untree(packed) as T;
+  const [table, body] = packed[1] as [Tree[], Tree];
+  return untree(
+    body,
+    table.map((entry) => untree(entry)),
+  ) as T;
+}
 
 export function requireValue(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid public filter custody input');
