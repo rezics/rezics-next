@@ -1596,9 +1596,10 @@ Items independently resolve and authorize both original and terminal; unavailabl
 ID or label and are not replaced by later values. Only actual current label facts are filled.
 
 Relation prefixes use the existing ordered outbound index solely as bounded locators. Their native
-checkpoint must cover the source revision's own write position, and each locator must match the
-source revision/security and current selected slot. Unrelated later partition positions do not make
-a finite unaffected source wait. Each exact original/terminal, selection, provenance, consent,
+checkpoint must cover the source revision's own write position. A locator may retain the revision
+that last changed its link. Its revision must be at or before the current source revision and its
+security revision must match. Values come from the current selected slot. Unrelated later partition
+positions do not make a finite unaffected source wait. Each exact original/terminal, selection, provenance, consent,
 account and source-fence observation is freshly collected again before disclosure. Source tuple
 fences retain the native security revision, including an absent fence observation. There is no
 reusable authorization verdict, cached native time, whole-subject hydration or all-home sweep.

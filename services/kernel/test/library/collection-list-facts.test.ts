@@ -10,6 +10,7 @@ import { testTokens } from '../support/test-kernel.ts';
 import { capture } from '../support/growth.ts';
 import detailSQL from '../../src/semantic/read-subject.sql';
 import factsSQL from '../../src/semantic/list-presentation-subjects.sql';
+import { citedValue } from '../semantic/support/list-presentation-fixture.ts';
 import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
 
 const quantity = (amount: string) => ({ amount, unit: '1' });
@@ -57,6 +58,62 @@ bunTest.serial(
       expect(basic.next).toBe(result.next);
       expect(basic.members).toEqual(result.members.map(({ subject, facts, ...member }) => member));
       expect(f.maximumHeldBackends()).toBeLessThanOrEqual(1);
+    } finally {
+      await f.close();
+    }
+  },
+  180_000,
+);
+
+bunTest.serial(
+  'anonymous FULL Collection keeps current author facts after a later Visual Novel adoption',
+  async () => {
+    const f = await createCollectionListFactsFixture();
+    try {
+      const author = await f.create('schema:Person', {}, { en: 'Public author' });
+      const novel = await f.create(
+        'wd:Q689445',
+        {
+          'schema:author': author,
+          'schema:datePublished': {
+            time: '+2024-01-01T00:00:00Z',
+            precision: 11,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
+        { en: 'First visual novel' },
+      );
+      const second = await f.create('wd:Q689445', {}, { en: 'Second visual novel' });
+      const collection = await f.collection([novel, second]);
+      const property = 'schema:inLanguage';
+      const { candidate } = await f.checked('POST', `/v1/subjects/${novel}/candidates`, {
+        statement: citedValue(property, 'ja'),
+      });
+      const lagging = await f.get(collection.id, 'FULL', null, '&limit=100');
+      expect(lagging.status).toBe(503);
+      expect((await lagging.json()).code).toBe('semantic_not_ready');
+      await f.adopt(novel, property, [candidate]);
+
+      const basic = await page(await f.get(collection.id, 'BASIC', null, '&limit=100'));
+      const full = await page(await f.get(collection.id, 'FULL', null, '&limit=100'));
+      expect(full.members.map(({ subject, facts, ...member }) => member)).toEqual(basic.members);
+      expect(full.members.map((member) => member.subject.id)).toEqual([novel, second]);
+      const date = { 'schema:datePublished': [{ kind: 'time', year: 2024, month: 1, day: 1 }] };
+      expect(full.members.map((member) => member.facts)).toEqual([
+        {
+          'schema:author': [{ kind: 'item', id: author, labels: { en: 'Public author' } }],
+          ...date,
+        },
+        {},
+      ]);
+      const first = await page(await f.get(collection.id, 'BASIC', null, '&limit=1'));
+      expect(first.next).toBeString();
+      const remainder = await page(await f.get(collection.id, 'FULL', null, `&limit=1&cursor=${first.next}`));
+      expect(remainder).toEqual({ members: [full.members[1]], next: null });
+
+      await f.hide(author);
+      const concealed = await page(await f.get(collection.id, 'FULL', null, '&limit=100'));
+      expect(concealed.members[0]!.facts).toEqual(date);
     } finally {
       await f.close();
     }

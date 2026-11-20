@@ -226,7 +226,13 @@ async function observeSubjects(
           }
           for (const locator of locators) {
             const header = visible.get(locator.id)!.header;
-            if (locator.source_revision !== header.revision || locator.source_security_revision !== header.security)
+            // The projection writes deltas. Once the checkpoint covers the Subject revision,
+            // an unchanged link can retain its older revision. Read the current slot below.
+            if (
+              header.revision === null ||
+              locator.source_revision > header.revision ||
+              locator.source_security_revision !== header.security
+            )
               unready();
           }
         }
