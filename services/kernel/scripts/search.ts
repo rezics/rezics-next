@@ -178,6 +178,7 @@ async function rebuild(): Promise<void> {
   const { readSearchConfig } = await import('../src/search/work.ts');
   const config = readSearchConfig(process.env);
   if (!config) throw new ConfigError('OPENSEARCH_URL');
+  const { composeSearchNativePorts } = await import('../src/composition/search-native.ts');
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
   const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
@@ -185,11 +186,13 @@ async function rebuild(): Promise<void> {
   const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {
+    const { source } = createRatedSubjectSource(pool, routeKey, undefined, composeSearchNativePorts());
+    const search = createOpenSearch(config.url);
     const result = await rebuildSubjects({
       publication: 'native',
       pool,
-      search: createOpenSearch(config.url),
-      source: createRatedSubjectSource(pool, routeKey).source,
+      search,
+      source,
       prefix: config.prefix,
       // The worker's runner discovers the new generation on its own.
       runner: { async refresh() {} },
@@ -197,8 +200,8 @@ async function rebuild(): Promise<void> {
     const { subjectListingSource } = await import('../src/library/listing-counts.ts');
     const discovery = await rebuildDiscovery({
       pool,
-      search: createOpenSearch(config.url),
-      source: createRatedSubjectSource(pool, routeKey).source,
+      search,
+      source,
       listing: subjectListingSource(pool),
       prefix: config.prefix,
       routeKey,
