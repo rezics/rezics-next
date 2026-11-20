@@ -8,6 +8,7 @@ import {
 import { OPERATOR_TRANSFER_PAGE_PATH } from '../src/operator-transfer-page';
 
 const actor = 'human-account';
+const sessionUrl = 'https://auth.test/session';
 const request = {
   version: 1 as const,
   previous: { subjectAccountId: 'subject', operatorAccountId: 'source', reservationId: 'reservation' },
@@ -31,7 +32,7 @@ test('destination advice is a read of the selected destination and never a comma
   const calls: { path: string; body?: unknown }[] = [];
   globalThis.fetch = (async (input, init) => {
     const path = String(input);
-    if (path === '/session')
+    if (path === sessionUrl)
       return Response.json({ account_id: actor, client_id: 'auth-management', scope: ['account:manage'] });
     calls.push({ path, body: JSON.parse(String(init?.body)) });
     return Response.json({
@@ -81,7 +82,7 @@ test('wrong side, non-ready private advice and invalid native versions never adv
       const calls: string[] = [];
       globalThis.fetch = (async (input) => {
         calls.push(String(input));
-        if (String(input) === '/session') return Response.json({ account_id: actor });
+        if (String(input) === sessionUrl) return Response.json({ account_id: actor });
         return Response.json({ viewer: { kind: 'ready' }, review });
       }) as typeof fetch;
       const selected = { ...attempt, side, ...(side === 'source' ? { acceptance: 'original-acceptance' } : {}) };
@@ -90,7 +91,7 @@ test('wrong side, non-ready private advice and invalid native versions never adv
         reason: 'unavailable',
       });
       expect(selected.phase).toBe('approve');
-      expect(calls.filter((path) => path !== '/session')).toEqual([OPERATOR_TRANSFER_PAGE_PATH]);
+      expect(calls.filter((path) => path !== sessionUrl)).toEqual([OPERATOR_TRANSFER_PAGE_PATH]);
     }
   globalThis.fetch = (async () =>
     Response.json({

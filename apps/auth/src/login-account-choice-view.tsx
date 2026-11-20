@@ -37,7 +37,7 @@ export function LoginAccountChoiceView({
       ? choice.page.viewer
       : null;
   return (
-    <AuthTaskSection aria-label={m.auth_login_heading()} aria-busy={pending || choice.kind === 'loading'}>
+    <AuthTaskSection aria-busy={pending || choice.kind === 'loading'}>
       <AuthNotice ref={status} tabIndex={-1} role="status" className="gap-2">
         {uncertain ? <p className="font-medium">{m.auth_login_uncertain()}</p> : null}
         {choice.kind === 'loading' ? <p>{m.auth_inventory_loading()}</p> : null}
