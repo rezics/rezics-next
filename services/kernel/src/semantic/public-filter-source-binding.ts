@@ -362,6 +362,8 @@ export type PublicFilterSourceBinding = Readonly<{
     request: Readonly<{
       queried: PublicFilterQueriedObservation;
       execution?: string;
+      /** The mixed page protocol checks current coverage at START and FINAL. */
+      mixedCoveragePage?: true;
     }>,
     context: PublicFilterConsumerContext,
   ): Promise<
@@ -2420,7 +2422,16 @@ export function createNativePublicFilterSourceBinding(
         cut.bootstrap.bookPopulation &&
         cut.row.state === 'adopted' &&
         cut.row.queried === retained.queried.snapshot.observation;
-      if (mode !== 'repair' && !originalPage) await requireServingCoverage(cut, db);
+      // Mixed resume still joins the exact cut and execution. The page's
+      // population roles verify attached coverage before dispatch and disclosure.
+      const mixedPage =
+        input.mixedCoveragePage === true &&
+        'representation' in definition.capture &&
+        cut.row.coverage_publication !== null &&
+        cut.row.state === 'adopted' &&
+        cut.row.queried === retained.queried.snapshot.observation &&
+        (retained.execution === null || retained.execution.start.observation.startsWith('population:'));
+      if (mode !== 'repair' && !originalPage && !mixedPage) await requireServingCoverage(cut, db);
       if (retained.execution !== null) {
         const startLocator = retained.execution.start.observation;
         if (startLocator.startsWith('population:')) {

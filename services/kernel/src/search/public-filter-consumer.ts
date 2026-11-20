@@ -1605,16 +1605,26 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     execution: string | undefined,
     m: Meter,
     context: PublicFilterConsumerContext,
-    restorePage = false,
+    restorePage?: 'book' | 'mixed',
   ) {
-    const restored = restorePage ? await restoreBookPageCut(binding, q, context) : undefined;
+    const restored = restorePage === 'book' ? await restoreBookPageCut(binding, q, context) : undefined;
+    const mixedPage = restorePage === 'mixed';
+    const result =
+      restored ??
+      (await binding.join(
+        {
+          queried: q,
+          ...(execution === undefined ? {} : { execution }),
+          ...(mixedPage ? { mixedCoveragePage: true } : {}),
+        },
+        context,
+      ));
+    // A resumed mixed page has no capture work on its meter. Fund its original
+    // cut and serving proof from the native lookup's measured preparation inputs.
     const joined =
-      restored?.status === 'joined' && restored.bookPopulation
-        ? m.takePreparation(restored)
-        : m.take(
-            restored ??
-              (await binding.join({ queried: q, ...(execution === undefined ? {} : { execution }) }, context)),
-          );
+      (mixedPage && execution === undefined) || (restored?.status === 'joined' && restored.bookPopulation)
+        ? m.takePreparation(result)
+        : m.take(result);
     if (joined.status !== 'joined')
       throw new ConsumerFailure(joined.reason === 'deadline' ? 'deadline' : 'source_pending');
     if (
@@ -2741,7 +2751,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
-      const cut = bookCut ?? (await join(q, undefined, m, context, !!page && !!prefix && !mixed));
+      const restoringMixed = mixed && page?.id === null && prefix !== undefined;
+      const restorePage = restoringMixed ? 'mixed' : page && prefix && !mixed ? 'book' : undefined;
+      const cut = bookCut ?? (await join(q, undefined, m, context, restorePage));
       const plan = cut.definition.capture;
       let restoredBookPage = false;
       if (
@@ -2927,7 +2939,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // The native Book page's FINAL validates the retained children, input
       // boundary, current coverage and own rows before publishing the result.
       if (!page?.bookCut) {
-        const finalJoined = await join(q, execution, m, context);
+        const finalJoined = await join(q, execution, m, context, restoringMixed ? 'mixed' : undefined);
         if (
           !isDeepStrictEqual(finalJoined.execution, { id: execution, start: started.start, ownRows: rows }) ||
           !isDeepStrictEqual(finalJoined.covered, cut.covered)
