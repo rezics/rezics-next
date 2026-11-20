@@ -1,3 +1,4 @@
+import { type CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../access/index.ts';
 import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
@@ -78,6 +79,8 @@ export type PublicFilterSourceBinding = Readonly<{
     join(request: Readonly<{
         queried: PublicFilterQueriedObservation;
         execution?: string;
+        /** The mixed page protocol checks current coverage at START and FINAL. */
+        mixedCoveragePage?: true;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'joined';
         bookPopulation?: string;
@@ -384,7 +387,7 @@ export declare class PublicFilterSourceDefinitionError extends Error {
 /** Load only an existing immutable read definition. The optional byte cap lets native callers
  * debit a fixed upper bound before the retained capture and dependency keys are read.
  */
-export declare function readNativePublicFilterSourceDefinition(id: string, db: Pool, routeDigest: string, search: NativeSourceBindingPorts['search'], maxBytes?: number): Promise<Readonly<{
+export declare function readNativePublicFilterSourceDefinition(id: string, db: CommandTransaction, routeDigest: string, search: NativeSourceBindingPorts['search'], maxBytes?: number): Promise<Readonly<{
     definition: PublicFilterSourceDefinition;
     bytes: number;
 }>>;

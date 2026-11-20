@@ -3230,6 +3230,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4776,6 +4777,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

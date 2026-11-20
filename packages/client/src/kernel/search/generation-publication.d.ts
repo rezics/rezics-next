@@ -24,8 +24,11 @@ export type SearchGenerationPublication = Readonly<{
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
         sourceAdvanced?: boolean;
+        additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
     } | PublicFilterConsumerUnavailable>;
-    activate(job: GenerationPublicationJob, context: PublicFilterConsumerContext): Promise<{
+    activate(job: GenerationPublicationJob, context: PublicFilterConsumerContext, options?: Readonly<{
+        batchSource: boolean;
+    }>): Promise<{
         status: 'activated';
         consumer: PublicFilterConsumer;
         cost: SearchPublicFilterCost;
@@ -40,6 +43,7 @@ export type SearchGenerationPublication = Readonly<{
         next?: 'step' | 'activate';
         advanced?: boolean;
         sourceAdvanced?: boolean;
+        additionalSourceCosts?: readonly SearchPublicFilterCost[];
     } | PublicFilterConsumerUnavailable>;
     close(): Promise<void>;
 }>;

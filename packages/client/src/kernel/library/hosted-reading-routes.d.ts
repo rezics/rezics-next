@@ -3093,6 +3093,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4639,6 +4640,7 @@ export declare function hostedReadingRoutes(app: DefinitionRoutes, dependencies:
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

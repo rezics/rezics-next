@@ -3091,6 +3091,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4637,6 +4638,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

@@ -3085,6 +3085,7 @@ export declare function libraryArchiveMergeRoutes(app: ReturnType<typeof definit
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4631,6 +4632,7 @@ export declare function libraryArchiveMergeRoutes(app: ReturnType<typeof definit
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

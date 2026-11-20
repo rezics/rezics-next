@@ -3100,6 +3100,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         }>;
                                         type: string;
                                         label: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;
@@ -4646,6 +4647,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         external: string | null;
                                         type?: string;
                                         label?: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;
@@ -31710,6 +31712,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         }>;
                                         type: string;
                                         label: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;
@@ -33256,6 +33259,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         external: string | null;
                                         type?: string;
                                         label?: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;

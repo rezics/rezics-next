@@ -3090,6 +3090,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4636,6 +4637,7 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

@@ -84,9 +84,7 @@ export type SubjectReadResult = {
     summary: SubjectSummary | null;
     component: SubjectComponent;
 };
-export type SubjectSummaryReader = (deps: SummaryDependencies | SummaryReaderDependencies, ids: readonly string[], options?: {
-    languages?: readonly string[];
-}) => Promise<Map<string, SubjectSummary | null>>;
+export type SubjectSummaryReader = (deps: SummaryDependencies | SummaryReaderDependencies, ids: readonly string[], options?: SummaryReadOptions) => Promise<Map<string, DisplaySummary | null>>;
 export type SubjectReadingPageRequest = {
     runtime: SubjectReadingRuntime;
     subject: string;
@@ -172,6 +170,13 @@ export type SubjectSummary = {
     } | null;
     creativeWork: boolean;
     cover: CoverSummary | null;
+};
+export type DisplaySummary = SubjectSummary & {
+    date?: string;
+};
+export type SummaryReadOptions = {
+    languages?: readonly string[];
+    publicationDateFor?: ReadonlySet<string>;
 };
 /** A merged original keeps its id; its summary is the survivor's and `redirect` names that survivor. */
 export type RelatedSubjectSummary = SubjectSummary & {

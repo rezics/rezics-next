@@ -3094,6 +3094,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4640,6 +4641,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

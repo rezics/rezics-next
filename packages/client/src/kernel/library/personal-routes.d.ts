@@ -3107,6 +3107,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4653,6 +4654,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

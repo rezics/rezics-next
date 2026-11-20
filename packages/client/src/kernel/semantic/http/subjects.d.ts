@@ -3241,6 +3241,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4787,6 +4788,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

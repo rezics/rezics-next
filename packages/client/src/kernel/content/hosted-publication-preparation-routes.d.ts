@@ -3084,6 +3084,7 @@ export declare function hostedPublicationPreparationRoutes(app: ReturnType<typeo
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4630,6 +4631,7 @@ export declare function hostedPublicationPreparationRoutes(app: ReturnType<typeo
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -24553,6 +24555,7 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -26099,6 +26102,7 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

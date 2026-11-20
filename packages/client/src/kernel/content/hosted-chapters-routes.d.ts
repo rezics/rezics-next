@@ -3083,6 +3083,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4629,6 +4630,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

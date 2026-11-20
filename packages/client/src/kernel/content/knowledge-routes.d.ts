@@ -3083,6 +3083,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4629,6 +4630,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

@@ -3092,6 +3092,7 @@ export declare function aniListImportRoutes(app: ReturnType<typeof definitionRou
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4638,6 +4639,7 @@ export declare function aniListImportRoutes(app: ReturnType<typeof definitionRou
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

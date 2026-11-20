@@ -3082,6 +3082,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4628,6 +4629,7 @@ export declare function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourc
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

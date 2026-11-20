@@ -3089,6 +3089,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4635,6 +4636,7 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

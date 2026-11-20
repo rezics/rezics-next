@@ -427,7 +427,7 @@ export type FeedAdmissionPort = Readonly<{
     following(actor: FeedAccountActor, deadline: number): Promise<void>;
     personalLibrary(actor: FeedAccountActor, deadline: number): Promise<void>;
     readingProgress(actor: FeedAccountActor, deadline: number): Promise<void>;
-    discovery(actor: FeedActor, deadline: number): Promise<void>;
+    discovery(actor: FeedActor, kind: string | undefined, deadline: number): Promise<void>;
 }>;
 export type FeedCursorPort = Readonly<{
     fingerprint(value: unknown): string;

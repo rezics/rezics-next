@@ -3086,6 +3086,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4632,6 +4633,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

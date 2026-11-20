@@ -3116,6 +3116,7 @@ export declare function createCommunityHttpDeclaration(ambient: CommunityAmbient
                                         }>;
                                         type: string;
                                         label: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;
@@ -4662,6 +4663,7 @@ export declare function createCommunityHttpDeclaration(ambient: CommunityAmbient
                                         external: string | null;
                                         type?: string;
                                         label?: string;
+                                        date?: string;
                                         summary: {
                                             id: string;
                                             type: string;

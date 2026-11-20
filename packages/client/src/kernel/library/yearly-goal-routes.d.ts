@@ -3092,6 +3092,7 @@ export declare function yearlyCompletionGoalRoutes(app: ReturnType<typeof defini
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4638,6 +4639,7 @@ export declare function yearlyCompletionGoalRoutes(app: ReturnType<typeof defini
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

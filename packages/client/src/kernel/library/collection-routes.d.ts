@@ -3429,6 +3429,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4975,6 +4976,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;

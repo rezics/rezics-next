@@ -506329,6 +506329,9 @@
                             ],
                             "type": "object"
                           },
+                          "date": {
+                            "type": "string"
+                          },
                           "label": {
                             "type": "string"
                           },
@@ -521965,6 +521968,9 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "date": {
+                            "type": "string"
+                          },
                           "external": {
                             "type": [
                               "string",

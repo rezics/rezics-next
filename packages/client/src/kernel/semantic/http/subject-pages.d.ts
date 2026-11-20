@@ -3086,6 +3086,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     }>;
                                     type: string;
                                     label: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
@@ -4632,6 +4633,7 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                     external: string | null;
                                     type?: string;
                                     label?: string;
+                                    date?: string;
                                     summary: {
                                         id: string;
                                         type: string;
