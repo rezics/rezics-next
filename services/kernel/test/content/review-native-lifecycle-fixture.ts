@@ -5,6 +5,7 @@ import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
@@ -56,6 +57,8 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
   };
 
   try {
+    const identity = await installIdentityEpochBootstrap(system.database.pool);
+    if (identity.mode !== 'absence') throw new Error('Native review fixture requires fresh Subject identity state');
     await bootstrapRelease(system.database.pool, bundledRelease);
     const databaseName = (
       await system.database.pool.query<{ database_name: string }>('SELECT current_database() AS database_name')
