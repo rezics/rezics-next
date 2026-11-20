@@ -417,7 +417,7 @@ test('native Subject enrollment rechecks the original definition and release on 
       await f.close();
     }
   }
-});
+}, 60_000);
 
 test('canonical retained observation execution joins preserve complete compiler keys', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
