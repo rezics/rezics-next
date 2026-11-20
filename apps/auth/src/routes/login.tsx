@@ -506,10 +506,7 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
           onReview={reviewSession}
         />
         {showCredentials && pageData ? (
-          <AuthTaskSection
-            aria-label={m.auth_login_heading()}
-            className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
-          >
+          <AuthTaskSection className="rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
             <h2>{m.auth_login_heading()}</h2>
             <form className="grid min-w-0 gap-4" method="post" action="/signin" noValidate onSubmit={submit}>
               {message ? (
