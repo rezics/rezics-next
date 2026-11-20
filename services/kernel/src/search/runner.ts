@@ -135,6 +135,8 @@ export async function startSearchIndexing(options: {
     throw new RangeError('retireAfterMs must be a non-negative finite number');
   const lifetime = new AbortController();
   const search = runnerSearch(options.search, lifetime.signal);
+  const relayLifetime = new AbortController();
+  const relaySearch = runnerSearch(options.search, relayLifetime.signal);
   const mixed = options.discovery
     ? startDiscoveryIndexing({
         ...options,
@@ -257,7 +259,7 @@ export async function startSearchIndexing(options: {
             await upgradeSubjectRefreshInterval(search, options.prefix, generation);
             return createSubjectIndexer({
               pool: options.pool,
-              search,
+              search: relaySearch,
               source: options.source,
               listing: options.listing,
               index: subjectIndexName(options.prefix, generation),
@@ -266,7 +268,7 @@ export async function startSearchIndexing(options: {
               writer: createSearchWriterGuard({
                 consumer: subjectConsumer(options.prefix, generation),
                 pool: options.pool,
-                search,
+                search: relaySearch,
                 source: options.source,
                 listing: options.listing,
                 index: subjectIndexName(options.prefix, generation),
@@ -380,11 +382,15 @@ export async function startSearchIndexing(options: {
       if (closing) return closing;
       stopped = true;
       paused = true;
-      lifetime.abort(new Error('Search runner stopped'));
       resumeAfter = undefined;
       clearSchedule();
+      const reason = new Error('Search runner stopped');
       const previous = current;
-      const projection = Promise.all([previous?.stop(), mixed?.stop()]);
+      // Seal batch admission before cancelling discovery. Admitted Subject batches still
+      // own the bulk response, allocation check and checkpoint under their existing bounds.
+      const subjectDrain = (previous?.stop() ?? Promise.resolve()).finally(() => relayLifetime.abort(reason));
+      lifetime.abort(reason);
+      const projection = Promise.all([subjectDrain, mixed?.stop()]);
       const preparing = options.publicPreparation?.stop();
       closing = Promise.all([discovery, projection, preparing]).then(async () => {
         if (current && current !== previous) await current.stop();
