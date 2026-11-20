@@ -717,7 +717,7 @@ test(
       expect(handleText).not.toContain(leaked);
       expect(handleText).not.toMatch(/email|address/i);
 
-      const correction = page.getByRole('button', { name: 'Use this handle with a new request', exact: true });
+      const correction = page.getByRole('button', { name: 'Start again with this handle', exact: true });
       expect(await correction.isDisabled()).toBe(true);
       await controls.handle.fill('Reader_2');
       expect(await correction.isEnabled()).toBe(true);
@@ -725,13 +725,13 @@ test(
       signupStatus = 201;
       await Promise.all([
         page.waitForResponse(
+          (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+        ),
+        page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
         ),
         page.getByRole('button', { name: 'Create an account', exact: true }).click(),
       ]);
-      await page.waitForResponse(
-        (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
-      );
       await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
       const registrations = signupCalls();
       expect(registrations).toHaveLength(2);
