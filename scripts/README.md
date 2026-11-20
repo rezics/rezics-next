@@ -527,6 +527,17 @@ The gate requests four slots per group by default (`GATE_REMOTE_SLOTS` overrides
 It partitions eligible hosts between groups when at least two qualify by configured slot count.
 Otherwise both groups use the original hosts file. Admission still checks actual slice capacity.
 `GATE_CONCURRENCY` controls workspace concurrency inside each group. Group results return to `.temp/gate/`.
+Within an admitted group, Gate reuses a clean, unexpired workspace pass from the same check host when its
+command, installed toolchain, environment, workspace dependency closure and shared inputs match. The index
+and actual prepared source bytes are checked, including tracked or untracked overlays. Gate records each
+workspace pass after its command completes and its input key is rechecked. The record names the original
+run and requires that run's retained prepared-input receipt, so a later group failure or interruption can
+leave a usable workspace pass. A reused outcome names that run and revision in the group report.
+
+The groups still go through admission, install and toolchain checks. Web's native release check and the
+control-plane Gate run on the current candidate, as do mutating and live commands. Legacy aggregate
+reports, streamed progress and generic check-results rows lack the workspace source and completion binding
+needed by this path. An eligible workspace needs a physical pass to establish that binding.
 
 For a full Kernel check across bounded physical runs, run `node_modules/.bin/bun scripts/kernel-check-groups.ts a`
 from the candidate checkout. The coordinator reserves 8 GiB on the named performance host for each serial group

@@ -36,6 +36,9 @@ CREATE INDEX check_results_expiry ON check_results(time);`,
 
 const GLOBAL =
   /^(?:bun\.lock|package\.json|bunfig\.toml|tsconfig[^/]*|patches\/|scripts\/|contracts\/|specs\/|\.github\/workflows\/|\.oxlintrc|\.oxfmtrc|\.prettier|\.editorconfig|\.gitattributes|\.gitignore|AGENTS\.md|services\/(?:kernel\/scripts\/database\.ts|auth\/scripts\/database\.ts|kernel\/db\/search\/opensearch\/Dockerfile))/;
+export function sharedCheckInput(path: string): boolean {
+  return GLOBAL.test(path);
+}
 type WorkspaceManifest = { value: unknown } | { error: unknown };
 type SourceProjection = {
   globalInputs: [string, string][];
@@ -90,7 +93,7 @@ function sourceProjection(root: string, commit: string, policy: ControlPolicy['s
     });
   const blobs = entries.filter((entry) => entry.type === 'blob');
   const globalInputs = blobs.flatMap(({ object, path }) =>
-    GLOBAL.test(path) ? [[path, object] as [string, string]] : [],
+    sharedCheckInput(path) ? [[path, object] as [string, string]] : [],
   );
   const manifestPaths = blobs
     .map(({ object, path }) => ({ object, path }))
@@ -119,26 +122,24 @@ function sourceProjection(root: string, commit: string, policy: ControlPolicy['s
   return projection;
 }
 
-function workspaceClosure(projection: SourceProjection, root: string, cwd: string): string[] {
-  const here = relative(root, cwd).split(sep).join('/');
-  const start = projection.workspaceDirs.find((dir) => here === dir || here.startsWith(`${dir}/`));
-  if (!start) return [];
+export function checkWorkspaceClosure(
+  start: string,
+  workspaceByName: ReadonlyMap<unknown, string>,
+  manifestAt: (directory: string) => unknown,
+): string[] {
   const seen = new Set<string>();
   const visit = (dir: string) => {
     if (seen.has(dir)) return;
     seen.add(dir);
-    const source = projection.workspaceManifests.get(dir)!;
-    if ('error' in source) throw source.error;
-    const manifest = source.value as Record<string, Record<string, string>>;
+    const manifest = manifestAt(dir) as Record<string, Record<string, string>>;
     for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
       for (const [name, version] of Object.entries(manifest[field] ?? {}))
-        if (version.startsWith('workspace:') && projection.workspaceByName.has(name))
-          visit(projection.workspaceByName.get(name)!);
+        if (version.startsWith('workspace:') && workspaceByName.has(name)) visit(workspaceByName.get(name)!);
   };
   visit(start);
   return [...seen].sort();
 }
-export function checkResultKey(input: {
+type CheckResultKeyInput = {
   root: string;
   commit?: string;
   cwd: string;
@@ -154,20 +155,40 @@ export function checkResultKey(input: {
     opensearch: string;
     playwright: string;
   }>;
-}): { key: string; unit: string } {
-  const { root, cwd, command } = input;
+};
+
+export function checkResultKey(input: CheckResultKeyInput): { key: string; unit: string } {
+  const { root, cwd } = input;
   const commit = input.commit ?? git(cwd, 'rev-parse', 'HEAD');
   const projection = sourceProjection(root, commit, input.policy ?? defaultPolicy.storage);
   const here = relative(root, cwd).split(sep).join('/');
   const atRoot = here === '' || here === '.';
-  let unitDirs = atRoot ? ['.'] : workspaceClosure(projection, root, cwd);
+  const start = projection.workspaceDirs.find((dir) => here === dir || here.startsWith(`${dir}/`));
+  let unitDirs = atRoot
+    ? ['.']
+    : start
+      ? checkWorkspaceClosure(start, projection.workspaceByName, (dir) => {
+          const source = projection.workspaceManifests.get(dir)!;
+          if ('error' in source) throw source.error;
+          return source.value;
+        })
+      : [];
   const workdir = atRoot || unitDirs.length ? undefined : here;
   if (workdir) unitDirs = ['.'];
   const unit = workdir ?? (unitDirs.join(',') || '.');
-  const trees = unitDirs.map((dir) => [
+  const trees: [string, string][] = unitDirs.map((dir) => [
     dir,
     dir === '.' ? git(root, 'rev-parse', `${commit}^{tree}`) : projection.trees.get(dir)!,
   ]);
+  return { key: checkResultFingerprint(input, here, trees, projection.globalInputs), unit };
+}
+
+export function checkResultFingerprint(
+  input: Pick<CheckResultKeyInput, 'command' | 'env' | 'toolchain'>,
+  here: string,
+  trees: readonly (readonly [string, string])[],
+  global: readonly (readonly [string, string])[],
+): string {
   const env = Object.fromEntries(CHECK_RESULT_ENV.map((name) => [name, input.env?.[name] ?? '']));
   const toolchain = {
     bun: Bun.version,
@@ -182,14 +203,14 @@ export function checkResultKey(input: {
   };
   const value = {
     schema: CHECK_RESULT_SCHEMA,
-    command: [...command],
+    command: [...input.command],
     env,
     trees,
-    global: projection.globalInputs,
+    global,
     toolchain,
     workdir: here || '.',
   };
-  return { key: createHash('sha256').update(JSON.stringify(value)).digest('hex'), unit };
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 export function reusableCommand(command: readonly string[]): boolean {
   const text = command.join(' ').toLowerCase();
