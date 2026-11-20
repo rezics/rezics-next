@@ -3723,10 +3723,10 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('owner_unavailable');
           await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
-          if (subjectPublication)
-            repairs = page.repairLocators.map((locator) =>
-              producedRepair(input.bootstrap, input.execution, row.step, page, locator),
-            );
+          // Every locator shares this verified page and its currentness checks.
+          repairs = page.repairLocators.map((locator) =>
+            producedRepair(input.bootstrap, input.execution, row.step, page, locator),
+          );
           expected =
             page.status === 'complete'
               ? record.input.resumeBridge

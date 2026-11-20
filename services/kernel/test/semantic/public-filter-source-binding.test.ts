@@ -576,6 +576,9 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       expect(step.receipts.map((receipt) => receipt.locatorDigest)).toEqual(
         page.repairs.map((entry) => entry.receipt.locatorDigest),
       );
+      expect(nativePublicFilterRepairEvidence(binding, step)?.repairs.map((entry) => entry.receipt)).toEqual(
+        page.repairs.map((entry) => entry.receipt),
+      );
       const recovered = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
       const replay = await recovered.repairPage(request, readContext());
       expect(replay.status).toBe('progress');
