@@ -643,6 +643,7 @@ test('an interrupted Gate preserves an independently bound pass until a transiti
   const inputs = ['--workspaces', 'packages/a-passed', 'packages/b-runner'];
   const sourceDirectory = join(checkout, '.temp/check-host');
   mkdirSync(sourceDirectory, { recursive: true });
+  let preparationDeadline = 100;
   const run = async (id: string) => {
     const manifest = await currentCheckSourceManifest(checkout);
     const receipts = join(dir, 'receipts', id);
@@ -660,7 +661,12 @@ test('an interrupted Gate preserves an independently bound pass until a transiti
       }),
     );
     writeFileSync(join(sourceDirectory, `source-manifest-${id}.json`), JSON.stringify(manifest));
-    return runLocalGate(inputs, checkout, { ...env, REZICS_CHECK_RUN: id }, (root, env, source) => {
+    const runEnv = {
+      ...env,
+      REZICS_CHECK_RUN: id,
+      REMOTE_CHECK_HOST_PREPARATION_DEADLINE: String(++preparationDeadline),
+    };
+    return runLocalGate(inputs, checkout, runEnv, (root, env, source) => {
       if (source?.run && source.revision && source.sourceSha256) {
         return GateWorkspaceResults.open(root, dir, env, {
           run: source.run,
