@@ -294,6 +294,79 @@ CREATE TABLE economy.journal (
 
 
 --
+-- Name: market_item; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_item (
+    home_id text NOT NULL,
+    item_id text NOT NULL,
+    initial_holder_id text NOT NULL,
+    holder_id text NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    marketable boolean NOT NULL,
+    CONSTRAINT market_item_generation_check CHECK ((generation > 0))
+);
+
+
+--
+-- Name: market_item_listing; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_item_listing (
+    home_id text NOT NULL,
+    book_id text NOT NULL,
+    listing_id text NOT NULL,
+    item_id text NOT NULL,
+    holder_id text NOT NULL,
+    generation bigint NOT NULL,
+    reservation_id text NOT NULL,
+    protected_until bigint NOT NULL,
+    phase text NOT NULL,
+    trade_id text,
+    CONSTRAINT market_item_listing_check CHECK (((phase <> 'reserved'::text) OR (trade_id IS NULL))),
+    CONSTRAINT market_item_listing_check1 CHECK (((phase <> ALL (ARRAY['prepared'::text, 'fenced'::text, 'delivered'::text])) OR (trade_id IS NOT NULL))),
+    CONSTRAINT market_item_listing_generation_check CHECK ((generation > 0)),
+    CONSTRAINT market_item_listing_phase_check CHECK ((phase = ANY (ARRAY['reserved'::text, 'prepared'::text, 'fenced'::text, 'released'::text, 'delivered'::text]))),
+    CONSTRAINT market_item_listing_protected_until_check CHECK ((protected_until > 0))
+);
+
+
+--
+-- Name: market_item_receipt; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_item_receipt (
+    home_id text NOT NULL,
+    book_id text NOT NULL,
+    instruction_id text NOT NULL,
+    work jsonb NOT NULL,
+    receipt_id uuid NOT NULL,
+    observed_generation bigint,
+    CONSTRAINT market_item_receipt_observed_generation_check CHECK ((observed_generation > 0)),
+    CONSTRAINT market_item_receipt_work_check CHECK ((jsonb_typeof(work) = 'object'::text))
+);
+
+
+--
+-- Name: market_item_trade; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_item_trade (
+    home_id text NOT NULL,
+    book_id text NOT NULL,
+    trade_id text NOT NULL,
+    listing_id text NOT NULL,
+    binding jsonb NOT NULL,
+    phase text NOT NULL,
+    decided_at bigint,
+    CONSTRAINT market_item_trade_binding_check CHECK ((jsonb_typeof(binding) = 'object'::text)),
+    CONSTRAINT market_item_trade_check CHECK (((phase = 'prepared'::text) = (decided_at IS NULL))),
+    CONSTRAINT market_item_trade_decided_at_check CHECK ((decided_at >= 0)),
+    CONSTRAINT market_item_trade_phase_check CHECK ((phase = ANY (ARRAY['prepared'::text, 'fenced'::text, 'released'::text, 'delivered'::text])))
+);
+
+
+--
 -- Name: market_listing; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -532,6 +605,46 @@ ALTER TABLE ONLY economy.journal
 
 
 --
+-- Name: market_item_listing market_item_listing_home_id_item_id_reservation_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_listing
+    ADD CONSTRAINT market_item_listing_home_id_item_id_reservation_id_key UNIQUE (home_id, item_id, reservation_id);
+
+
+--
+-- Name: market_item_listing market_item_listing_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_listing
+    ADD CONSTRAINT market_item_listing_pkey PRIMARY KEY (home_id, book_id, listing_id);
+
+
+--
+-- Name: market_item market_item_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item
+    ADD CONSTRAINT market_item_pkey PRIMARY KEY (home_id, item_id);
+
+
+--
+-- Name: market_item_receipt market_item_receipt_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_receipt
+    ADD CONSTRAINT market_item_receipt_pkey PRIMARY KEY (home_id, book_id, instruction_id);
+
+
+--
+-- Name: market_item_trade market_item_trade_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_trade
+    ADD CONSTRAINT market_item_trade_pkey PRIMARY KEY (home_id, book_id, trade_id);
+
+
+--
 -- Name: market_listing market_listing_book_id_item_home_id_item_id_reservation_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -610,6 +723,13 @@ CREATE INDEX hold_due_idx ON economy.hold USING btree (book_id, expires_at, asse
 
 
 --
+-- Name: market_one_active_item_listing; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE UNIQUE INDEX market_one_active_item_listing ON economy.market_item_listing USING btree (home_id, item_id) WHERE (phase = ANY (ARRAY['reserved'::text, 'prepared'::text, 'fenced'::text]));
+
+
+--
 -- Name: market_trade_pending_decision; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -670,6 +790,13 @@ CREATE TRIGGER funding_intent_pending_deposit AFTER INSERT OR UPDATE OF phase ON
 --
 
 CREATE TRIGGER journal_immutable BEFORE DELETE OR UPDATE ON economy.journal FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: market_item_receipt market_item_receipt_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER market_item_receipt_immutable BEFORE DELETE OR UPDATE ON economy.market_item_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -796,6 +923,22 @@ ALTER TABLE ONLY economy.journal
 
 ALTER TABLE ONLY economy.journal
     ADD CONSTRAINT journal_book_id_origin_id_namespace_operation_id_fkey FOREIGN KEY (book_id, origin_id, namespace, operation_id) REFERENCES economy.command_receipt(book_id, origin_id, namespace, operation_id);
+
+
+--
+-- Name: market_item_listing market_item_listing_home_id_item_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_listing
+    ADD CONSTRAINT market_item_listing_home_id_item_id_fkey FOREIGN KEY (home_id, item_id) REFERENCES economy.market_item(home_id, item_id);
+
+
+--
+-- Name: market_item_trade market_item_trade_home_id_book_id_listing_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_item_trade
+    ADD CONSTRAINT market_item_trade_home_id_book_id_listing_id_fkey FOREIGN KEY (home_id, book_id, listing_id) REFERENCES economy.market_item_listing(home_id, book_id, listing_id);
 
 
 --
