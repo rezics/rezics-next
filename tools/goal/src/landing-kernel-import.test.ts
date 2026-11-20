@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import { importLandingKernelCandidate } from './landing-kernel-import.ts';
 import { transpileLandingCandidate } from './landing-transpile.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -188,17 +189,23 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
 
 test('a real Reylo SQL mismatch against candidate migrations returns the first diagnostic', async () => {
   const repository = resolveRepository();
-  const fixture = temporaryDirectory();
+  // Keep the fixture until the native driver finishes. The unit-test afterEach
+  // sweep can run while a timed-out test is still unwinding.
+  const fixture = ownedTemporaryDirectory(join(repository, '.temp', 'goal-tests'), 'kernel-import-');
   try {
     const root = fixture.path;
-    git(root, 'init', '-b', 'dev');
-    git(root, 'config', 'user.name', 'Fixture');
-    git(root, 'config', 'user.email', 'fixture@example.invalid');
-    put(root, '.gitignore', '.temp/\n');
+    put(root, 'services/kernel/package.json', '{"type":"module"}\n');
+    // Apply the candidate migrations, then let Reylo describe this query
+    // against the live database without warming the candidate's SQL cache.
     put(
       root,
       'services/kernel/scripts/derived.ts',
-      `export { withThrowawayDatabase } from ${JSON.stringify(join(repository, 'services/kernel/scripts/derived.ts'))};\n`,
+      [
+        `import { withThrowawayDatabase as migrate } from ${JSON.stringify(join(repository, 'services/kernel/scripts/derived.ts'))};`,
+        'export function withThrowawayDatabase(work) {',
+        '  return migrate(({ REYLO_CONFIG, ...env }) => work(env), { analysis: false });',
+        '}\n',
+      ].join('\n'),
     );
     put(root, 'services/kernel/src/mismatch.sql', 'SELECT missing_query_key FROM semantic.subject;\n');
     put(root, 'services/kernel/src/server.ts', "import mismatch from './mismatch.sql';\nexport { mismatch };\n");
@@ -206,18 +213,20 @@ test('a real Reylo SQL mismatch against candidate migrations returns the first d
     symlinkIfPresent(join(repository, 'node_modules'), join(root, 'node_modules'));
     symlinkIfPresent(join(repository, 'services/kernel/node_modules'), join(root, 'services/kernel/node_modules'));
     const result = await runImport(root, ['services/kernel/src/server.ts', 'services/kernel/src/mismatch.sql']);
-    expect(['diagnostic', 'unavailable']).toContain(result.outcome);
-    if (result.outcome === 'unavailable') {
-      expect(result.infrastructureError).toBeTruthy();
-      return;
-    }
-    expect(result.diagnostic?.message.length).toBeGreaterThan(0);
-    expect(result.diagnostic?.entry).toBe('services/kernel/src/server.ts');
-    expect(existsSync(result.logPath)).toBe(true);
+    console.log(
+      `landing-kernel-import mismatch: outcome=${result.outcome} setup=${result.setupMs}ms import=${result.importMs}ms cleanup=${result.cleanupMs}ms total=${result.elapsedMs}ms`,
+    );
+    expect(result.outcome, result.infrastructureError ?? result.output).toBe('diagnostic');
+    expect(result.diagnostic).toMatchObject({
+      entry: 'services/kernel/src/server.ts',
+      message: expect.stringContaining('column "missing_query_key" does not exist'),
+    });
+    expect(readFileSync(result.logPath, 'utf8')).toContain('Dev landing Kernel import diagnostic:');
+    expect(readdirSync(join(root, '.temp'))).toEqual(['landing.log']);
   } finally {
     fixture.close();
   }
-}, 180_000);
+}, 360_000);
 
 test('importing the actual Kernel server and worker against a throwaway database measures setup, import and cleanup', async () => {
   const root = resolveRepository();
