@@ -409,11 +409,10 @@ async function writeBaselinePage(
 
 type HomeRange = Readonly<{ start: number; end: number }>;
 export type PreparedEnrollmentRange = HomeRange & Readonly<{ digest: string }>;
-export type ColdEnrollmentRequest = Readonly<{ version: 1; job: string; byteLimit: number }> &
-  (
-    | Readonly<{ action: 'prepare' | 'prepare-and-adopt'; ranges: readonly HomeRange[] }>
-    | Readonly<{ action: 'adopt'; ranges: readonly PreparedEnrollmentRange[] }>
-  );
+export type ColdEnrollmentStage =
+  | Readonly<{ action: 'prepare' | 'prepare-and-adopt'; ranges: readonly HomeRange[] }>
+  | Readonly<{ action: 'adopt'; ranges: readonly PreparedEnrollmentRange[] }>;
+export type ColdEnrollmentRequest = Readonly<{ version: 1; job: string; byteLimit: number }> & ColdEnrollmentStage;
 
 const coldEnrollmentFixedInputs = 24;
 const coldEnrollmentFixedBytes = 64 * 1024;
@@ -421,18 +420,20 @@ const coldEnrollmentAdoptInputsPerHome = 20;
 const coldEnrollmentPrepareInputsPerHome = (keyCount: number) => 26 + 2 * keyCount;
 const coldEnrollmentBytesPerHome = (keys: readonly string[]) => 12 * 1024 + 4 * Buffer.byteLength(JSON.stringify(keys));
 
-/** Fund two disjoint prepares and their shared adoption from the same Search offer. */
+/** Fund all preparation and ordered adoption from the same Search offer. */
 export function planColdSubjectEnrollment(
   dependencies: readonly PublicFilterDependencyKey[],
   frontier: number,
   inputLimit: number,
   byteLimit: number,
+  separateAdoption = false,
 ): readonly HomeRange[] | null {
   const keys = publicFilterCoverageKeys(dependencies, true);
   if (keys.length > 450) return null;
-  // One retained definition and bootstrap read, shared by preparation and adoption.
-  const inputs = inputLimit - 2 * coldEnrollmentFixedInputs - 16;
-  const bytes = byteLimit - 2 * coldEnrollmentFixedBytes - 64 * 1024;
+  // Lookahead uses two independently checked Source calls for the same page.
+  const bindingReads = separateAdoption ? 2 : 1;
+  const inputs = inputLimit - 2 * coldEnrollmentFixedInputs - bindingReads * 16;
+  const bytes = byteLimit - 2 * coldEnrollmentFixedBytes - bindingReads * 64 * 1024;
   const homes = Math.min(
     4096 - frontier,
     maxPublicFilterEnrollmentHomes,
@@ -440,6 +441,7 @@ export function planColdSubjectEnrollment(
     Math.floor(bytes / (2 * coldEnrollmentBytesPerHome(keys))),
   );
   if (homes < 2) return null;
+  if (separateAdoption) return [{ start: frontier, end: frontier + homes }];
   const middle = frontier + Math.ceil(homes / 2);
   return [
     { start: frontier, end: middle },

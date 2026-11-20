@@ -8,6 +8,7 @@ import {
   readPublicFilterCreationEvents,
   type PublicFilterCreationWindow,
 } from '../../src/semantic/public-filter-creation-window.ts';
+import { planColdSubjectEnrollment } from '../../src/semantic/public-filter-coverage-baseline.ts';
 import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
@@ -440,6 +441,39 @@ test('native Subject enrollment prepares disjoint ranges and rechecks the origin
     );
     expect(combined).toMatchObject({ status: 'range-adopted' });
     expect((await readFrontier())[0]).toEqual({ account_after: next + 3, coverage_after: next + 3 });
+    // A separately prepared worker page must fund the second binding read and
+    // adoption from what is left after the original Access receipts commit.
+    const startLookahead = next + 3;
+    const inputLimit = 872;
+    const planned = planColdSubjectEnrollment(
+      resolved.definition.dependencyKeys,
+      startLookahead,
+      inputLimit,
+      rangeContext.byteLimit,
+      true,
+    );
+    if (planned?.length !== 1) throw new Error('Expected one funded lookahead range');
+    const staged = await prepare([...planned], inputLimit);
+    if (staged?.status !== 'ranges-prepared') throw new Error(`Lookahead preparation ${staged?.status}`);
+    expect((await readFrontier())[0]).toEqual({ account_after: startLookahead, coverage_after: startLookahead });
+    const committed = await advanceNativePublicFilterPreparation(
+      binding,
+      {
+        ...resume,
+        inputLimit: inputLimit - staged.cost.inputKeys,
+        coldEnrollment: {
+          ...rangeContext,
+          byteLimit: rangeContext.byteLimit - staged.cost.bytes,
+          action: 'adopt',
+          ranges: staged.ranges,
+        },
+      },
+      readContext(),
+    );
+    if (committed?.status !== 'range-adopted') throw new Error(`Lookahead adoption ${committed?.status}`);
+    expect(staged.cost.inputKeys + committed.cost.inputKeys).toBeLessThanOrEqual(inputLimit);
+    expect(staged.cost.bytes + committed.cost.bytes).toBeLessThanOrEqual(rangeContext.byteLimit);
+    expect((await readFrontier())[0]).toEqual({ account_after: planned[0]!.end, coverage_after: planned[0]!.end });
     console.log('Cold enrollment Source cost', JSON.stringify(prepared.cost));
     const beforeLoss = (await readFrontier())[0]!;
     let lost = false;

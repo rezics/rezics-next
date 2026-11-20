@@ -23,6 +23,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from './native-bindings.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
+import type { ColdEnrollmentStage } from '../semantic/public-filter-coverage-baseline.ts';
 import type { PublicFilterConsumer } from '../semantic/index.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import type {
@@ -691,43 +692,62 @@ export function createSearchGenerationPublication(
     return rows.length === 1 ? rows[0]! : null;
   }
 
-  async function enrollPreparedSubjectRanges(
+  async function subjectEnrollmentPage(
     job: Job,
     definition: SearchPublicFilterSourceDefinition,
     frontier: SubjectEnrollmentFrontier,
     context: PublicFilterConsumerContext,
     meter: Meter,
     reserve: number,
-  ): Promise<SubjectEnrollmentFrontier | null> {
-    if (!planColdSubjectEnrollment || !advanceNativePublicFilterPreparation) return null;
-    const inputLimit = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys;
-    const byteLimit = VALIDATION_BYTE_LIMIT - meter[validationBytes];
-    const ranges = planColdSubjectEnrollment(definition.dependencyKeys, frontier.end, inputLimit, byteLimit);
-    if (!ranges) return null;
-    const adopted = await advanceNativePublicFilterPreparation(
-      binding,
-      {
-        bootstrap: frontier.bootstrap,
-        subjectEnrollment: {
-          consumer: job.consumer,
-          source: job.binding.source,
-          registration: { partition: 0, id: frontier.registration },
-          capturingOnly: true,
-        },
-        inputLimit,
-        coldEnrollment: { version: 1, job: job.job, byteLimit, action: 'prepare-and-adopt', ranges },
-      },
-      context,
+    separateAdoption = false,
+  ) {
+    const advance = advanceNativePublicFilterPreparation;
+    if (!planColdSubjectEnrollment || !advance) return null;
+    const inputLimit = () => PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys;
+    const byteLimit = () => VALIDATION_BYTE_LIMIT - meter[validationBytes];
+    const ranges = planColdSubjectEnrollment(
+      definition.dependencyKeys,
+      frontier.end,
+      inputLimit(),
+      byteLimit(),
+      separateAdoption,
     );
-    if (!adopted) return null;
-    add(meter, adopted.cost);
-    if (adopted.status !== 'range-adopted') {
-      if ('reason' in adopted && adopted.reason === 'deadline') throw new Pending('deadline');
-      return null;
-    }
+    if (!ranges) return null;
     const end = ranges.at(-1)!.end;
-    if (frontier.end < 40 || end === 4096) bookPreparationTiming?.mark('enrollmentRangeAdopted', end);
-    return { ...frontier, end };
+    const submit = async (stage: ColdEnrollmentStage) => {
+      const result = await advance(
+        binding,
+        {
+          bootstrap: frontier.bootstrap,
+          subjectEnrollment: {
+            consumer: job.consumer,
+            source: job.binding.source,
+            registration: { partition: 0, id: frontier.registration },
+            capturingOnly: true,
+          },
+          inputLimit: inputLimit(),
+          coldEnrollment: { version: 1, job: job.job, byteLimit: byteLimit(), ...stage },
+        },
+        context,
+      );
+      if (result) add(meter, result.cost);
+      if (result && 'reason' in result && result.reason === 'deadline') throw new Pending('deadline');
+      return result;
+    };
+    let adoption: ColdEnrollmentStage = { action: 'prepare-and-adopt', ranges };
+    if (separateAdoption) {
+      const prepared = await submit({ action: 'prepare', ranges });
+      if (prepared?.status !== 'ranges-prepared') return null;
+      adoption = { action: 'adopt', ranges: prepared.ranges };
+    }
+    return {
+      frontier: { ...frontier, end },
+      async adopt() {
+        if ((await submit(adoption))?.status !== 'range-adopted') return false;
+        if (frontier.end < 40 || end === 4096) bookPreparationTiming?.mark('enrollmentRangeAdopted', end);
+        return true;
+      },
+    };
   }
 
   async function checkpointEnrolledSubjects(
@@ -1007,14 +1027,8 @@ export function createSearchGenerationPublication(
                       reservedInputs,
                       job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
                     );
-                    frontier = await enrollPreparedSubjectRanges(
-                      job,
-                      definition,
-                      frontier,
-                      context,
-                      pageMeter,
-                      reserve,
-                    );
+                    const page = await subjectEnrollmentPage(job, definition, frontier, context, pageMeter, reserve);
+                    frontier = page && (await page.adopt()) ? page.frontier : null;
                     if (frontier) return true;
                   }
                   return continueSubjectEnrollment(job, connection, context, pageMeter, true, reservedInputs);
@@ -1023,6 +1037,7 @@ export function createSearchGenerationPublication(
                 if (enrollment === 'sealed') return work(job, client, current, capture, enrollment);
                 if (enrollment === false) throw new Pending('source_pending');
                 if (enrollment !== true) return work(job, client, current, capture);
+                const preparedFirstPage = frontier !== null;
                 const subjectMeter = cost();
                 if (canPrepareRanges && !frontier)
                   frontier = await subjectEnrollmentFrontier(job, client, subjectMeter);
@@ -1030,6 +1045,38 @@ export function createSearchGenerationPublication(
                 const additionalEnrollmentCosts: Meter[] = [];
                 const enroll = async () => {
                   let duration = 0;
+                  if (preparedFirstPage && frontier) {
+                    const prepare = (start: SubjectEnrollmentFrontier, page: number) => {
+                      const pageMeter = cost();
+                      additionalEnrollmentCosts.push(pageMeter);
+                      const reserve = Math.max(
+                        page === 1 && scan ? SUBJECT_ENROLLMENT_SCAN_INPUTS : 0,
+                        job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+                      );
+                      return subjectEnrollmentPage(job, definition, start, context, pageMeter, reserve, true);
+                    };
+                    // A staged page exposes original receipts. Only its ordered adoption advances the prefix.
+                    const firstStart = Date.now();
+                    let staged: Awaited<ReturnType<typeof prepare>> = await prepare(frontier, 1);
+                    duration = Date.now() - firstStart;
+                    for (let page = 1; staged; page++) {
+                      const started = Date.now();
+                      const more =
+                        page + 1 < SUBJECT_ENROLLMENT_PAGES &&
+                        staged.frontier.end < 4096 &&
+                        started + 2 * duration < context.deadline;
+                      const [committed, next] = await Promise.allSettled([
+                        staged.adopt(),
+                        more ? prepare(staged.frontier, page + 1) : null,
+                      ]);
+                      if (committed.status === 'rejected') throw committed.reason;
+                      if (next.status === 'rejected') throw next.reason;
+                      if (!committed.value) return;
+                      staged = next.value;
+                      duration = Math.max(duration, Date.now() - started);
+                    }
+                    return;
+                  }
                   for (let page = 1; page < SUBJECT_ENROLLMENT_PAGES; page++) {
                     const started = Date.now();
                     if (started + 2 * duration >= context.deadline) break;

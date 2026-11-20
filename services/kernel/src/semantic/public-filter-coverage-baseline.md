@@ -24,8 +24,10 @@ evidence. Recovery reconstructs the same digest from those original rows, includ
 payload needs a separate retention lifetime. Parallel preparation only enrolls the compiler keys and verifies
 their committed receipts. It leaves the Search and Source cursors untouched.
 
-The Search worker prepares two disjoint ranges in one Source call, then adopts the contiguous batch in one
-transaction. Adoption rereads the whole batch under the native owner and checkpoint locks, verifies each range
+The first Search page prepares two disjoint ranges in one Source call. Later pages can prepare one funded
+Access group while the preceding page adopts. Each page pays for both retained binding reads and one adoption.
+The Subject scan uses only a committed prefix. A failed predecessor leaves later original receipts available for
+replay. Adoption rereads the whole batch under the native owner and checkpoint locks, verifies each range
 digest against its own slice, and binds the existing Source and Search prefix to the same job, bootstrap,
 definition, registration generation and incarnation. A gap returns pending. An overlapping retry appends only the
 unadopted suffix with its original predecessors. The ordinary path can consume the same home receipts.
@@ -38,7 +40,8 @@ Observation, repair, ACK and serving use their existing authority checks.
 - Bound: One offer reserves aggregate inputs and bytes before dispatch. Preparation reserves 24 fixed inputs plus
   26 inputs per home and two per compiler key per home, including a rejected fresh group probe and single-home
   fallback. Batched adoption reserves 24 fixed and 20 inputs per home. The combined worker path charges the
-  shared definition and bootstrap reads once. Range size and the number of concurrent ranges share these bounds.
+  shared definition and bootstrap reads once. Lookahead reserves another 16 inputs and 64 KiB for its second
+  binding read. At most one lookahead page prepares alongside one ordered adoption.
 - Growth check: The focused native enrollment fixture holds one predecessor, reads the later committed home from
   a second connection, and checks the unchanged prefix, batch rejection on digest or epoch drift, recovery and
   ordinary continuation.
