@@ -605,7 +605,7 @@ test.each(['open', 'closed', 'previous writer'])(
     });
     if (mode === 'previous writer') {
       const previousSql = await Bun.file(
-        new URL('./support/previous-identity-writer-settle.sql', import.meta.url),
+        new URL('./support/previous-identity-writer-settle.sql.txt', import.meta.url),
       ).text();
       const originalQuery = pg.Client.prototype.query;
       let previousSettlements = 0;
