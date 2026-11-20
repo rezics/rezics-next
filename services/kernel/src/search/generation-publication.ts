@@ -699,55 +699,34 @@ export function createSearchGenerationPublication(
     reserve: number,
   ): Promise<SubjectEnrollmentFrontier | null> {
     if (!planColdSubjectEnrollment || !advanceNativePublicFilterPreparation) return null;
-    const inputLimit = () => PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys;
-    const byteLimit = () => VALIDATION_BYTE_LIMIT - meter[validationBytes];
-    const ranges = planColdSubjectEnrollment(definition.dependencyKeys, frontier.end, inputLimit(), byteLimit());
+    const inputLimit = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys;
+    const byteLimit = VALIDATION_BYTE_LIMIT - meter[validationBytes];
+    const ranges = planColdSubjectEnrollment(definition.dependencyKeys, frontier.end, inputLimit, byteLimit);
     if (!ranges) return null;
-    const request = {
-      bootstrap: frontier.bootstrap,
-      subjectEnrollment: {
-        consumer: job.consumer,
-        source: job.binding.source,
-        registration: { partition: 0, id: frontier.registration },
-        capturingOnly: true as const,
-      },
-    };
-    const prepared = await advanceNativePublicFilterPreparation(
+    const adopted = await advanceNativePublicFilterPreparation(
       binding,
       {
-        ...request,
-        inputLimit: inputLimit(),
-        coldEnrollment: { version: 1, job: job.job, byteLimit: byteLimit(), action: 'prepare', ranges },
+        bootstrap: frontier.bootstrap,
+        subjectEnrollment: {
+          consumer: job.consumer,
+          source: job.binding.source,
+          registration: { partition: 0, id: frontier.registration },
+          capturingOnly: true,
+        },
+        inputLimit,
+        coldEnrollment: { version: 1, job: job.job, byteLimit, action: 'prepare-and-adopt', ranges },
       },
       context,
     );
-    if (!prepared) return null;
-    add(meter, prepared.cost);
-    if (prepared.status !== 'ranges-prepared') {
-      if ('reason' in prepared && prepared.reason === 'deadline') throw new Pending('deadline');
+    if (!adopted) return null;
+    add(meter, adopted.cost);
+    if (adopted.status !== 'range-adopted') {
+      if ('reason' in adopted && adopted.reason === 'deadline') throw new Pending('deadline');
       return null;
     }
-    let end = frontier.end;
-    for (const range of prepared.ranges) {
-      if (inputLimit() <= 0 || byteLimit() <= 0 || context.deadline <= Date.now()) break;
-      const adopted = await advanceNativePublicFilterPreparation(
-        binding,
-        {
-          ...request,
-          inputLimit: inputLimit(),
-          coldEnrollment: { version: 1, job: job.job, byteLimit: byteLimit(), action: 'adopt', range },
-        },
-        context,
-      );
-      if (!adopted) break;
-      add(meter, adopted.cost);
-      if (adopted.status !== 'range-adopted') break;
-      end = range.end;
-      if (range.start < 40 || end === 4096) bookPreparationTiming?.mark('enrollmentRangeAdopted', end);
-    }
-    // A failed successor can be retried from its original receipts. Only the
-    // prefix that Source accepted can admit reconciliation.
-    return end > frontier.end ? { ...frontier, end } : null;
+    const end = ranges.at(-1)!.end;
+    if (frontier.end < 40 || end === 4096) bookPreparationTiming?.mark('enrollmentRangeAdopted', end);
+    return { ...frontier, end };
   }
 
   async function checkpointEnrolledSubjects(

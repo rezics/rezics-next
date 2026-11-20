@@ -397,8 +397,8 @@ type HomeRange = Readonly<{ start: number; end: number }>;
 export type PreparedEnrollmentRange = HomeRange & Readonly<{ digest: string }>;
 export type ColdEnrollmentRequest = Readonly<{ version: 1; job: string; byteLimit: number }> &
   (
-    | Readonly<{ action: 'prepare'; ranges: readonly HomeRange[] }>
-    | Readonly<{ action: 'adopt'; range: PreparedEnrollmentRange }>
+    | Readonly<{ action: 'prepare' | 'prepare-and-adopt'; ranges: readonly HomeRange[] }>
+    | Readonly<{ action: 'adopt'; ranges: readonly PreparedEnrollmentRange[] }>
   );
 
 const coldEnrollmentFixedInputs = 24;
@@ -407,7 +407,7 @@ const coldEnrollmentAdoptInputsPerHome = 20;
 const coldEnrollmentPrepareInputsPerHome = (keyCount: number) => 26 + 2 * keyCount;
 const coldEnrollmentBytesPerHome = (keys: readonly string[]) => 12 * 1024 + 4 * Buffer.byteLength(JSON.stringify(keys));
 
-/** Fund a two-range prepare and its ordered adoptions from the same Search offer. */
+/** Fund two disjoint prepares and their shared adoption from the same Search offer. */
 export function planColdSubjectEnrollment(
   dependencies: readonly PublicFilterDependencyKey[],
   frontier: number,
@@ -416,9 +416,9 @@ export function planColdSubjectEnrollment(
 ): readonly HomeRange[] | null {
   const keys = publicFilterCoverageKeys(dependencies, true);
   if (keys.length > 450) return null;
-  // Prepare plus two adoptions, each with its own retained definition and bootstrap read.
-  const inputs = inputLimit - 3 * (coldEnrollmentFixedInputs + 16);
-  const bytes = byteLimit - 3 * (coldEnrollmentFixedBytes + 64 * 1024);
+  // One retained definition and bootstrap read, shared by preparation and adoption.
+  const inputs = inputLimit - 2 * coldEnrollmentFixedInputs - 16;
+  const bytes = byteLimit - 2 * coldEnrollmentFixedBytes - 64 * 1024;
   const homes = Math.min(
     4096 - frontier,
     maxPublicFilterEnrollmentHomes,
@@ -444,18 +444,19 @@ type ColdEnrollmentBinding = PublicFilterBaselineBinding &
   }>;
 
 export function coldEnrollmentFunding(request: ColdEnrollmentRequest, keys: readonly string[]) {
-  const ranges = request.action === 'adopt' ? [request.range] : request.ranges;
+  const { action, ranges } = request;
   if (
     request.version !== 1 ||
+    typeof request.job !== 'string' ||
     !uuid.test(request.job) ||
-    (request.action !== 'prepare' && request.action !== 'adopt') ||
+    (action !== 'prepare' && action !== 'adopt' && action !== 'prepare-and-adopt') ||
     !Number.isSafeInteger(request.byteLimit) ||
     request.byteLimit < 0 ||
     request.byteLimit > 4 * 1024 * 1024 ||
     !Array.isArray(ranges) ||
     ranges.length < 1 ||
     ranges.length > 4 ||
-    ranges.some(
+    Array.from(ranges).some(
       ({ start, end }, i) =>
         !Number.isInteger(start) ||
         !Number.isInteger(end) ||
@@ -465,7 +466,8 @@ export function coldEnrollmentFunding(request: ColdEnrollmentRequest, keys: read
         end - start > maxPublicFilterEnrollmentHomes ||
         (i > 0 && ranges[i - 1]!.end > start),
     ) ||
-    (request.action === 'adopt' && !/^[0-9a-f]{64}$/.test(request.range.digest))
+    (action === 'adopt' &&
+      request.ranges.some(({ digest }) => typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)))
   )
     throw new TypeError('Invalid cold Subject enrollment range');
   const homes = ranges.reduce((sum, range) => sum + range.end - range.start, 0);
@@ -473,11 +475,14 @@ export function coldEnrollmentFunding(request: ColdEnrollmentRequest, keys: read
     throw new RangeError('Cold enrollment exceeds its native page bound');
   // A failed group probe can repeat the Access reads on the retained path.
   // Reserve the original writes, the independent receipt reread, and both binding reads.
+  const prepares = action !== 'adopt';
+  const adopts = action !== 'prepare';
+  const stages = prepares && adopts ? 2 : 1;
   const perHome =
-    request.action === 'prepare' ? coldEnrollmentPrepareInputsPerHome(keys.length) : coldEnrollmentAdoptInputsPerHome;
+    (prepares ? coldEnrollmentPrepareInputsPerHome(keys.length) : 0) + (adopts ? coldEnrollmentAdoptInputsPerHome : 0);
   return {
-    inputs: coldEnrollmentFixedInputs + homes * perHome,
-    bytes: coldEnrollmentFixedBytes + homes * coldEnrollmentBytesPerHome(keys),
+    inputs: stages * coldEnrollmentFixedInputs + homes * perHome,
+    bytes: stages * (coldEnrollmentFixedBytes + homes * coldEnrollmentBytesPerHome(keys)),
   };
 }
 
@@ -594,7 +599,15 @@ async function readColdEnrollment(
     complete: true,
   }));
   for (const receipt of receipts) requireReceipt(binding, receipt);
-  const digest = hash([
+  return receipts;
+}
+
+function coldEnrollmentDigest(
+  binding: ColdEnrollmentBinding,
+  range: HomeRange,
+  receipts: readonly AccountDiscoveryEnrollment[],
+) {
+  return hash([
     1,
     binding.job,
     binding.bootstrap,
@@ -607,7 +620,6 @@ async function readColdEnrollment(
     range.end,
     receipts.map((receipt) => receipt.receipt),
   ]);
-  return { receipts, digest };
 }
 
 export async function prepareColdEnrollment(
@@ -624,8 +636,8 @@ export async function prepareColdEnrollment(
       try {
         // An already adopted range can be read back after a lost response.
         if (range.end > frontier) await enroll(range);
-        const proof = await readColdEnrollment(pool, binding, range, false);
-        return { start: range.start, end: range.end, digest: proof.digest };
+        const receipts = await readColdEnrollment(pool, binding, range, false);
+        return { start: range.start, end: range.end, digest: coldEnrollmentDigest(binding, range, receipts) };
       } finally {
         timing?.mark('enrollmentRangePrepareEnd', range.start);
       }
@@ -636,25 +648,32 @@ export async function prepareColdEnrollment(
     if (result.status === 'rejected') throw result.reason;
     return result.value;
   });
-  await coldEnrollmentFrontier(pool, binding);
-  return prepared;
+  return { ranges: prepared, frontier: await coldEnrollmentFrontier(pool, binding) };
 }
 
 export async function adoptColdEnrollment(
   pool: Pool,
   binding: ColdEnrollmentBinding,
-  range: PreparedEnrollmentRange,
+  ranges: readonly PreparedEnrollmentRange[],
   deadline: number,
+  preparedFrontier?: number,
 ) {
   // A gap can be reported while its predecessor is still taking writer locks.
-  const frontier = await coldEnrollmentFrontier(pool, binding);
-  if (range.start > frontier) return 'pending' as const;
+  const frontier = preparedFrontier ?? (await coldEnrollmentFrontier(pool, binding));
+  const start = ranges[0]!.start;
+  const end = ranges.at(-1)!.end;
+  if (start > frontier || ranges.some((range, i) => i > 0 && range.start !== ranges[i - 1]!.end))
+    return 'pending' as const;
   return transaction(pool, deadline, async (client) => {
     // Lock home zero before higher homes, and keep the original pins and owner
     // epochs stable through the ordered cursor write.
     await client.query('/* semantic.native-keyed:1:1 */ SELECT 1 FROM core.partition WHERE partition_no=0 FOR SHARE');
-    const proof = await readColdEnrollment(client, binding, range, true);
-    if (proof.digest !== range.digest) throw new CommandUnavailableError('contention', range.start);
+    const receipts = await readColdEnrollment(client, binding, { start, end }, true);
+    for (const range of ranges) {
+      const original = receipts.slice(range.start - start, range.end - start);
+      if (coldEnrollmentDigest(binding, range, original) !== range.digest)
+        throw new CommandUnavailableError('contention', range.start);
+    }
     // Registration replaces the native target before taking its own row lock.
     const target = await client.query(
       `/* semantic.native-keyed:1:1 */ SELECT 1 FROM search.public_filter_target
@@ -664,10 +683,10 @@ export async function adoptColdEnrollment(
     if (target.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
     await lockRegistration(client, binding);
     const current = await coldEnrollmentFrontier(client, binding, true);
-    if (range.end <= current) return 'adopted' as const;
-    if (range.start > current) return 'pending' as const;
+    if (end <= current) return 'adopted' as const;
+    if (start > current) return 'pending' as const;
     // An ordinary enrollment may have adopted part of this range in the meantime.
-    await writeBaselinePage(client, binding, proof.receipts.slice(current - range.start));
+    await writeBaselinePage(client, binding, receipts.slice(current - start));
     return 'adopted' as const;
   });
 }

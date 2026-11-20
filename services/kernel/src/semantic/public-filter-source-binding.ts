@@ -4740,11 +4740,12 @@ export function createNativePublicFilterSourceBinding(
           job: request.job,
           keys,
         };
-        if (request.action === 'adopt') {
-          const state = await adoptColdEnrollment(db, baseline, request.range, context.deadline);
+        const adopt = async (ranges: readonly PreparedEnrollmentRange[], frontier?: number) => {
+          const state = await adoptColdEnrollment(db, baseline, ranges, context.deadline, frontier);
           return { status: state === 'adopted' ? ('range-adopted' as const) : ('range-pending' as const), cost };
-        }
-        const ranges = await prepareColdEnrollment(db, baseline, request.ranges, async (range) => {
+        };
+        if (request.action === 'adopt') return adopt(request.ranges);
+        const prepared = await prepareColdEnrollment(db, baseline, request.ranges, async (range) => {
           const grouped = ports.access.newAccountEnrollment;
           const enrollment = {
             bootstrap: row.bootstrap,
@@ -4763,7 +4764,8 @@ export function createNativePublicFilterSourceBinding(
               await ports.access.enrollAccountHome(db, { ...enrollment, partition }, context);
           }
         });
-        return { status: 'ranges-prepared' as const, ranges, cost };
+        if (request.action === 'prepare-and-adopt') return adopt(prepared.ranges, prepared.frontier);
+        return { status: 'ranges-prepared' as const, ranges: prepared.ranges, cost };
       });
     }
     const retained = await run(context, async (cost, db) => {

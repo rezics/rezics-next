@@ -355,13 +355,13 @@ test('native Subject enrollment prepares disjoint ranges and rechecks the origin
         },
         context,
       );
-    const adopt = (range: { start: number; end: number; digest: string }) =>
+    const adopt = (...ranges: { start: number; end: number; digest: string }[]) =>
       advanceNativePublicFilterPreparation(
         binding,
         {
           ...resume,
           inputLimit: 872,
-          coldEnrollment: { ...rangeContext, action: 'adopt', range },
+          coldEnrollment: { ...rangeContext, action: 'adopt', ranges },
         },
         readContext(),
       );
@@ -407,17 +407,39 @@ test('native Subject enrollment prepares disjoint ranges and rechecks the origin
       status: 'ranges-prepared',
       ranges: [laterRange],
     });
-    expect(await adopt(firstRange!)).toMatchObject({ status: 'range-adopted' });
+    expect(await adopt(firstRange!, { ...laterRange, digest: '0'.repeat(64) })).toMatchObject({
+      status: 'unavailable',
+      reason: 'owner_unavailable',
+    });
+    expect((await readFrontier())[0]).toEqual(beforeRanges);
     const nextEpoch = (
       await f.db.admin.query<{ epoch: number }>('SELECT epoch FROM core.partition WHERE partition_no=$1', [next])
     ).rows[0]!.epoch;
     await setNativePartitionEpochForFixture(f.db, next, nextEpoch + 1);
-    expect(await adopt(laterRange)).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable' });
-    expect((await readFrontier())[0]!.coverage_after).toBe(next);
+    expect(await adopt(firstRange!, laterRange)).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable' });
+    expect((await readFrontier())[0]).toEqual(beforeRanges);
     await setNativePartitionEpochForFixture(f.db, next, nextEpoch);
-    expect(await adopt(laterRange)).toMatchObject({ status: 'range-adopted' });
-    expect(await adopt(laterRange)).toMatchObject({ status: 'range-adopted' });
+    expect(await adopt(firstRange!, laterRange)).toMatchObject({ status: 'range-adopted' });
+    expect(await adopt(firstRange!, laterRange)).toMatchObject({ status: 'range-adopted' });
     expect((await readFrontier())[0]).toEqual({ account_after: next + 1, coverage_after: next + 1 });
+    const combined = await advanceNativePublicFilterPreparation(
+      binding,
+      {
+        ...resume,
+        inputLimit: 872,
+        coldEnrollment: {
+          ...rangeContext,
+          action: 'prepare-and-adopt',
+          ranges: [
+            { start: next + 1, end: next + 2 },
+            { start: next + 2, end: next + 3 },
+          ],
+        },
+      },
+      readContext(),
+    );
+    expect(combined).toMatchObject({ status: 'range-adopted' });
+    expect((await readFrontier())[0]).toEqual({ account_after: next + 3, coverage_after: next + 3 });
     console.log('Cold enrollment Source cost', JSON.stringify(prepared.cost));
     const beforeLoss = (await readFrontier())[0]!;
     let lost = false;
