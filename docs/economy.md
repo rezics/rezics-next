@@ -14,9 +14,11 @@ API responses, private receipts and mutations use the same decision. Recheck aut
 owner workflows authenticate their source and complete only named, previously admitted obligations. Use test assets and
 deterministic provider adapters for development. The deployed system starts closed and real-money execution requires a
 separately authorized instrument, provider and operating policy.
-`KERNEL_ECONOMY_BOOK_ID` selects the installed book for an explicitly configured Kernel deployment. An absent value
-leaves the wallet adapter unbound. Choosing a book grants no account access. Provision assets and balances through
-trusted owner operations in the configured test environment.
+`KERNEL_ECONOMY_BOOK_ID` selects the installed book and `KERNEL_ECONOMY_NODE` selects the local native owner. Both
+settings are required to bind the wallet adapter. Wallet requests lock current account and direct grant evidence from
+the active local owner in the ledger transaction before loading a wallet fact or receipt. The source and recipient of a
+transfer both require that evidence. Provision assets and balances through trusted owner operations in the configured
+test environment.
 
 ## Book and wallet
 

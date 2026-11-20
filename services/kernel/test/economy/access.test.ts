@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
 import type { EconomyWalletPort } from '../../src/economy/contract.ts';
-import { createNativeEconomyLedger } from '../../src/composition/economy.ts';
+import { createNativeEconomyLedger, createNativeEconomyWallet } from '../../src/composition/economy.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -131,8 +131,9 @@ beforeAll(async () => {
         }),
     });
   app = mount(economy);
-  ledger = createNativeEconomyLedger(db.pool, `http:${crypto.randomUUID()}`);
-  nativeApp = mount(ledger);
+  const bookId = `http:${crypto.randomUUID()}`;
+  ledger = createNativeEconomyLedger(db.pool, bookId);
+  nativeApp = mount(createNativeEconomyWallet(db.pool, { bookId, node: 'b' }));
 });
 
 afterAll(async () => {

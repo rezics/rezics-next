@@ -1,5 +1,6 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
 export { readExplicitExposureGrant } from './gates/catalogue.ts';
+export { lockNativeEconomyAdmission } from './gates/economy-admission.ts';
 export type {
   Access,
   AccessCheck,
