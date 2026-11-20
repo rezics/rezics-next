@@ -86,15 +86,18 @@ async function withThreeTaskIncident(
     inbox: ManagerEvent[] = [];
   try {
     h.settings.toolRetryBackoffMs = [0, 0, 0];
-    const taskIds = [1, 2, 3].map(() => h.tasks.dispatch(h.briefFile).id);
+    const taskIds = [1, 2, 3].map(
+      (index) => h.tasks.dispatch(h.writeBrief(`Run independent cache consumer ${index}.`)).id,
+    );
+    expect(new Set(taskIds).size).toBe(3);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     for (const taskId of taskIds) await job.start(taskId);
     for (const [index, taskId] of taskIds.entries()) {
       const task = h.store.task(taskId);
-      failAttempt(h, taskId, 1, {
+      failAttempt(h, taskId, task.currentAttempt, {
         error: `ENOSPC: no space left on device at ${task.worktree}/cache-${index + 11} errno ${100 + index}`,
       });
-      job.onAttemptExit({ taskId, attempt: 1 });
+      job.onAttemptExit({ taskId, attempt: task.currentAttempt });
     }
     await job.drain();
     await run(job, h, taskIds, inbox);
@@ -179,8 +182,8 @@ test('tool-blocker retries back off by fingerprint across tasks: first, second, 
 
 test('three distinct tasks with one normalized blocker open one incident and hold their retries', async () => {
   await withThreeTaskIncident(async (_job, h, taskIds, inbox) => {
-    const dependency = h.tasks.dispatch(h.briefFile);
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (task) => {
+    const dependency = h.tasks.dispatch(h.writeBrief('Produce the input required by the held task.'));
+    h.store.updateTask({ taskId: dependency.id, attempt: dependency.currentAttempt }, (task) => {
       task.state = 'running';
     });
     const held = h.store.createTask(
@@ -189,9 +192,9 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       'implementation',
       'held-status',
     );
-    const pending = h.tasks.dispatch(h.briefFile);
+    const pending = h.tasks.dispatch(h.writeBrief('Retry work that is waiting on its own backoff.'));
     const sourceAttempt = h.store.attempt({ taskId: taskIds[0]!, attempt: 1 });
-    const pendingAttempt = h.store.nextAttempt({ taskId: pending.id, attempt: 0 }, (attempt) => ({
+    const pendingAttempt = h.store.nextAttempt({ taskId: pending.id, attempt: pending.currentAttempt }, (attempt) => ({
       ...sourceAttempt,
       taskId: pending.id,
       attempt,

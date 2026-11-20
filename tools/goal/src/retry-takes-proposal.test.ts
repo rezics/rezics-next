@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import type { GateOutcome } from './contracts.ts';
+import { StaleAttemptError, type GateOutcome } from './contracts.ts';
 import { consumeApplicableBriefProposal, recordReplacementBrief } from './durable-follow-up.ts';
 import { WorkerJob } from './job.ts';
 import { harness, markdown } from './test-support.ts';
@@ -34,7 +34,7 @@ async function pendingAutomaticRetry(h: ReturnType<typeof harness>) {
   const first = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
   await first.start(task.id);
   await first.drain();
-  const ref = { taskId: task.id, attempt: 1 };
+  const ref = { taskId: task.id, attempt: h.store.task(task.id).currentAttempt };
   h.store.updateAttempt(ref, (attempt) => {
     attempt.result = 'Blocked';
     attempt.blocker = 'The implementation is incomplete.';
@@ -117,16 +117,23 @@ test('The consumed proposal is recorded on the attempt and removed from the pend
   try {
     const { task, ref } = await pendingAutomaticRetry(h);
     await hostRetry(h);
-    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    const { currentAttempt } = h.store.task(task.id);
+    expect(currentAttempt).toBe(2);
     const changed = replacement('Take this after the automatic retry started.');
-    const path = join(h.root, '.temp/goal/stale-generation.md');
+    const path = join(h.root, '.temp/goal/replacement.md');
     writeFileSync(path, changed);
-    await runWorkerCommand('retry', [task.id, '--expected-attempt', String(ref.attempt), '--brief', path], {
+    const context = {
       tasks: h.tasks,
       print() {},
-    });
+    };
+    await expect(
+      runWorkerCommand('retry', [task.id, '--expected-attempt', String(ref.attempt), '--brief', path], context),
+    ).rejects.toBeInstanceOf(StaleAttemptError);
+    expect(h.store.pendingBriefProposals(task.id)).toEqual([]);
+    await runWorkerCommand('retry', [task.id, '--expected-attempt', String(currentAttempt), '--brief', path], context);
     await hostRetry(h);
     const current = h.store.task(task.id);
+    expect(current.currentAttempt).toBe(currentAttempt + 1);
     expect(current.brief.markdown).toBe(changed);
     expect(h.store.attempt({ taskId: task.id, attempt: current.currentAttempt })).toMatchObject({
       previousBriefHash: hash(markdown),

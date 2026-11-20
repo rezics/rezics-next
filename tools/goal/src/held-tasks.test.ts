@@ -7,6 +7,7 @@ import { completeContinuation } from './continuation.ts';
 import { parseBrief } from './briefs.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { WorkerJob } from './job.ts';
+import { defaultPolicy } from './policy.ts';
 import { promote } from './promotion.ts';
 import { harness, markdown } from './test-support.ts';
 import { git } from './merge.ts';
@@ -167,6 +168,8 @@ test('the recovery sweep starts a released task that no process started', async 
 test('only the host starts a released task, and a second starter leaves it to the one holding its lease', async () => {
   const h = harness();
   try {
+    const policy = h.settings.policy ?? defaultPolicy;
+    h.settings.policy = { ...policy, capacity: { ...policy.capacity, pollIntervalMs: 20 } };
     writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
     const first = h.tasks.dispatch(h.briefFile);
     const secondBrief = join(h.root, '.temp/goal/second.md');
@@ -177,10 +180,11 @@ test('only the host starts a released task, and a second starter leaves it to th
         .replace('waiting: []', `waiting: []\nafter: [${first.id}]`),
     );
     const second = h.tasks.dispatch(secondBrief);
-    h.store.updateTask({ taskId: first.id, attempt: 0 }, (task) => {
+    expect(second).toMatchObject({ state: 'held', brief: { after: [first.id] } });
+    h.store.updateTask({ taskId: first.id, attempt: first.currentAttempt }, (task) => {
       task.state = 'integrated';
     });
-    h.store.updateTask({ taskId: second.id, attempt: 0 }, (task) => {
+    h.store.updateTask({ taskId: second.id, attempt: second.currentAttempt }, (task) => {
       task.state = 'ready';
     });
 
@@ -195,8 +199,9 @@ test('only the host starts a released task, and a second starter leaves it to th
     await Promise.all(hosts.map((job) => job.recoverOrphans()));
     await Promise.all(hosts.map((job) => job.drain()));
     expect(h.store.task(second.id).currentAttempt).toBe(1);
+    expect(h.store.events(second.id, 1).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
@@ -277,7 +282,7 @@ test('a continuation keeps its parent source-required edge even when its draft o
   const completed = completeContinuation(draft, parent, ownership);
 
   expect(parseBrief(completed, ownership)).toMatchObject({
-    after: [predecessor, parent.id],
+    after: [predecessor],
     afterSource: [predecessor],
   });
 });

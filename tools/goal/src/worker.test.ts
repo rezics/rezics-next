@@ -119,7 +119,6 @@ if(ref.attempt === 1) {
   spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {stdio:'ignore'});
   store.event(ref,'heartbeat',{});
   spawnSync(process.execPath, [${JSON.stringify(cli)}, 'event',ref.taskId,'1','cli-heartbeat']);
-  writeFileSync(join(state,'ready'), 'ready');
   const interval=setInterval(()=>{ try {store.event(ref,'heartbeat',{});} catch {} },20);
   process.on('SIGTERM',()=>{
     clearInterval(interval);
@@ -136,6 +135,7 @@ if(ref.attempt === 1) {
     writeFileSync(join(state,'refusals'),JSON.stringify({rejected,code:command.status,error:command.stderr}));
     setTimeout(()=>process.exit(0),100);
   });
+  writeFileSync(join(state,'ready'), 'ready');
 } else {
   const previous=store.attempt({taskId:ref.taskId,attempt:1});
   writeFileSync(join(state,'replacement'),String(previous.process && sameProcess(previous.process)));
@@ -153,7 +153,7 @@ if(ref.attempt === 1) {
     await ready;
     const identity = h.store.attempt(first.attempt).process!;
     expect(sameProcess(identity)).toBe(true);
-    const second = await h.tasks.retry(task.id);
+    const second = await h.tasks.retry(task.id, { expectedAttempt: first.attempt.attempt });
     await settle(h.tasks, second, { enqueue: (request) => landings.push(request) });
     await expect(settle(h.tasks, first, { enqueue: (request) => landings.push(request) })).rejects.toBeInstanceOf(
       StaleAttemptError,
@@ -170,7 +170,7 @@ if(ref.attempt === 1) {
     expect(() => h.store.assertCurrent(first.attempt)).toThrow(StaleAttemptError);
     expect(h.store.records().map((r) => r.attempt)).toEqual([1, 2]);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }, 15000);
 test('registered CLI dispatch runs against injected landing and inbox adapters', async () => {

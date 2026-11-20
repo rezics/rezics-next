@@ -7,7 +7,7 @@ import { configurationProblem, loadLocalSettings } from './local-settings.ts';
 import { firstFailure, git, policyGit } from './merge.ts';
 import { defaultPolicy, readControlPolicy } from './policy.ts';
 import { scriptPolicy, readScriptPolicy, withScriptPolicy } from './script-policy.ts';
-import { reportServices } from './service.ts';
+import { reportServices, SERVICE_UNITS } from './service.ts';
 import { repository, temporaryDirectory, harness, mergeTrainHarness } from './test-support.ts';
 import { WorkerStore } from './store.ts';
 import { recordToolBlockerFailure } from './tool-incidents.ts';
@@ -182,8 +182,9 @@ test('service log requests use the caller page size and preserve injected execut
   );
   expect(code).toBe(0);
   const journals = calls.filter((argv) => argv[0] === 'journalctl');
-  expect(journals).toHaveLength(4);
-  for (const argv of journals) expect(argv).toContain('--lines=3');
+  expect(journals).toEqual(
+    SERVICE_UNITS.map((unit) => ['journalctl', '--user', '--unit', unit, '--no-pager', '--lines=3']),
+  );
 });
 
 test('incident thresholds, example limits and probe cadence follow the operator snapshot', () => {
@@ -195,9 +196,9 @@ test('incident thresholds, example limits and probe cadence follow the operator 
   try {
     let result: ReturnType<typeof recordToolBlockerFailure> | undefined;
     for (const offset of [-101, 0, 1]) {
-      const task = h.tasks.dispatch(h.briefFile);
+      const task = h.tasks.dispatch(h.writeBrief(`Record an independent cache failure at offset ${offset}.`));
       const next = store.nextAttempt(
-        { taskId: task.id, attempt: 0 },
+        { taskId: task.id, attempt: task.currentAttempt },
         (attempt) =>
           ({
             taskId: task.id,
@@ -210,14 +211,7 @@ test('incident thresholds, example limits and probe cadence follow the operator 
             process: null,
           }) as Attempt,
       );
-      result = recordToolBlockerFailure(
-        store,
-        store.task(task.id),
-        store.attempt({ taskId: task.id, attempt: next.attempt }),
-        h.settings,
-        { deliver() {} },
-        now + offset,
-      );
+      result = recordToolBlockerFailure(store, store.task(task.id), next, h.settings, { deliver() {} }, now + offset);
       if (offset <= 0) expect(result.incident).toBeNull();
     }
     expect(result?.opened).toBe(true);
