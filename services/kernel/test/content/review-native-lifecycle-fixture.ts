@@ -22,6 +22,7 @@ export type ReviewLifecycleFixture = Readonly<{
   author: ReviewLifecyclePerson;
   other: ReviewLifecyclePerson;
   boardId: string;
+  boardConceptId: string;
   subjectId: string;
   question: Record<string, any>;
   call(
@@ -109,10 +110,10 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
     await bootstrapLocalShowcaseBoardCreation(system.database.pool, governance.accountId);
 
     const links = linkProjection(system.database.pool);
-    const subject = async (label: string, bearer = author.bearer): Promise<string> => {
+    const createSubject = async (type: 'schema:Book' | 'skos:Concept', label: string, bearer = author.bearer) => {
       const result = await checked('POST', '/v1/subjects', {
         bearer,
-        body: { type: 'schema:Book', labels: { en: label } },
+        body: { type, labels: { en: label } },
       });
       const id: unknown = result.value.subject?.id;
       const route = typeof id === 'string' ? routeOf(id) : null;
@@ -131,6 +132,7 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       }
       throw new Error(`Native Semantic link projection did not drain in partition ${partition}`);
     };
+    const subject = (label: string, bearer?: string) => createSubject('schema:Book', label, bearer);
     const subjectId = await subject('Native review lifecycle subject');
     const subjectRead = await call('GET', `/v1/subjects/${subjectId}`);
     if (subjectRead.response.status !== 200)
@@ -138,10 +140,11 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
         `Native review subject is not publicly readable: ${subjectRead.response.status} ${subjectRead.text}`,
       );
 
+    const boardConceptId = await createSubject('skos:Concept', 'Native review lifecycle board concept');
     const createdBoard = await checked('POST', '/v1/boards', {
       bearer: author.bearer,
       body: {
-        conceptId: subjectId,
+        conceptId: boardConceptId,
         title: 'Native review lifecycle board',
         purpose: 'reviews',
         visibility: 'published',
@@ -193,6 +196,7 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       author,
       other,
       boardId,
+      boardConceptId,
       subjectId,
       question,
       call,
