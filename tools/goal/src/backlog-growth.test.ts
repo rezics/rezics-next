@@ -86,18 +86,21 @@ function event(db: Database, id: string, kind: string, at: number): void {
   );
 }
 
-function observeDatabase(db: Database, metrics: Metrics): () => void {
+function observeDatabase(db: Database, metrics: Metrics, stoppedQueries: Set<string>): () => void {
   const handle = db as unknown as ProbeDatabase;
   const queryBefore = handle.query;
   const execBefore = handle.exec;
   const query = handle.query.bind(db);
   handle.query = (sql) => {
     const statement = query(sql);
-    const stoppedQuery = /FROM worker_tasks WHERE json_extract\(body, '\$\.state'\)='stopped'/i.test(sql);
+    const stoppedQuery = /FROM worker_tasks t\s+WHERE json_extract\(t\.body, '\$\.state'\)='stopped'/i.test(sql);
     const countRows = (count: number) => {
       metrics.sqliteExecutions += 1;
       metrics.sqliteRowsReturned += count;
-      if (stoppedQuery) metrics.stoppedRowsReturned += count;
+      if (stoppedQuery) {
+        metrics.stoppedRowsReturned += count;
+        stoppedQueries.add(sql);
+      }
     };
     return {
       all(...args) {
@@ -198,13 +201,6 @@ async function run(input: Input) {
     utimesSync(file, time, time);
   }
 
-  const taskPlan = db
-    .query(
-      "EXPLAIN QUERY PLAN SELECT id, current_attempt, body FROM worker_tasks WHERE json_extract(body, '$.state')='stopped' ORDER BY sequence",
-    )
-    .all()
-    .map((step) => (step as { detail: string }).detail)
-    .join(' ');
   const eventPlan = db
     .query(
       'EXPLAIN QUERY PLAN SELECT at FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence DESC LIMIT 1',
@@ -232,22 +228,30 @@ async function run(input: Input) {
       );
     },
   };
-  const restoreDatabase = observeDatabase(db, metrics);
+  const stoppedQueries = new Set<string>();
+  const restoreDatabase = observeDatabase(db, metrics, stoppedQueries);
   const restoreJson = observeJson(metrics);
   const restoreDirectories = observeDirectories(backlog, metrics);
   const sweeps: BacklogSweep[] = [];
   let firstMetrics: Metrics | undefined;
   try {
-    const { sweepBacklog } = await import('./backlog.ts');
-    for (let index = 0; index <= (input.sweeps ?? 0); index += 1) {
-      sweeps.push(await sweepBacklog(runtime));
-      if (index === 0) firstMetrics = { ...metrics };
+    try {
+      const { sweepBacklog } = await import('./backlog.ts');
+      for (let index = 0; index <= (input.sweeps ?? 0); index += 1) {
+        sweeps.push(await sweepBacklog(runtime));
+        if (index === 0) firstMetrics = { ...metrics };
+      }
+    } finally {
+      restoreDirectories();
+      restoreJson();
+      restoreDatabase();
     }
+    const taskPlan = [...stoppedQueries]
+      .flatMap((sql) => db.query(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[])
+      .map((step) => step.detail)
+      .join(' ');
     return { sweeps, metrics: firstMetrics!, dispatches, cancellations, taskPlan, eventPlan };
   } finally {
-    restoreDirectories();
-    restoreJson();
-    restoreDatabase();
     db.close();
     temporary.close();
   }

@@ -174,9 +174,10 @@ test('urgent outcomes are marked and separate from report, flow and hourly throu
     expect(flow.urgent).toEqual({ tasks: [task.id], integrated: 1 });
     expect(flow.attemptsPerIntegrated).toBeNull();
     const hourly = await renderHourlyEfficiencyReport(h.store.db, { bucket: '2026-11-04T01:00:00.000Z' });
-    expect(hourly).toContain('Landings in UTC hour: dev 0; stabilize 0; main 0; unknown 0');
-    expect(hourly).toContain(`Urgent landings (excluded from throughput): ${task.id}#1`);
-    expect(hourly).toContain('Urgent worker starts / finishes in bucket (excluded from throughput): 1 / 1');
+    expect(hourly).toContain('Legacy managed landings in UTC hour: dev 0; stabilize 0; main 0; unknown 0');
+    expect(hourly).toContain('Legacy managed worker starts / finishes in bucket: 0 starts (including resumes) / 0 finished attempts');
+    expect(hourly).toContain(`Legacy managed urgent landings (excluded from throughput): ${task.id}#1`);
+    expect(hourly).toContain('Legacy managed urgent worker starts / finishes in bucket (excluded from throughput): 1 / 1');
     const record = makeRecord(
       h.store.task(task.id),
       {

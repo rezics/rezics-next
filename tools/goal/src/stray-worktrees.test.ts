@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -79,10 +78,10 @@ test('removing a task worktree succeeds when it holds a read-only remote-check g
 
 test('a sweep removes no-.git leftovers for finished, stopped and unknown tasks, and keeps a live process cwd', async () => {
   const h = harness();
-  const integrated = h.tasks.dispatch(h.briefFile);
-  const stopped = h.tasks.dispatch(h.briefFile);
-  const running = h.tasks.dispatch(h.briefFile);
-  const occupied = h.tasks.dispatch(h.briefFile);
+  const integrated = h.tasks.dispatch(h.writeBrief('Integrated task with an unregistered worktree.'));
+  const stopped = h.tasks.dispatch(h.writeBrief('Stopped task with an unregistered worktree.'));
+  const running = h.tasks.dispatch(h.writeBrief('Running task with an unregistered worktree.'));
+  const occupied = h.tasks.dispatch(h.writeBrief('Cancelled task whose worktree contains a live process.'));
   h.store.updateTask({ taskId: integrated.id, attempt: 0 }, (row) => {
     row.state = 'integrated';
   });
@@ -103,12 +102,14 @@ test('a sweep removes no-.git leftovers for finished, stopped and unknown tasks,
   mkdirSync(unknown, { recursive: true });
   writeFileSync(join(unknown, 'junk'), 'x');
   const kept: string[] = [];
-  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+  const child = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)'], {
     cwd: occupied.worktree,
-    stdio: 'ignore',
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
   });
   try {
-    await waitUntil(() => child.pid !== undefined && hasLiveProcessUnder(occupied.worktree) === true);
+    await waitUntil(() => child.exitCode === null && hasLiveProcessUnder(occupied.worktree) === true);
     for (let pass = 0; pass < 5; pass++)
       await removeFinishedWorktree(h.settings, h.store, fake(), { strayKept: (path) => kept.push(path) });
     expect(existsSync(integrated.worktree)).toBe(false);
@@ -119,7 +120,7 @@ test('a sweep removes no-.git leftovers for finished, stopped and unknown tasks,
     expect(kept).toContain(occupied.worktree);
   } finally {
     child.kill();
-    await new Promise<void>((resolve) => child.once('close', () => resolve()));
+    await child.exited;
     h.dispose();
   }
 }, 30_000);
@@ -186,8 +187,8 @@ test('unknown root cleanup advances in bounded filesystem pages and resumes its 
 
 test('one failing task in a background pass is recorded once with its task id and does not fail the rest', async () => {
   const h = harness();
-  const broken = h.tasks.dispatch(h.briefFile);
-  const independent = h.tasks.dispatch(h.briefFile);
+  const broken = h.tasks.dispatch(h.writeBrief('Integrated task whose Git removal fails.'));
+  const independent = h.tasks.dispatch(h.writeBrief('Merged task that can be removed independently.'));
   h.store.updateTask({ taskId: broken.id, attempt: 0 }, (row) => {
     row.state = 'integrated';
   });

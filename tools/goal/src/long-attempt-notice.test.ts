@@ -63,7 +63,7 @@ test('a long attempt is reported once when it crosses the threshold, then at mos
   }
 });
 
-test('a new command alone does not notify again, while new commits notify immediately and deduplicate', () => {
+test('new commands and commits appear in hourly reports without waking the manager early', () => {
   const value = setup();
   try {
     const threshold = now + 1;
@@ -77,11 +77,15 @@ test('a new command alone does not notify again, while new commits notify immedi
     );
     expect(value.run(threshold + 1_000)).toBe(0);
     expect(value.run(threshold + 60 * 60_000)).toBe(1);
+    expect(value.delivered.at(-1)).toContain('bun test changed.ts');
+    expect(value.delivered.at(-1)).toContain('with 1 commits');
     writeFileSync(join(value.worker.worktree, 'commit-change.txt'), 'new commit\n');
     git(value.worker.worktree, ['add', 'commit-change.txt']);
     git(value.worker.worktree, ['commit', '-m', 'advance attempt']);
-    expect(value.run(threshold + 60 * 60_000 + 1_000)).toBe(1);
-    expect(value.run(threshold + 60 * 60_000 + 2_000)).toBe(0);
+    expect(value.run(threshold + 60 * 60_000 + 1_000)).toBe(0);
+    expect(value.run(threshold + 120 * 60_000)).toBe(1);
+    expect(value.delivered.at(-1)).toContain('with 2 commits');
+    expect(value.run(threshold + 120 * 60_000 + 1_000)).toBe(0);
     expect(value.delivered).toHaveLength(3);
   } finally {
     value.repo.close();
