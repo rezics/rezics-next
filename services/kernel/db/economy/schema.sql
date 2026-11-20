@@ -459,6 +459,118 @@ CREATE TABLE economy."position" (
 
 
 --
+-- Name: spot_fill; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.spot_fill (
+    book_id text NOT NULL,
+    fill_id text NOT NULL,
+    instrument_id text NOT NULL,
+    maker_order_id text NOT NULL,
+    taker_order_id text NOT NULL,
+    buyer_id uuid NOT NULL,
+    seller_id uuid NOT NULL,
+    buyer_hold_id uuid NOT NULL,
+    seller_hold_id uuid NOT NULL,
+    lots bigint NOT NULL,
+    price bigint NOT NULL,
+    base_units bigint NOT NULL,
+    quote_units bigint NOT NULL,
+    buyer_fee_units bigint NOT NULL,
+    seller_fee_units bigint NOT NULL,
+    due_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    claim_id uuid,
+    settled_at timestamp with time zone,
+    CONSTRAINT spot_fill_base_units_check CHECK ((base_units > 0)),
+    CONSTRAINT spot_fill_buyer_fee_units_check CHECK ((buyer_fee_units >= 0)),
+    CONSTRAINT spot_fill_check CHECK (((seller_fee_units >= 0) AND (seller_fee_units <= quote_units))),
+    CONSTRAINT spot_fill_check1 CHECK (((maker_order_id <> taker_order_id) AND (buyer_id <> seller_id))),
+    CONSTRAINT spot_fill_check2 CHECK ((((quote_units)::numeric + (buyer_fee_units)::numeric) <= ('9223372036854775807'::bigint)::numeric)),
+    CONSTRAINT spot_fill_check3 CHECK (((settled_at IS NULL) OR (claim_id IS NOT NULL))),
+    CONSTRAINT spot_fill_fill_id_check CHECK (((length(fill_id) >= 1) AND (length(fill_id) <= 255))),
+    CONSTRAINT spot_fill_lots_check CHECK ((lots > 0)),
+    CONSTRAINT spot_fill_price_check CHECK ((price > 0)),
+    CONSTRAINT spot_fill_quote_units_check CHECK ((quote_units > 0))
+);
+
+
+--
+-- Name: spot_instrument; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.spot_instrument (
+    book_id text NOT NULL,
+    instrument_id text NOT NULL,
+    policy_version bigint NOT NULL,
+    base_asset_id text NOT NULL,
+    quote_asset_id text NOT NULL,
+    base_units_per_lot bigint NOT NULL,
+    quote_units_per_price_tick bigint NOT NULL,
+    maker_fee_bps bigint NOT NULL,
+    taker_fee_bps bigint NOT NULL,
+    fee_account_id uuid NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    matching_sequence bigint,
+    CONSTRAINT spot_instrument_base_units_per_lot_check CHECK ((base_units_per_lot > 0)),
+    CONSTRAINT spot_instrument_check CHECK (((matching_sequence > 0) AND (matching_sequence <= revision))),
+    CONSTRAINT spot_instrument_check1 CHECK ((base_asset_id <> quote_asset_id)),
+    CONSTRAINT spot_instrument_fee_account_id_check CHECK ((fee_account_id <> '00000000-0000-0000-0000-000000000000'::uuid)),
+    CONSTRAINT spot_instrument_instrument_id_check CHECK ((instrument_id ~ '^[a-zA-Z0-9_-]{1,64}$'::text)),
+    CONSTRAINT spot_instrument_maker_fee_bps_check CHECK (((maker_fee_bps >= 0) AND (maker_fee_bps <= 10000))),
+    CONSTRAINT spot_instrument_policy_version_check CHECK ((policy_version > 0)),
+    CONSTRAINT spot_instrument_quote_units_per_price_tick_check CHECK ((quote_units_per_price_tick > 0)),
+    CONSTRAINT spot_instrument_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT spot_instrument_taker_fee_bps_check CHECK (((taker_fee_bps >= 0) AND (taker_fee_bps <= 10000)))
+);
+
+
+--
+-- Name: spot_match_step; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.spot_match_step (
+    book_id text NOT NULL,
+    instrument_id text NOT NULL,
+    from_revision bigint NOT NULL,
+    order_id text NOT NULL,
+    status text NOT NULL,
+    fill_ids text[] NOT NULL,
+    CONSTRAINT spot_match_step_fill_ids_check CHECK ((cardinality(fill_ids) <= 32)),
+    CONSTRAINT spot_match_step_from_revision_check CHECK ((from_revision > 0)),
+    CONSTRAINT spot_match_step_status_check CHECK ((status = ANY (ARRAY['matching'::text, 'resting'::text, 'filled'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: spot_order; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.spot_order (
+    book_id text NOT NULL,
+    instrument_id text NOT NULL,
+    order_id text NOT NULL,
+    account_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    side text NOT NULL,
+    price bigint NOT NULL,
+    lots bigint NOT NULL,
+    remaining_lots bigint NOT NULL,
+    status text NOT NULL,
+    reservation_id uuid NOT NULL,
+    reserved_units_per_lot bigint NOT NULL,
+    CONSTRAINT spot_order_check CHECK (((remaining_lots >= 0) AND (remaining_lots <= lots))),
+    CONSTRAINT spot_order_check1 CHECK (((status = 'filled'::text) = (remaining_lots = 0))),
+    CONSTRAINT spot_order_lots_check CHECK ((lots > 0)),
+    CONSTRAINT spot_order_order_id_check CHECK ((order_id ~ '^[a-zA-Z0-9_-]{1,64}$'::text)),
+    CONSTRAINT spot_order_price_check CHECK ((price > 0)),
+    CONSTRAINT spot_order_reserved_units_per_lot_check CHECK ((reserved_units_per_lot > 0)),
+    CONSTRAINT spot_order_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT spot_order_side_check CHECK ((side = ANY (ARRAY['buy'::text, 'sell'::text]))),
+    CONSTRAINT spot_order_status_check CHECK ((status = ANY (ARRAY['matching'::text, 'resting'::text, 'filled'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: spot_settlement; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -701,6 +813,46 @@ ALTER TABLE ONLY economy."position"
 
 
 --
+-- Name: spot_fill spot_fill_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_fill
+    ADD CONSTRAINT spot_fill_pkey PRIMARY KEY (book_id, fill_id);
+
+
+--
+-- Name: spot_instrument spot_instrument_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_instrument
+    ADD CONSTRAINT spot_instrument_pkey PRIMARY KEY (book_id, instrument_id);
+
+
+--
+-- Name: spot_match_step spot_match_step_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_match_step
+    ADD CONSTRAINT spot_match_step_pkey PRIMARY KEY (book_id, instrument_id, from_revision);
+
+
+--
+-- Name: spot_order spot_order_book_id_instrument_id_sequence_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_order
+    ADD CONSTRAINT spot_order_book_id_instrument_id_sequence_key UNIQUE (book_id, instrument_id, sequence);
+
+
+--
+-- Name: spot_order spot_order_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_order
+    ADD CONSTRAINT spot_order_pkey PRIMARY KEY (book_id, instrument_id, order_id);
+
+
+--
 -- Name: spot_settlement spot_settlement_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -758,6 +910,41 @@ CREATE INDEX market_work_ready ON economy.market_work USING btree (book_id, owne
 
 
 --
+-- Name: spot_ask_priority; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_ask_priority ON economy.spot_order USING btree (book_id, instrument_id, price, sequence) WHERE ((status = 'resting'::text) AND (side = 'sell'::text));
+
+
+--
+-- Name: spot_bid_priority; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_bid_priority ON economy.spot_order USING btree (book_id, instrument_id, price DESC, sequence) WHERE ((status = 'resting'::text) AND (side = 'buy'::text));
+
+
+--
+-- Name: spot_fill_ready; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_fill_ready ON economy.spot_fill USING btree (book_id, due_at, fill_id) WHERE (settled_at IS NULL);
+
+
+--
+-- Name: spot_matching_ready; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_matching_ready ON economy.spot_instrument USING btree (book_id, instrument_id) WHERE (matching_sequence IS NOT NULL);
+
+
+--
+-- Name: spot_one_matching_order; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE UNIQUE INDEX spot_one_matching_order ON economy.spot_order USING btree (book_id, instrument_id) WHERE (status = 'matching'::text);
+
+
+--
 -- Name: asset asset_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -804,6 +991,34 @@ CREATE TRIGGER market_item_receipt_immutable BEFORE DELETE OR UPDATE ON economy.
 --
 
 CREATE TRIGGER receipt_immutable BEFORE DELETE OR UPDATE ON economy.command_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: spot_fill spot_fill_terms_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER spot_fill_terms_immutable BEFORE DELETE OR UPDATE OF book_id, fill_id, instrument_id, maker_order_id, taker_order_id, buyer_id, seller_id, buyer_hold_id, seller_hold_id, lots, price, base_units, quote_units, buyer_fee_units, seller_fee_units ON economy.spot_fill FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: spot_instrument spot_instrument_terms_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER spot_instrument_terms_immutable BEFORE DELETE OR UPDATE OF book_id, instrument_id, policy_version, base_asset_id, quote_asset_id, base_units_per_lot, quote_units_per_price_tick, maker_fee_bps, taker_fee_bps, fee_account_id ON economy.spot_instrument FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: spot_match_step spot_match_step_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER spot_match_step_immutable BEFORE DELETE OR UPDATE ON economy.spot_match_step FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: spot_order spot_order_terms_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER spot_order_terms_immutable BEFORE DELETE OR UPDATE OF book_id, instrument_id, order_id, account_id, sequence, side, price, lots, reservation_id, reserved_units_per_lot ON economy.spot_order FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -979,6 +1194,62 @@ ALTER TABLE ONLY economy.pending_deposit
 
 ALTER TABLE ONLY economy."position"
     ADD CONSTRAINT position_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: spot_instrument spot_active_order_exists; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_instrument
+    ADD CONSTRAINT spot_active_order_exists FOREIGN KEY (book_id, instrument_id, matching_sequence) REFERENCES economy.spot_order(book_id, instrument_id, sequence);
+
+
+--
+-- Name: spot_fill spot_fill_book_id_instrument_id_maker_order_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_fill
+    ADD CONSTRAINT spot_fill_book_id_instrument_id_maker_order_id_fkey FOREIGN KEY (book_id, instrument_id, maker_order_id) REFERENCES economy.spot_order(book_id, instrument_id, order_id);
+
+
+--
+-- Name: spot_fill spot_fill_book_id_instrument_id_taker_order_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_fill
+    ADD CONSTRAINT spot_fill_book_id_instrument_id_taker_order_id_fkey FOREIGN KEY (book_id, instrument_id, taker_order_id) REFERENCES economy.spot_order(book_id, instrument_id, order_id);
+
+
+--
+-- Name: spot_instrument spot_instrument_book_id_base_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_instrument
+    ADD CONSTRAINT spot_instrument_book_id_base_asset_id_fkey FOREIGN KEY (book_id, base_asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: spot_instrument spot_instrument_book_id_quote_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_instrument
+    ADD CONSTRAINT spot_instrument_book_id_quote_asset_id_fkey FOREIGN KEY (book_id, quote_asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: spot_match_step spot_match_step_book_id_instrument_id_order_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_match_step
+    ADD CONSTRAINT spot_match_step_book_id_instrument_id_order_id_fkey FOREIGN KEY (book_id, instrument_id, order_id) REFERENCES economy.spot_order(book_id, instrument_id, order_id);
+
+
+--
+-- Name: spot_order spot_order_book_id_instrument_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_order
+    ADD CONSTRAINT spot_order_book_id_instrument_id_fkey FOREIGN KEY (book_id, instrument_id) REFERENCES economy.spot_instrument(book_id, instrument_id);
 
 
 --
