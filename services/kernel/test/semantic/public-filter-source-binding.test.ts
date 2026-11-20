@@ -403,7 +403,8 @@ test('native Subject enrollment rechecks the original definition and release on 
     try {
       const result = await advance();
       expect(result).toMatchObject({ status: 'unready', reason: 'definition_missing' });
-      expect(result!.cost.statements).toBeGreaterThanOrEqual(6);
+      const cost = result?.cost;
+      expect(cost && 'statements' in cost ? cost.statements : undefined).toBeGreaterThanOrEqual(6);
       expect(checkouts).toBe(1);
     } finally {
       f.db.pool.off('acquire', acquired);
