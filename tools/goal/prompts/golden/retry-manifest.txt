@@ -6,6 +6,7 @@ Send the manager independent gaps with the outcome, evidence, first edit and dep
 money/authorization rules.
 Report failures already on base and fix regressions you introduced. For a tool or infrastructure failure persisting after
 two retries, start the `tool` blocker with the exact first error line.
+Keep the final summary within 120 words and blocker detail within 80 words.
 
 row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; path k=kernel,w=web,p=package,@=rezics; dir:{...}; - = none
 Other modules: docs/architecture/modules.json
