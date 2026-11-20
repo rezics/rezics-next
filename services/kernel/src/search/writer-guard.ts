@@ -697,6 +697,7 @@ export function createDiscoveryRepairWriter(options: {
           enrollment.transactionId,
           enrollment.position.toString(),
           [subject],
+          false,
         ]);
         if (enrolled.rowCount !== 1) throw unavailable('Mixed repair writer is pending or structurally fenced');
         await tx.query(
@@ -1151,6 +1152,8 @@ export function createSearchWriterGuard(options: {
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
+  /** The live outbox relay can replace an interrupted pre-dispatch enrollment on replay. */
+  recoverRelayEnrollment?: true;
 }): SearchWriterNativeCustody & SearchWriterPublicationGuard {
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(options.consumer)) throw new TypeError('Invalid Search consumer');
   const match = /subjects-g([1-9][0-9]*)$/.exec(options.index);
@@ -2167,6 +2170,7 @@ export function createSearchWriterGuard(options: {
             receipt.transactionId,
             receipt.position.toString(),
             [subject],
+            false,
           ]);
           if (enrolled.rowCount !== 1) throw unavailable('Repair writer is pending or structurally fenced');
           await tx.query(
@@ -2383,6 +2387,8 @@ export function createSearchWriterGuard(options: {
           receipt.transactionId,
           receipt.position.toString(),
           ids,
+          // Dispatch and replacement use the same native row. The old token can no longer dispatch.
+          options.recoverRelayEnrollment === true && !renewal,
         ]);
         if (result.rowCount !== ids.length)
           throw unavailable('Search writer is enrolled, structurally closed, or awaiting owner custody');

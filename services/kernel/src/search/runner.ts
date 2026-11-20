@@ -270,6 +270,7 @@ export async function startSearchIndexing(options: {
                 source: options.source,
                 listing: options.listing,
                 index: subjectIndexName(options.prefix, generation),
+                recoverRelayEnrollment: true,
               }),
               ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
             });
