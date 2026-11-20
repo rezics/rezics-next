@@ -106,6 +106,7 @@ export type SearchGenerationPublication = Readonly<{
   activate(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
+    options?: Readonly<{ batchSource: boolean }>,
   ): Promise<
     | { status: 'activated'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
     | { status: 'superseded'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
@@ -116,6 +117,7 @@ export type SearchGenerationPublication = Readonly<{
         next?: 'step' | 'activate';
         advanced?: boolean;
         sourceAdvanced?: boolean;
+        additionalSourceCosts?: readonly SearchPublicFilterCost[];
       }
     | PublicFilterConsumerUnavailable
   >;
@@ -149,6 +151,7 @@ const cost = (): Meter => ({
 });
 const PAGE = 50;
 const SUBJECT_ENROLLMENT_PAGES = 32;
+const SUBJECT_SETTLEMENT_TURNS = 8;
 const SUBJECT_VALIDATION_HOMES = 256;
 const SUBJECT_VALIDATION_REPLAY = 'subject-validation-replay';
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -1763,7 +1766,7 @@ export function createSearchGenerationPublication(
         ),
       );
     },
-    activate(input, context) {
+    activate(input, context, options) {
       return run(context, (meter) =>
         locked(input, context, meter, 'activate', async (job, client, current, capture, enrollmentAdvanced) => {
           const preparing = (next: 'activate' | 'step', advanced = false, sourceAdvanced = false) => ({
@@ -1792,9 +1795,35 @@ export function createSearchGenerationPublication(
             return preparing('step', true);
           guardAvailable();
           if (!job.fence) {
+            const started = Date.now();
             const sourceCompletion = await completeSource(job, client, context, meter, capture);
-            if (!sourceCompletion.complete)
+            if (!sourceCompletion.complete) {
+              if (
+                options?.batchSource &&
+                nativeMeaning &&
+                job.family === 'subjects' &&
+                job.phase === 'reconciled' &&
+                current === null &&
+                jobPin(job) &&
+                sourceCompletion.sourceAdvanced
+              ) {
+                // A successful Source turn has committed its own exact repair or ACK frontier.
+                // Resume under the same alias lock, with the same deadline and a fresh meter.
+                const additionalSourceCosts: SearchPublicFilterCost[] = [];
+                let longest = Date.now() - started;
+                while (additionalSourceCosts.length + 1 < SUBJECT_SETTLEMENT_TURNS) {
+                  const nextStarted = Date.now();
+                  if (nextStarted + 2 * longest >= context.deadline) break;
+                  const nextMeter = cost();
+                  const next = await completeSource(job, client, context, nextMeter, capture);
+                  additionalSourceCosts.push(nextMeter);
+                  if (!next.sourceAdvanced || next.complete) break;
+                  longest = Math.max(longest, Date.now() - nextStarted);
+                }
+                return { ...preparing('activate', true, true), additionalSourceCosts };
+              }
               return preparing('activate', sourceCompletion.advanced, sourceCompletion.sourceAdvanced);
+            }
             await installFence(job, client, context, meter);
           }
           try {

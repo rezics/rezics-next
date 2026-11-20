@@ -211,7 +211,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         ready && reconciliation.sourceAdvanced === true,
       );
     }
-    const activated = await options.runtime.publication.activate(job, context);
+    const activated = await options.runtime.publication.activate(job, context, { batchSource: true });
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated' || activated.status === 'superseded') return advance(null);

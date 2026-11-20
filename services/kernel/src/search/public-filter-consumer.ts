@@ -3234,16 +3234,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             context,
             charge,
           ));
-        const emptyDiscoveryProgress =
-          config.discoveryPreparation === 'repair' &&
+        const emptyPreparationProgress =
+          (subjectPublication || config.discoveryPreparation === 'repair') &&
           !intent.complete &&
           !intent.repairs.length &&
           !intent.account &&
           !intent.subject &&
           !work.repairPage;
-        // An empty mixed page advances only the open observation and exact execution CAS.
+        // An empty preparation page advances only the open observation and exact execution CAS.
         // Reopen native custody and the physical target before dispatch or terminal closure.
-        if (!emptyDiscoveryProgress) {
+        if (!emptyPreparationProgress) {
           const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
           if (
             finalCustody.status !== 'found' ||
