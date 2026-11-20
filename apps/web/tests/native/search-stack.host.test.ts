@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
 import { bundledWebFixtureTimeoutMs, startNativeWebStack } from './stack.ts';
+import { readSubjectSearchCutoff } from './subject-publication-observation.ts';
 
 function docker(args: string[]): string {
   const result = Bun.spawnSync(['docker', ...args]);
@@ -69,8 +70,14 @@ async function verifyNativeSearch() {
         final = body as { subjects: { id: string }[] };
         break;
       }
-      if (performance.now() >= until)
-        throw new Error(`Native search composition did not project books: status=${response.status} code=${body.code}`);
+      if (performance.now() >= until) {
+        const failure = new Error(
+          `Native search composition did not project books: status=${response.status} code=${body.code}`,
+        );
+        const sample = await readSubjectSearchCutoff(stack, ids).catch(() => null);
+        console.info(`native-web-search-cutoff ${JSON.stringify(sample)}`);
+        throw failure;
+      }
       await Bun.sleep(100);
     }
     expect(new Set(final.subjects.map((subject) => subject.id))).toEqual(new Set(ids));

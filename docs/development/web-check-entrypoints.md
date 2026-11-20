@@ -83,6 +83,16 @@ Run `bun run --cwd apps/web check:release` for standalone Web release qualificat
 placement and timing return. The native HTTP fixtures build and start the production Worker with their own service
 bindings. Run `bun run --cwd apps/web check` for the development suite.
 
+Use the standard Web host lane to select the cold two-Book Search check.
+
+```sh
+bun run --cwd apps/web test:host tests/native/search-stack.host.test.ts --test-name-pattern '^native web stack default search returns its API-created matching books$'
+```
+
+At the 30-second HTTP cutoff, `native-web-search-cutoff` logs one bounded sample with the Subject publication cursor,
+Source enrollment and repair progress, fixture writer visibility, and read alias state. A null observation means that
+read was unavailable. The original readiness error still determines the result.
+
 The screenshots output argument is relocated in place, preserving the order of all flags. A destination outside the
 candidate is refused before capture. Build outputs likewise must be contained. Artifact transport must copy only
 outputs of this physical run, including on failure, and retain native failure plus return/cleanup failure. Web adds
