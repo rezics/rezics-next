@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { GLOBAL_CONTEXT } from '../../../services/importer/src/ordinary-owner-grants.ts';
-import { seedCommunityEntities } from '../scripts/first-public-scope-fixture.ts';
+import { checkpointWebFixturePersonas, seedCommunityEntities } from '../scripts/first-public-scope-fixture.ts';
 import { selectFirstPublicPaths } from '../scripts/first-public-scope-walk.ts';
 import type { KernelCall } from '../scripts/semantic-first-public-native.ts';
 import { FIRST_PUBLIC_SCOPE_PATHS } from '../scripts/first-public-scope-paths.ts';
@@ -110,6 +110,32 @@ test('community selects only the Board and Realm journeys, with every other path
 });
 
 const fixtureId = (tail: number) => `00000000-0000-8000-8000-${String(tail).padStart(12, '0')}`;
+
+test('a Web fixture privately checkpoints both personas and resumes the exact pair without registration', async () => {
+  const temp = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(temp, { recursive: true });
+  const root = mkdtempSync(join(temp, 'web-persona-test-'));
+  try {
+    const pair = await checkpointWebFixturePersonas(root, async (tag) => ({
+      handle: `${tag}0011223344`,
+      email: `${tag}0011223344@example.test`,
+      accountId: fixtureId(tag === 'webowner' ? 1 : 2),
+    }));
+    const directory = join(root, '.temp/goal/web/personas');
+    const [fixture] = readdirSync(directory);
+    const checkpoint = join(directory, fixture!, 'personas.json');
+    expect(statSync(checkpoint).mode & 0o777).toBe(0o600);
+    const noSignup = async () => {
+      throw new Error('Unexpected signup');
+    };
+    expect(await checkpointWebFixturePersonas(root, noSignup, checkpoint)).toEqual(pair);
+    await expect(checkpointWebFixturePersonas(root, noSignup, join(directory, 'missing.json'))).rejects.toThrow(
+      'ENOENT',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test.each([undefined, fixtureId(9)])(
   'community entities keep the exact authored Concept and opening context (%s)',

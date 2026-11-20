@@ -5,7 +5,7 @@
  */
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { developmentKeys, firstPublicWebWalk, startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
@@ -1089,7 +1089,34 @@ export async function run(args: readonly string[] = []): Promise<PathResult[]> {
   return results;
 }
 
-if (import.meta.main) {
+/** Produce representative fixture data from the published catalogue and the recovered native personas. */
+async function resumeFixture(args: string[]) {
+  const [checkout, personas, output, ...extra] = args;
+  if (!checkout || !personas || !output || extra.length)
+    throw new Error(
+      'Usage: first-public-scope-walk.ts --resume-fixture <retained checkout> <personas.json> <new output>',
+    );
+  const target = resolve(output);
+  const existing = await lstat(target).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  });
+  if (existing) throw new Error('The representative fixture output already exists');
+  const stack = stackOrigins();
+  const catalogue = await readFirstPublicCatalogueReport(checkout);
+  const fixture = await seedFirstPublicWeb(
+    checkout,
+    stack,
+    (method, path, options) => kernel(stack, method, path, options),
+    catalogue,
+    personas,
+  );
+  await writeFile(target, `${JSON.stringify(fixture, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  console.log('Representative Web fixture saved');
+}
+
+if (import.meta.main && process.argv[2] === '--resume-fixture') {
+  await resumeFixture(process.argv.slice(3));
+} else if (import.meta.main) {
   const results = await run(process.argv.slice(2));
   const failed = results.some((row) => row.status !== 'PASS');
   process.exit(failed ? 1 : 0);

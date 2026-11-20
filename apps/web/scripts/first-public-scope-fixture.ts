@@ -1,7 +1,13 @@
+import { lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fromPlainText } from '@rezics/document';
 import { decodeJwt } from 'jose';
-import { developmentKeys, firstPublicWebOwnerActions } from '../../../services/auth/scripts/dev-stack.ts';
+import {
+  developmentKeys,
+  firstPublicWebOwnerActions,
+  localClientIds,
+  prepareFirstPublicWebGrantor,
+} from '../../../services/auth/scripts/dev-stack.ts';
 import { createAccountTokenProvider } from '../../../services/importer/src/credentials.ts';
 import type { CrossMediaSeedReport } from '../../../services/importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT, grantOrdinaryOwnerActions } from '../../../services/importer/src/ordinary-owner-grants.ts';
@@ -19,9 +25,12 @@ import {
   type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
 
-export type CommunityFixture = {
+type FixturePersonas = {
   owner: { accountId: string; handle: string; email: string };
   outsider: { accountId: string; handle: string; email: string };
+};
+
+export type CommunityFixture = FixturePersonas & {
   conceptId: string;
   boardId: string;
   threadId: string;
@@ -149,14 +158,61 @@ async function readCatalogueSubjects(call: KernelCall, catalogue: CrossMediaSeed
   return { workId, secondWorkId, releaseId };
 }
 
-async function seedOwner(root: string, stack: WalkStackOrigins, actions: readonly string[]) {
+export async function checkpointWebFixturePersonas(
+  root: string,
+  register: (tag: 'webowner' | 'webreader') => Promise<FixturePersonas['owner']>,
+  resumePersonasFrom?: string,
+): Promise<FixturePersonas> {
+  if (resumePersonasFrom !== undefined) {
+    const file = await lstat(resumePersonasFrom);
+    if (!file.isFile() || (file.mode & 0o077) !== 0)
+      throw new Error('Web fixture persona checkpoint must be a private file');
+    const value = JSON.parse(await readFile(resumePersonasFrom, 'utf8')) as Partial<FixturePersonas> | null;
+    const person = (record: FixturePersonas['owner'] | undefined, prefix: string) => {
+      if (
+        typeof record?.handle !== 'string' ||
+        !new RegExp(`^${prefix}[0-9a-f]{10}$`, 'u').test(record.handle) ||
+        record.email !== `${record.handle}@example.test`
+      )
+        throw new Error('Web fixture persona checkpoint has an invalid identity');
+      return {
+        handle: record.handle,
+        email: record.email,
+        accountId: requireId(record.accountId, 'Web fixture account'),
+      };
+    };
+    const owner = person(value?.owner, 'webowner');
+    const outsider = person(value?.outsider, 'webreader');
+    if (owner.accountId === outsider.accountId) throw new Error('Web fixture personas must be distinct');
+    return { owner, outsider };
+  }
+
+  const directory = join(root, '.temp/goal/web/personas');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const checkpoint = join(await mkdtemp(join(directory, 'fixture-')), 'personas.json');
+  const owner = await register('webowner');
+  const outsider = await register('webreader');
+  await writeFile(checkpoint, `${JSON.stringify({ owner, outsider })}\n`, { mode: 0o600, flag: 'wx' });
+  return { owner, outsider };
+}
+
+async function seedOwner(
+  root: string,
+  stack: WalkStackOrigins,
+  actions: readonly (typeof firstPublicWebOwnerActions)[number][],
+  resumePersonasFrom?: string,
+) {
   const [bindings, { website }, seedEnv] = await Promise.all([
     parseEnv(join(root, 'apps/web/.dev.vars')),
-    developmentKeys(),
+    developmentKeys(join(root, '.temp/local-stack')),
     parseEnv(join(root, '.temp/local-stack/seed.env')),
   ]);
-  const owner = await signup(stack, 'webowner');
-  const outsider = await signup(stack, 'webreader');
+  const { owner, outsider } = await checkpointWebFixturePersonas(root, (tag) => signup(stack, tag), resumePersonasFrom);
+  if (resumePersonasFrom !== undefined) {
+    await resolveFollowTarget(stack, owner, 'recovered Web fixture owner');
+    await resolveFollowTarget(stack, outsider, 'recovered Web fixture reader');
+    bindings.WEBSITE_SCOPES = await prepareFirstPublicWebGrantor(root);
+  }
   const ownerAuth = await websiteToken(stack, owner, bindings, website);
   const outsiderAuth = await websiteToken(stack, outsider, bindings, website);
   const ownerSessions = await readOrdinaryAuthSession(stack, owner, ownerAuth.session);
@@ -168,11 +224,10 @@ async function seedOwner(root: string, stack: WalkStackOrigins, actions: readonl
     !(ownerSessions.sessions as Json[] | undefined)?.some((row) => row.id === sessionId && row.current === true)
   )
     throw new Error('The independently authenticated Web fixture identities did not match');
-
   const grantor = await createAccountTokenProvider({
     accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
     account: requireId(seedEnv.REZICS_DEV_PERSONA_ACCOUNT, 'development grantor account'),
-    client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
+    client: localClientIds.firstPublicWebGrantor,
     authOrigin: stack.native,
     issuerOrigin: stack.issuer,
     scopes: ['access:grant', ...actions],
@@ -320,9 +375,15 @@ export async function seedFirstPublicWeb(
   stack: WalkStackOrigins,
   call: KernelCall,
   catalogue: CrossMediaSeedReport,
+  resumePersonasFrom?: string,
 ): Promise<WebFixture> {
   const { workId, secondWorkId, releaseId } = await readCatalogueSubjects(call, catalogue);
-  const { owner, outsider, bearer, outsiderBearer } = await seedOwner(root, stack, firstPublicWebOwnerActions);
+  const { owner, outsider, bearer, outsiderBearer } = await seedOwner(
+    root,
+    stack,
+    firstPublicWebOwnerActions,
+    resumePersonasFrom,
+  );
   const subjectId = await resolveFollowTarget(stack, owner, 'public Web fixture owner');
   const closed = await proveClosedScope(
     call,
