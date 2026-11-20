@@ -19,8 +19,10 @@ function ownerEnvironment(h: ReturnType<typeof harness>, manager: string) {
     engine: 'codex',
     status: 'running',
   });
-  const env = { CODEX_THREAD_ID: state.threadId!, GOAL_MANAGER: manager };
-  expect(authenticatedManager(h.store.db, env)).toEqual({ id: manager, sessionId: state.threadId });
+  const sessionId = state.threadId;
+  if (!sessionId) throw new Error('The fixture owner must have an active thread');
+  const env = { CODEX_THREAD_ID: sessionId, GOAL_MANAGER: manager };
+  expect(authenticatedManager(h.store.db, env)).toEqual({ id: manager, sessionId });
   return env;
 }
 
