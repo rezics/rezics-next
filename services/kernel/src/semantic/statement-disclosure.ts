@@ -32,6 +32,20 @@ const PUBLIC_READER = Symbol('public statement reader');
 type ReaderScope = StatementReader & { refreshAuthorization?: () => Promise<void> };
 const readers = new AsyncLocalStorage<ReaderScope | typeof PUBLIC_READER>();
 
+/** A newly entered reader evaluates its own proof on the first source snapshot.
+ * An inherited managed reader may already have evaluated a different snapshot. */
+export function withSubjectStatementReader<T>(
+  readAs: (<V>(read: () => Promise<V>) => Promise<V>) | undefined,
+  read: (needsAudienceRefresh: boolean) => Promise<T>,
+): Promise<T> {
+  const previous = readers.getStore();
+  const run = () =>
+    read(
+      !!previous && previous !== PUBLIC_READER && !!previous.refreshAuthorization && readers.getStore() === previous,
+    );
+  return readAs ? readAs(run) : run();
+}
+
 /** Prepare audience evidence outside the source checkout after every freshness wait. */
 export async function refreshStatementReaderAuthorization(): Promise<void> {
   const reader = readers.getStore();

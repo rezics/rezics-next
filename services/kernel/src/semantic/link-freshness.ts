@@ -109,6 +109,52 @@ function checkpointWaitReason(row: Behind, subject: string): SubjectLinkWaitReas
   return `${home}-checkpoint-position`;
 }
 
+function linkRequirements(components: readonly SessionComponent[], observeMissing: boolean) {
+  return {
+    consumer: LINKS_CONSUMER,
+    observe_missing: observeMissing,
+    partitions: components.map((component) => component.partition),
+    epochs: components.map((component) => component.epoch),
+    positions: components.map((component) => component.position),
+  };
+}
+
+/** Check the exact session and Subject anchor on the caller's current snapshot, without polling. */
+export async function subjectLinkWaitReason(
+  client: PoolClient,
+  seen: readonly SessionComponent[],
+  subject: string,
+  observeMissing = false,
+  anchor?: SessionComponent,
+  beforeMerge?: () => void,
+): Promise<SubjectLinkWaitReason | null> {
+  const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
+  let behind = requirements.partitions.length ? await readLinkCheckpoint.run(client, requirements) : null;
+  // Only the detail reader supplies its authorized Subject home anchor. A positive link
+  // checkpoint plus a complete suffix of already committed maintenance has no link work left.
+  if (
+    behind &&
+    anchor &&
+    anchor.partition === partitionOf(routeOf(subject)!) &&
+    (await coversSubjectAnchor(client, behind, anchor))
+  ) {
+    const otherRequirements = linkRequirements(
+      seen.filter(
+        (component) =>
+          component.partition !== anchor.partition ||
+          component.epoch !== anchor.epoch ||
+          component.position > anchor.position,
+      ),
+      observeMissing,
+    );
+    behind = otherRequirements.partitions.length ? await readLinkCheckpoint.run(client, otherRequirements) : null;
+  }
+  if (behind) return checkpointWaitReason(behind, subject);
+  beforeMerge?.();
+  const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
+  return pending === null ? null : 'merge';
+}
+
 export async function linksCaughtUp(
   pool: Pool,
   seen: readonly SessionComponent[],
@@ -120,14 +166,6 @@ export async function linksCaughtUp(
   observeMissing = false,
   anchor?: SessionComponent,
 ): Promise<boolean> {
-  const requirementsFor = (components: readonly SessionComponent[]) => ({
-    consumer: LINKS_CONSUMER,
-    observe_missing: observeMissing,
-    partitions: components.map((component) => component.partition),
-    epochs: components.map((component) => component.epoch),
-    positions: components.map((component) => component.position),
-  });
-  const requirements = requirementsFor(anchor ? [...seen, anchor] : seen);
   let requestedPriority = false;
   let lastObservation: SubjectLinkWaitReason = 'deadline';
   const unfinished = () => {
@@ -140,35 +178,11 @@ export async function linksCaughtUp(
         pool,
         async (client) => {
           lastObservation = 'checkpoint-deadline';
-          let behind = requirements.partitions.length ? await readLinkCheckpoint.run(client, requirements) : null;
-          // Only the detail reader supplies its authorized Subject home anchor. A positive link
-          // checkpoint plus a complete suffix of already committed maintenance has no link work left.
-          if (
-            behind &&
-            anchor &&
-            anchor.partition === partitionOf(routeOf(subject)!) &&
-            (await coversSubjectAnchor(client, behind, anchor))
-          ) {
-            const otherRequirements = requirementsFor(
-              seen.filter(
-                (component) =>
-                  component.partition !== anchor.partition ||
-                  component.epoch !== anchor.epoch ||
-                  component.position > anchor.position,
-              ),
-            );
-            behind = otherRequirements.partitions.length
-              ? await readLinkCheckpoint.run(client, otherRequirements)
-              : null;
-          }
-          if (behind) {
-            lastObservation = checkpointWaitReason(behind, subject);
-            return false;
-          }
-          lastObservation = 'merge-deadline';
-          const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-          lastObservation = pending === null ? 'deadline' : 'merge';
-          return pending === null;
+          const reason = await subjectLinkWaitReason(client, seen, subject, observeMissing, anchor, () => {
+            lastObservation = 'merge-deadline';
+          });
+          lastObservation = reason ?? 'deadline';
+          return reason === null;
         },
         deadline,
       );
@@ -183,7 +197,7 @@ export async function linksCaughtUp(
         requestedPriority = await withBoundedCommandConnection(
           pool,
           Math.min(deadline, Date.now() + FRESHNESS_POLL_MS),
-          (client) => prioritizeReads.run(client, requirements),
+          (client) => prioritizeReads.run(client, linkRequirements([...seen, anchor], observeMissing)),
         ).then(
           () => true,
           () => false,

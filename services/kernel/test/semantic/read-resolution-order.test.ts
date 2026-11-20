@@ -447,9 +447,27 @@ test('Subject GET sees the applied relation while the link checkpoint trails its
   const position = BigInt(home!.position);
   expect(position).toBeGreaterThan(book.component.position);
   const session = encodeSession(tokens, `account:${accounts.reader}`, [{ ...book.component, position }]);
-  const current = await read(session);
-  expect(current.response.status).toBe(200);
-  expect(current.body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+  const observer = observeSql(pool);
+  try {
+    const current = await read(session);
+    expect(current.response.status).toBe(200);
+    expect(current.body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+    const identity = observer.records.findIndex(({ statement }) => statement === identitySql);
+    const detail = observer.records.findIndex(({ statement }) => statement === subjectSql);
+    expect(identity).toBeGreaterThanOrEqual(0);
+    expect(detail).toBeGreaterThan(identity);
+    const backend = observer.records[identity]!.connectionId;
+    expect(observer.records[detail]!.connectionId).toBe(backend);
+    const snapshot = observer.records
+      .slice(identity, detail)
+      .filter(({ connectionId }) => connectionId === backend)
+      .map(({ statement }) => statement);
+    expect(snapshot).toContain(checkpointSql);
+    expect(snapshot).toContain(pendingMemberSql);
+    expect(snapshot).not.toContain('COMMIT');
+  } finally {
+    await observer.close();
+  }
   const foreign = await createFixed((partition + 1) % 4096, 'schema:Person', 'Pending foreign Subject');
   const pending = encodeSession(tokens, `account:${accounts.reader}`, [
     { ...book.component, position },
