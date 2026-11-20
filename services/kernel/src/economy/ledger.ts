@@ -10,6 +10,7 @@ import {
   type HoldAllocation,
   type HoldAllocationKey,
   type HoldAllocationPurpose,
+  type SpotFillSettlement,
   type WalletEntry,
 } from './contract.ts';
 
@@ -32,6 +33,7 @@ type Position = Readonly<{ accountId: string; posted: string; held: string; rest
 type Delta = Readonly<{ position: Position; posted: bigint; held: bigint }>;
 type Hold = Readonly<{ remaining: string; allocated: string; expiresAt: Date }>;
 type HoldChange = Readonly<{ captured?: bigint; released?: bigint; allocated?: bigint }>;
+type SpotCapture = Readonly<{ amount: bigint; feeAccountId: string; fee: bigint }>;
 type AllocationRef = Pick<HoldAllocationKey, 'holdId' | 'purpose' | 'reference'>;
 type AllocationRow = Omit<HoldAllocation, 'allocatedAt' | 'resolvedAt'> & {
   allocatedAt: Date;
@@ -99,14 +101,8 @@ async function getTime(client: Query): Promise<Date> {
   return result.rows[0]!.at;
 }
 
-function positions(context: Context): Promise<readonly [Position]>;
-function positions(context: Context, related: string): Promise<readonly [Position, Position]>;
-async function positions(
-  context: Context,
-  related?: string,
-): Promise<readonly [Position] | readonly [Position, Position]> {
-  const { client, bookId, asset, accountId } = context;
-  const keys = related === undefined ? [accountId] : [accountId, related];
+async function lockPositions(context: Context, keys: readonly string[]): Promise<Map<string, Position>> {
+  const { client, bookId, asset } = context;
   await client.query(
     `INSERT INTO economy.position (book_id, asset_id, account_id)
      SELECT $1, $2, account_id FROM unnest($3::uuid[]) AS keys(account_id) ORDER BY account_id
@@ -120,10 +116,20 @@ async function positions(
      ORDER BY account_id FOR UPDATE`,
     [bookId, asset.id, keys],
   );
-  const own = result.rows.find((position) => position.accountId === accountId);
-  if (own === undefined || result.rows.length !== keys.length) throw new Error('Economy account position is missing');
-  if (related === undefined) return [own];
-  return [own, result.rows.find((position) => position.accountId === related)!];
+  if (result.rows.length !== keys.length) throw new Error('Economy account position is missing');
+  return new Map(result.rows.map((position) => [position.accountId, position]));
+}
+
+function positions(context: Context): Promise<readonly [Position]>;
+function positions(context: Context, related: string): Promise<readonly [Position, Position]>;
+async function positions(
+  context: Context,
+  related?: string,
+): Promise<readonly [Position] | readonly [Position, Position]> {
+  const { accountId } = context;
+  const locked = await lockPositions(context, related === undefined ? [accountId] : [accountId, related]);
+  const own = locked.get(accountId)!;
+  return related === undefined ? [own] : [own, locked.get(related)!];
 }
 
 function delta(position: Position, posted: bigint, held = 0n): Delta {
@@ -274,6 +280,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     holdId: string | null,
     operands: readonly (string | boolean)[],
     prepare: (context: Context) => Promise<Plan | BusinessFailure>,
+    connection?: Query,
   ): Promise<EconomyResult<EconomyReceipt>> {
     const accountId = walletAccount(input.accountId);
     if (
@@ -289,7 +296,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     const digest = createHash('sha256')
       .update(JSON.stringify([1, kind, assetId, holdId, ...operands]))
       .digest();
-    return database.transaction(async (client) => {
+    const run = async (client: Query): Promise<EconomyResult<EconomyReceipt>> => {
       await client.query(
         `SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array($1::text, $2::text, $3::text, $4::text)::text, 0))`,
         [bookId, accountId, namespace, operationId],
@@ -328,7 +335,8 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       await saveOutcome('ok');
       await record(context, namespace, operationId, kind, holdId, plan);
       return success({ operationId });
-    });
+    };
+    return connection === undefined ? database.transaction(run) : run(connection);
   }
 
   function dropHold(
@@ -358,35 +366,162 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
   function resolveAllocation(
     input: HoldAllocationKey & Pick<Operation, 'operationId'>,
     recipient: string | null,
+    spot?: Readonly<{ capture: SpotCapture; connection: Query }>,
   ): Promise<EconomyResult<EconomyReceipt>> {
     if (!validAllocationRef(input)) return Promise.resolve(failure('invalid_operation'));
     const { holdId, purpose, reference } = input;
     const kind = recipient === null ? 'release_allocation' : 'capture_allocation';
     const operands = recipient === null ? [purpose, reference] : [purpose, reference, recipient];
-    return command(input, kind, holdId, operands, async (context) => {
-      const hold = await getHold(context, holdId, true);
-      if (hold === undefined) return failure('hold_missing');
-      const key = { accountId: context.accountId, assetId: context.asset.id, holdId, purpose, reference };
-      const allocation = await getAllocation(context.client, bookId, key);
-      if (allocation === undefined) return failure('allocation_missing');
-      if (allocation.status !== 'protected') return failure('allocation_closed');
+    const spotCapture = spot?.capture;
+    if (spotCapture) operands.push(spotCapture.amount.toString(), spotCapture.feeAccountId, spotCapture.fee.toString());
+    return command(
+      input,
+      kind,
+      holdId,
+      operands,
+      async (context) => {
+        const hold = await getHold(context, holdId, true);
+        if (hold === undefined) return failure('hold_missing');
+        const key = { accountId: context.accountId, assetId: context.asset.id, holdId, purpose, reference };
+        const allocation = await getAllocation(context.client, bookId, key);
+        if (allocation === undefined) return failure('allocation_missing');
+        if (allocation.status !== 'protected') return failure('allocation_closed');
 
-      const amount = BigInt(allocation.amount);
-      const [owner, receiver] = recipient === null ? await positions(context) : await positions(context, recipient);
-      const at = await getTime(context.client);
-      const captured = receiver === undefined ? 0n : amount;
-      const released = amount - captured;
-      return {
-        at,
-        deltas:
-          receiver === undefined
-            ? [delta(owner, 0n, -amount)]
-            : [delta(owner, -amount, -amount), delta(receiver, amount)],
-        persistHold: async (transactionId) => {
-          await changeHold(context, holdId, at, { captured, released, allocated: -amount });
-          await finishAllocation(context.client, bookId, key, recipient, transactionId, at);
-        },
-      };
+        const amount = BigInt(allocation.amount);
+        if (spotCapture && amount !== spotCapture.amount) return failure('operation_conflict');
+        if (spotCapture && !context.asset.transferable) return failure('asset_not_transferable');
+        const fee = spotCapture?.fee ?? 0n;
+        const feeAccountId = spotCapture?.feeAccountId;
+        const keys = recipient === null ? [context.accountId] : [context.accountId, recipient];
+        if (fee > 0n && feeAccountId !== undefined) keys.push(feeAccountId);
+        const locked = await lockPositions(context, keys);
+        const owner = locked.get(context.accountId)!;
+        const captured = recipient === null ? 0n : amount;
+        const released = amount - captured;
+        const changes = [delta(owner, -captured, -amount)];
+        if (recipient !== null && amount > fee) changes.push(delta(locked.get(recipient)!, amount - fee));
+        if (fee > 0n && feeAccountId !== undefined) changes.push(delta(locked.get(feeAccountId)!, fee));
+        const at = await getTime(context.client);
+        return {
+          at,
+          deltas: changes,
+          persistHold: async (transactionId) => {
+            await changeHold(context, holdId, at, { captured, released, allocated: -amount });
+            await finishAllocation(context.client, bookId, key, recipient, transactionId, at);
+          },
+        };
+      },
+      spot?.connection,
+    );
+  }
+
+  function settleSpotFill(input: SpotFillSettlement): Promise<EconomyResult<EconomyReceipt>> {
+    const { fillId, instrumentId, policyVersion, buyerHoldId, sellerHoldId, baseAssetId, quoteAssetId } = input;
+    const buyerId = walletAccount(input.buyerId);
+    const sellerId = walletAccount(input.sellerId);
+    const feeAccountId = walletAccount(input.feeAccountId);
+    const base = positiveInteger(input.baseUnits);
+    const quote = positiveInteger(input.quoteUnits);
+    const buyerFee = input.buyerFeeUnits === '0' ? 0n : positiveInteger(input.buyerFeeUnits);
+    const sellerFee = input.sellerFeeUnits === '0' ? 0n : positiveInteger(input.sellerFeeUnits);
+    if (
+      buyerId === null ||
+      sellerId === null ||
+      feeAccountId === null ||
+      new Set([buyerId, sellerId, feeAccountId]).size !== 3 ||
+      ![instrumentId, baseAssetId, quoteAssetId].every(validIdentifier) ||
+      baseAssetId === quoteAssetId ||
+      ![fillId, buyerHoldId, sellerHoldId].every(validOperationKey) ||
+      positiveInteger(policyVersion) === null
+    )
+      return Promise.resolve(failure('invalid_operation'));
+    if (
+      base === null ||
+      quote === null ||
+      buyerFee === null ||
+      sellerFee === null ||
+      sellerFee > quote ||
+      quote + buyerFee > maxInteger
+    )
+      return Promise.resolve(failure('invalid_amount'));
+
+    const digest = createHash('sha256')
+      .update(
+        JSON.stringify([
+          1,
+          instrumentId,
+          policyVersion,
+          buyerId,
+          sellerId,
+          feeAccountId,
+          buyerHoldId,
+          sellerHoldId,
+          baseAssetId,
+          quoteAssetId,
+          base.toString(),
+          quote.toString(),
+          buyerFee.toString(),
+          sellerFee.toString(),
+        ]),
+      )
+      .digest();
+    const operation = createHash('sha256').update(fillId).digest('hex');
+    const legs = [
+      {
+        assetId: baseAssetId,
+        accountId: sellerId,
+        holdId: sellerHoldId,
+        recipient: buyerId,
+        operationId: `spot/base/${operation}`,
+        amount: base,
+        fee: 0n,
+      },
+      {
+        assetId: quoteAssetId,
+        accountId: buyerId,
+        holdId: buyerHoldId,
+        recipient: sellerId,
+        operationId: `spot/quote/${operation}`,
+        amount: quote + buyerFee,
+        fee: buyerFee + sellerFee,
+      },
+    ].sort((left, right) => (left.assetId < right.assetId ? -1 : 1));
+    return database.transaction(async (client) => {
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array($1::text, 'spot_settlement', $2::text)::text, 0))`,
+        [bookId, fillId],
+      );
+      const prior = await client.query<{ digest: Buffer }>(
+        'SELECT digest FROM economy.spot_settlement WHERE book_id = $1 AND fill_id = $2',
+        [bookId, fillId],
+      );
+      if (prior.rows[0])
+        return digest.equals(prior.rows[0].digest) ? success({ operationId: fillId }) : failure('operation_conflict');
+      await client.query('SAVEPOINT economy_spot_settlement');
+      for (const leg of legs) {
+        const result = await resolveAllocation({ ...leg, purpose: 'spot_fill', reference: fillId }, leg.recipient, {
+          capture: { amount: leg.amount, feeAccountId, fee: leg.fee },
+          connection: client,
+        });
+        if (result.kind !== 'ok') {
+          await client.query('ROLLBACK TO SAVEPOINT economy_spot_settlement');
+          return result;
+        }
+      }
+      await client
+        .query(
+          `INSERT INTO economy.spot_settlement
+         (book_id, fill_id, digest, base_asset_id, base_transaction_id, quote_asset_id, quote_transaction_id)
+         SELECT $1, $2, $3, base.asset_id, base.transaction_id, quote.asset_id, quote.transaction_id
+         FROM economy.journal AS base CROSS JOIN economy.journal AS quote
+         WHERE base.book_id = $1 AND base.origin_id = $4 AND base.namespace = 'owner' AND base.operation_id = $5
+           AND quote.book_id = $1 AND quote.origin_id = $6 AND quote.namespace = 'owner' AND quote.operation_id = $7`,
+          [bookId, fillId, digest, sellerId, `spot/base/${operation}`, buyerId, `spot/quote/${operation}`],
+        )
+        .then((inserted) => {
+          if (inserted.rowCount !== 1) throw new Error('Spot settlement is missing a captured ledger leg');
+        });
+      return success({ operationId: fillId });
     });
   }
 
@@ -618,5 +753,6 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     },
 
     releaseAllocation: (input) => resolveAllocation(input, null),
+    settleSpotFill,
   };
 }

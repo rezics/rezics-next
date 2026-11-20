@@ -64,6 +64,24 @@ export type HoldAllocation = Readonly<{
 }>;
 type AllocationCommand = HoldAllocationKey & Pick<WalletCommand, 'operationId'>;
 
+/** Trusted terms captured by the instrument owner for one same-book fill. */
+export type SpotFillSettlement = Readonly<{
+  fillId: string;
+  instrumentId: string;
+  policyVersion: string;
+  buyerId: string;
+  sellerId: string;
+  buyerHoldId: string;
+  sellerHoldId: string;
+  baseAssetId: string;
+  quoteAssetId: string;
+  baseUnits: string;
+  quoteUnits: string;
+  buyerFeeUnits: string;
+  sellerFeeUnits: string;
+  feeAccountId: string;
+}>;
+
 export interface EconomyWalletPort {
   readBalance(input: WalletKey): Promise<EconomyResult<WalletBalance>>;
   readStatement(
@@ -91,4 +109,5 @@ export interface EconomyLedger extends EconomyWalletPort {
     input: AllocationCommand & Readonly<{ recipientId: string }>,
   ): Promise<EconomyResult<EconomyReceipt>>;
   releaseAllocation(input: AllocationCommand): Promise<EconomyResult<EconomyReceipt>>;
+  settleSpotFill(input: SpotFillSettlement): Promise<EconomyResult<EconomyReceipt>>;
 }

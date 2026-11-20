@@ -92,6 +92,91 @@ CREATE TABLE economy.entry (
 
 
 --
+-- Name: funding_dispatch; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_dispatch (
+    book_id text NOT NULL,
+    intent_id text NOT NULL,
+    attempt_id text NOT NULL,
+    action text NOT NULL,
+    due_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    active_claim_id uuid,
+    closed_at timestamp with time zone,
+    CONSTRAINT funding_dispatch_action_check CHECK ((action = ANY (ARRAY['submit'::text, 'reconcile'::text])))
+);
+
+
+--
+-- Name: funding_dispatch_claim; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_dispatch_claim (
+    book_id text NOT NULL,
+    intent_id text NOT NULL,
+    claim_id uuid NOT NULL,
+    action text NOT NULL,
+    lease_until timestamp with time zone NOT NULL,
+    acknowledgment text,
+    CONSTRAINT funding_dispatch_claim_acknowledgment_check CHECK (((char_length(acknowledgment) >= 1) AND (char_length(acknowledgment) <= 4096))),
+    CONSTRAINT funding_dispatch_claim_action_check CHECK ((action = ANY (ARRAY['submit'::text, 'reconcile'::text])))
+);
+
+
+--
+-- Name: funding_evidence; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_evidence (
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    source_kind text NOT NULL,
+    source_id text NOT NULL,
+    book_id text NOT NULL,
+    intent_id text NOT NULL,
+    fingerprint text NOT NULL,
+    recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT funding_evidence_fingerprint_check CHECK (((char_length(fingerprint) >= 1) AND (char_length(fingerprint) <= 4096))),
+    CONSTRAINT funding_evidence_source_id_check CHECK (((char_length(source_id) >= 1) AND (char_length(source_id) <= 255))),
+    CONSTRAINT funding_evidence_source_kind_check CHECK ((source_kind = ANY (ARRAY['movement'::text, 'refusal'::text])))
+);
+
+
+--
+-- Name: funding_intent; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_intent (
+    book_id text NOT NULL,
+    intent_id text NOT NULL,
+    wallet_id uuid NOT NULL,
+    asset_id text NOT NULL,
+    units bigint NOT NULL,
+    direction text NOT NULL,
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    destination_ref text NOT NULL,
+    phase text NOT NULL,
+    confirmed_movement_id text,
+    reversed_units bigint NOT NULL,
+    CONSTRAINT funding_intent_check CHECK (((reversed_units >= 0) AND (reversed_units <= units))),
+    CONSTRAINT funding_intent_check1 CHECK (((phase <> 'awaiting_hold'::text) OR (direction = 'withdrawal'::text))),
+    CONSTRAINT funding_intent_check2 CHECK (((phase = ANY (ARRAY['confirmed'::text, 'reversed'::text])) = (confirmed_movement_id IS NOT NULL))),
+    CONSTRAINT funding_intent_check3 CHECK (((confirmed_movement_id IS NOT NULL) OR (reversed_units = 0))),
+    CONSTRAINT funding_intent_check4 CHECK (((phase = 'reversed'::text) = (reversed_units = units))),
+    CONSTRAINT funding_intent_confirmed_movement_id_check CHECK (((char_length(confirmed_movement_id) >= 1) AND (char_length(confirmed_movement_id) <= 255))),
+    CONSTRAINT funding_intent_destination_ref_check CHECK (((char_length(destination_ref) >= 1) AND (char_length(destination_ref) <= 255))),
+    CONSTRAINT funding_intent_direction_check CHECK ((direction = ANY (ARRAY['deposit'::text, 'withdrawal'::text]))),
+    CONSTRAINT funding_intent_intent_id_check CHECK ((intent_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'::text)),
+    CONSTRAINT funding_intent_phase_check CHECK ((phase = ANY (ARRAY['awaiting_hold'::text, 'ready'::text, 'submitted'::text, 'unknown'::text, 'refused'::text, 'confirmed'::text, 'reversed'::text]))),
+    CONSTRAINT funding_intent_provider_mode_check CHECK ((provider_mode = ANY (ARRAY['test'::text, 'live'::text]))),
+    CONSTRAINT funding_intent_provider_namespace_check CHECK (((char_length(provider_namespace) >= 1) AND (char_length(provider_namespace) <= 255))),
+    CONSTRAINT funding_intent_units_check CHECK ((units > 0)),
+    CONSTRAINT funding_intent_wallet_id_check CHECK ((wallet_id <> '00000000-0000-0000-0000-000000000000'::uuid))
+);
+
+
+--
 -- Name: hold; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -187,6 +272,24 @@ CREATE TABLE economy."position" (
 
 
 --
+-- Name: spot_settlement; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.spot_settlement (
+    book_id text NOT NULL,
+    fill_id text NOT NULL,
+    digest bytea NOT NULL,
+    base_asset_id text NOT NULL,
+    base_transaction_id uuid NOT NULL,
+    quote_asset_id text NOT NULL,
+    quote_transaction_id uuid NOT NULL,
+    CONSTRAINT spot_settlement_check CHECK ((base_asset_id <> quote_asset_id)),
+    CONSTRAINT spot_settlement_digest_check CHECK ((octet_length(digest) = 32)),
+    CONSTRAINT spot_settlement_fill_id_check CHECK (((char_length(fill_id) >= 1) AND (char_length(fill_id) <= 255)))
+);
+
+
+--
 -- Name: asset asset_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -216,6 +319,54 @@ ALTER TABLE ONLY economy.entry
 
 ALTER TABLE ONLY economy.entry
     ADD CONSTRAINT entry_pkey PRIMARY KEY (book_id, asset_id, account_id, "position");
+
+
+--
+-- Name: funding_dispatch funding_dispatch_attempt_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch
+    ADD CONSTRAINT funding_dispatch_attempt_id_key UNIQUE (attempt_id);
+
+
+--
+-- Name: funding_dispatch_claim funding_dispatch_claim_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch_claim
+    ADD CONSTRAINT funding_dispatch_claim_pkey PRIMARY KEY (book_id, intent_id, claim_id);
+
+
+--
+-- Name: funding_dispatch funding_dispatch_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch
+    ADD CONSTRAINT funding_dispatch_pkey PRIMARY KEY (book_id, intent_id);
+
+
+--
+-- Name: funding_evidence funding_evidence_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_evidence
+    ADD CONSTRAINT funding_evidence_pkey PRIMARY KEY (provider_namespace, provider_mode, source_kind, source_id);
+
+
+--
+-- Name: funding_intent funding_intent_book_id_intent_id_provider_namespace_provide_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_intent
+    ADD CONSTRAINT funding_intent_book_id_intent_id_provider_namespace_provide_key UNIQUE (book_id, intent_id, provider_namespace, provider_mode);
+
+
+--
+-- Name: funding_intent funding_intent_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_intent
+    ADD CONSTRAINT funding_intent_pkey PRIMARY KEY (book_id, intent_id);
 
 
 --
@@ -275,6 +426,21 @@ ALTER TABLE ONLY economy."position"
 
 
 --
+-- Name: spot_settlement spot_settlement_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_settlement
+    ADD CONSTRAINT spot_settlement_pkey PRIMARY KEY (book_id, fill_id);
+
+
+--
+-- Name: funding_dispatch_due_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX funding_dispatch_due_idx ON economy.funding_dispatch USING btree (book_id, due_at, intent_id) WHERE (closed_at IS NULL);
+
+
+--
 -- Name: hold_due_idx; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -296,6 +462,13 @@ CREATE TRIGGER entry_immutable BEFORE DELETE OR UPDATE ON economy.entry FOR EACH
 
 
 --
+-- Name: funding_evidence funding_evidence_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER funding_evidence_immutable BEFORE DELETE OR UPDATE ON economy.funding_evidence FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
 -- Name: journal journal_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -307,6 +480,13 @@ CREATE TRIGGER journal_immutable BEFORE DELETE OR UPDATE ON economy.journal FOR 
 --
 
 CREATE TRIGGER receipt_immutable BEFORE DELETE OR UPDATE ON economy.command_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: spot_settlement spot_settlement_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER spot_settlement_immutable BEFORE DELETE OR UPDATE ON economy.spot_settlement FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -323,6 +503,46 @@ ALTER TABLE ONLY economy.entry
 
 ALTER TABLE ONLY economy.entry
     ADD CONSTRAINT entry_book_id_asset_id_transaction_id_fkey FOREIGN KEY (book_id, asset_id, transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: funding_dispatch funding_dispatch_active_claim_fk; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch
+    ADD CONSTRAINT funding_dispatch_active_claim_fk FOREIGN KEY (book_id, intent_id, active_claim_id) REFERENCES economy.funding_dispatch_claim(book_id, intent_id, claim_id);
+
+
+--
+-- Name: funding_dispatch funding_dispatch_book_id_intent_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch
+    ADD CONSTRAINT funding_dispatch_book_id_intent_id_fkey FOREIGN KEY (book_id, intent_id) REFERENCES economy.funding_intent(book_id, intent_id);
+
+
+--
+-- Name: funding_dispatch_claim funding_dispatch_claim_book_id_intent_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_dispatch_claim
+    ADD CONSTRAINT funding_dispatch_claim_book_id_intent_id_fkey FOREIGN KEY (book_id, intent_id) REFERENCES economy.funding_dispatch(book_id, intent_id);
+
+
+--
+-- Name: funding_evidence funding_evidence_book_id_intent_id_provider_namespace_prov_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_evidence
+    ADD CONSTRAINT funding_evidence_book_id_intent_id_provider_namespace_prov_fkey FOREIGN KEY (book_id, intent_id, provider_namespace, provider_mode) REFERENCES economy.funding_intent(book_id, intent_id, provider_namespace, provider_mode);
+
+
+--
+-- Name: funding_intent funding_intent_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_intent
+    ADD CONSTRAINT funding_intent_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
 
 
 --
@@ -387,6 +607,22 @@ ALTER TABLE ONLY economy.journal
 
 ALTER TABLE ONLY economy."position"
     ADD CONSTRAINT position_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: spot_settlement spot_settlement_book_id_base_asset_id_base_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_settlement
+    ADD CONSTRAINT spot_settlement_book_id_base_asset_id_base_transaction_id_fkey FOREIGN KEY (book_id, base_asset_id, base_transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: spot_settlement spot_settlement_book_id_quote_asset_id_quote_transaction_i_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.spot_settlement
+    ADD CONSTRAINT spot_settlement_book_id_quote_asset_id_quote_transaction_i_fkey FOREIGN KEY (book_id, quote_asset_id, quote_transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
 
 
 --
