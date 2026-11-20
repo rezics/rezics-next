@@ -1,6 +1,7 @@
 import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
+import { hasDispatchableRepairCoverage, type RepairCoverageScope } from './public-filter-repair-coverage.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import type {
   NativePublicFilterPublication,
@@ -3106,6 +3107,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         previous = encodeNative(state);
       }
       const subjectPublication = publication !== undefined && !('representation' in retained.definition.capture);
+      const repairCoverage = { capture: retained.definition.capture, subjectPublication };
       const mixedPreparation =
         config.discoveryPreparation === 'repair' && 'representation' in retained.definition.capture;
       const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
@@ -3264,7 +3266,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         }
         while (work.repairPage && work.repairPage.next < work.repairPage.repairs.length) {
           const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
-          encoded = await applyRepair(repair, work, state.pages, encoded, m, context);
+          encoded = await applyRepair(repair, work, state.pages, encoded, m, context, repairCoverage);
         }
         const complete = intent.complete;
         if (complete && (work.projectionSource || work.records.length || work.repair || work.dispatch))
@@ -3396,6 +3398,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     encoded: string,
     m: Meter,
     context: PublicFilterConsumerContext,
+    coverage: RepairCoverageScope,
   ): Promise<string> {
     const q = work.queried!;
     const projection = repair.projection;
@@ -3417,7 +3420,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.repairPage!.next++;
       return save(work, encoded, false, m);
     }
-    if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
+    if (!hasDispatchableRepairCoverage(work.records, coverage)) throw new ConsumerFailure('source_pending');
     const guard = /discovery-g[1-9][0-9]*$/.test(target) ? await mixedRepairWriter(q, m) : await subjectRepairWriter(m);
     const locator = encodeNative({
       observation: q.snapshot.observation,

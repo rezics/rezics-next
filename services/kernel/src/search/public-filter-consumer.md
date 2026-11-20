@@ -43,7 +43,10 @@ ordinal advancement commit together; uncertain retries reuse the original versio
 records remain in native execution custody. Only Source settle can certify its owner receipts plus
 actual Search custody for the old cut/execution; a refresh, callback or successful write cannot publish an ACK.
 Settled repair is a maintenance diagnostic; changed-since-start continues to block disclosure of the old
-execution through query/status. Unresolved projection/owner work stays unavailable. Partial builds cannot authorize a replacement.
+execution through query/status. Complete Source projections with unresolved scalar facts can reach the ordinary
+Subject writer for the retained unfiltered ID publication, whose membership has no scalar predicate. The writer
+uses its own current Source read and exact winner proof. Those facts remain `not_proven` for matcher coverage,
+including under negation. Partial builds and unresolved owner work cannot authorize a replacement.
 
 Lifecycle close barriers and native leases belong to custody. Factory close drains admitted work and closes
 only PITs it owns, leaving supplied pools, engine and Source open. Closed or uncertain observations do not
