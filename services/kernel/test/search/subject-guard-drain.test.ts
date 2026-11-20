@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import pg from 'pg';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { withQueryAccounting } from '../../src/database/pool.ts';
@@ -521,9 +522,9 @@ test.each(['intent', 'legacy', 'mismatch'])(
   60_000,
 );
 
-test.each([false, true])(
-  'Subject relay settles the retained original receipt with home closed=%s',
-  async (closed) => {
+test.each(['open', 'closed', 'previous writer'])(
+  'Subject relay settles the retained original receipt with %s',
+  async (mode) => {
     const t = await target();
     const relay = (search = f.search) => {
       const options = { ...f.options(t.prefix, search), ...t };
@@ -538,8 +539,9 @@ test.each([false, true])(
           writer_token: string | null;
           source_position: string | null;
           relay_receipt: string | null;
+          relay_intent: string | null;
         }>(
-          `SELECT writer_token,source_position,relay_receipt FROM search.identity_writer
+          `SELECT writer_token,source_position,relay_receipt,relay_intent FROM search.identity_writer
        WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
           [t.partition, t.index, t.id],
         )
@@ -567,9 +569,10 @@ test.each([false, true])(
       _index: t.index,
       _version: Number(receipt.version),
     });
+    expect(retained.relay_intent).toBeString();
     expect(retained.source_position).toBeNull();
     expect(await checkpoint(t)).toBe(0n);
-    if (closed) {
+    if (mode === 'closed') {
       const writer = createSearchWriterGuard({
         ...f.options(t.prefix, f.search),
         ...t,
@@ -579,12 +582,17 @@ test.each([false, true])(
       expect(barrier.ordinary).toBe('draining');
       await expect(relay().run(t.partition)).rejects.toThrow('Search generation is closed to writer enrollment');
       expect((await writer.adoptGenerationPublicationBarrier(barrier.locator)).ordinary).toBe('drained');
-      expect(await row()).toEqual({ writer_token: null, source_position: receipt.version, relay_receipt: null });
+      expect(await row()).toEqual({
+        writer_token: null,
+        source_position: receipt.version,
+        relay_receipt: null,
+        relay_intent: null,
+      });
       expect(await checkpoint(t)).toBe(0n);
       return;
     }
     let replayed = false;
-    await relay({
+    const retry = relay({
       ...f.search,
       async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
         const next = await row();
@@ -594,11 +602,37 @@ test.each([false, true])(
         replayed = true;
         return f.search.bulk<T>(...args);
       },
-    }).run(t.partition);
+    });
+    if (mode === 'previous writer') {
+      const previousSql = await Bun.file(
+        new URL('./support/previous-identity-writer-settle.sql', import.meta.url),
+      ).text();
+      const originalQuery = pg.Client.prototype.query;
+      let previousSettlements = 0;
+      pg.Client.prototype.query = new Proxy(originalQuery, {
+        apply(query, client, args) {
+          const statement = args[0];
+          if (!replayed && statement?.text?.includes('/* search:identity-writer:settle */')) {
+            previousSettlements++;
+            args[0] = { ...statement, text: previousSql };
+          }
+          return Reflect.apply(query, client, args);
+        },
+      });
+      try {
+        await retry.run(t.partition);
+      } finally {
+        pg.Client.prototype.query = originalQuery;
+      }
+      expect(previousSettlements).toBe(1);
+    } else {
+      await retry.run(t.partition);
+    }
     expect(replayed).toBe(true);
     const settled = await row();
     expect(settled.writer_token).toBeNull();
     expect(settled.relay_receipt).toBeNull();
+    expect(settled.relay_intent).toBeNull();
     expect(BigInt(settled.source_position!)).toBeGreaterThan(BigInt(receipt.version));
     expect(await checkpoint(t)).toBeGreaterThan(0n);
   },
