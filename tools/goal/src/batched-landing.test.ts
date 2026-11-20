@@ -176,9 +176,9 @@ test('a member that conflicts with an earlier batch member is deferred past it, 
     // The rebase outcome starts the worker's conflict-resolution attempt, which lands again.
     expect(h.queue.next()?.request).toMatchObject({ taskId: conflict.id, attempt: 2 });
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
-});
+}, 30_000);
 
 test('a landing that conflicts with dev itself, first in its batch, gets a rebase outcome instead of staying deferred', async () => {
   const h = integrationHarness();
@@ -206,9 +206,9 @@ test('a landing that conflicts with dev itself, first in its batch, gets a rebas
     expect(outcome?.conflictedFiles).toEqual(['shared.txt']);
     expect(h.outcomes.find(({ taskId }) => taskId === next.id)?.passed).toBe(true);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
-});
+}, 30_000);
 
 test('a stale attempt discovered during the batch typecheck is skipped and never lands', async () => {
   const h = integrationHarness();

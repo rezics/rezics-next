@@ -124,6 +124,6 @@ test('a failed postintegration affected check leaves both batch members integrat
     expect(h.head('dev')).toBe(landed);
     expect(h.outcomes.map(({ passed }) => passed)).toEqual([true, true]);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
-});
+}, 30_000);

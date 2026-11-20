@@ -419,7 +419,10 @@ test('prelaunch amendment deliberately replaces stopped zero input without resta
     ];
     for (const recordEvidence of evidence) {
       const stopped = prelaunchTask(h);
-      await h.tasks.stop(stopped.id);
+      // Seed the historical state directly. The live stop path is exercised above.
+      h.store.updateTask({ taskId: stopped.id, attempt: 0 }, (current) => {
+        current.state = 'stopped';
+      });
       recordEvidence(stopped.id);
       const before = JSON.stringify(h.store.task(stopped.id));
       const history = h.store.events(stopped.id);

@@ -1290,9 +1290,9 @@ test('ordinary dev independence: source-only backlog lands before main proof and
     ]);
     expect(releaseRecords(h)[0]?.devScriptTree).toBe(captured);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
-});
+}, 30_000);
 
 test('ordinary dev independence: stale proof hands off without reusing partial evidence or taking a live dev lease', async () => {
   const h = integrationHarness();

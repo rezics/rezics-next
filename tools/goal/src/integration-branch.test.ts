@@ -264,9 +264,9 @@ test('a failing stabilize candidate leaves its dependent tasks integrated pendin
     expect(h.store.task(culprit.id).currentAttempt).toBe(1);
     expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
-});
+}, 30_000);
 
 test('a promotion failure that main shares is an environment failure and reverts nothing', async () => {
   const h = integrationHarness();

@@ -276,6 +276,9 @@ test('a just-exited group that lingers as zombies of that incarnation is already
 test('terminateProcessGroup waits until a memberless kernel group becomes absent', async () => {
   const identity = { pid: 2_000_000_001, group: 2_000_000_001, start: '0', boot: 'fixture-boot' };
   let visible = 3;
+  // The synthetic group disappears after observations. Host /proc scan latency cannot advance that sequence.
+  let now = Date.now();
+  const clock = spyOn(Date, 'now').mockImplementation(() => (now += 20));
   const kill = process.kill.bind(process);
   const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
     if (pid === -identity.group && signal === 0) {
@@ -286,8 +289,15 @@ test('terminateProcessGroup waits until a memberless kernel group becomes absent
   });
   try {
     await terminateProcessGroup(identity, 200);
+    expect(killSpy.mock.calls.filter(([pid]) => Math.abs(pid) === identity.group)).toEqual([
+      [-identity.group, 0],
+      [-identity.group, 0],
+      [-identity.group, 0],
+      [-identity.group, 0],
+    ]);
   } finally {
     killSpy.mockRestore();
+    clock.mockRestore();
   }
 });
 test('terminateProcessGroup reports a group still unconfirmed after the grace', async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
@@ -10,6 +10,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { acquireDirectoryLease, trainLaneStatus } from './lease.ts';
 import { git } from './merge.ts';
+import { stopProcessesUnder } from './process.ts';
 import { integrationHarness, repository } from './test-support.ts';
 
 function setup() {
@@ -282,18 +283,6 @@ async function waitUntil(label: string, check: () => boolean, timeoutMs = 30_000
   }
 }
 
-function stopPids(pids: Iterable<number | undefined | null>): void {
-  for (const pid of pids) {
-    if (!pid) continue;
-    try {
-      process.kill(-pid, 'SIGKILL');
-    } catch {}
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {}
-  }
-}
-
 function cpSyncContext(checkout: string): CpSyncRefTransactionContext {
   const run: CpSyncRefTransactionContext['run'] = (args, options) => {
     const result = spawnSync('git', [...args], {
@@ -363,10 +352,10 @@ function preparePublishedCandidate(checkout: string, stamp: string): { previous:
 
 test('a spawned train finishes its landing after cp-sync publishes tools/goal and the replacement takes the rest', async () => {
   const h = integrationHarness();
-  const pids = new Set<number>();
-  let child: ChildProcess | undefined;
-  const ready = join(h.settings.stateDirectory, 'typecheck-ready');
-  const release = join(h.settings.stateDirectory, 'typecheck-release');
+  const firstReady = join(h.settings.stateDirectory, 'first-typecheck-ready');
+  const firstRelease = join(h.settings.stateDirectory, 'first-typecheck-release');
+  const secondReady = join(h.settings.stateDirectory, 'second-typecheck-ready');
+  const secondRelease = join(h.settings.stateDirectory, 'second-typecheck-release');
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')) as Record<string, unknown>;
     local.integrationChecks = [];
@@ -381,12 +370,21 @@ test('a spawned train finishes its landing after cp-sync publishes tools/goal an
     writeFileSync(
       join(h.root, 'scripts/typecheck.ts'),
       `import { existsSync, writeFileSync } from 'node:fs';
-writeFileSync(${JSON.stringify(ready)}, '');
-while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => setTimeout(resolve, 20));
+// Keep automatic promotion from racing the explicit cp-sync publication.
+if (!process.env.TYPECHECK_CANDIDATE_COMMIT) process.exit(1);
+const paths = ${JSON.stringify({
+        'docs/first.md': [firstReady, firstRelease],
+        'docs/second.md': [secondReady, secondRelease],
+      })};
+const phase = paths[process.env.TYPECHECK_CHANGED];
+if (!phase) throw new Error('Unexpected typecheck paths: ' + process.env.TYPECHECK_CHANGED);
+const [ready, release] = phase;
+writeFileSync(ready, '');
+while (!existsSync(release)) await new Promise((resolve) => setTimeout(resolve, 20));
 `,
     );
     git(h.root, 'add', '--', 'scripts/typecheck.ts');
-    git(h.root, 'commit', '-m', 'Hold the first typecheck');
+    git(h.root, 'commit', '-m', 'Hold each landing typecheck');
     writeTrainCli(h.root, 'v1');
     git(h.root, 'add', '--', 'tools/goal');
     git(h.root, 'commit', '-m', 'Add tools/goal trampoline');
@@ -401,24 +399,26 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
     const prepared = preparePublishedCandidate(h.root, 'v2');
     expect(codeVersion(h.root, 'tools/goal')).toBe(oldVersion);
 
-    child = spawn(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'train'], {
+    const child = spawn(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'train'], {
       cwd: h.root,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    if (child.pid) pids.add(child.pid);
     let stderr = '';
     child.stderr?.on('data', (chunk) => {
       stderr += String(chunk);
     });
-    const parentExit = new Promise<number | null>((resolve) => child!.once('exit', resolve));
+    const parentExit = new Promise<number | null>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', resolve);
+    });
+    void parentExit.catch(() => {}); // The ready barrier can fail before the exit is awaited.
 
-    await waitUntil('first landing held', () => existsSync(ready));
+    await waitUntil('first landing held', () => existsSync(firstReady));
     const held = trainLaneStatus(h.settings.stateDirectory).find((lane) => lane.state === 'running');
     expect(held?.codeVersion).toBe(oldVersion);
     expect(held?.pid).toBeDefined();
     const oldPid = held!.pid!;
-    pids.add(oldPid);
 
     const listed = spawnSync(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'status'], {
       cwd: h.root,
@@ -449,23 +449,18 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
     expect(trainLaneStatus(h.settings.stateDirectory).find((lane) => lane.pid === oldPid)?.codeVersion).toBe(
       oldVersion,
     );
-    expect(published).not.toBe(oldVersion);
-
-    writeFileSync(release, '');
+    writeFileSync(firstRelease, '');
     const parentCode = await parentExit;
     expect(parentCode === 0 ? parentCode : `${parentCode}: ${stderr}`).toBe(0);
 
-    await waitUntil('replacement train from published code', () =>
-      trainLaneStatus(h.settings.stateDirectory).some(
-        (lane) => lane.state === 'running' && lane.pid !== oldPid && lane.codeVersion === published,
-      ),
-    );
+    await waitUntil('second landing held', () => existsSync(secondReady));
     const replacement = trainLaneStatus(h.settings.stateDirectory).find(
       (lane) => lane.state === 'running' && lane.pid !== oldPid,
     );
     expect(replacement?.pid).not.toBe(oldPid);
     expect(replacement?.codeVersion).toBe(published);
-    if (replacement?.pid) pids.add(replacement.pid);
+    expect(h.store.task(first.id).state).toBe('integrated');
+    expect(h.store.task(second.id).state).not.toBe('integrated');
     const live = spawnSync(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'status'], {
       cwd: h.root,
       encoding: 'utf8',
@@ -479,9 +474,12 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
       }
     ).trains;
     expect(liveTrains.some((lane) => lane.pid === oldPid && lane.state === 'running')).toBe(false);
-    const reportedReplacement = liveTrains.find((lane) => lane.pid === replacement?.pid);
-    if (reportedReplacement) expect(reportedReplacement.codeVersion).toBe(published);
+    expect(liveTrains.find((lane) => lane.pid === replacement?.pid)).toMatchObject({
+      state: 'running',
+      codeVersion: published,
+    });
 
+    writeFileSync(secondRelease, '');
     await waitUntil(
       'both landings recorded',
       () =>
@@ -489,13 +487,15 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
         h.store.task(second.id).state === 'integrated' &&
         h.store.records().filter((record) => record.outcome === 'passed').length === 2,
     );
-    expect(h.store.records().map((record) => [record.taskId, record.attempt, record.outcome])).toEqual([
-      [first.id, 1, 'passed'],
-      [second.id, 1, 'passed'],
-    ]);
+    expect(h.store.records()).toHaveLength(2);
+    expect(h.store.record({ taskId: first.id, attempt: 1 })?.outcome).toBe('passed');
+    expect(h.store.record({ taskId: second.id, attempt: 1 })?.outcome).toBe('passed');
     expect(h.store.task(first.id).currentAttempt).toBe(1);
     expect(h.store.task(second.id).currentAttempt).toBe(1);
     expect(h.queue.next()).toBeUndefined();
+    await waitUntil('replacement train released its lane', () =>
+      trainLaneStatus(h.settings.stateDirectory).every((lane) => lane.state === 'missing'),
+    );
     const after = spawnSync(process.execPath, [join(h.root, 'tools/goal/src/cli.ts'), 'status'], {
       cwd: h.root,
       encoding: 'utf8',
@@ -508,11 +508,7 @@ while (!existsSync(${JSON.stringify(release)})) await new Promise((resolve) => s
     };
     expect(reported.trains.some((lane) => lane.pid === oldPid && lane.state === 'running')).toBe(false);
   } finally {
-    try {
-      writeFileSync(release, '');
-    } catch {}
-    stopPids([...pids, child?.pid]);
-    for (const lane of trainLaneStatus(h.settings.stateDirectory)) stopPids([lane.pid]);
-    h.dispose();
+    await stopProcessesUnder(h.root, 300);
+    await h.disposeAsync();
   }
 }, 60_000);

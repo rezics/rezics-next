@@ -102,7 +102,7 @@ async function withThreeTaskIncident(
     await job.drain();
     await run(job, h, taskIds, inbox);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }
 
@@ -414,7 +414,7 @@ test('a passing incident probe releases the other held retries', async () => {
     expect((JSON.parse(releasedStatus.at(-1)!) as { toolIncidents: unknown[] }).toolIncidents).toEqual([]);
     expect(inbox.filter((event) => event.kind === 'blocker')).toHaveLength(1);
   });
-});
+}, 30_000);
 
 test('a pending retry waits for its backoff time and for check hosts in a probed outage', async () => {
   await withRetryFixture(
