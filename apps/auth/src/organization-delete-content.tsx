@@ -98,13 +98,19 @@ export function OrganizationDeleteContent({
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<OrganizationDeletionHistoryView>([]);
   const [needsReview, setNeedsReview] = useState(false);
+  const mounted = useRef(false);
   const submitting = useRef<object | null>(null);
   const attempt = useRef<OrganizationDeletionAttempt | null>(null);
   const [returns] = useState(
     () =>
-      new OrganizationDeletionReturnController(setHistory, () => {
-        if (attempt.current) attempt.current.unresolved = true;
-      }),
+      new OrganizationDeletionReturnController(
+        (history) => {
+          if (mounted.current) setHistory(history);
+        },
+        () => {
+          if (attempt.current) attempt.current.unresolved = true;
+        },
+      ),
   );
   const recoveryHeading = useRef<HTMLHeadingElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -168,9 +174,14 @@ export function OrganizationDeleteContent({
   }
 
   function releaseNativeFlight(token: object): void {
-    if (nativeFlight.current !== token) return;
-    nativeFlight.current = null;
-    setNativeBusy(false);
+    if (nativeFlight.current === token) {
+      nativeFlight.current = null;
+      if (mounted.current) setNativeBusy(false);
+    }
+    if (submitting.current === token) {
+      submitting.current = null;
+      if (mounted.current) setPending(false);
+    }
   }
 
   function retireReview(current: OrganizationDeletionReviewGeneration, result?: OrganizationDeletionLoad) {
@@ -278,13 +289,7 @@ export function OrganizationDeleteContent({
     }
     submitting.current = operationToken;
     setPending(true);
-    void loadReview(current).finally(() => {
-      releaseNativeFlight(operationToken);
-      if (submitting.current === operationToken) {
-        submitting.current = null;
-        setPending(false);
-      }
-    });
+    void loadReview(current).finally(() => releaseNativeFlight(operationToken));
   }
 
   async function reviewCurrent() {
@@ -304,12 +309,16 @@ export function OrganizationDeleteContent({
       await loadReview(current);
     } finally {
       releaseNativeFlight(operationToken);
-      if (submitting.current === operationToken) {
-        submitting.current = null;
-        setPending(false);
-      }
     }
   }
+
+  // A settled command can still update its durable descriptor after the view is removed.
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useLayoutEffect(() => {
     returns.retire();
@@ -566,7 +575,7 @@ export function OrganizationDeleteContent({
           attempt.current.mounted = false;
           attempt.current = null;
         }
-        setConfirmation('');
+        if (mounted.current) setConfirmation('');
         if (current.isCurrent()) {
           returns.retire(current);
           setLoaded(null);
@@ -643,10 +652,6 @@ export function OrganizationDeleteContent({
       }
     } finally {
       releaseNativeFlight(operationToken);
-      if (submitting.current === operationToken) {
-        submitting.current = null;
-        setPending(false);
-      }
     }
   }
 
