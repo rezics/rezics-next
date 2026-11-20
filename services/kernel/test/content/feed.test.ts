@@ -632,7 +632,7 @@ test('First-public Home serves bibliographic Discovery with Search closed and bi
 
     for (const kind of BOOK_CATALOGUE_TYPES) {
       const selected = await page(kind, 'home', 1, undefined, false);
-      expect(selected.feedItems.map(({ key }) => key.id)).toEqual([subjects[kind]]);
+      expect(selected.feedItems.map(({ key }) => key.id)).toEqual([subjects[kind]!]);
     }
     const publicFirst = await page(undefined, 'home', 1, undefined, false);
     expect(publicFirst.next).toBeString();

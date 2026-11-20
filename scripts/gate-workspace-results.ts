@@ -323,7 +323,7 @@ function hostTools(root: string, env: Environment): string {
   return digest([
     release(),
     ...['sh', 'node', 'git', 'python3', 'docker', 'unshare', 'ip', 'openssl', 'ps', 'go-task', 'task'].map((name) => {
-      const found = Bun.which(name, { PATH });
+      const found = Bun.which(name, PATH === undefined ? undefined : { PATH });
       return [name, found ? statIdentity(realpathSync(found)) : null];
     }),
   ]);

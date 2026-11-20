@@ -109,7 +109,7 @@ bunTest.serial(
       const first = await page(await f.get(collection.id, 'BASIC', null, '&limit=1'));
       expect(first.next).toBeString();
       const remainder = await page(await f.get(collection.id, 'FULL', null, `&limit=1&cursor=${first.next}`));
-      expect(remainder).toEqual({ members: [full.members[1]], next: null });
+      expect(remainder).toEqual({ members: [full.members[1]!], next: null });
 
       await f.hide(author);
       const concealed = await page(await f.get(collection.id, 'FULL', null, '&limit=100'));

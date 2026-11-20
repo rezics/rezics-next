@@ -151,7 +151,7 @@ function validateWorkspaceOutcome(value: unknown): WorkspaceOutcome | null {
     durationSeconds: value.durationSeconds,
     failingFiles: value.failingFiles,
     loadSensitiveTests: value.loadSensitiveTests,
-    ...(value.reused === undefined ? {} : { reused: value.reused as WorkspaceOutcome['reused'] }),
+    ...(value.reused === undefined ? {} : { reused: value.reused as NonNullable<WorkspaceOutcome['reused']> }),
   };
 }
 
