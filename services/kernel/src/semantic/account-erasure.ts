@@ -293,8 +293,11 @@ async function minimizePayload(
   if (locator.source_transaction_id) {
     await tx.query(
       `INSERT INTO semantic.erasure_shared_custody(partition_no,account_id,role,transaction_id,outbox_position)
-      VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-      [partition, accountId, role, locator.source_transaction_id, locator.source_position],
+      SELECT $1,$2,$3,$4,position FROM semantic.erasure_retained_role_position($1,$4,$5,$6) AS position
+      ON CONFLICT(partition_no,account_id,role,transaction_id) DO UPDATE SET outbox_position=EXCLUDED.outbox_position
+        WHERE EXCLUDED.outbox_position IS NOT NULL
+          AND semantic.erasure_shared_custody.outbox_position IS DISTINCT FROM EXCLUDED.outbox_position`,
+      [partition, accountId, role, locator.source_transaction_id, locator.source_position, locator.delivery_position],
     );
   }
   if (store === 'identity_epoch_mapping_generation') return;

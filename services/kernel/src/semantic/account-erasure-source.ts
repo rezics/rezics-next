@@ -118,8 +118,10 @@ const BASIS_CHILD = 1;
 const SELECT_BODY = 2;
 const SEEK_BODY = 2;
 const HOLD_EOF_BODY = 3;
-const HOLD_ROLE_BODY = 6;
-const HOLD_OBSERVE_BODY = 7;
+// Three live transaction probes and up to three points for a minimized write basis.
+const ROLE_POSITION_KEYS = 6;
+const HOLD_ROLE_BODY = 6 + ROLE_POSITION_KEYS;
+const HOLD_OBSERVE_BODY = 7 + ROLE_POSITION_KEYS;
 const HOLD_CROSS_BODY = 4;
 const TRANSFER_BODY = 5;
 const READ_BODY = 1;
@@ -633,7 +635,10 @@ function sourceFactory(
           const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
           if (raw) {
             // Exact native role/body proof. Read and release this home before any identity control home.
-            budget.reserve(READ_BODY, wireBytes(cursorValues(next)));
+            budget.reserve(
+              READ_BODY + ROLE_POSITION_KEYS,
+              wireBytes(cursorValues(next)) + bodyBytes(ROLE_POSITION_KEYS),
+            );
             const detail = await withReadTransaction(
               pool,
               async (tx) =>
@@ -644,7 +649,8 @@ function sourceFactory(
               (d.source_transaction_id IS NOT NULL AND NOT EXISTS(
                 SELECT 1 FROM semantic.erasure_shared_custody c WHERE c.partition_no=d.partition_no
                   AND c.account_id=d.account_id AND c.role=d.role AND c.transaction_id=d.source_transaction_id
-                  AND c.outbox_position IS NOT DISTINCT FROM d.source_position)) AS custody_pending
+                  AND c.outbox_position=semantic.erasure_retained_role_position(
+                    d.partition_no,d.source_transaction_id,d.source_position,d.delivery_position))) AS custody_pending
              FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
                USING(partition_no,account_id,role,store,record_key)
              JOIN semantic.erasure_source_disposition proof USING(partition_no,store,record_key)
@@ -663,14 +669,16 @@ function sourceFactory(
                 ).rows[0],
             );
             if (!detail?.native_present) return pendingPage(budget);
-            const refresh = () =>
-              refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
+            const refresh = () => {
+              budget.reserve(ROLE_POSITION_KEYS, bodyBytes(ROLE_POSITION_KEYS));
+              return refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
                 store: next.store,
                 recordKey: next.record_key,
                 role: next.role,
                 deliveryPosition: next.delivery_position,
                 originKey: next.origin_key,
               });
+            };
             if (detail.state !== 'minimized' || detail.custody_pending) {
               await refresh();
               return pendingPage(budget);
@@ -846,7 +854,8 @@ function sourceFactory(
                   AND EXISTS(SELECT 1 FROM semantic.erasure_source_disposition proof WHERE proof.partition_no=$1 AND proof.store=$4 AND proof.record_key=$5)
                   AND (d.source_transaction_id IS NULL OR EXISTS(SELECT 1 FROM semantic.erasure_shared_custody c
                     WHERE c.partition_no=d.partition_no AND c.account_id=d.account_id AND c.role=d.role
-                      AND c.transaction_id=d.source_transaction_id AND c.outbox_position IS NOT DISTINCT FROM d.source_position))
+                      AND c.transaction_id=d.source_transaction_id AND c.outbox_position=semantic.erasure_retained_role_position(
+                        d.partition_no,d.source_transaction_id,d.source_position,d.delivery_position) FOR SHARE OF c))
                 FOR SHARE OF d,l`,
                 [
                   next.source_partition,

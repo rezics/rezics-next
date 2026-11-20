@@ -79,7 +79,11 @@ async function local(b: HistoryBarrier) {
     await Bun.sleep(20);
   }
 }
-async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
+async function complete(
+  b: HistoryBarrier,
+  replayKeyPrefix?: string,
+  afterConsume?: (frontier: string, records: readonly SubjectErasureSourceRecord[]) => Promise<void>,
+) {
   const records: SubjectErasureSourceRecord[] = [];
   let frontier: string | null = null;
   let proof: SubjectErasureSourceProof | null = null;
@@ -130,6 +134,7 @@ async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
     if (page.status === 'complete') break;
     expect(Buffer.byteLength(page.frontier)).toBeLessThanOrEqual(2048);
     frontier = page.frontier;
+    if (afterConsume && page.records.length) await afterConsume(frontier, page.records);
   }
   while (!proof) {
     if (Date.now() >= end) throw new Error('Independent native Source terminal proof did not complete');
@@ -590,3 +595,77 @@ test('account agent Subject roles retain the source transaction position across 
   expect(roles.rows.some((row) => row.delivery_position !== row.basis && row.basis !== null)).toBe(true);
   for (const row of roles.rows) expect(row.source_position).toBe(row.basis ?? row.committed);
 }, 120_000);
+
+test('a retained inherited Subject resumes at its pre-upgrade key with the original transaction receipt', async () => {
+  const author = await f.author();
+  const captureMigration = await Bun.file(
+    new URL('../../db/semantic/migrations/20261120233000_erasure_original_role_position.sql', import.meta.url),
+  ).text();
+  const [up, down] = captureMigration.split('-- migrate:down');
+  await f.db.admin.query(down!);
+  try {
+    await f.tombstone(author);
+    await synchronizeAccountAgent(f.db.pool, author.accountId);
+  } finally {
+    await f.db.admin.query(up!);
+  }
+  const {
+    rows: [origin],
+  } = await f.db.admin.query<{
+    partition_no: number;
+    record_key: string;
+    delivery_position: string;
+    transaction_id: string;
+    origin_key: string;
+    position: string;
+  }>(
+    `SELECT r.partition_no,r.record_key,r.delivery_position,r.source_transaction_id AS transaction_id,r.origin_key,b.position
+     FROM semantic.erasure_source_record r JOIN editorial.write_basis b
+       ON (b.partition_no,b.transaction_id)=(r.partition_no,r.source_transaction_id)
+     WHERE r.account_id=$1 AND r.store='subject' AND r.role='subject'
+       AND r.source_position=r.delivery_position AND b.position<r.source_position`,
+    [author.accountId],
+  );
+  if (!origin) throw new Error('Expected the retained pre-upgrade Subject delivery');
+  const prefix = `${origin.partition_no}:subject:${origin.record_key}:subject:`;
+  const retainedKey = `${prefix}${origin.delivery_position}:${origin.origin_key}`;
+  const firstKey = `${prefix}${origin.position}:${origin.transaction_id}/${origin.position}`;
+  const b = await barrier(author.accountId);
+  await local(b);
+  const identity = [origin.partition_no, author.accountId, origin.transaction_id];
+  const exact = "partition_no=$1 AND account_id=$2 AND role='subject' AND transaction_id=$3";
+  let exercised = false;
+  const result = await complete(b, retainedKey, async (frontier, records) => {
+    if (!records.some((r) => r.key === firstKey)) return;
+    // The preceding delivery has been consumed. Neither a wrong nor a lost obligation may transfer the next one.
+    for (const fault of [
+      `UPDATE semantic.erasure_shared_custody SET outbox_position=$4 WHERE ${exact}`,
+      `DELETE FROM semantic.erasure_shared_custody WHERE ${exact}`,
+    ]) {
+      const args = fault.startsWith('UPDATE') ? [...identity, origin.delivery_position] : identity;
+      expect((await f.db.admin.query(fault, args)).rowCount).toBe(1);
+      const pending = await createSubjectErasureSource(config()).readPage({
+        barrier: b,
+        frontier,
+        inputLimit: 100,
+        context: context(),
+      });
+      expect(pending.status).toBe('pending');
+      expect(
+        (await f.db.admin.query(`SELECT outbox_position FROM semantic.erasure_shared_custody WHERE ${exact}`, identity))
+          .rows,
+      ).toEqual([{ outbox_position: origin.position }]);
+      expect(
+        (
+          await f.db.admin.query(
+            'SELECT id,consumed FROM semantic.erasure_source_page WHERE route=$1 AND account_id=$2',
+            [b.accountRoute, b.accountId],
+          )
+        ).rows,
+      ).toEqual([{ id: frontier, consumed: true }]);
+    }
+    exercised = true;
+  });
+  expect(exercised).toBe(true);
+  expect(result.records.filter((r) => r.key === retainedKey)).toHaveLength(1);
+}, 720_000);

@@ -2496,6 +2496,10 @@ The Source cursor orders `store, record_key, role, delivery_position, origin_key
 refresh read the exact directory origin, independently of the queue's most recent provenance.
 A physical row's completed minimization does not prove both origins' shared custody: the reader
 requires the exact transaction, role and source position, refreshing that origin when absent.
+Older inherited roles can carry the later delivery position in their stored key. The reader keeps that
+key and checks the shared position against the transaction's write basis, Source or Identity commit,
+or the retained Source record captured from its write basis before minimization. Refresh records
+the proven position in the pending shared obligation. Each lookup costs at most six indexed probes.
 Local holds, page keys and terminal traversal carry the discriminator. Existing transfers whose
 origin was never stored are unavailable; current locator state cannot reconstruct their proof.
 Sealed replay seeks an existing origin through its transaction/position index. A new origin at
