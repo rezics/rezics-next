@@ -3327,7 +3327,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           m.maintenance,
         ),
       );
-      if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
+      if (nativeSettlement.status !== 'settled')
+        return nativeSettlement.advanced ? progress() : m.unavailable('source_pending');
       const settled = m.take(
         await withPublicFilterRepairAllowance(
           spent(),

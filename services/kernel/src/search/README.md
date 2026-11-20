@@ -2339,23 +2339,23 @@ complete window/chain and creation/change closure; an empty final step needs no 
 Search does not infer this from counts, a current equivalent page, callback completion or a serialized brand.
 For an exact bound Subject publication, the same native step invocation can supply the verified repair bodies.
 Search compares them to its retained intent. The other paths keep separate receipt and Account owner reads.
-It then opens a fresh local transaction and compares the entire staged custody/execution/work, retained
-intent/effect, physical allocation, owner epoch, writer and enrollment/fence generation basis before its actual
-native writer verification, readback and refresh. A changed basis invalidates that invocation's owner positives.
-Immutable release authority is resolved before taking the local checkout. No raw Source registration,
-read-definition, bootstrap or repair-step SQL participates in this Search guard.
+A bounded pass checks contiguous linkage across every retained page, including empty pages. A fresh local
+transaction compares the staged custody identity and evidence revision before it records the verified Source page. The same execution owns an ordinal and item cursor, unfinished copy sources and the latest
+effect coordinate per subject. A later call resumes from that cursor. The original intents, writer receipts
+and settlement locator keep their existing encoding. A terminal Source read verifies the original complete
+seal again before each attempt to authorize acknowledgement.
 
-This proves Search dispatch closure only. FAA must join its own durable Source step/window verifier,
-creation/change bridge and original/start/final checks; the Account owner remains independent.
-The final native fence is persisted on that same settlement record only after the reader's complete
-revalidation. It contains the actual SQL transaction, physical UUID/write alias, Source registration epoch
-and native refresh response. Re-reading a locator always repeats the guard; a previously stored fence
-cannot establish current readiness. Effectful pages use a partial execution-leading index and one scalar
-ordinal at a time, admitting each bounded intent before loading another; empty Source
-scan pages do not require rescanning all native homes. Every effect lookup, owner/writer lock, engine
-request and byte, including owner verification and both local snapshots, is charged against the consumer's
-existing allowance. `withPublicFilterRepairAllowance` carries already-spent caller work into all reader phases. An over-allowance closure remains
-unavailable rather than receiving a second verification budget.
+Winner checks read the original receipts and exact native Search winners in bounded batches. Source-head
+and owner changes invalidate the page proof. Writer, gate, copy and native shard checkpoint changes
+invalidate the winner pass. The reader refreshes before a new winner pass, includes every active copy and its
+primary term in the native checkpoint, and rechecks the physical allocation, original custody and locked
+authority revisions before it writes the final fence. A stored fence alone cannot authorize acknowledgement.
+Subject and mixed targets retain their original receipt and refresh rules. Immutable release authority is
+resolved before taking the local checkout. Source operations use the native binding.
+
+The existing caller allowance charges all phases, including actual escaped intent and effect bytes, owner
+reads, SQL controls, refreshes and engine work. Nonterminal progress returns the original execution as
+pending. The FAA receiver still verifies and acknowledges its own original Source window independently.
 The all-copy erasure worker now consumes the agreed `semantic/account-erasure-source` page port. It passes the
 producer's opaque receipt unchanged to its native verifier in the receiving command, and advances a raw frontier
 only after exact physical effects settle. Page verification transfers native custody, so it runs in the

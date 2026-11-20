@@ -51,6 +51,18 @@ END $$;
 
 
 --
+-- Name: advance_public_filter_repair_authority(text, integer); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.advance_public_filter_repair_authority(target text, home integer) RETURNS void
+    LANGUAGE sql
+    AS $$
+  INSERT INTO search.public_filter_repair_authority AS a(physical_target,lane,revision) VALUES (target,home%4,1)
+  ON CONFLICT (physical_target,lane) DO UPDATE SET revision=a.revision+1
+$$;
+
+
+--
 -- Name: capture_freshness_position(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -288,6 +300,115 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+
+
+--
+-- Name: invalidate_public_filter_repair_evidence(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.invalidate_public_filter_repair_evidence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    UPDATE search.public_filter_repair_verification SET revision=revision+1,progress=NULL
+    WHERE (partition_no,observation,execution)=(OLD.partition_no,OLD.observation,OLD.execution);
+  END IF;
+  IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND
+      (OLD.partition_no,OLD.observation,OLD.execution)<>(NEW.partition_no,NEW.observation,NEW.execution)) THEN
+    UPDATE search.public_filter_repair_verification SET revision=revision+1,progress=NULL
+    WHERE (partition_no,observation,execution)=(NEW.partition_no,NEW.observation,NEW.execution);
+  END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: mark_public_filter_repair_allocation(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_public_filter_repair_allocation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM search.advance_public_filter_repair_authority(OLD.prefix||'discovery-g'||OLD.generation,0);
+  IF TG_OP = 'UPDATE' AND (OLD.prefix,OLD.generation)<>(NEW.prefix,NEW.generation) THEN
+    PERFORM search.advance_public_filter_repair_authority(NEW.prefix||'discovery-g'||NEW.generation,0);
+  END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: mark_public_filter_repair_copy(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_public_filter_repair_copy() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM search.advance_public_filter_repair_authority(OLD.prefix||'discovery-g'||OLD.generation,OLD.route/16);
+  ELSE
+    PERFORM search.advance_public_filter_repair_authority(NEW.prefix||'discovery-g'||NEW.generation,NEW.route/16);
+  END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: mark_public_filter_repair_owner(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_public_filter_repair_owner() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM search.advance_public_filter_repair_authority('',NEW.partition_no);
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: mark_public_filter_repair_source_change(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_public_filter_repair_source_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM search.advance_public_filter_repair_authority(TG_ARGV[0],OLD.partition_no);
+  ELSE
+    PERFORM search.advance_public_filter_repair_authority(TG_ARGV[0],NEW.partition_no);
+  END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: mark_public_filter_repair_writer(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_public_filter_repair_writer() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND
+      (OLD.physical_target,OLD.partition_no)<>(NEW.physical_target,NEW.partition_no)) THEN
+    PERFORM search.advance_public_filter_repair_authority(OLD.physical_target,OLD.partition_no);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    PERFORM search.advance_public_filter_repair_authority(NEW.physical_target,NEW.partition_no);
+  END IF;
+  RETURN NULL;
+END
+$$;
 
 
 --
@@ -1563,6 +1684,19 @@ CREATE TABLE search.public_filter_registration (
 
 
 --
+-- Name: public_filter_repair_authority; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_repair_authority (
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    lane integer NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_repair_authority_lane_check CHECK (((lane >= 0) AND (lane <= 3))),
+    CONSTRAINT public_filter_repair_authority_revision_check CHECK ((revision >= 0))
+);
+
+
+--
 -- Name: public_filter_repair_effect; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1591,6 +1725,39 @@ CREATE TABLE search.public_filter_repair_page (
     intent text NOT NULL,
     CONSTRAINT public_filter_repair_page_intent_check CHECK ((octet_length(intent) <= 1048576)),
     CONSTRAINT public_filter_repair_page_ordinal_check CHECK ((ordinal >= 0))
+);
+
+
+--
+-- Name: public_filter_repair_subject; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_repair_subject (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL COLLATE pg_catalog."C",
+    subject uuid NOT NULL,
+    home integer NOT NULL,
+    revision bigint NOT NULL,
+    pending_source text,
+    page integer,
+    item integer,
+    "position" bigint,
+    completion bigint
+);
+
+
+--
+-- Name: public_filter_repair_verification; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_repair_verification (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL COLLATE pg_catalog."C",
+    revision bigint DEFAULT 0 NOT NULL,
+    progress text,
+    CONSTRAINT public_filter_repair_verification_progress_check CHECK ((octet_length(progress) <= 16384))
 );
 
 
@@ -2295,6 +2462,14 @@ ALTER TABLE ONLY search.public_filter_registration
 
 
 --
+-- Name: public_filter_repair_authority public_filter_repair_authority_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_authority
+    ADD CONSTRAINT public_filter_repair_authority_pkey PRIMARY KEY (physical_target, lane);
+
+
+--
 -- Name: public_filter_repair_effect public_filter_repair_effect_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2308,6 +2483,22 @@ ALTER TABLE ONLY search.public_filter_repair_effect
 
 ALTER TABLE ONLY search.public_filter_repair_page
     ADD CONSTRAINT public_filter_repair_page_pkey PRIMARY KEY (partition_no, observation, execution, ordinal);
+
+
+--
+-- Name: public_filter_repair_subject public_filter_repair_subject_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_subject
+    ADD CONSTRAINT public_filter_repair_subject_pkey PRIMARY KEY (partition_no, observation, execution, subject);
+
+
+--
+-- Name: public_filter_repair_verification public_filter_repair_verification_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_verification
+    ADD CONSTRAINT public_filter_repair_verification_pkey PRIMARY KEY (partition_no, observation, execution);
 
 
 --
@@ -2714,6 +2905,20 @@ CREATE INDEX public_filter_repair_page_effects ON search.public_filter_repair_pa
 
 
 --
+-- Name: public_filter_repair_subject_pending; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_repair_subject_pending ON search.public_filter_repair_subject USING btree (partition_no, observation, execution, revision) WHERE (pending_source IS NOT NULL);
+
+
+--
+-- Name: public_filter_repair_subject_winners; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_repair_subject_winners ON search.public_filter_repair_subject USING btree (partition_no, observation, execution, revision, home, subject) WHERE (page IS NOT NULL);
+
+
+--
 -- Name: public_filter_target_physical; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -2907,6 +3112,48 @@ CREATE TRIGGER public_filter_page_execution_guard BEFORE INSERT OR DELETE OR UPD
 --
 
 CREATE TRIGGER public_filter_population_protocol_immutable BEFORE UPDATE ON search.public_filter_coverage_preparation FOR EACH ROW EXECUTE FUNCTION search.retain_public_filter_population_protocol();
+
+
+--
+-- Name: discovery_generation public_filter_repair_allocation_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_allocation_revision AFTER DELETE OR UPDATE OF prefix, generation, index_uuid, incarnation, state ON search.discovery_generation FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_allocation();
+
+
+--
+-- Name: discovery_copy public_filter_repair_copy_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_copy_revision AFTER INSERT OR DELETE OR UPDATE ON search.discovery_copy FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_copy();
+
+
+--
+-- Name: public_filter_repair_effect public_filter_repair_effect_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_effect_revision AFTER INSERT OR DELETE OR UPDATE ON search.public_filter_repair_effect FOR EACH ROW EXECUTE FUNCTION search.invalidate_public_filter_repair_evidence();
+
+
+--
+-- Name: identity_writer_gate public_filter_repair_gate_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_gate_revision AFTER INSERT OR DELETE OR UPDATE OF partition_no, physical_target, consumer, incarnation, owner_epoch, write_alias, closed_token, enrollment_generation, fence_generation ON search.identity_writer_gate FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_writer();
+
+
+--
+-- Name: public_filter_repair_page public_filter_repair_page_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_page_revision AFTER INSERT OR DELETE OR UPDATE ON search.public_filter_repair_page FOR EACH ROW EXECUTE FUNCTION search.invalidate_public_filter_repair_evidence();
+
+
+--
+-- Name: identity_writer public_filter_repair_writer_revision; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_writer_revision AFTER INSERT OR DELETE OR UPDATE ON search.identity_writer FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_writer();
 
 
 --
@@ -3107,6 +3354,22 @@ ALTER TABLE ONLY search.public_filter_repair_effect
 
 ALTER TABLE ONLY search.public_filter_repair_page
     ADD CONSTRAINT public_filter_repair_page_partition_no_observation_executi_fkey FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_execution(partition_no, observation, id);
+
+
+--
+-- Name: public_filter_repair_subject public_filter_repair_subject_partition_no_observation_exec_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_subject
+    ADD CONSTRAINT public_filter_repair_subject_partition_no_observation_exec_fkey FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_repair_verification(partition_no, observation, execution);
+
+
+--
+-- Name: public_filter_repair_verification public_filter_repair_verifica_partition_no_observation_exe_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_verification
+    ADD CONSTRAINT public_filter_repair_verifica_partition_no_observation_exe_fkey FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_execution(partition_no, observation, id) ON DELETE CASCADE;
 
 
 --

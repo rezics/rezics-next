@@ -408,7 +408,7 @@ function checkRepairOwner(receipt: PublicFilterRepairWriterReceipt, owner: Repai
 
 /** Checks the rows already locked by the reopened native settlement transaction. */
 export function assertRetainedRepairWriterFence(
-  receipt: DiscoveryRepairWriterReceipt,
+  receipt: PublicFilterRepairWriterReceipt,
   gate: RepairGate | undefined,
   writer: RepairWriter | undefined,
   owner: RepairOwner | undefined,

@@ -4140,6 +4140,13 @@ CREATE TRIGGER public_filter_population_owner AFTER UPDATE OF epoch, write_state
 
 
 --
+-- Name: partition public_filter_repair_owner_revision; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_owner_revision AFTER UPDATE OF epoch, write_state, "position" ON core.partition FOR EACH ROW WHEN (((old.epoch IS DISTINCT FROM new.epoch) OR (old.write_state IS DISTINCT FROM new.write_state) OR (new."position" < old."position"))) EXECUTE FUNCTION search.mark_public_filter_repair_owner();
+
+
+--
 -- Name: record_history_locator record_history_preserve_copy; Type: TRIGGER; Schema: core; Owner: -
 --
 
