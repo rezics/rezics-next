@@ -668,6 +668,7 @@ import {
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
   readWithPublicationWriterRepair,
+  withDiscoveryRepairCustody,
   withPublicFilterRepairAllowance,
 } from './public-filter-custody.ts';
 import type {
@@ -2555,6 +2556,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             ).rows[0];
       if (old?.consumer_work) {
         const retained = decodeWork(old.consumer_work);
+        if (config.discoveryPreparation === 'enrollment' && retained.bootstrap.coveragePublication)
+          return m.unavailable('source_pending');
         if (mixedPage)
           mixedPage.captureWitness = {
             stage: retained.bootstrap.coveragePublication ? 'published-coverage' : 'retained-population-bootstrap',
@@ -2572,17 +2575,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return await advanceCapture(retained, old.consumer_work, m, context, page, publication);
       }
       if (config.discoveryPreparation === 'enrollment') {
-        const parent = await m.sql<{ has_work: boolean }>(
-          `SELECT consumer_work IS NOT NULL AS has_work FROM search.public_filter_observation
-           WHERE (partition_no,registration)=($1,$2) AND state='open' AND expires_at>$3 LIMIT 1`,
+        const parent = await m.sql(
+          `SELECT 1 FROM search.public_filter_observation
+           WHERE (partition_no,registration)=($1,$2) AND state='open' AND expires_at>$3
+             AND consumer_work IS NULL LIMIT 1`,
           [registration.partition, registration.id, Date.now()],
         );
-        const observation = parent.rows[0];
-        if (observation) {
+        if (parent.rows.length > 0) {
           if (mixedPage)
             mixedPage.captureWitness = {
               stage: 'open-registration-observation',
-              reason: observation.has_work ? 'observation_has_consumer_work' : 'observation_without_consumer_work',
+              reason: 'observation_without_consumer_work',
             };
           return m.unavailable('source_pending');
         }
@@ -2617,7 +2620,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             ...(!publication &&
             !('purpose' in canonical) &&
             ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
-              ? { usePublishedCoverage: true as const }
+              ? {
+                  usePublishedCoverage:
+                    config.discoveryPreparation === 'enrollment' ? ('reconcile' as const) : (true as const),
+                }
               : {}),
             inputLimit,
           },
@@ -2639,6 +2645,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (mixedPage) mixedPage.captureWitness = { stage: 'begin', reason: begun.reason };
         return m.unavailable('source_pending');
       }
+      if (config.discoveryPreparation === 'enrollment' && begun.bootstrap.coveragePublication)
+        return m.unavailable('source_pending');
       if (mixedPage)
         mixedPage.captureWitness = {
           stage: begun.bootstrap.coveragePublication ? 'published-coverage' : 'population-bootstrap',
@@ -3020,10 +3028,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: NativePublicFilterPublication,
   ) {
     const job = structuredClone(input);
+    if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     let use: CustodyUse | undefined;
-    const run = async () => {
-      if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
-      const loaded = await load(job, m);
+    const run = async (loaded: Awaited<ReturnType<typeof load>>) => {
       const { work } = loaded;
       let encoded = loaded.encoded;
       if (loaded.registration) {
@@ -3376,9 +3383,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { status: 'settled' as const, job, cost: m.cost };
     };
     try {
-      return await run().finally(async () => {
-        if (use) await releaseUse(use, context, m);
-      });
+      const loaded = await load(job, m);
+      const execute = () =>
+        run(loaded).finally(async () => {
+          if (use) await releaseUse(use, context, m);
+        });
+      const { work } = loaded;
+      return await (config.discoveryPreparation === 'repair' &&
+      !loaded.registration &&
+      work.adopted &&
+      work.queried &&
+      !work.bootstrap.coveragePublication
+        ? withDiscoveryRepairCustody(work.queried, work.bootstrap.id, execute)
+        : execute());
     } catch (error) {
       return failure(error, m);
     }

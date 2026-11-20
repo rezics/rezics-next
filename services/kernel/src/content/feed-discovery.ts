@@ -1,4 +1,5 @@
 import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
+import type { DiscoveryFilterDocument } from '@rezics/filter';
 import { ProblemError } from '../http/problem-error.ts';
 import type { DiscoveryUnionHit } from '../search/index.ts';
 import { routeOf } from '../route/route.ts';
@@ -6,10 +7,13 @@ import type { FeedItem } from './feed-contract.ts';
 
 export function homeDiscoverySelection(kind: string | undefined): {
   kinds: readonly string[];
+  filter: DiscoveryFilterDocument;
   publicCatalogue: boolean;
 } {
+  const kinds = kind === undefined ? BOOK_CATALOGUE_TYPES : [kind];
   return {
-    kinds: kind === undefined ? BOOK_CATALOGUE_TYPES : [kind],
+    kinds,
+    filter: { kind: { in: [...kinds] } },
     publicCatalogue: kind === undefined || BOOK_CATALOGUE_TYPES.some((type) => type === kind),
   };
 }

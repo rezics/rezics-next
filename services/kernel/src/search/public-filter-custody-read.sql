@@ -2,7 +2,9 @@ WITH requested AS (SELECT $6::text AS execution)
 SELECT r.definition, o.queried, o.covered, e.execution,
   CASE WHEN r.id IS NULL THEN 'definition_missing'
     WHEN r.state <> 'active' OR t.incarnation <> $4 THEN 'binding_mismatch'
-    WHEN o.state <> 'open' OR o.expires_at <= $5 OR o.queried <> $3 THEN 'observation_lost'
+    WHEN o.state <> 'open' OR o.queried <> $3 OR (o.expires_at <= $5 AND NOT coalesce(
+      o.consumer_bootstrap = $7::text AND o.consumer_work IS NOT NULL,false
+    )) THEN 'observation_lost'
     WHEN requested.execution IS NOT NULL AND e.id IS NULL THEN 'execution_missing' END AS failure
 FROM requested CROSS JOIN search.public_filter_observation o
 LEFT JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)

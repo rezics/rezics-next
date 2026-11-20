@@ -274,12 +274,12 @@ export function createNativeFeedPorts(
           async page(input) {
             const actor = asPlatformActor(input.actor, liveActor());
             const principal = actor.kind === 'account' ? (`account:${actor.accountId}` as const) : 'anonymous';
-            const { kinds, publicCatalogue } = homeDiscoverySelection(input.kind);
+            const { kinds, filter, publicCatalogue } = homeDiscoverySelection(input.kind);
             const request = {
               representation: 'discovery-v1' as const,
               limit: input.limit,
               languages: [...input.languages],
-              filter: { kind: { in: [...kinds] } },
+              filter,
               ...(input.spaceId === undefined ? {} : { spaceId: input.spaceId }),
               ...(input.cursor ? { cursor: input.cursor } : {}),
             };

@@ -444,7 +444,7 @@ export function startDiscoveryIndexing(options: {
     relay: ReturnType<typeof startRelays>;
   };
   let installation: Installation | undefined;
-  let preparedHome: string | undefined;
+  let homePreparation: { allocation: string; next: number } | undefined;
   let lastRetirement = 0;
   let stopped = false,
     paused = false,
@@ -616,11 +616,15 @@ export function startDiscoveryIndexing(options: {
         });
     }
     if (stopped || paused) return;
-    const cold = !generations.some(({ state }) => state === 'active') && relayTargets.at(-1);
-    if (cold && options.publicPreparation) {
-      const allocation = `${cold.generation}:${cold.uuid}:${cold.incarnation}`;
-      if (allocation !== preparedHome && (await options.publicPreparation.prepareDefaultHome(cold, turn.deadline)))
-        preparedHome = allocation;
+    const home = generations.some(({ state }) => state === 'active')
+      ? relayTargets.find(({ state }) => state === 'active')
+      : relayTargets.at(-1);
+    if (home && options.publicPreparation) {
+      const allocation = `${home.generation}:${home.uuid}:${home.incarnation}:${home.state === 'active'}`;
+      if (homePreparation?.allocation !== allocation || homePreparation.next <= Date.now()) {
+        homePreparation = { allocation, next: Date.now() + 30_000 };
+        await options.publicPreparation.prepareDefaultHome(home, turn.deadline);
+      }
     }
     if (readiness) throw readiness;
   };

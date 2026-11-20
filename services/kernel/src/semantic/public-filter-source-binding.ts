@@ -616,7 +616,11 @@ export async function readNativePublicFilterPublicationCompletion(
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput =
   | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
-      Readonly<{ inputLimit?: number; usePublishedCoverage?: true; definition?: PublicFilterSourceDefinition }>)
+      Readonly<{
+        inputLimit?: number;
+        usePublishedCoverage?: true | 'reconcile';
+        definition?: PublicFilterSourceDefinition;
+      }>)
   | Readonly<{
       bootstrap: string;
       inputLimit?: number;
@@ -2181,45 +2185,53 @@ export function createNativePublicFilterSourceBinding(
           route,
           subject_id: state.subject!,
         };
-        const advancement = await runCommand(
-          db,
-          {
-            partition: state.partition,
-            deadline: context.deadline,
-            clock: ports.sourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock,
-          },
-          async (tx) => {
-            const existing = await nativeSourceQuery(tx, repairVersion, values);
-            if (existing && (existing.transaction_id === null || existing.native_xid === null))
-              throw new BindingError('owner_unavailable');
-            if (existing) return noEffect(existing);
-            // The original advancement and its first genuine keyed privacy
-            // baseline are both attempted writes, including a lost CAS.
-            cost.resultWrites += 2;
-            const result = await nativeSourceQuery(tx, repairAdvance, {
-              ...values,
-              transaction_id: currentCommand(tx).transactionId,
-            });
-            const inserted = Array.isArray(result) ? result[0] : result;
-            if (!inserted) throw new BindingError('owner_unavailable');
-            return {
-              value: inserted,
-              events: [
-                {
-                  type: 'com.rezics.semantic.public-source.advanced.v1',
-                  subject: state.subject!,
-                  data: {
-                    id: state.subject!,
-                    bootstrap: id,
-                    execution: request.execution,
+        // A saved successor can only replay its original committed advancement.
+        // Revalidate the receipt without taking the owner command lock again.
+        const retained = replay ? await nativeSourceQuery(db, repairVersion, values) : null;
+        if (replay && !retained) throw new BindingError('owner_unavailable');
+        const advance = () =>
+          runCommand(
+            db,
+            {
+              partition: state.partition,
+              deadline: context.deadline,
+              clock: ports.sourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock,
+            },
+            async (tx) => {
+              const existing = await nativeSourceQuery(tx, repairVersion, values);
+              if (existing && (existing.transaction_id === null || existing.native_xid === null))
+                throw new BindingError('owner_unavailable');
+              if (existing) return noEffect(existing);
+              // The original advancement and its first genuine keyed privacy
+              // baseline are both attempted writes, including a lost CAS.
+              cost.resultWrites += 2;
+              const result = await nativeSourceQuery(tx, repairAdvance, {
+                ...values,
+                transaction_id: currentCommand(tx).transactionId,
+              });
+              const inserted = Array.isArray(result) ? result[0] : result;
+              if (!inserted) throw new BindingError('owner_unavailable');
+              return {
+                value: inserted,
+                events: [
+                  {
+                    type: 'com.rezics.semantic.public-source.advanced.v1',
+                    subject: state.subject!,
+                    data: {
+                      id: state.subject!,
+                      bootstrap: id,
+                      execution: request.execution,
+                    },
                   },
-                },
-              ],
-            };
-          },
-        );
+                ],
+              };
+            },
+          );
+        const advancement = retained ? { value: retained, position: owner.position } : await advance();
         const position = BigInt(advancement.value.position);
         if (
+          advancement.value.transaction_id === null ||
+          advancement.value.native_xid === null ||
           advancement.value.owner_epoch !== owner.epoch ||
           position > advancement.position ||
           (state.bridgeThrough !== undefined && position < state.bridgeThrough)
@@ -2643,7 +2655,7 @@ export function createNativePublicFilterSourceBinding(
       receiptPageOnly?: true;
     },
     inputLimit = preparationInputLimit,
-    usePublishedCoverage = false,
+    usePublishedCoverage: boolean | 'reconcile' = false,
     definition?: PublicFilterSourceDefinition,
     collect?: (item: BookCutGroup) => void,
     bookRegistration?: Awaited<ReturnType<typeof ports.search.readGenerationPublicationCustody>>,
@@ -2709,6 +2721,21 @@ export function createNativePublicFilterSourceBinding(
         throw new BindingError('binding_mismatch');
       if (usePublishedCoverage && !existing && !('purpose' in capture)) {
         const mixed = 'representation' in capture;
+        if (mixed && usePublishedCoverage === 'reconcile') {
+          // A background caller needs only the original population job. A
+          // settled baseline is enough; the request owns any new serving cut.
+          const covered = await db.query(
+            `/* semantic.native-keyed:1:4 */
+             SELECT 1 FROM semantic.public_filter_mixed_coverage($1,$2,$3,NULL,$4)`,
+            [
+              consumer.physicalTarget,
+              consumer.incarnation,
+              resolved.definition.readDefinition,
+              ports.search.encodeConsumer(consumer),
+            ],
+          );
+          if (covered.rowCount) throw new BindingError('owner_unavailable');
+        }
         const coverage = mixed
           ? 'semantic.public_filter_mixed_coverage($1,$2,$3,NULL,$10)'
           : 'semantic.public_filter_published_coverage($1,$2,$3,NULL,$4::text[])';
@@ -2977,7 +3004,8 @@ export function createNativePublicFilterSourceBinding(
         }
         if (mixed) {
           // A second read must not replace the baseline while its original repair
-          // is scanning, verifying writers or acknowledging the receiver homes.
+          // is scanning, verifying writers or acknowledging the receiver homes. The
+          // adopted job owns its evidence after the preparation PIT expires.
           const pending = await db.query<{ bootstrap: string; complete: boolean }>(
             `/* semantic.native-keyed:8:11 */
              SELECT b.bootstrap::text,coalesce(seal.ready,false) AS complete FROM search.public_filter_coverage_home h
@@ -2991,18 +3019,17 @@ export function createNativePublicFilterSourceBinding(
              WHERE (h.partition_no,h.registration,h.source_home)=(0,$1,0)
                AND b.state='adopted' AND b.consumer=$2 AND b.read_definition=$3 AND b.coverage_publication IS NULL
                AND o.registration=h.registration AND o.consumer_bootstrap='0:'||b.bootstrap::text
-               AND o.state='open' AND ((o.expires_at>$4 AND seal.ready IS NULL)
+               AND o.state='open' AND o.consumer_work IS NOT NULL AND (seal.ready IS NULL
                  OR (seal.ready AND EXISTS (
                    SELECT 1 FROM search.discovery_generation g
-                   WHERE g.partition_no=0 AND g.prefix=regexp_replace($5,'discovery-g[1-9][0-9]*$','')
-                     AND g.prefix||'discovery-g'||g.generation::text=$5 AND g.index_uuid=$6
+                   WHERE g.partition_no=0 AND g.prefix=regexp_replace($4,'discovery-g[1-9][0-9]*$','')
+                     AND g.prefix||'discovery-g'||g.generation::text=$4 AND g.index_uuid=$5
                      AND g.state IN ('populating','replaying','reconciling','ready')
                  )))`,
             [
               registration.registration.id,
               encode(consumer),
               resolved.definition.readDefinition,
-              Date.now(),
               consumer.physicalTarget,
               consumer.incarnation,
             ],
@@ -4480,7 +4507,7 @@ export function createNativePublicFilterSourceBinding(
         context,
         undefined,
         input.inputLimit,
-        input.usePublishedCoverage === true,
+        input.usePublishedCoverage ?? false,
         input.definition,
       );
     const retained = await run(context, async (cost, db) => {
