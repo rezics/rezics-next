@@ -6,7 +6,7 @@ WITH input AS (
     $9::uuid AS settled_transaction_id, $10::bigint AS settled_position, $11::bigint AS source_position
 )
 UPDATE search.identity_writer AS writer SET writer_token=NULL,
-  relay_receipt=NULL,
+  relay_receipt=NULL, relay_intent=NULL,
   settled_transaction_id=input.settled_transaction_id, settled_position=input.settled_position,
   visible_transaction_id=CASE WHEN input.source_position IS NULL THEN writer.visible_transaction_id ELSE input.settled_transaction_id END,
   visible_position=CASE WHEN input.source_position IS NULL THEN writer.visible_position ELSE input.settled_position END,

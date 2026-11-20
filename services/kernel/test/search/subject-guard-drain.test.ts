@@ -386,88 +386,140 @@ test('live Subject replay batches foreign creator identities and reaches later c
   }
 }, 30_000);
 
-test('dispatched Subject relay retains the same custody before transport and after a lost successful response', async () => {
-  const t = await target();
-  const relay = (search = f.search) => {
-    const options = { ...f.options(t.prefix, search), ...t };
-    return createSubjectIndexer({
-      ...options,
-      writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
-    });
-  };
-  await relay().run(t.partition);
-  const previous = await checkpoint(t);
-  await runCommand(f.pool, { partition: t.partition }, async () => ({
-    value: null,
-    events: [{ type: 'com.rezics.subject.created.v1', subject: t.id, data: { id: t.id } }],
-  }));
-  const row = async () =>
-    (
-      await f.admin.query(
-        `SELECT writer_token, writer_position, writer_transaction_id, dispatch_state, source_position, visible_position,
-              repair_action, repair_receipt, relay_receipt
+test.each(['intent', 'legacy', 'mismatch'])(
+  'dispatched Subject relay recovers a lost response with %s evidence',
+  async (mode) => {
+    const t = await target();
+    const relay = (search = f.search) => {
+      const options = { ...f.options(t.prefix, search), ...t };
+      return createSubjectIndexer({
+        ...options,
+        writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
+      });
+    };
+    await relay().run(t.partition);
+    const previous = await checkpoint(t);
+    await runCommand(f.pool, { partition: t.partition }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.subject.created.v1', subject: t.id, data: { id: t.id } }],
+    }));
+    const row = async () =>
+      (
+        await f.admin.query(
+          `SELECT writer_token, writer_position, writer_transaction_id, dispatch_state, source_position, visible_position,
+              repair_action, repair_receipt, relay_receipt, relay_intent
        FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
-        [t.partition, t.index, t.id],
-      )
-    ).rows[0]!;
-  const lastVisible = await row();
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const lost = new Error('Injected response loss after real refresh-visible bulk');
-  let returnedVersion: number | undefined;
-  const running = observe(
-    relay({
-      ...f.search,
-      async bulk<T>(lines: readonly unknown[], options?: Parameters<typeof f.search.bulk>[1]): Promise<T> {
-        entered.resolve();
-        await release.promise;
-        const result = await f.search.bulk<{ errors: boolean; items: Array<{ index: { _version: number } }> }>(
-          lines,
-          options,
+          [t.partition, t.index, t.id],
+        )
+      ).rows[0]!;
+    const lastVisible = await row();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const lost = new Error('Injected response loss after real refresh-visible bulk');
+    let returnedVersion: number | undefined;
+    const running = observe(
+      relay({
+        ...f.search,
+        async bulk<T>(lines: readonly unknown[], options?: Parameters<typeof f.search.bulk>[1]): Promise<T> {
+          entered.resolve();
+          await release.promise;
+          const result = await f.search.bulk<{ errors: boolean; items: Array<{ index: { _version: number } }> }>(
+            mode === 'mismatch' ? [lines[0], { ...(lines[1] as object), public_collection_count: 77 }] : lines,
+            options,
+          );
+          expect(result.errors).toBe(false);
+          returnedVersion = result.items[0]!.index._version;
+          throw lost;
+        },
+      }).run(t.partition),
+    );
+    let dispatched: Awaited<ReturnType<typeof row>>;
+    try {
+      await Promise.race([
+        entered.promise,
+        running.outcome.then((outcome) => {
+          throw new Error('Relay failed before native dispatch', { cause: outcome });
+        }),
+      ]);
+      if (mode === 'legacy') {
+        await f.admin.query(
+          `UPDATE search.identity_writer SET relay_intent=NULL
+         WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+          [t.partition, t.index, t.id],
         );
-        expect(result.errors).toBe(false);
-        returnedVersion = result.items[0]!.index._version;
-        throw lost;
+      }
+      dispatched = await row();
+      expect(dispatched.dispatch_state).toBe('dispatched');
+      expect(dispatched.writer_token).toBeString();
+      expect(dispatched.visible_position).toBe(lastVisible.visible_position);
+      expect(dispatched.repair_action).toBeNull();
+      expect(dispatched.repair_receipt).toBeNull();
+      expect(dispatched.relay_receipt).toBeNull();
+      if (mode !== 'legacy') expect(dispatched.relay_intent).toStartWith(`${dispatched.writer_position}:`);
+      await expect(relay().run(t.partition)).rejects.toThrow('Search relay visible winner conflicts');
+      expect(await row()).toEqual(dispatched);
+      expect(await checkpoint(t)).toBe(previous);
+    } finally {
+      release.resolve();
+      await running.outcome;
+    }
+    expect(await running.outcome).toEqual({ ok: false, error: lost });
+    if (returnedVersion === undefined) throw new Error('OpenSearch did not return the applied version');
+    expect(returnedVersion).toBeGreaterThan(Number(dispatched.source_position));
+    const { body } = await f.search.request<{ hits: { hits: Array<{ _version: number }> } }>(
+      'POST',
+      `/${t.index}/_search`,
+      {
+        version: true,
+        query: { ids: { values: [t.id] } },
       },
-    }).run(t.partition),
-  );
-  let dispatched: Awaited<ReturnType<typeof row>>;
-  try {
-    await Promise.race([
-      entered.promise,
-      running.outcome.then((outcome) => {
-        throw new Error('Relay failed before native dispatch', { cause: outcome });
-      }),
-    ]);
-    dispatched = await row();
-    expect(dispatched.dispatch_state).toBe('dispatched');
-    expect(dispatched.writer_token).toBeString();
-    expect(dispatched.visible_position).toBe(lastVisible.visible_position);
-    expect(dispatched.repair_action).toBeNull();
-    expect(dispatched.repair_receipt).toBeNull();
-    expect(dispatched.relay_receipt).toBeNull();
-    await expect(relay().run(t.partition)).rejects.toThrow('Search writer is enrolled');
-    expect(await row()).toEqual(dispatched);
-  } finally {
-    release.resolve();
-    await running.outcome;
-  }
-  expect(await running.outcome).toEqual({ ok: false, error: lost });
-  if (returnedVersion === undefined) throw new Error('OpenSearch did not return the applied version');
-  expect(returnedVersion).toBeGreaterThan(Number(dispatched.source_position));
-  const { body } = await f.search.request<{ hits: { hits: Array<{ _version: number }> } }>(
-    'POST',
-    `/${t.index}/_search`,
-    {
-      version: true,
-      query: { ids: { values: [t.id] } },
-    },
-  );
-  expect(body.hits.hits.map((hit) => hit._version)).toEqual([returnedVersion]);
-  await expect(relay().run(t.partition)).rejects.toThrow('Search writer is enrolled');
-  expect(await row()).toEqual(dispatched);
-  expect(await checkpoint(t)).toBe(previous);
-}, 60_000);
+    );
+    expect(body.hits.hits.map((hit) => hit._version)).toEqual([returnedVersion]);
+    let probes = 0;
+    let writes = 0;
+    const retry = relay({
+      ...f.search,
+      async request<T>(...args: Parameters<typeof f.search.request>) {
+        if (args[1] === `/${t.index}/_search`) probes++;
+        return f.search.request<T>(...args);
+      },
+      async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
+        writes++;
+        const next = await row();
+        expect(next.writer_token).not.toBe(dispatched.writer_token);
+        expect(next.source_position).toBe(String(returnedVersion));
+        expect(BigInt(next.visible_position)).toBeGreaterThan(BigInt(dispatched.visible_position));
+        expect(next.relay_receipt).toBeNull();
+        expect(await checkpoint(t)).toBe(previous);
+        return f.search.bulk<T>(...args);
+      },
+    });
+    if (mode === 'mismatch') {
+      await expect(retry.run(t.partition)).rejects.toThrow('Search relay visible winner conflicts');
+      expect(probes).toBe(1);
+      expect(writes).toBe(0);
+      expect(await row()).toEqual(dispatched);
+      expect(await checkpoint(t)).toBe(previous);
+      return;
+    }
+    await retry.run(t.partition);
+    expect(probes).toBe(1);
+    expect(writes).toBe(1);
+    expect(await row()).toMatchObject({
+      writer_token: null,
+      dispatch_state: 'settled',
+      relay_intent: null,
+      relay_receipt: null,
+    });
+    expect(await checkpoint(t)).toBeGreaterThan(previous);
+    const settled = await row();
+    await retry.run(t.partition);
+    expect(await row()).toEqual(settled);
+    expect(probes).toBe(1);
+    expect(writes).toBe(1);
+  },
+  60_000,
+);
 
 test.each([false, true])(
   'Subject relay settles the retained original receipt with home closed=%s',
