@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
+import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
 test('selects same-directory sibling tests and falls back to workspace tests', () => {
@@ -28,7 +29,7 @@ test('selects same-directory sibling tests and falls back to workspace tests', (
   }
 });
 
-test('a landing refuses a changed source whose sibling test fails only on the candidate', async () => {
+test('a stabilize landing refuses a changed source whose sibling test fails only on the candidate', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -40,25 +41,22 @@ import { readFileSync } from 'node:fs';
 test('remote check contract', () => expect(readFileSync('scripts/remote-check.ts', 'utf8')).toBe('good'));\n`,
     );
     h.settings.affectedTests = [];
-    const task = h.dispatch('scripts/remote-check.ts');
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({
-        file: 'scripts/remote-check.ts',
-        content: 'broken',
-      }),
-    );
+    const base = h.head('dev');
+    git(h.root, 'branch', 'stabilize', base);
+    const task = h.dispatch('scripts/remote-check.ts', [], ['true'], 'fixture', 'stabilize');
+    h.planWorkerFile(task, 'scripts/remote-check.ts', 'broken');
     await h.start(task);
     await h.train(undefined, false);
-    expect(h.outcomes[0]!.passed).toBe(false);
-    expect(h.outcomes[0]!.stage).toBe('gate');
+    expect(h.outcomes[0]).toMatchObject({ taskId: task.id, passed: false, stage: 'gate' });
     expect(h.outcomes[0]!.firstFailure!.assertion).toContain('scripts/remote-check.test.ts');
+    expect(h.head('stabilize')).toBe(base);
+    expect(h.head('dev')).toBe(base);
   } finally {
     h.dispose();
   }
 }, 60_000);
 
-test('a sibling failure also present on the base is reported as pre-existing', async () => {
+test('a sibling failure also present on the stabilize base is reported as pre-existing', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -70,17 +68,13 @@ import { readFileSync } from 'node:fs';
 test('remote check contract', () => expect(readFileSync('scripts/remote-check.ts', 'utf8')).toBe('good'));\n`,
     );
     h.settings.affectedTests = [];
-    const task = h.dispatch('scripts/remote-check.ts');
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({
-        file: 'scripts/remote-check.ts',
-        content: 'branch-broken',
-      }),
-    );
+    git(h.root, 'branch', 'stabilize', h.head('dev'));
+    const task = h.dispatch('scripts/remote-check.ts', [], ['true'], 'fixture', 'stabilize');
+    h.planWorkerFile(task, 'scripts/remote-check.ts', 'branch-broken');
     await h.start(task);
     await h.train(undefined, false);
-    expect(h.outcomes[0]!.passed).toBe(true);
+    expect(h.outcomes[0]).toMatchObject({ taskId: task.id, passed: true, stage: 'merge' });
+    expect(git(h.root, 'show', 'stabilize:scripts/remote-check.ts')).toBe('branch-broken');
     expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Base already shares the affected-test failures');
   } finally {
     h.dispose();
