@@ -258,7 +258,7 @@ if (args[0] === 'install') {
       for (let i = 0; i < 64; i++) await write(stream, noise);
       await write(stream, '\\n');
     }
-    await write(process.stderr, 'Database cleanup failed: fixture\\ntests/middle.test.ts:\\n(fail) middle check ran\\nLoad-sensitive tests (passed alone): 1\\nprevious read\\n');
+    await write(process.stderr, 'Database cleanup failed: fixture\\ntests/middle.test.ts:\\nError: mounted status kept stale focus\\n    at verifyStatus (/fixture/tests/middle.test.ts:77:13)\\n(fail) middle check ran\\nLoad-sensitive tests (passed alone): 1\\nprevious read\\n');
     for (let i = 0; i < 64; i++) await write(process.stderr, noise);
     await write(process.stderr, '\\nAuth checks finished\\n');
     process.exit(1);
@@ -838,6 +838,9 @@ test('a noisy Auth Pages check retains its native failure and middle report entr
   expect(log).toContain('Auth checks started');
   expect(log).toContain('Auth checks finished');
   expect(log).toContain('diagnostic bytes]');
+  expect(log.includes('tests/middle.test.ts: (fail) middle check ran')).toBe(true);
+  expect(log.includes('Error: mounted status kept stale focus')).toBe(true);
+  expect(log.includes('at verifyStatus (/fixture/tests/middle.test.ts:77:13)')).toBe(true);
   expect(log.length).toBeLessThan(300_000);
   expect(JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')).workspaces).toMatchObject([
     {

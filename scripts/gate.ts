@@ -620,6 +620,7 @@ async function run(
 // Bound the text passed to Bun's diagnostic classifier and host-prefix formatter. A failed
 // DOM assertion can print a large object graph before the runner prints its file summary.
 const workspaceExcerptBytes = 64 * 1024;
+const workspaceFailureBytes = 8 * 1024;
 const workspaceProgressPrefixes: Partial<Record<string, string>> = {
   'apps/web': '[web-file] ',
   'services/auth': '[auth-file] ',
@@ -636,6 +637,10 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>, onLine?: 
   let remainingFiles = 0;
   let remainingTests = 0;
   let activeTestFile: string | undefined;
+  let failureHeading: string | undefined;
+  let failureLocation: string | undefined;
+  let failureBytes = 0;
+  const failures: string[] = [];
   let pending = '';
   let longLine = false;
   let previousCR = false;
@@ -666,11 +671,31 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>, onLine?: 
     );
     if (testLine) {
       const [, file, detail] = testLine;
-      if (!detail!.trim()) activeTestFile = file;
-      else if (/^\s*(?:error|fail(?:ed)?)(?:\s|:|$)/i.test(detail!)) remember(files, file!);
+      if (!detail!.trim()) {
+        activeTestFile = file;
+        failureHeading = undefined;
+        failureLocation = undefined;
+      } else if (/^\s*(?:error|fail(?:ed)?)(?:\s|:|$)/i.test(detail!)) remember(files, file!);
     }
-    if (activeTestFile && (/^\(fail\)\s/.test(trimmed) || trimmed === '# Unhandled error between tests'))
+    if (activeTestFile && !failureHeading && /^(?:error|Error|\w+(?:Error|Exception)):\s/.test(trimmed))
+      failureHeading = trimmed.slice(0, 512);
+    if (failureHeading && !failureLocation && /^at .+:\d+:\d+\)?$/.test(trimmed))
+      failureLocation = trimmed.slice(0, 512);
+    if (activeTestFile && (/^\(fail\)\s/.test(trimmed) || trimmed === '# Unhandled error between tests')) {
       remember(files, activeTestFile);
+      const excerpt = [`${activeTestFile.slice(0, 512)}: ${trimmed.slice(0, 512)}`, failureHeading, failureLocation]
+        .filter(Boolean)
+        .join('\n');
+      const size = Buffer.byteLength(excerpt) + 1;
+      if (failureBytes + size <= workspaceFailureBytes) {
+        failureBytes += size;
+        failures.push(excerpt);
+      }
+    }
+    if (/^\((?:pass|fail|skip|todo)\)\s/.test(trimmed) || trimmed === '# Unhandled error between tests') {
+      failureHeading = undefined;
+      failureLocation = undefined;
+    }
     if (/^(?:bun test |\d+ tests? failed:|Ran \d+ tests?)/.test(trimmed)) activeTestFile = undefined;
     const summary = line.match(/tests failed for (\d+) file\(s\):/i);
     if (summary) {
@@ -716,9 +741,11 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>, onLine?: 
   scan(decoder.decode());
   if (pending && !longLine) readLine(pending);
   const omitted = Math.max(0, bytes - head.length - tail.length);
+  const diagnostics = failures.length ? `[Gate retained failure diagnostics]\n${failures.join('\n')}\n` : '';
   const text = omitted
     ? head.toString() +
       `\n[Gate omitted ${omitted} diagnostic bytes]\n` +
+      diagnostics +
       Buffer.concat([tail.subarray(tailOffset), tail.subarray(0, tailOffset)]).toString()
     : Buffer.concat([
         head.subarray(0, Math.min(bytes, head.length)),
