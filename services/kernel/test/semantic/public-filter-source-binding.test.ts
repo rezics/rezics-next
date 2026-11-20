@@ -282,6 +282,104 @@ test('native public Source configuration and immutable meaning/read definition r
   }
 });
 
+test('native Subject enrollment rechecks the original definition and release on one checkout', async () => {
+  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
+  const { createOpenSearch } = await import('../../src/search/opensearch.ts');
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const index = `source-enrollment-${crypto.randomUUID()}`;
+  let created = false;
+  try {
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const source = publicFilterSource(f.config);
+    const capture = {
+      sort: 'id' as const,
+      size: 1,
+      filterDocument: undefined,
+      text: undefined,
+      catalogueCoverage: true as const,
+      catalogueNameSort: true as const,
+    };
+    const input = { source, meaning: f.meaning, capture };
+    const resolved = await binding.resolve(input, readContext());
+    if (resolved.status !== 'resolved') throw new Error(resolved.reason);
+    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    created = true;
+    const registered = await createPublicFilterCustody(f.db.pool).register(
+      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      search,
+      readContext(),
+    );
+    if (registered.status !== 'registered') throw new Error(registered.reason);
+    const original = await advanceNativePublicFilterPreparation(
+      binding,
+      { ...input, consumer: registered.consumer, snapshot: 'prepared' },
+      readContext(),
+    );
+    if (original?.status !== 'preparing') throw new Error(`Expected a capturing bootstrap, got ${original?.status}`);
+    const resume = {
+      bootstrap: original.bootstrap.id,
+      subjectEnrollment: {
+        consumer: registered.consumer,
+        source: resolved.definition.source,
+        registration: registered.registration,
+        capturingOnly: true as const,
+      },
+    };
+    const advance = () => advanceNativePublicFilterPreparation(binding, resume, readContext());
+    expect(await advance()).toMatchObject({
+      status: 'preparing',
+      enrollmentAdvanced: true,
+      bootstrap: { id: resume.bootstrap },
+    });
+    const readFrontier = async () =>
+      (
+        await f.db.admin.query(
+          'SELECT account_after, coverage_after FROM semantic.public_filter_bootstrap WHERE partition_no=0 AND bootstrap=$1',
+          [resume.bootstrap.slice(2)],
+        )
+      ).rows;
+    const frontier = await readFrontier();
+    const epoch = resolved.definition.source.epoch;
+    await setNativePartitionEpochForFixture(f.db, 0, epoch + 1);
+    expect(await advance()).toMatchObject({ status: 'unavailable', reason: 'observation_lost' });
+    await setNativePartitionEpochForFixture(f.db, 0, epoch);
+    await withConnection(f.db.admin, async (client) => {
+      await client.query('BEGIN');
+      try {
+        await client.query("SET LOCAL semantic.erasure_cleanup='on'");
+        await client.query('DELETE FROM semantic.definition_activation WHERE route=0 AND digest=$1', [
+          f.meaning.digest,
+        ]);
+        await client.query('DELETE FROM semantic.definition_release WHERE route=0 AND digest=$1', [f.meaning.digest]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+    let checkouts = 0;
+    const acquired = () => checkouts++;
+    f.db.pool.on('acquire', acquired);
+    try {
+      const result = await advance();
+      expect(result).toMatchObject({ status: 'unready', reason: 'definition_missing' });
+      expect(result!.cost.statements).toBeGreaterThanOrEqual(6);
+      expect(checkouts).toBe(1);
+    } finally {
+      f.db.pool.off('acquire', acquired);
+    }
+    expect(await readFrontier()).toEqual(frontier);
+  } finally {
+    try {
+      if (created) await search.request('DELETE', `/${index}`);
+    } finally {
+      await f.close();
+    }
+  }
+});
+
 test('canonical retained observation execution joins preserve complete compiler keys', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
