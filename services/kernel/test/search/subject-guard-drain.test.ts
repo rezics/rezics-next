@@ -320,6 +320,7 @@ test('live Subject replay batches foreign creator identities and reaches later c
     expect(await checkpoint(t)).toBe(previous);
 
     const identityBatchSizes: number[] = [];
+    const creatorHomeBatchSizes: number[] = [];
     replay = observe(
       withQueryAccounting(
         {
@@ -327,6 +328,8 @@ test('live Subject replay batches foreign creator identities and reaches later c
           query(sql, operands, dispatch) {
             if (sql.includes('semantic.identity_epoch_mapping_sources'))
               identityBatchSizes.push((operands[0] as string[]).length);
+            if (sql.includes('WHERE partition_no = ANY($1::integer[])'))
+              creatorHomeBatchSizes.push(String(operands[0]).split(',').length);
             return dispatch();
           },
         },
@@ -342,6 +345,15 @@ test('live Subject replay batches foreign creator identities and reaches later c
     const replacement = await writerState();
     // Project both selected pages and revalidate their whole dependency window.
     expect(identityBatchSizes).toEqual([CREDIT_SEARCH_LIMITS.creditsPerPage, 1, cast.size]);
+    // Each phase checks the creator header homes and the name homes in bounded batches.
+    expect(creatorHomeBatchSizes).toEqual([
+      CREDIT_SEARCH_LIMITS.creditsPerPage,
+      CREDIT_SEARCH_LIMITS.creditsPerPage,
+      1,
+      1,
+      cast.size,
+      cast.size,
+    ]);
     expect(replacement.dispatch_state).toBe('dispatched');
     expect(replacement.writer_token).not.toBe(enrolled.writer_token);
     expect(replacement.visible_transaction_id).toBe(receipt);

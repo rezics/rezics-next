@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
-import type { Partition } from '../partition/partition.ts';
+import { readPartitions, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from './identity-adapters/identity-epoch-contract.ts';
 import { readIdentityMappings } from './identity-adapters/read.ts';
@@ -49,11 +49,12 @@ export type CreditCreatorSnapshot = Readonly<{
   subjects?: ReadonlyMap<string, WorkHeader | null>;
   owners?: ReadonlyMap<number, Partition>;
 }>;
-export type CreditIdentityReader = (pool: Pool, originals: readonly string[]) => Promise<IdentityMapping[]>;
 export type CreditCreatorObservation = Readonly<{
   snapshot?: CreditCreatorSnapshot;
-  readIdentities?: CreditIdentityReader;
+  indexReplay?: true;
 }>;
+
+const REPLAY_POINT_PAGE = 100;
 
 function groups(ids: readonly string[]) {
   const result = new Map<number, { route: number; id: string }[]>();
@@ -68,30 +69,70 @@ function groups(ids: readonly string[]) {
   return result;
 }
 
+type CreatorGroup = {
+  partition_no: number;
+  routes: number[];
+  subject_ids: string[];
+};
+
+async function readCreatorGroups<Row>(
+  pool: Pool,
+  ids: readonly string[],
+  read: (client: CommandTransaction, parameters: CreatorGroup) => Promise<Row[]>,
+  snapshot?: CommandTransaction,
+  indexReplay?: true,
+): Promise<Row[]> {
+  const parameters = (partition: number, group: { route: number; id: string }[]): CreatorGroup => ({
+    partition_no: partition,
+    routes: group.map(({ route }) => route),
+    subject_ids: group.map(({ id }) => id),
+  });
+  const rows: Row[] = [];
+  if (indexReplay && !snapshot) {
+    // A bounded native snapshot can anchor many homes while retaining the exact per-home point plans.
+    for (let offset = 0; offset < ids.length; offset += REPLAY_POINT_PAGE) {
+      const batch = groups(ids.slice(offset, offset + REPLAY_POINT_PAGE));
+      const page = await inSearchSnapshot(pool, async (client) => {
+        const owners = await readPartitions(client, [...batch.keys()]);
+        const result: Row[] = [];
+        for (const owner of owners) {
+          if (owner.writeState === 'moved') continue;
+          result.push(...(await read(client, parameters(owner.partitionNo, batch.get(owner.partitionNo)!))));
+        }
+        return result;
+      });
+      rows.push(...page);
+    }
+    return rows;
+  }
+  for (const [partition, group] of groups(ids)) {
+    const readAtHome = async (client: CommandTransaction) => {
+      const home = await readPartition(client, partition);
+      if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
+      return !home || home.writeState === 'moved' ? [] : read(client, parameters(partition, group));
+    };
+    rows.push(...(snapshot ? await readAtHome(snapshot) : await inSearchSnapshot(pool, readAtHome)));
+  }
+  return rows;
+}
+
 export async function loadSubjects(
   pool: Pool,
   ids: readonly string[],
   snapshot?: CommandTransaction,
+  indexReplay?: true,
 ): Promise<Map<string, WorkHeader>> {
-  const found = new Map<string, WorkHeader>();
-  for (const [partition, group] of groups(ids)) {
-    const read = async (client: CommandTransaction) => {
-      const home = await readPartition(client, partition);
-      if (snapshot && home?.writeState !== 'active') throw new AccessUnavailableError('contention');
-      if (!home || home.writeState === 'moved') return [];
-      const parameters = {
-        partition_no: partition,
-        routes: group.map((entry) => entry.route),
-        subject_ids: group.map((entry) => entry.id),
-      };
-      return (await (snapshot
+  const rows = await readCreatorGroups(
+    pool,
+    ids,
+    (client, parameters) =>
+      (snapshot
         ? nativeSourceQuery(client, readSubjects, parameters)
-        : readSubjects.run(client, parameters))) as WorkHeader[];
-    };
-    const rows = snapshot ? await read(snapshot) : await inSearchSnapshot(pool, read);
-    for (const row of rows) found.set(row.id, row);
-  }
-  return found;
+        : readSubjects.run(client, parameters)) as Promise<WorkHeader[]>,
+    snapshot,
+    indexReplay,
+  );
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 export const readCreatorTermBudgetSql = `SELECT current_facts FROM semantic.subject
@@ -125,25 +166,20 @@ export async function loadNames(
   pool: Pool,
   ids: readonly string[],
   nameLimit: number,
+  indexReplay?: true,
 ): Promise<Map<string, NameRow[]>> {
+  const rows = await readCreatorGroups(
+    pool,
+    ids,
+    (client, parameters) => readCreditNames.run(client, { ...parameters, name_limit: nameLimit }) as Promise<NameRow[]>,
+    undefined,
+    indexReplay,
+  );
   const names = new Map<string, NameRow[]>();
-  if (!ids.length) return names;
-  for (const [partition, group] of groups(ids)) {
-    const rows = await inSearchSnapshot(pool, async (client) => {
-      const home = await readPartition(client, partition);
-      if (!home || home.writeState === 'moved') return [];
-      return (await readCreditNames.run(client, {
-        partition_no: partition,
-        routes: group.map((entry) => entry.route),
-        subject_ids: group.map((entry) => entry.id),
-        name_limit: nameLimit,
-      })) as NameRow[];
-    });
-    for (const row of rows) {
-      const list = names.get(row.id) ?? [];
-      list.push(row);
-      names.set(row.id, list);
-    }
+  for (const row of rows) {
+    const list = names.get(row.id) ?? [];
+    list.push(row);
+    names.set(row.id, list);
   }
   return names;
 }
@@ -214,10 +250,10 @@ async function identityOf(pool: Pool, originals: readonly string[]): Promise<Ide
 }
 
 /** Each point batch observes all its source and control homes in one native snapshot. */
-export async function readIndexCreditIdentities(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
+async function readIndexCreditIdentities(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
   const mappings: IdentityMapping[] = [];
-  for (let offset = 0; offset < originals.length; offset += 100) {
-    const batch = originals.slice(offset, offset + 100);
+  for (let offset = 0; offset < originals.length; offset += REPLAY_POINT_PAGE) {
+    const batch = originals.slice(offset, offset + REPLAY_POINT_PAGE);
     const observed = await inSearchSnapshot(pool, (tx) => readReleasedIdentityMappingsInSnapshot(tx, batch));
     mappings.push(...observed.mappings);
   }
@@ -238,7 +274,7 @@ export async function canonicalCreators(
   originals: readonly string[],
   limits: CreditSearchCeilings,
   itemQualifierIds: readonly string[] = [],
-  { snapshot, readIdentities = identityOf }: CreditCreatorObservation = {},
+  { snapshot, indexReplay }: CreditCreatorObservation = {},
 ): Promise<CreatorResolution> {
   const unique = [...new Set(originals)];
   const roots = [...new Set([...unique, ...itemQualifierIds])];
@@ -247,7 +283,7 @@ export async function canonicalCreators(
   let pending = roots;
   for (let depth = 0; pending.length && depth < 8; depth++) {
     const missing = pending.filter((id) => !states.has(id));
-    const loaded = await loadSubjects(pool, missing, snapshot?.tx);
+    const loaded = await loadSubjects(pool, missing, snapshot?.tx, indexReplay);
     const next: string[] = [];
     for (const id of missing) {
       const row = loaded.get(id) ?? null;
@@ -259,7 +295,7 @@ export async function canonicalCreators(
   if (snapshot && pending.some((id) => !states.has(id))) return { state: 'unavailable' };
   const mappings = snapshot
     ? (await readReleasedIdentityMappingsInSnapshot(snapshot.tx, roots, snapshot.owners)).mappings
-    : await readIdentities(pool, roots);
+    : await (indexReplay ? readIndexCreditIdentities : identityOf)(pool, roots);
   if (mappings.some((mapping) => mapping.state === 'pending')) return { state: 'preparing' };
   // Bootstrap, missing-owner and moved homes fail closed: a redirect chain never stands in for unknown identity.
   if (mappings.some((mapping) => mapping.state === 'unavailable')) return { state: 'unavailable' };
@@ -276,7 +312,7 @@ export async function canonicalCreators(
       }),
     ),
   ];
-  const loadedTerminals = await loadSubjects(pool, missingTerminals, snapshot?.tx);
+  const loadedTerminals = await loadSubjects(pool, missingTerminals, snapshot?.tx, indexReplay);
   for (const id of missingTerminals) states.set(id, loadedTerminals.get(id) ?? null);
   const terminals = new Map<string, WorkHeader>();
   for (const original of roots) {
@@ -300,7 +336,7 @@ export async function canonicalCreators(
   const terminalIds = [...new Set(creatorTerminals)];
   const nameRows = snapshot
     ? await loadNativeNames(snapshot.tx, terminalIds)
-    : await loadNames(pool, terminalIds, nameLimit);
+    : await loadNames(pool, terminalIds, nameLimit, indexReplay);
   if (!nameRows) return { state: 'unavailable' };
   const creators = new Map<string, PublicCreator>();
   for (const original of unique) {
