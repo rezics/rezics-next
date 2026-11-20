@@ -3082,10 +3082,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
       use = acquired.use;
       await physical(q, m, context);
-      const nativeJoin = await joinNativePublicFilterRepair(binding, { queried: q }, context);
-      const joined = nativeJoin ? m.take(nativeJoin) : await join(q, undefined, m, context);
-      if (joined.status !== 'joined') return m.unavailable('source_pending');
-      if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+      // The Subject publication has already resolved its exact original observation.
+      // Its page producer and independent verifier each reopen Source with the
+      // exact execution. A third join without that execution adds no evidence.
+      const originalSubject = publication !== undefined && config.discoveryTarget === undefined;
+      if (!originalSubject) {
+        const nativeJoin = await joinNativePublicFilterRepair(binding, { queried: q }, context);
+        const joined = nativeJoin ? m.take(nativeJoin) : await join(q, undefined, m, context);
+        if (joined.status !== 'joined') return m.unavailable('source_pending');
+        if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+      }
       if (!work.execution) {
         // Original native preparation must be repairable while its same-row
         // summary is behind. A served population start would require this ACK
@@ -3116,6 +3122,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const retained = m.take(await custody.read({ queried: q, execution: work.execution }, context));
       if (retained.status !== 'found' || !retained.execution) return m.unavailable('observation_lost');
+      if (originalSubject && !isDeepStrictEqual(retained.covered, work.bootstrap.covered))
+        return m.unavailable('observation_lost');
       const current = await repairCurrent.run(m.pool, {
         partition_no: work.registration.partition,
         observation: q.snapshot.observation,
