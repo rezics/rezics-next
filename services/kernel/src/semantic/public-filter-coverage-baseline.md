@@ -49,11 +49,11 @@ Observation, repair, ACK and serving use their existing authority checks.
 
 ## Shared subscription design
 
-The next cold enrollment protocol opens a versioned retention hold for the native creation and privacy streams
+Cold Source preparation opens a versioned retention hold for the native creation and privacy streams
 before sampling any home. It registers the definition's keys once and persists a gapless cover of original home
-cuts in bounded immutable pages. Cleanup will honor outstanding holds, and privacy maintenance will retain each
-pending interval until its captured subscriber set is accounted for. The receiver will independently verify
-the same native evidence before committing its own ACK. Persisted preparations retain their original protocol.
+cuts in bounded immutable pages. Core cleanup honors outstanding holds. Privacy maintenance owns disposition
+of each captured interval, and the receiver independently verifies the native evidence before its ACK.
+Each persisted preparation retains its original protocol.
 
 ### Core retention boundary
 
@@ -99,6 +99,64 @@ index maintenance and WAL. Tuple visits exclude empty seeks and system catalogs.
 The ordinary create and hide each appended two original event slots and one write basis. Hide added one
 privacy-log entry. Both commands recorded zero scans and zero writes on the retention tables. The added
 legacy minimum indexes track checkpoint position and home enrollment position on their respective paths.
+
+### Source and Access preparation on the shared hold
+
+`openHeldSubjectPreparation` takes the cold job and its original bootstrap UUID. Under the publication
+lock it opens the Core membership and reserves the ordinary prepared Source request in one transaction.
+A different bootstrap or a previously started preparation fails admission. Source pins this version by
+membership birth. Production admission remains with the publication owner.
+
+`semantic.capture_subject_access_page_v1(birth, first_home, end_home)` captures the Core and Access
+pages together. It holds the Account population rows through commit and reads the Account revision,
+claim revision and original Account-domain enqueue for each native cut. An existing Core page without
+its Access companion cannot acquire a later Access observation. The single-home reader
+`semantic.subject_access_cut_v1(bootstrap, home)` returns the original tuple and current heads only
+under the original membership, definition, registration, store and active owner. The Subject path reads
+Account metadata while enumerating only Subject originals.
+
+A committed page admits Source inventory by route and original ID, including hidden and redirected rows.
+Each step reads at most 32 keys plus a lookahead. After inventory finishes, Source captures finite command
+ends for that page. The creation reader walks every outbox slot through those ends, including unrelated
+events. The saved envelopes carry the owner epoch, event ID, position, sequence, count, type, original
+subject, payload digest and native write-basis transaction where present. The page receipt binds the home
+generation and both stream bases. An uncertain commit reopens the same birth, interval and ordinal.
+
+For a job with an explicit held preparation, the ordinary publication step consumes these original IDs
+and positions through its writer and physical generation comparison. Only a successful comparison and a
+fresh check of the page can advance the Source reconciliation cursor. A change after a page's finite end
+still belongs to the subsequent publication revalidation and held traversal. The physical fixture checks
+the pending writer, the settled resident Book, the withdrawn Book and continuation into a fresh page.
+[PostgreSQL and OpenSearch fixture](../../test/semantic/public-filter-held-publication.test.ts)
+
+Privacy fanout resolves the membership's original home with `subject_access_cut_v1`. A missing page stays
+pending. The saved privacy base distinguishes original inventory from later delivery. The privacy owner
+compares stored log epochs and records the shared interval disposition before clearing its live key.
+The receiver owns adoption and ACK. The publication owner owns the fence, alias and activation, and
+retirement owns release of the original membership and pages.
+
+### Two-home Source preparation cost
+
+The [interrupted Source fixture](../../test/semantic/public-filter-held-subject.test.ts) uses seven compiler keys, one resident Book and one initially empty home.
+After the inventory connection is terminated, ordinary commands create and hide a Book behind its saved cursor.
+The statement count includes Source transaction control. PostgreSQL user-table tuple visits and row writes
+include the fixture’s native verification of each writer obligation during the cursor handoff. A rolled-back
+in-flight Account update, stale compiler closure and deliberately torn outbox group exercise refusal separately.
+
+| Phase | Statements | Tuple visits | Row writes |
+| --- | ---: | ---: | ---: |
+| Open membership and reserve Source bootstrap | 6 | 28 | 11 |
+| Capture the two-home page | 1 | 54 | 2 |
+| Scan original keys | 7 | 59 | 1 |
+| Resolve original membership and bootstrap | 4 | 19 | 0 |
+| Resolve original page | 1 | 54 | 0 |
+| Recover inventory after disconnect | 5 | 61 | 0 |
+| Advance Source cursor after inventory handoff | 7 | 124 | 1 |
+| Save both finite creation ends | 6 | 61 | 1 |
+| Recover finite ends after a later append | 5 | 71 | 0 |
+| Advance Source cursor after window handoff | 7 | 122 | 1 |
+| Replay four creation and visibility slots | 6 | 91 | 1 |
+| Advance Source cursor after event handoff | 7 | 154 | 1 |
 
 ## Subject receiver ACK protocol
 

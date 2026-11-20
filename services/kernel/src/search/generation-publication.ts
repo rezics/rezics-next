@@ -3,7 +3,11 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
-import { advanceNativePublicFilterPreparation, planColdSubjectEnrollment } from './native-bindings.ts';
+import {
+  advanceNativePublicFilterPreparation,
+  planColdSubjectEnrollment,
+  reconcileHeldSubjectPage,
+} from './native-bindings.ts';
 import {
   bindSearchWriterPublicationReader,
   nativeSourceForHeldPublication,
@@ -956,11 +960,80 @@ export function createSearchGenerationPublication(
             try {
               const {
                 rows: [job],
-              } = await client.query<Job>(
-                'SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+              } = await client.query<
+                Job & {
+                  held_birth: string | null;
+                  held_bootstrap: string | null;
+                  next_home: number | null;
+                  next_ordinal: number | null;
+                  end_home: number | null;
+                }
+              >(
+                `SELECT * FROM search.generation_publication j
+                 LEFT JOIN LATERAL (
+                   SELECT m.birth::text AS held_birth,m.bootstrap AS held_bootstrap,
+                     s.next_home,s.next_ordinal,p.end_home FROM core.subject_subscription_v1 m
+                   JOIN semantic.subject_source_preparation_v1 s ON (s.birth,s.bootstrap)=(m.birth,m.bootstrap)
+                   LEFT JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home)=(s.birth,s.next_home)
+                   WHERE m.job=j.job LIMIT 1
+                 ) held ON true
+                 WHERE (j.partition_no,j.job)=(0,$1)`,
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              if (job.held_birth != null) {
+                if (
+                  phase === 'activate' ||
+                  job.family !== 'subjects' ||
+                  job.phase !== 'subject' ||
+                  job.pass !== '1' ||
+                  job.fence ||
+                  job.observation ||
+                  job.bootstrap ||
+                  job.pit ||
+                  !job.held_bootstrap ||
+                  job.next_home === null ||
+                  job.next_home === 4096 ||
+                  job.next_ordinal === null
+                )
+                  throw new Pending('source_pending');
+                const physical = await native(job.consumer, context, validationSearch(context, meter));
+                if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
+                await adopt(job, context, meter, physical);
+                const endHome = job.end_home ?? Math.min(4096, job.next_home + 8);
+                // Reserve the capture, original owner checks, 32 inventory keys or
+                // event slots and the closing custody comparison before dispatch.
+                const inputs = 176 + 18 * (endHome - job.next_home);
+                if (inputs + meter.inputKeys + 5 * 32 > 1000) throw new Pending('source_pending');
+                meter.inputKeys += inputs;
+                meter.dependencyPoints += inputs;
+                await reconcileHeldSubjectPage(
+                  pool,
+                  {
+                    job: job.job,
+                    bootstrap: job.held_bootstrap,
+                    birth: job.held_birth,
+                    firstHome: job.next_home,
+                    endHome,
+                    ordinal: job.next_ordinal,
+                  },
+                  context,
+                  async (obligation) => {
+                    await reconcile(
+                      job,
+                      obligation.partition,
+                      obligation.ids,
+                      undefined,
+                      BigInt(obligation.position),
+                      context,
+                      meter,
+                      true,
+                    );
+                  },
+                );
+                meter.frontierWrites++;
+                return work(job, client, null, undefined, true);
+              }
               const earlyEnrollment =
                 phase === 'step-enroll' && canEnrollSubject(job) && !job.bootstrap && !job.queried && !job.execution;
               const physical =

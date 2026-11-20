@@ -115,8 +115,7 @@ export const statement = (id: string, content: unknown, qualifiers: ReturnType<t
   qualifiers,
 });
 
-export async function fixture() {
-  const url = process.env.DATABASE_URL;
+export async function fixture(url = process.env.DATABASE_URL) {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const db = await openGrowthDatabase(url);
   const routeKey = new Uint8Array(32).fill(79);

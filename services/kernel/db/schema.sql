@@ -3993,6 +3993,13 @@ CREATE INDEX record_history_source_set_original ON core.record_history_source_se
 
 
 --
+-- Name: subject_access_original_keys; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX subject_access_original_keys ON core.subject_subscription_key_v1 USING btree (birth, input_key);
+
+
+--
 -- Name: subject_retention_creation_pin; Type: INDEX; Schema: core; Owner: -
 --
 
