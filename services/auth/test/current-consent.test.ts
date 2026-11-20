@@ -40,8 +40,12 @@ test('exact current tuple intersects the real client ceiling and re-reads deleti
     `UPDATE auth_client_coverage SET ready=true; DELETE FROM auth_consent WHERE account_id='selected-person'`,
   );
   expect(await read(selected)).toBeNull();
-  await database.query(`DELETE FROM auth_client_coverage; DELETE FROM auth_client WHERE client_id='selected-client'`);
-  expect(await read({ ...selected, actorAccountId: 'other-person' })).toBeNull();
+  const other = { ...selected, actorAccountId: 'other-person' };
+  expect(await read(other)).toEqual({ ...other, scopes: [] });
+  await database.query(`DELETE FROM auth_consent WHERE client_id='selected-client';
+    DELETE FROM auth_client_coverage WHERE client_id='selected-client';
+    DELETE FROM auth_client WHERE client_id='selected-client'`);
+  expect(await read(other)).toBeNull();
 });
 
 test('first-party standing consent requires an actual materialized row; reads never materialize', async () => {

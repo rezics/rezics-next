@@ -1,4 +1,10 @@
 import type { PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
+import { randomBytes } from 'node:crypto';
+
+/** Model the shape of a native Access approval for a fixture that verifies its own receipts. */
+export function fixtureCredentialApprovalReference(effectReference: string): string {
+  return `${Buffer.from(effectReference).toString('base64url')}.${randomBytes(32).toString('base64url')}`;
+}
 
 type PlainPorts = Exclude<TrustedAccessPorts, PasskeyTrustedAccessPorts>;
 type StubPorts<Ports extends TrustedAccessPorts> = Pick<Ports, 'readAccount' | 'authorizeProvisioning'> &

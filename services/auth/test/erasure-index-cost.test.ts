@@ -1,4 +1,4 @@
-import { trustedAccessPorts } from './support/trusted-access.ts';
+import { fixtureCredentialApprovalReference, trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
@@ -135,7 +135,7 @@ test('native account erasure preserves authorization, invalidation order and unr
           throw new Error('Deleted accounts cannot complete recovery');
         },
         async approveCredentialEffect({ stage }) {
-          const reference = `credential-opening-${stage.operationKey}`;
+          const reference = fixtureCredentialApprovalReference(stage.effectReference);
           const expiresAt = new Date(Date.now() + 60_000).toISOString();
           credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
           return { reference, expiresAt };

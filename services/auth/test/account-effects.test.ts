@@ -1,6 +1,5 @@
-import { trustedAccessPorts } from './support/trusted-access.ts';
+import { fixtureCredentialApprovalReference, trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomBytes } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -258,7 +257,7 @@ beforeAll(async () => {
         const subject = accounts.get(stage.subjectAccountId);
         if (!subject || human.account_id !== (subject.automated ? 'effects-human' : subject.accountId))
           throw new Error('Access denied');
-        const reference = `${Buffer.from(stage.effectReference).toString('base64url')}.${randomBytes(32).toString('base64url')}`;
+        const reference = fixtureCredentialApprovalReference(stage.effectReference);
         const expiresAt = new Date(Date.now() + 60000).toISOString();
         credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
         return { reference, expiresAt };

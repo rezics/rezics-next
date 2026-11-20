@@ -117,6 +117,8 @@ else { log('remote-cleanup'); }
     REZICS_STACK_SLOT: undefined,
     AUTH_CHECK_CONTAINER: undefined,
     AUTH_CHECK_LANE_OWNER: undefined,
+    AUTH_CHECK_LANE_COPIES: undefined,
+    AUTH_TEST_DATABASE_URL: undefined,
     DATABASE_URL: undefined,
     REMOTE_CHECK_POLL_MS: '10',
   };

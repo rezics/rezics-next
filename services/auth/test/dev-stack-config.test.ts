@@ -52,7 +52,7 @@ test('walk host Kernel Access authenticates a seeded persona against issuer JWKS
   expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
   expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
   expect(source).toContain('const actor = await access.authenticate(bearer, context)');
-  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+  expect(source).toContain("if (actor.kind !== 'account' || actor.accountId !== person.accountId)");
 });
 
 test('integrated startup keeps the full regression selection and original native acceptance', () => {
@@ -80,25 +80,29 @@ test('integrated startup keeps the full regression selection and original native
 });
 
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
-  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  const [source, walk] = await Promise.all([
+    readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8'),
+    readFile(resolve(import.meta.dir, '../../../scripts/walk-stack.ts'), 'utf8'),
+  ]);
   expect(source).toContain('SEEDED_WEB_READY_PATH');
-  expect(source).toContain('waitUntilWalkReady');
-  expect(source).not.toContain("code: 'ECONNREFUSED'");
+  expect(source).toContain('await waitUntilWalkReady({ urls, children: processes })');
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
-  expect(source).toContain('issuerJwksUrl(origins.issuer)');
-  expect(source).toContain('walkOriginListening(origins.issuer)');
+  expect(source).toContain('plan.deferPages ? issuerJwksUrl(origins.issuer)');
+  expect(source).toContain('return startSeededWalkFrontends(root, origins)');
+  expect(walk).toContain('const pagesUp = await walkOriginListening(origins.issuer)');
+  expect(walk).toContain("export const SEEDED_WEB_READY_PATH = '/en'");
   expect(source).toContain('startFakeStripe');
   expect(source).toContain('walkCommerceProviderEnvironment');
   expect(source).toContain("process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce'");
-  const deferredPages = source.slice(
-    source.indexOf('if (plan.deferPages)'),
-    source.indexOf('const kernel = launch(plan.kernel)'),
+  const ready = source.slice(
+    source.indexOf('async ready(service, children)'),
+    source.indexOf('async function phase<T>'),
   );
-  expect(deferredPages).toContain('issuerJwksUrl(origins.issuer)], [pages, identity]');
-  expect(deferredPages).not.toMatch(/\bworker\b/);
-  const kernelReady = source.indexOf("await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]))");
-  expect(source.indexOf('const worker = launch(', kernelReady)).toBeGreaterThan(kernelReady);
-  expect(source).toContain("await phase('worker', untilOutput(worker, 'Worker ready'))");
+  expect(ready).toContain("if (service === 'identity')");
+  expect(ready).toContain("untilOutput(children[0]!, 'Worker ready')");
+  expect(ready.indexOf("untilOutput(children[0]!, 'Worker ready')")).toBeLessThan(
+    ready.indexOf('await phase(service, untilReady(urls[service], children))'),
+  );
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
@@ -665,7 +669,8 @@ test('installed host receives management operations and independent reads from i
   expect(assembly).toContain('recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery()');
   expect(assembly).toContain('workflow: proofs');
   expect(assembly).toContain('referenceKeys: config.tokens');
-  expect(assembly).toContain('await host.stop()');
+  expect(assembly).toContain('stopAuth = () => host.stop()');
+  expect(assembly).toContain('if (stopAuth) await stopAuth()');
   expect(assembly).toContain('await kernelPool.end()');
 });
 

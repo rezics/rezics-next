@@ -161,6 +161,7 @@ test('direct unplaced and foreign-owner database access stay refused before any 
       DATABASE_URL: 'postgres://foreign/db',
     };
     delete env.AUTH_CHECK_LANE_OWNER;
+    delete env.AUTH_TEST_DATABASE_URL;
     if (owner) env.AUTH_CHECK_LANE_OWNER = owner;
     const child = Bun.spawn(
       [

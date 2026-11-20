@@ -1,5 +1,5 @@
 import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
-import { trustedAccessPorts } from './support/trusted-access.ts';
+import { fixtureCredentialApprovalReference, trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -164,7 +164,7 @@ async function setup(name: string, axes: readonly Axis[]) {
             throw new Error('Completion denied');
         },
         async approveCredentialEffect({ stage }) {
-          const reference = id(`credential-opening-${sequence++}`);
+          const reference = fixtureCredentialApprovalReference(stage.effectReference);
           const expiresAt = new Date(Date.now() + 60_000).toISOString();
           credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
           return { reference, expiresAt };

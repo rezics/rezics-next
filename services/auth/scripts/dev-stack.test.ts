@@ -133,8 +133,6 @@ test('cold Web starts before native readiness while every dependency gate still 
     'ready:identity',
     'launch:kernel',
     'ready:kernel',
-    'launch:worker',
-    'ready:worker',
     'launch:pages',
     'ready:pages',
     'ready:web',
@@ -152,7 +150,7 @@ test('deferred walks omit Web and cancellation prevents further native launches'
       async ready() {},
       stopping: () => false,
     });
-    expect(launched).toEqual(mode === 'walk' ? ['identity', 'pages', 'kernel', 'worker'] : ['identity']);
+    expect(launched).toEqual(mode === 'walk' ? ['identity', 'pages', 'kernel'] : ['identity']);
   }
   const launched: string[] = [];
   await expect(
