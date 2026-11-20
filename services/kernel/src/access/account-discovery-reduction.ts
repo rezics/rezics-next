@@ -487,31 +487,28 @@ export async function enrollNewAccountDiscoveryHomes(
           await client.query('ROLLBACK');
           return null;
         }
-        // This snapshot follows the writer locks. A retry must open its
-        // original tuple in the retained path before advancing any key frontier.
-        const carries = await client.query<{ partition: number; enqueue: string; retained: boolean }>(
-          `/* semantic.native-keyed:${3 * count}:${3 * count} */
-           SELECT h.partition,coalesce(p.enqueue_revision::text,'0') AS enqueue,
-             (e.bootstrap IS NOT NULL OR c.consumer IS NOT NULL) AS retained
-           FROM unnest($1::integer[]) h(partition)
-           LEFT JOIN semantic.public_filter_privacy_pending p
-             ON (p.partition_no,p.input_key)=(h.partition,'["domain","accounts"]')
-           LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(h.partition,$2)
-           LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(h.partition,$3)
-           ORDER BY h.partition`,
+        // Read carries in a fresh snapshot after taking the writer locks. A
+        // retained pin or receipt leaves the whole group to the single-home path.
+        const carries = await client.query<{ partition: number; enqueue: string; pinned: boolean }>(
+          `/* semantic.native-keyed:${5 * count}:${5 * count}:1 */
+           WITH carries AS MATERIALIZED (
+             SELECT h.partition,coalesce(p.enqueue_revision::text,'0') AS enqueue,
+               (e.bootstrap IS NOT NULL OR c.consumer IS NOT NULL) AS retained
+             FROM unnest($1::integer[]) h(partition)
+             LEFT JOIN semantic.public_filter_privacy_pending p
+               ON (p.partition_no,p.input_key)=(h.partition,'["domain","accounts"]')
+             LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(h.partition,$2)
+             LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(h.partition,$3)
+           ), pins AS (
+             INSERT INTO core.consumer_checkpoint(partition_no,consumer)
+             SELECT partition,$3 FROM carries WHERE NOT EXISTS (SELECT 1 FROM carries WHERE retained)
+             ORDER BY partition ON CONFLICT DO NOTHING RETURNING partition_no
+           )
+           SELECT c.partition,c.enqueue,p.partition_no IS NOT NULL AS pinned
+           FROM carries c LEFT JOIN pins p ON p.partition_no=c.partition ORDER BY c.partition`,
           [partitions, input.bootstrap, creationConsumer],
         );
-        if (carries.rows.some((row) => row.retained)) {
-          await client.query('ROLLBACK');
-          return null;
-        }
-        const pin = await client.query(
-          `/* semantic.native-keyed:${2 * count}:${2 * count} */
-           INSERT INTO core.consumer_checkpoint(partition_no,consumer)
-           SELECT partition,$2 FROM unnest($1::integer[]) h(partition) ON CONFLICT DO NOTHING`,
-          [partitions, creationConsumer],
-        );
-        if (pin.rowCount !== count) {
+        if (carries.rows.length !== count || carries.rows.some((row) => !row.pinned)) {
           await client.query('ROLLBACK');
           return null;
         }
@@ -527,19 +524,35 @@ export async function enrollNewAccountDiscoveryHomes(
           );
           return { partition, epoch, creation, account: account!, claim: claim!, source: source!, enqueue, receipt };
         });
-        const inserted = await client.query(
-          `/* semantic.native-keyed:${5 * count}:${5 * count} */
-           INSERT INTO semantic.public_filter_home_enrollment
-             (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
-              source_position,native_revision,native_claim_revision,key_digest,creation_consumer,
-              key_after,complete,creation_position,native_enqueue_revision,receipt)
-           SELECT h.partition,$2,$3,$4,$5::text::uuid,h.epoch,h.source,
-             CASE WHEN $9::boolean THEN h.account END,CASE WHEN $9::boolean THEN h.claim END,$6,$7,$8,
-             true,h.creation,h.enqueue,h.receipt
-           FROM jsonb_to_recordset($1::jsonb)
-             h(partition integer,epoch integer,source bigint,account bigint,claim bigint,
-               creation bigint,enqueue bigint,receipt text)
-           WHERE $5::text::uuid::text=$5::text ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
+        const enrollmentInputs = count * (6 + 2 * keys.length);
+        // Require every original receipt to be inserted before advancing the Source key generations.
+        const enrolled = await client.query(
+          `/* semantic.native-keyed:${enrollmentInputs}:${enrollmentInputs}:${1 + count * keys.length} */
+           WITH enrollment AS (
+             INSERT INTO semantic.public_filter_home_enrollment
+               (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
+                source_position,native_revision,native_claim_revision,key_digest,creation_consumer,
+                key_after,complete,creation_position,native_enqueue_revision,receipt)
+             SELECT h.partition,$2,$3,$4,$5::text::uuid,h.epoch,h.source,
+               CASE WHEN $9::boolean THEN h.account END,CASE WHEN $9::boolean THEN h.claim END,$6,$7,$8,
+               true,h.creation,h.enqueue,h.receipt
+             FROM jsonb_to_recordset($1::jsonb)
+               h(partition integer,epoch integer,source bigint,account bigint,claim bigint,
+                 creation bigint,enqueue bigint,receipt text)
+             WHERE $5::text::uuid::text=$5::text
+             ON CONFLICT (partition_no,bootstrap) DO NOTHING RETURNING 1
+           ), generation AS (
+             UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
+             WHERE partition_no=ANY($12::integer[])
+               AND (SELECT count(*) FROM enrollment)=$11::integer
+             RETURNING partition_no,enrollment_generation
+           ), edges AS (
+             INSERT INTO semantic.public_filter_key_enrollment
+               (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
+             SELECT partition_no,k,$3,$4,$2,enrollment_generation FROM generation CROSS JOIN unnest($10::text[]) k
+             ON CONFLICT DO NOTHING
+           )
+           SELECT partition_no FROM generation`,
           [
             JSON.stringify(rows),
             input.bootstrap,
@@ -550,25 +563,12 @@ export async function enrollNewAccountDiscoveryHomes(
             creationConsumer,
             keys.at(-1) ?? null,
             accounts,
+            keys,
+            count,
+            partitions,
           ],
         );
-        if (inserted.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);
-        const generationInputs = count * (1 + 2 * keys.length);
-        const generation = await client.query(
-          `/* semantic.native-keyed:${generationInputs}:${generationInputs}:${count * keys.length} */
-           WITH generation AS (
-             UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
-             WHERE partition_no=ANY($1::integer[]) RETURNING partition_no,enrollment_generation
-           ), edges AS (
-             INSERT INTO semantic.public_filter_key_enrollment
-               (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
-             SELECT partition_no,k,$2,$3,$4,enrollment_generation FROM generation CROSS JOIN unnest($5::text[]) k
-             ON CONFLICT DO NOTHING
-           )
-           SELECT enrollment_generation FROM generation`,
-          [partitions, input.registration.partition, input.registration.id, input.bootstrap, keys],
-        );
-        if (generation.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);
+        if (enrolled.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);
         requireAccessDeadline(context.deadline);
         await client.query('COMMIT');
         return rows.map(({ partition, epoch, account, claim, source, creation, enqueue, receipt }) =>
