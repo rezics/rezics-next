@@ -87,8 +87,7 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Research
 
-- Research is a core part of the workflow. Research every complex abstraction design before briefing its
-  implementation. That covers:
+- Research complex abstraction designs before choosing an implementation. That covers:
   - a model, module or package used by two or more Goals;
   - security, identity, money or data integrity;
   - a public contract or data format;
@@ -107,9 +106,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - Models change in months. Evidence about model behaviour, such as context limits, instruction following or prompt
   style, counts only from the last four months: current vendor guidance for the models REZICS runs, and measurements
   on those models. Older papers and guides are background. They never set a number or decide a design.
-- The owner compares the reports and records the decision in the owner document before briefing implementation.
-  The product owner retains contract authority; the resident manager resolves cross-owner choices. Implementation
-  briefs link the decision.
+- One assignment can test a cause, implement a supported fix, and compare it with the baseline. Split the work
+  when independent review or separate ownership helps. Record lasting decisions in the owner document. The
+  product owner retains contract authority and the resident manager resolves cross-owner choices.
 - Reports follow the [research lifecycle](documentation.md#research): kept unchanged when valuable, never loaded by
   default, deleted when they have no lasting value.
 
