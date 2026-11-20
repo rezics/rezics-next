@@ -190,13 +190,16 @@ context, retained?)` captures a finite native home interval; replay validates th
 same retained interval rather than extending its through-position.
 `readPublicFilterCreationEvent(pool, {bootstrap, window}, context)` reads one exact
 outbox event and preserves its event-count/sequence boundary. Ordinary Subject publication
-uses `readPublicFilterCreationEvents` to read consecutive unrelated events within that pin
-in one bounded step, stopping at the first repair action. It retains the count and digest
-of the ordered event envelopes. Independent verification reads that exact count and derives
-the same successor. Older steps retain their single-event replay. Missing positions, changed
-ownership, missing pins and partial event groups remain unavailable. The repair producer routes
-actual Subject and Account change events through their separate native repair phases before
-returning to that retained successor. These readers feed the independently verified terminal
+uses `readPublicFilterCreationEvents` to retain a bounded ordered range within that pin.
+A range can include successive changes to the same original Subject and intervening unrelated
+events. The first different repair identity stays at the exact successor and its lookahead
+is charged. The original position, sequence, event count, epoch, ID, type and subject of each
+retained envelope are independently replayed. A Subject's native advancement and projection
+must cover the highest retained position. The verified advancement carries that position
+as a native writer obligation, including for Subjects with no statement locator. Existing
+single-event and count/digest steps keep their original replay. Missing positions, changed
+ownership, missing pins and partial event groups remain unavailable. Account events keep their
+separate native repair phase. These readers feed the independently verified terminal
 chain and native settlement/ACK described below.
 They do not independently establish receiver settlement or eligibility of an old served observation.
 

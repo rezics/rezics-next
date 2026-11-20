@@ -796,8 +796,9 @@ export async function readPublicFilterRepairSettlement(
         coordinates.push({ page, item });
       };
       for (const { ordinal, page } of pages) {
-        if (page.account) {
-          if (page.repairs.length || page.complete) throw new Failure('binding_mismatch');
+        if (page.account || page.subject) {
+          if (page.repairs.length || page.complete || (page.account && page.subject))
+            throw new Failure('binding_mismatch');
           retainCoordinate(ordinal, 0);
         }
         for (const [item, repair] of page.repairs.entries()) {
@@ -813,6 +814,42 @@ export async function readPublicFilterRepairSettlement(
       )
         throw new Failure('owner_unavailable');
       const effectAt = new Map(effects.map(({ page, item, receipt }) => [`${page}:${item}`, receipt]));
+      const readSubjectEffect = (
+        ordinal: number,
+        item: number,
+        source: NonNullable<RetainedRepairPage['subject']>,
+        subjectOnly = false,
+      ) => {
+        const effect = effectAt.get(`${ordinal}:${item}`);
+        if (!effect) throw new Failure('owner_unavailable');
+        const receipt = decode<PublicFilterRepairWriterReceipt>(effect);
+        const locator = encode({
+          observation: q.snapshot.observation,
+          execution: input.execution,
+          page: ordinal,
+          item,
+        });
+        if (
+          (subjectOnly && isDiscoveryRepairWriterReceipt(receipt)) ||
+          receipt.locator !== locator ||
+          receipt.subject !== source.subject ||
+          receipt.partition !== source.partition ||
+          receipt.epoch !== source.epoch ||
+          repairWriterPosition(receipt) < source.position ||
+          receipt.incarnation !== q.consumer.incarnation
+        )
+          throw new Failure('binding_mismatch');
+        validatePublicFilterRepairWriterEvidence(q.consumer.physicalTarget, receipt);
+        const previous = latest.get(receipt.subject);
+        if (
+          previous &&
+          (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
+            receipt.enrollment.position <= previous.completion.position)
+        )
+          throw new Failure('binding_mismatch');
+        latest.set(receipt.subject, receipt);
+        copies.delete(receipt.subject);
+      };
       for (const { ordinal, page } of pages) {
         for (const [item, repair] of page.repairs.entries()) {
           meter.candidates++;
@@ -834,34 +871,17 @@ export async function readPublicFilterRepairSettlement(
             copies.set(repair.source.subject, sourceKey);
             continue;
           }
-          const effect = effectAt.get(`${ordinal}:${item}`);
-          if (!effect) throw new Failure('owner_unavailable');
-          const receipt = decode<PublicFilterRepairWriterReceipt>(effect);
-          const locator = encode({
-            observation: q.snapshot.observation,
-            execution: input.execution,
-            page: ordinal,
-            item,
-          });
-          if (
-            receipt.locator !== locator ||
-            receipt.subject !== repair.source.subject ||
-            receipt.partition !== repair.source.partition ||
-            receipt.epoch !== repair.source.epoch ||
-            repairWriterPosition(receipt) < repair.source.position ||
-            receipt.incarnation !== q.consumer.incarnation
-          )
+          readSubjectEffect(ordinal, item, repair.source);
+        }
+        if (page.subject) {
+          meter.candidates++;
+          meter.inputKeys++;
+          meter.accessPoints++;
+          meter.dependencyPoints++;
+          admit();
+          if (page.subject.partition !== subjectPartition(page.subject.subject) || copies.has(page.subject.subject))
             throw new Failure('binding_mismatch');
-          validatePublicFilterRepairWriterEvidence(q.consumer.physicalTarget, receipt);
-          const previous = latest.get(receipt.subject);
-          if (
-            previous &&
-            (repairWriterPosition(receipt) < repairWriterPosition(previous) ||
-              receipt.enrollment.position <= previous.completion.position)
-          )
-            throw new Failure('binding_mismatch');
-          latest.set(receipt.subject, receipt);
-          copies.delete(receipt.subject);
+          readSubjectEffect(ordinal, 0, page.subject, true);
         }
         if (page.account) {
           meter.candidates++;

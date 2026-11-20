@@ -2,6 +2,10 @@ import { runCommand } from '../../src/command/command.ts';
 import { enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes } from '../../src/access/adapters/index.ts';
 import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import {
+  readPublicFilterCreationEvents,
+  type PublicFilterCreationWindow,
+} from '../../src/semantic/public-filter-creation-window.ts';
 import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
@@ -899,6 +903,7 @@ test('native Source replays its original creation window after the same home adv
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
+    const author = await f.create('schema:Person');
     const execution = await publicationJob(f, source, registered.consumer);
     const begun = await prepareSource(f, binding, {
       source,
@@ -1012,6 +1017,13 @@ test('native Source replays its original creation window after the same home adv
       async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
     );
 
+    await f.propose(book, author);
+    let nextKey = key + 1;
+    while (partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, String(nextKey)).route) !== openHome)
+      nextKey++;
+    const second = await f.create('schema:Person', {}, String(nextKey));
+
+    let checkedRange = false;
     let frontier: string | null = page.frontier;
     let prefixPredecessor: string | null | undefined;
     let fallbackPredecessor: string | undefined;
@@ -1035,9 +1047,16 @@ test('native Source replays its original creation window after the same home adv
         row &&
         decodePublicFilterNativeState<{
           windowBatch?: { from: number; examined: number; through?: string[] };
-          bridgeEvents?: { count: number };
-          input: { bridge?: { partition: number; position: bigint; through: bigint } };
-          next: { phase: string; partition: number; bridge?: { partition: number } };
+          bridgeEvents?: { count?: number; envelopes?: string };
+          input: { bridge?: PublicFilterCreationWindow };
+          next: {
+            phase: string;
+            partition: number;
+            bridge?: { partition: number };
+            subject: string | null;
+            bridgeThrough?: bigint;
+            resumeBridge?: PublicFilterCreationWindow;
+          };
         }>(row.state);
       if (window && window.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome)
         prefixPredecessor = frontier;
@@ -1058,10 +1077,53 @@ test('native Source replays its original creation window after the same home adv
           frontier: fallbackPredecessor,
         });
       }
+      if (window && window.input.bridge && window.next.subject === book) {
+        const original = window.input.bridge;
+        const successor = window.next.resumeBridge!;
+        const keys = { bootstrap: request.bootstrap.slice(2), window: original, accounts: false, subjectRange: true };
+        const meter = { inputKeys: 0, rows: 0, dependencyPoints: 0 };
+        const range = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, inputLimit: 64 },
+          readContext(),
+          meter,
+        );
+        expect(window.bridgeEvents?.envelopes).toBe(range.packed);
+        expect(range.next).toEqual(successor);
+        expect(range.envelopes.filter(({ subject }) => subject === book).length).toBeGreaterThan(1);
+        expect(window.next.bridgeThrough).toBe(BigInt(range.envelopes.at(-1)!.position));
+        expect(meter.inputKeys).toBe(3 + range.envelopes.length + 1);
+        const lookahead = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, window: successor, inputLimit: 1 },
+          readContext(),
+          meter,
+        );
+        expect(lookahead.event.subject).toBe(second);
+        const capped = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, inputLimit: 1 },
+          readContext(),
+          meter,
+        );
+        expect(capped.envelopes).toEqual(range.envelopes.slice(0, 1));
+        expect(capped.next.position <= successor.position).toBe(true);
+        const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+        expect(await restarted.repairPage(nextRequest, readContext())).toMatchObject({
+          status: 'progress',
+          frontier: next.frontier,
+        });
+        expect(await restarted.readRepairStep(stepRequest, readContext())).toMatchObject({
+          status: 'verified',
+          frontier: next.frontier,
+        });
+        checkedRange = true;
+      }
       const verified = await recovered.readRepairStep(stepRequest, readContext());
       if (window && window.input.bridge?.partition === openHome && window.next.phase === 'window') {
-        expect(window.input.bridge.position).toBeLessThanOrEqual(window.input.bridge.through);
-        expect(window.bridgeEvents?.count).toBeGreaterThan(0);
+        if (window.input.bridge.position <= window.input.bridge.through)
+          expect(window.bridgeEvents?.count).toBeGreaterThan(0);
+        else expect(window.bridgeEvents).toBeUndefined();
         expect(window.next.partition).toBe(openHome + 1);
         expect(await recovered.repairPage(nextRequest, readContext())).toMatchObject({
           status: 'progress',
@@ -1086,6 +1148,7 @@ test('native Source replays its original creation window after the same home adv
     }
     if (!fallbackPredecessor) throw new Error('Missing ordinary window replay');
     expect(closedWithEvents).toBe(true);
+    expect(checkedRange).toBe(true);
     expect(frontier).toBeNull();
     const closed = await f.db.pool.query<{ verified_home: number }>(
       `SELECT verified_home FROM semantic.public_filter_repair_step
