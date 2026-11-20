@@ -55,6 +55,51 @@ cuts in bounded immutable pages. Cleanup will honor outstanding holds, and priva
 pending interval until its captured subscriber set is accounted for. The receiver will independently verify
 the same native evidence before committing its own ACK. Persisted preparations retain their original protocol.
 
+### Core retention boundary
+
+On a co-located installation, the offline `core.enable_subject_retention_v1()` checks all 4096 active
+homes under the placement lock. The migration starts in legacy mode. Enabling the Core guard makes
+missing cleanup permission pending. Search admission still requires the privacy and receiver protocols.
+
+At home 0, commit `core.open_subject_subscription_v1(job, bootstrap)` before taking the first cut.
+Its returned `birth` identifies the original job, Source configuration, definition, meaning, consumer,
+target generation, incarnation and at most 64 canonical compiler keys (16 KiB together). Privacy captures `core.subject_membership_revision_v1()` in the interval
+transaction. It checks store and registration lineage and holds the membership and restore locks until commit. Seek `core.subject_subscription_key_v1(input_key,birth)`
+through that revision and resolve each birth in `core.subject_subscription_v1`. A key captured before
+birth belongs to the later subscriber's original population.
+
+`core.capture_subject_retention_page_v1(birth, first_home, end_home)` persists the next half-open interval
+of 1–32 homes. Each ordered entry binds home, epoch, home generation and the command and privacy positions
+as decimal strings. Retrying the original interval checks current lineage and returns its original cuts.
+Source must bind its Access revisions and enqueue carry to the same snapshot before using a page for enrollment.
+
+Maintenance calls `core.advance_subject_cleanup_v1(home)`. A call examines at most 32 births under the
+membership revision. An unresolved home returns pending. Each issued pair of inclusive positions is capped
+by original cuts and native legacy pins. A live privacy key holds both grants at the previous issued
+positions until its interval is accounted for. The local mutation checks the grant, both finite heads, restore
+generation, physical store and home lineage. The guard covers the outbox, privacy log and the write-basis
+transaction/epoch/position join. Acting-human provenance can still be cleared independently. A restore or
+placement fence invalidates the grant. Distributed placements require routed owner coordination before admission.
+Memberships and pages remain immutable through delivery and ACK. Closing them requires the future native
+retirement proof covering outstanding fanout, readers, copies and repairs.
+
+The native two-home fixture measured the following PostgreSQL user-table tuple visits and writes
+with seven compiler keys. Each operation below is one SQL call. The write count excludes row locks,
+index maintenance and WAL. Tuple visits exclude empty seeks and system catalogs. The guarded outbox update includes its local retention trigger.
+
+| Operation | Tuple visits | Row writes |
+| --- | ---: | ---: |
+| Open membership / resolve original on retry | 16 / 16 | 9 / 0 |
+| Capture two homes / recover original page | 25 / 29 | 1 / 0 |
+| Issue permit before membership birth | 7 | 1 |
+| Request permit for unresolved home | 8 | 0 |
+| Issue permit at saved base / repeat | 10 / 11 | 1 / 0 |
+| Minimize one permitted / held outbox slot | 23 / 7 | 1 / 0 |
+
+The ordinary create and hide each appended two original event slots and one write basis. Hide added one
+privacy-log entry. Both commands recorded zero scans and zero writes on the retention tables. The added
+legacy minimum indexes track checkpoint position and home enrollment position on their respective paths.
+
 ## Subject receiver ACK protocol
 
 The original Search preparation pins its ACK protocol at insertion. Production defaults to version 0.

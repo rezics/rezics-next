@@ -14389,6 +14389,13 @@ CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING 
 
 
 --
+-- Name: subject_retention_privacy_pin; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_retention_privacy_pin ON semantic.public_filter_home_enrollment USING btree (partition_no, source_position);
+
+
+--
 -- Name: term_head_active; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -16740,6 +16747,24 @@ CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON 
 --
 
 CREATE TRIGGER subject_record_purge_gate BEFORE DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
+
+
+--
+-- Name: public_filter_privacy_log subject_retention_privacy; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_retention_privacy BEFORE DELETE OR UPDATE ON semantic.public_filter_privacy_log FOR EACH ROW EXECUTE FUNCTION core.guard_subject_retention_v1('privacy');
+
+ALTER TABLE semantic.public_filter_privacy_log ENABLE ALWAYS TRIGGER subject_retention_privacy;
+
+
+--
+-- Name: public_filter_privacy_log subject_retention_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_retention_truncate BEFORE TRUNCATE ON semantic.public_filter_privacy_log FOR EACH STATEMENT EXECUTE FUNCTION core.guard_subject_retention_v1();
+
+ALTER TABLE semantic.public_filter_privacy_log ENABLE ALWAYS TRIGGER subject_retention_truncate;
 
 
 --

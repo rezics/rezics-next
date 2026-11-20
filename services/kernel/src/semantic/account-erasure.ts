@@ -294,10 +294,15 @@ async function minimizePayload(
   if (store === 'record_source_set' || store === 'record_source_set_member') return;
   if (store === 'write_basis') {
     const original = await tx.query(
-      'SELECT transaction_id FROM semantic.erasure_provenance WHERE partition_no=$1 AND record_key=$2',
-      [partition, key],
+      `SELECT p.transaction_id, $3 <> 'acting-human' AND EXISTS (
+         SELECT FROM editorial.write_basis b WHERE (b.partition_no,b.transaction_id)=(p.partition_no,p.transaction_id)
+           AND b.principal_kind='account' AND b.principal_id=$4
+           AND NOT core.subject_cleanup_allowed_v1(b.partition_no,b.epoch,b.position,'command')
+       ) AS held FROM semantic.erasure_provenance p WHERE p.partition_no=$1 AND p.record_key=$2`,
+      [partition, key, role, accountId],
     );
     if (!original.rowCount) return;
+    if (original.rows[0].held) return { defer: true, rawKeys: 1, bytes: 0 };
     const transactionId = original.rows[0].transaction_id;
     if (role === 'acting-human') {
       await tx.query(
