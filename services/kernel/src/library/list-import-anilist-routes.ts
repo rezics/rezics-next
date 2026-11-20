@@ -43,7 +43,7 @@ function detail(operation: string) {
   return {
     operationId: `library_import_anilist.${operation}`,
     'x-action': 'library_entry:update',
-    'x-exposure': 'gate:personal_library',
+    'x-exposure': 'gate:library_portability',
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: [{ bearerAuth: [] }],

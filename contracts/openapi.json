@@ -72934,14 +72934,14 @@
           }
         ],
         "x-action": "collection:update",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections",
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        },
-        "x-resource-types": [
-          "library.collection"
-        ]
+        }
       }
     },
     "/v1/collections": {
@@ -247420,7 +247420,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -248319,7 +248319,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -249216,7 +249216,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryExports/{id}/pages": {
@@ -251420,7 +251420,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryHostedReading": {
@@ -256033,7 +256033,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -256822,7 +256822,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -257606,7 +257606,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -258353,7 +258353,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -259124,7 +259124,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -259891,7 +259891,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -260683,7 +260683,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -261443,7 +261443,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -262358,7 +262358,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -263172,7 +263172,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -263937,7 +263937,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -264706,7 +264706,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -265436,7 +265436,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -266155,7 +266155,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/bangumi/{uploadId}/metadata/{ordinal}": {
@@ -266880,7 +266880,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/bangumi/{uploadId}/rows/{ordinal}/tags": {
@@ -267607,7 +267607,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/bangumi/{uploadId}:apply": {
@@ -268427,7 +268427,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 4096,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -269163,7 +269163,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -269938,7 +269938,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -270673,7 +270673,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -271467,7 +271467,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -272263,7 +272263,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -273010,7 +273010,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -273756,7 +273756,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -274574,7 +274574,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -275378,7 +275378,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -276231,7 +276231,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -277062,7 +277062,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -277920,7 +277920,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -278779,7 +278779,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -279640,7 +279640,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -280492,7 +280492,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -281308,7 +281308,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -282358,7 +282358,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -283165,7 +283165,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -283995,7 +283995,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 4194304,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -284824,7 +284824,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -286643,7 +286643,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/vndb/{uploadId}/dates/apply": {
@@ -287500,7 +287500,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -288356,7 +288356,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 16384,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -289166,7 +289166,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/vndb/{uploadId}/labels:apply": {
@@ -289994,7 +289994,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 32768,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -290825,7 +290825,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 32768,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -291734,7 +291734,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 32768,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -292553,7 +292553,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/vndb/{uploadId}/source": {
@@ -293361,7 +293361,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library"
+        "x-exposure": "gate:library_portability"
       }
     },
     "/v1/libraryImports/vndb/{uploadId}:apply": {
@@ -294557,7 +294557,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -295422,7 +295422,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -296251,7 +296251,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -297898,7 +297898,7 @@
           "schema:MusicRelease",
           "schema:Quotation"
         ],
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -298735,7 +298735,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 2048,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1
@@ -299629,7 +299629,7 @@
           "schema:Quotation"
         ],
         "x-body-limit": 12582976,
-        "x-exposure": "gate:personal_library",
+        "x-exposure": "gate:library_portability",
         "x-rate-limit": {
           "family": "write",
           "units": 1

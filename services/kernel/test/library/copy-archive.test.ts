@@ -233,7 +233,7 @@ afterEach(async () => {
   retainedUploads.clear();
 });
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ clock: () => new Date(now) });
+  f = await createProfileEntryFixture({ openLibraryPortability: true, clock: () => new Date(now) });
   owner = await f.identity(scopes);
   other = await f.identity(scopes);
   await f.grantLibraryGate(owner.actor.accountId);

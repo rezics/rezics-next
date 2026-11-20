@@ -39,7 +39,7 @@ const review = (id: string, body: unknown) => json('POST', `${base}/${id}:review
 const apply = (id: string, rows: { ordinal: number; reviewId: string }[]) =>
   json('POST', `${base}/${id}:apply`, { rows });
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
+  f = await createProfileEntryFixture({ openLibraryPortability: true, gameUnits: ['minute', 'episode'] });
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
   producerBearer = producer.bearer;

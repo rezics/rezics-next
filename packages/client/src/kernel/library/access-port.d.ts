@@ -20,7 +20,7 @@ import type { agentContributionAttribution as NativeAgentContributionAttribution
 import type { collectionAuthorizationPreparationWork as NativeCollectionAuthorizationPreparationWork, collectionMutationIsConcealed as NativeCollectionMutationIsConcealed, specializeCollectionList as NativeSpecializeCollectionList } from '../access/adapters/collection-policy.ts';
 import type { readAccountDiscoverySummaries as NativeReadAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import type { ACCESS_EVENTS as NativeAccessEvents } from '../access/events.ts';
-import type { admitLiveCopyRoles as NativeAdmitLiveCopyRoles, cancelLiveCopy as NativeCancelLiveCopy, consumeLiveCopy as NativeConsumeLiveCopy, finishLiveCopyGate as NativeFinishLiveCopyGate, liveCopyLocator as NativeLiveCopyLocator, observeLiveCopyAdmissions as NativeObserveLiveCopyAdmissions, openLiveCopyGate as NativeOpenLiveCopyGate, readLiveCopy as NativeReadLiveCopy, readLiveCopyDomain as NativeReadLiveCopyDomain, readLiveCopyResult as NativeReadLiveCopyResult } from '../access/live-copy.ts';
+import type { advanceListingBootstrap as NativeAdvanceListingBootstrap, admitLiveCopyRoles as NativeAdmitLiveCopyRoles, cancelLiveCopy as NativeCancelLiveCopy, consumeLiveCopy as NativeConsumeLiveCopy, finishLiveCopyGate as NativeFinishLiveCopyGate, liveCopyLocator as NativeLiveCopyLocator, observeLiveCopyAdmissions as NativeObserveLiveCopyAdmissions, openLiveCopyGate as NativeOpenLiveCopyGate, readLiveCopy as NativeReadLiveCopy, readLiveCopyDomain as NativeReadLiveCopyDomain, readLiveCopyResult as NativeReadLiveCopyResult } from '../access/live-copy.ts';
 type ResourceEligibility = ReturnType<typeof NativeCreateResourcePublicEligibility>;
 export type LibraryAccessPorts = Readonly<{
     deadlineClient: typeof NativeDeadlineClient;
@@ -65,6 +65,7 @@ export type LibraryAccessPorts = Readonly<{
     readLiveCopy: typeof NativeReadLiveCopy;
     readLiveCopyDomain: typeof NativeReadLiveCopyDomain;
     readLiveCopyResult: typeof NativeReadLiveCopyResult;
+    advanceListingBootstrap: typeof NativeAdvanceListingBootstrap;
     admitLiveCopyRoles: typeof NativeAdmitLiveCopyRoles;
     observeLiveCopyAdmissions: typeof NativeObserveLiveCopyAdmissions;
     openLiveCopyGate: typeof NativeOpenLiveCopyGate;
@@ -118,6 +119,7 @@ export declare const liveCopyLocator: LibraryAccessPorts['liveCopyLocator'];
 export declare const readLiveCopy: LibraryAccessPorts['readLiveCopy'];
 export declare const readLiveCopyDomain: LibraryAccessPorts['readLiveCopyDomain'];
 export declare const readLiveCopyResult: LibraryAccessPorts['readLiveCopyResult'];
+export declare const advanceListingBootstrap: LibraryAccessPorts['advanceListingBootstrap'];
 export declare const admitLiveCopyRoles: LibraryAccessPorts['admitLiveCopyRoles'];
 export declare const observeLiveCopyAdmissions: LibraryAccessPorts['observeLiveCopyAdmissions'];
 export declare const openLiveCopyGate: LibraryAccessPorts['openLiveCopyGate'];

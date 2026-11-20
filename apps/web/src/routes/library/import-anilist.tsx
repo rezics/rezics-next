@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
-import { prepareExposure } from '../../kernel/exposure';
+import { prepareExposure, useOperation } from '../../kernel/exposure';
 import { PersonalAniListImportPage } from '../../library/personal-anilist-import';
 import { nativeAniListImport } from '../../library/personal-anilist-import/native';
 import { AniListUnavailable } from '../../library/personal-anilist-import/states';
@@ -30,6 +30,7 @@ export const Route = createFileRoute('/library/import-anilist')({
 
 function AniListImportRoute() {
   const { available } = Route.useLoaderData();
-  if (!available) return <AniListUnavailable />;
+  const admitted = useOperation('library_import_anilist.preview');
+  if (!available || !admitted) return <AniListUnavailable />;
   return <PersonalAniListImportPage />;
 }

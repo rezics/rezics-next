@@ -1,7 +1,6 @@
 import type { SubjectReadingApplication } from '../subject-reading-application.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { Pool } from 'pg';
-import { type Item } from '../item.ts';
 import type { Access, AccessCheck, AccountActor, Resource } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 import { type SubjectRelationCountResponse } from '../counts.ts';
@@ -209,7 +208,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 };
                 response: {
                     200: {
-                        subject: Item;
+                        subject: import("../item.ts").Item;
                     };
                     201: {
                         subject: {

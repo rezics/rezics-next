@@ -338,7 +338,7 @@ export async function createOwnedErasureFixture() {
     if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${JSON.stringify(value)}`);
     return value;
   }
-  for (const group of ['collections', 'personal_library', 'reading_progress'])
+  for (const group of ['collections', 'personal_library', 'library_portability', 'reading_progress'])
     await json(people.staff, 'POST', `/v1/platform/exposure/${group}:open`, 200);
   await json(people.staff, 'POST', '/v1/grants', 201, {
     resource: { route: 0, id: GLOBAL_CONTEXT },

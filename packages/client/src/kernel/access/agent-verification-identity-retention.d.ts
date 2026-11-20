@@ -9,6 +9,7 @@ import { type AgentIdentitySourceKey, type HistoryBarrier } from '../history/con
 type AccountReceipt = Exclude<IdentityReceipt, {
     kind: 'subject.merge';
 }>;
+export declare function sameAccountIdentityNativeReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolean;
 /** Native-only receiver lookup. It does not recurse through the personal source and cannot
  * mint the ordinary source admission capability. The accepted reader owns the claim lock.
  */

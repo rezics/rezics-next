@@ -194,6 +194,7 @@ async function profileRatingFixture() {
   const db = await identityEpochDatabase();
   try {
     const f = await createProfileEntryFixture({
+      openLibraryPortability: true,
       ownerScopes: ['rating:vote'],
       pool: db.pool,
       databaseUrl: db.url,

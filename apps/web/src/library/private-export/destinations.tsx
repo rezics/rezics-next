@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { Link } from '@tanstack/react-router';
+import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { actionClass } from './controls';
@@ -17,6 +18,7 @@ const items: readonly { id: ArchiveRecoveryDestination; href: string; label: () 
 /** Each recovery owns its upload/reuse, review and confirmation. Export itself restores nothing. */
 export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveRecoveryDestination }) {
   const headingId = useId();
+  const exportAdmitted = useOperation('library_export.create');
   if (current === 'export') {
     const destinations = [
       {
@@ -70,7 +72,7 @@ export function ArchiveRecoveryDestinations({ current }: { current?: ArchiveReco
   return (
     <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
       {items
-        .filter((item) => item.id !== current)
+        .filter((item) => item.id !== current && (item.id !== 'export' || exportAdmitted))
         .map((item) => (
           <a
             key={item.href}

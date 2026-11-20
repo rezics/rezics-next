@@ -121,8 +121,8 @@ after resolving it. Seed does not continue after a failed persona step.
 Decision: `REZICS_DEV_VNDB_EXPORT` names the persona's actual private VNDB version 1.0 export; missing input stays
 unavailable and prevents a complete showcase report. The seed does not synthesize personal activity from catalogue
 records. Supply an owner-only regular UTF-8 file under `.temp/` before running `task seed:dev`; the native preview
-owns XML/version admission. The separate showcase client requests `library_entry:update` through the existing
-personal Library gate and own-account authority, without adding platform grants.
+owns XML/version admission. The separate showcase client uses `library_entry:update` and own-account authority. The local
+personal-list seed requires the operator to open `library_portability` explicitly.
 
 The mounted wrapper uses the generated authenticated Kernel client and the common `showcase.sqlite` upload journal.
 It seals the original persona, client, credential identity, destination, XML and idempotency key before sending.

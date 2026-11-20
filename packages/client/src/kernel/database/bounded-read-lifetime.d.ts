@@ -15,6 +15,7 @@ export declare class RetiredReadClientError extends Error {
 }
 export type BoundedReadLifetimeOptions = Readonly<{
     transaction?: 'repeatable-read-read-only';
+    mode?: 'command';
     deadlineError?: () => Error;
     mapError?: (error: unknown) => unknown;
     isUncertainError?: (error: unknown) => boolean;

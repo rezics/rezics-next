@@ -60,7 +60,7 @@ export type ZoneAuthorizationPage = Readonly<{
     ids: readonly string[];
     validate(client: ZoneQueryClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
-export type ZonePublicEligibilityPrepare<E> = Readonly<{
+export type ZonePublicEligibilityPrepare<_E> = Readonly<{
     pool: Pool;
     resource: Readonly<{
         route: number;

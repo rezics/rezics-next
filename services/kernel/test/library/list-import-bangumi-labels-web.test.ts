@@ -11,7 +11,7 @@ const wrapper = (collections: unknown[]) => ({
 });
 
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
 }, 120000);
 afterAll(async () => {
   await f?.close();

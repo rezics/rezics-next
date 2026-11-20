@@ -152,7 +152,7 @@ export type RealmRecent<T, M> = Readonly<{
         };
     }>[];
 }>;
-export type RealmCommunityPorts<D, C, B extends RealmCommunityBoard, T extends RealmCommunityThread, M, S extends RealmCommunitySelection> = Readonly<{
+export type RealmCommunityPorts<D, C, _B extends RealmCommunityBoard, T extends RealmCommunityThread, M, S extends RealmCommunitySelection> = Readonly<{
     recent(dependencies: D, board: string, context: C): Promise<{
         threads: readonly T[];
         complete: boolean;

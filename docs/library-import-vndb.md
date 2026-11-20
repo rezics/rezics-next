@@ -3,7 +3,8 @@
 The mounted Kernel API imports the authenticated person's uploaded `vndb-export version="1.0"` XML into reviewed
 personal state and selected native Progress, with explicit guarded score consent. It does not fetch or claim provider
 accounts, create catalogue subjects or holdings, change provider mappings, import aggregates, or publish notes/reviews.
-Web owns the interface; a changed re-import preserves the original Entry identity.
+The mounted methods require `library_portability` admission. Web owns the interface. A changed re-import
+preserves the original Entry identity.
 
 Imports owns the mounted personal-list caller and explicit unmatched match. It submits the supplied private export
 through the generated VNDB preview method, seals the exact body and idempotency key in the existing `ShowcaseJournal`,

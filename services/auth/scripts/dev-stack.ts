@@ -904,8 +904,8 @@ export async function openLocalShowcase(
   open: (input: { group: string; key: string }) => Promise<unknown>,
   scope: boolean | 'first-public-web' = false,
 ): Promise<void> {
-  // Importer keeps its development opening. Web uses the catalogue operator for source statistics
-  // and exposes only Collections, since personal_library also admits deferred personal-list imports.
+  // Importer keeps its development opening. The first-public Web walk opens Collections here
+  // and uses the catalogue operator for source statistics.
   const groups = new Set<string>(
     scope === 'first-public-web' ? ['collections'] : scope ? ['personal_library'] : showcaseOpenings,
   );

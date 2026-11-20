@@ -24,7 +24,7 @@ let f: NativeProfileFixture;
 let subjectId: string;
 let artifact: { manifest: Record<string, unknown>; records: Record<string, unknown>[] };
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ ownerScopes: scopes });
+  f = await createProfileEntryFixture({ openLibraryPortability: true, ownerScopes: scopes });
   for (const group of ['personal_library', 'reading_progress', 'collections'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   subjectId = await f.createSubject('game', 'Web archive recovery');

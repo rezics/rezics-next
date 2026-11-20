@@ -54,6 +54,7 @@ export declare function withIdentitySourceConsumerMaintenance<T>(deps: Readonly<
     client?: WorkClient;
     registry?: HistoryRegistry;
     selectedHistoryJob?: string;
+    independentSearchWriter?: true;
 }>, context: Readonly<{
     deadline: number;
 }>, body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>): Promise<T>;

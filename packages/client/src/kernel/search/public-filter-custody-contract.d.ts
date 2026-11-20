@@ -95,7 +95,9 @@ export type NativePublicFilterRepairSettlement = Readonly<{
     id: string;
     [privateProducerBrand]: true;
 }>;
-export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
+export type PublicFilterRepairSettlementResult = (CustodyFailure & Readonly<{
+    advanced?: true;
+}>) | Readonly<{
     status: 'settled';
     definition: CustodyRetainedDefinition;
     queried: PublicFilterQueriedObservation;

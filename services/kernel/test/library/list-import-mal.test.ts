@@ -13,7 +13,7 @@ const anime = (id: string, extra = '', status = 'Completed') =>
 const xml = (rows: string) => `<myanimelist><myinfo><user_name>private</user_name></myinfo>${rows}</myanimelist>`;
 let native: NativeProfileFixture;
 beforeAll(async () => {
-  native = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
+  native = await createProfileEntryFixture({ openLibraryPortability: true, gameUnits: ['minute', 'episode'] });
 }, 120_000);
 afterAll(async () => {
   await native?.close();

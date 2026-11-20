@@ -45,7 +45,7 @@ const response = <T>() => ({ 200: t.Unsafe<T>(t.Any()), ...errors() });
 const detail = (operation: string, write = true) => ({
   operationId: `library_vndb_labels.${operation}`,
   'x-action': 'library_entry:update',
-  'x-exposure': 'gate:personal_library',
+  'x-exposure': 'gate:library_portability',
   'x-authority-anchor': 'own-account',
   'x-authority-resource-types': Object.keys(bundledRelease.types),
   security: [{ bearerAuth: [] }],

@@ -53,7 +53,7 @@ async function review(person: Identity, id: string, kind?: string | null) {
   });
 }
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
   source = await f.identity(scopes);
   for (const group of ['collections', 'personal_library', 'reading_progress'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);

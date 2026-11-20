@@ -48,6 +48,8 @@ export type CreditSearchPage = Readonly<{
  * charge raw examined rows and nested label work against these bounds before performing the read.
  * Missing native support is unavailable, never a complete empty page. */
 export interface CreditSearchSource {
+    /** Private index input with the same complete coverage and currentness as the paged projection. */
+    projectForIndex?(workId: string): Promise<CreditSearchIndexProjection>;
     page(input: Readonly<{
         workId: string;
         after: string | null;

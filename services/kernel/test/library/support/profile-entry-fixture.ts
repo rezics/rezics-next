@@ -225,6 +225,7 @@ export async function createProfileEntryFixture(
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
+    openLibraryPortability?: boolean;
     growthSubjectCount?: number;
   } = {},
 ) {
@@ -916,6 +917,10 @@ export async function createProfileEntryFixture(
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);
     await setLibraryOpen(true);
+    if (options.openLibraryPortability) {
+      const opened = await send('steward', 'POST', '/v1/platform/exposure/library_portability:open');
+      expect(opened.status).toBe(200);
+    }
     // A native, authorized baseline must finish before any expected missing profile behavior.
     const baseline = await createSubject('game');
     const accepted = await withRequestDeadline(Date.now() + 30_000, () =>

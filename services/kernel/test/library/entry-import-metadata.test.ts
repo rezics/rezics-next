@@ -42,7 +42,7 @@ async function personal() {
 }
 
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
   const importer = await f.identity(['subject:batch_write', 'subject:read']);
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
     { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },

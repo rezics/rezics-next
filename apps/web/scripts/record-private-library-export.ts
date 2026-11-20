@@ -73,7 +73,7 @@ async function recordExport(): Promise<number> {
     await sql(
       `INSERT INTO access.exposure_opening("group",valid,transaction_id)
     SELECT g,tstzrange('2020-01-01',NULL,'[)'),$1 FROM unnest($2::text[]) g`,
-      [owner, ['personal_library', 'reading_progress', 'collections']],
+      [owner, ['personal_library', 'library_portability', 'reading_progress', 'collections']],
     );
     await sql(
       `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES($1,$2,'schema:Book',$3)`,

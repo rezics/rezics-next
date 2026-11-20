@@ -4,6 +4,7 @@ import { ArchiveEntryRecoveryView } from '../src/library/archive-entry-recovery/
 import { ArchiveEntryRecoveryJourney } from '../src/library/archive-entry-recovery/controller';
 import { archiveRecoveryNative } from '../src/library/archive-entry-recovery/native';
 import { createKernelClient } from '@rezics/client';
+import { operationIsAdmitted } from '../src/kernel/exposure';
 import { libraryNavigation } from '../src/library/navigation';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
@@ -25,8 +26,12 @@ test('Library offers a distinct signed-in archive recovery destination beside ex
     match: 'exact',
     group: 'personal',
   });
-  expect(libraryNavigation.some((item) => item.href === '/library/export')).toBe(true);
-  expect(libraryNavigation.some((item) => item.href === '/library/import-mal')).toBe(true);
+  for (const href of ['export', 'import-anilist', 'import-bangumi', 'import-mal', 'import-vndb']) {
+    const operation = libraryNavigation.find((item) => item.href === `/library/${href}`)?.operation;
+    expect(operation).toBeDefined();
+    expect(operationIsAdmitted(operation!, ['personal_library'])).toBe(false);
+    expect(operationIsAdmitted(operation!, ['personal_library', 'library_portability'])).toBe(true);
+  }
   expect(libraryNavigation.some((item) => item.href === '/library/recover-progress')).toBe(true);
 });
 
@@ -66,7 +71,7 @@ test('Every locale mounts native file admission and explains the supported branc
       expect(html).toContain('<details open=""');
       expect(html).not.toContain('id="archive-rows"');
       expect(html).toContain(`href="/${locale}/library"`);
-      expect(html).toContain(`href="/${locale}/library/export"`);
+      expect(html).not.toContain(`href="/${locale}/library/export"`);
       expect(html).toContain(`href="/${locale}/library/recover-collections"`);
       expect(html).toContain(`href="/${locale}/library/recover-progress"`);
       expect(html).not.toContain('data-upload-id');

@@ -54,7 +54,16 @@ const group = 'fixture_group';
 const groupAction = `gate:${group}`;
 const fixtureAction = 'fixture:read';
 const siblingAction = 'fixture:inspect';
-const clientScopes = ['access:grant', 'exposure:open', 'exposure:close', 'gate:any', fixtureAction, siblingAction];
+const libraryScopes = ['follow:list', 'library_entry:list', 'library_entry:update', 'progress_session:list'];
+const clientScopes = [
+  'access:grant',
+  'exposure:open',
+  'exposure:close',
+  'gate:any',
+  fixtureAction,
+  siblingAction,
+  ...libraryScopes,
+];
 const fixtures = [
   { method: 'GET', path: '/v1/public-fixture', operationId: 'fixture.public_read', exposure: 'public' },
   { method: 'GET', path: '/v1/gated-fixture', operationId: 'fixture.gated_read', exposure: `gate:${group}` },
@@ -433,6 +442,56 @@ test('an opened group appears for everyone from T and disappears again at close'
       await post(`/v1/platform/exposure/${group}:close`, staff.bearer);
     }
     clockTime = new Date('2026-06-01T12:00:00.000Z');
+  }
+});
+
+test('ordinary Library opening leaves the mounted personal portability routes closed', async () => {
+  const bearer = await issue(ordinary.email, libraryScopes);
+  const opening = new Date(Date.now() - 180_000);
+  const opened: string[] = [];
+  const originalClock = clockTime;
+  clockTime = opening;
+  try {
+    for (const group of ['personal_library', 'reading_progress']) {
+      const result = await post(`/v1/platform/exposure/${group}:open`, staff.bearer);
+      expect(result.response.status, JSON.stringify(result.body)).toBe(200);
+      opened.push(group);
+    }
+
+    const { body } = await get('/v1/platform/exposure', bearer);
+    expect(body.admitted).toContain('personal_library');
+    expect(body.admitted).not.toContain('library_portability');
+
+    const { document } = await documentFor(bearer);
+    const visible = operationIds(document);
+    for (const operation of ['library_entry.list', 'follow.list', 'library_continue.list'])
+      expect(visible).toContain(operation);
+    const portability = mountedOperations().filter(({ operationId }) =>
+      /^library_(export|import_anilist|bangumi|mal|vndb|vndb_labels)\./.test(operationId),
+    );
+    expect(portability.length).toBeGreaterThan(6);
+    for (const { operationId, exposure } of portability) {
+      expect(exposure, operationId).toBe('gate:library_portability');
+      expect(visible).not.toContain(operationId);
+    }
+
+    const id = newId(routeOf(ordinary.accountId)!);
+    for (const path of [
+      `/v1/libraryExports/${id}`,
+      `/v1/libraryImports/anilist/${id}`,
+      `/v1/libraryImports/bangumi/${id}`,
+      `/v1/libraryImports/mal/${id}`,
+      `/v1/libraryImports/vndb/${id}`,
+      `/v1/libraryImports/vndb/${id}/labels`,
+    ]) {
+      const denied = await get(path, bearer);
+      expect(denied.response.status, path).toBe(403);
+      expect(denied.body, path).toMatchObject({ code: 'platform_closed' });
+    }
+  } finally {
+    clockTime = new Date(opening.getTime() + 1);
+    for (const group of opened) await post(`/v1/platform/exposure/${group}:close`, staff.bearer);
+    clockTime = originalClock;
   }
 });
 

@@ -89,6 +89,7 @@ export type BookPagePublication = {
     identityEpoch?: Promise<string>;
     generation?: Promise<number>;
     sortFormat?: Promise<number | null>;
+    nameOrdered?: Promise<boolean>;
     observation?: Promise<SearchObservation>;
 };
 export type PublicSearchReadContext = Readonly<{
