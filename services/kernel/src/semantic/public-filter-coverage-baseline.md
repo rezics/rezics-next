@@ -63,9 +63,15 @@ settlement and continuity in the same transaction as its 0-to-4096 CAS. The trig
 the inserting transaction. A later withdrawal keeps its pending key and current delta across historical
 readback. Publication still reopens the settlement and original population start.
 
-Before ordinary selection changes, Semantic population and Book withdrawal readers must qualify effective
-ACK membership and explicit superseding receipts. Discovery keeps its materialized protocol. Search
-writer admission, copy erasure and target retirement must qualify the retained proof lifetime.
+Population and Book withdrawal readers resolve the original manifest, terminal and retention clock in their
+statement snapshot. The manifest supplies the ACK origin. Each home supplies the position, native enqueue
+and nullable revisions from its immutable baseline. The explicit receiver operation proves that same tuple.
+A higher materialized position requires independent settlement evidence before it can supersede the baseline.
+
+Dirty reads seek the registration’s delta index. Book capture checks up to nine homes against its limit of
+eight withdrawals. A missing cut yields pending. The changed-generation seek remains independent at population
+start and final. Discovery uses its materialized ACK protocol. Ordinary v1 selection awaits composed serving,
+writer admission, copy erasure and target retirement qualification.
 
 ## Serving from published catalogue coverage
 

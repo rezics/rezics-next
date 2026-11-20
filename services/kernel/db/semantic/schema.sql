@@ -3823,17 +3823,59 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 
 --
+-- Name: public_filter_ack_origin(text, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_ack_origin(registration_id text, original uuid) RETURNS TABLE(job uuid, observation text, execution text, settlement text, terminal uuid, ack_after integer)
+    LANGUAGE sql STABLE ROWS 1
+    AS $$
+  SELECT m.job,m.observation,m.execution,m.settlement,m.terminal,t.ack_after
+  FROM search.public_filter_ack_manifest m
+  JOIN search.public_filter_ack_authority a ON
+    (a.partition_no,a.job,a.registration,a.bootstrap,a.observation,a.execution,a.physical_target,a.incarnation,
+     a.owner_epoch,a.generation,a.enrollment_root,a.identity_digest)=
+    (m.partition_no,m.job,m.registration,m.bootstrap,m.observation,m.execution,m.physical_target,m.incarnation,
+     m.owner_epoch,m.generation,m.enrollment_root,m.identity_digest)
+  JOIN search.public_filter_repair_verification v ON (v.partition_no,v.observation,v.execution,v.evidence_revision)=
+    (m.partition_no,m.observation,m.execution,m.evidence_revision)
+  JOIN search.public_filter_ack_range r ON
+    (r.revision,r.digest,r.job,r.partition_no,r.registration,r.bootstrap,r.binding,r.identity_digest,
+     r.first_home,r.width,r.enrollment_root)=
+    (m.root_revision,m.root_digest,m.job,m.partition_no,m.registration,m.bootstrap,m.binding,m.identity_digest,
+     0,4096,m.enrollment_root)
+  JOIN semantic.public_filter_repair_step t ON
+    (t.partition_no,t.bootstrap,t.execution,t.step,t.verified_binding,t.verified_root,t.verified_ordinal)=
+    (m.partition_no,m.bootstrap,m.execution,m.terminal,m.binding,m.terminal_root,m.ordinal)
+  JOIN search.public_filter_ack_home_clock k ON
+    (k.partition_no,k.registration,k.bootstrap,k.first_home,k.width)=(m.partition_no,m.registration,m.bootstrap,0,4096)
+  WHERE (m.partition_no,m.registration,m.bootstrap)=(0,registration_id,original)
+    AND m.version=1 AND m.committed_by IS DISTINCT FROM pg_current_xact_id_if_assigned()
+    AND t.complete AND t.verified_next IS NULL
+    AND search.public_filter_ack_settlement_digest(a.repair_settlement::jsonb->1)=m.settlement_digest
+    AND m.continuity=(SELECT sha256(uuid_send(k.incarnation)||int8send(k.continuity)||
+      sha256(convert_to(jsonb_agg(jsonb_build_array(w.physical_target,w.lane,w.revision)
+        ORDER BY w.physical_target,w.lane)::text,'UTF8')))
+      FROM search.public_filter_repair_authority w WHERE w.physical_target IN ('','@ack-retention') HAVING count(*)=8)
+$$;
+
+
+--
 -- Name: public_filter_book_dirty_homes(text); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
 CREATE FUNCTION semantic.public_filter_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
-    LANGUAGE sql STABLE
+    LANGUAGE plpgsql STABLE ROWS 9
     SET enable_seqscan TO 'off'
     AS $$
-  SELECT h.* FROM search.public_filter_coverage_home h
-  WHERE h.partition_no = 0 AND h.registration = registration_id AND h.behind
-  ORDER BY h.source_home LIMIT 9
-$$;
+BEGIN
+  IF EXISTS (SELECT FROM search.public_filter_coverage_home h JOIN search.public_filter_coverage_preparation c
+      ON (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap)
+      WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,0) AND c.ack_protocol=1) THEN
+    RAISE EXCEPTION 'A manifest ACK requires its original bootstrap' USING ERRCODE='40001';
+  END IF;
+  RETURN QUERY SELECT h.* FROM search.public_filter_coverage_home h
+    WHERE h.partition_no=0 AND h.registration=registration_id AND h.behind ORDER BY h.source_home LIMIT 9;
+END $$;
 
 
 --
@@ -3886,6 +3928,71 @@ CREATE FUNCTION semantic.public_filter_committed_ack(original_bootstrap uuid, or
     FOR SHARE OF a,m,r,v
   )
 $$;
+
+
+--
+-- Name: public_filter_effective_homes(text, uuid, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_effective_homes(registration_id text, original uuid, point integer DEFAULT NULL::integer, home_limit integer DEFAULT 9) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE plpgsql STABLE ROWS 9
+    SET enable_seqscan TO 'off'
+    AS $$
+DECLARE
+  protocol smallint;
+  origin record;
+  h search.public_filter_coverage_home%ROWTYPE;
+BEGIN
+  IF home_limit IS NULL OR home_limit NOT BETWEEN 1 AND 9 OR point NOT BETWEEN 0 AND 4095 THEN
+    RAISE EXCEPTION 'Invalid effective ACK home range' USING ERRCODE='22023';
+  END IF;
+  SELECT c.ack_protocol INTO protocol FROM search.public_filter_coverage_preparation c
+    WHERE (c.partition_no,c.registration,c.bootstrap)=(0,registration_id,original);
+  IF protocol=0 THEN
+    IF point IS NULL THEN
+      RETURN QUERY SELECT raw.* FROM search.public_filter_coverage_home raw
+        WHERE (raw.partition_no,raw.registration)=(0,registration_id) AND raw.behind
+        ORDER BY raw.source_home LIMIT home_limit;
+    ELSE
+      RETURN QUERY SELECT raw.* FROM search.public_filter_coverage_home raw
+        WHERE (raw.partition_no,raw.registration,raw.source_home)=(0,registration_id,point);
+    END IF;
+    RETURN;
+  END IF;
+  SELECT * INTO origin FROM semantic.public_filter_ack_origin(registration_id,original) WHERE protocol=1;
+  IF NOT FOUND THEN
+    h.partition_no := 0;
+    h.registration := registration_id;
+    h.source_home := point;
+    h.behind := true;
+    RETURN NEXT h;
+    RETURN;
+  END IF;
+
+  FOR h IN
+    (SELECT raw.* FROM search.public_filter_coverage_home raw WHERE point IS NULL
+       AND (raw.partition_no,raw.registration)=(0,registration_id) AND raw.baseline_delta
+       ORDER BY raw.source_home LIMIT home_limit)
+    UNION ALL
+    SELECT raw.* FROM search.public_filter_coverage_home raw WHERE point IS NOT NULL
+      AND (raw.partition_no,raw.registration,raw.source_home)=(0,registration_id,point)
+  LOOP
+    -- The explicit ACK writer currently proves exactly the enrolled tuple. A
+    -- newer raw position has no independent covering receipt on this protocol.
+    SELECT b.bootstrap,b.source_position,b.native_enqueue_revision,b.native_revision,b.native_claim_revision,
+        origin.observation,origin.execution,origin.settlement
+      INTO h.acknowledged_baseline,h.acknowledged_position,h.acknowledged_native_enqueue,h.acknowledged_native_revision,
+        h.acknowledged_native_claim_revision,h.acknowledged_observation,h.acknowledged_execution,h.acknowledged_settlement
+      FROM search.public_filter_coverage_baseline b
+      WHERE (b.partition_no,b.registration,b.bootstrap,b.source_home)=(0,registration_id,original,h.source_home)
+        AND b.source_epoch=h.source_epoch AND h.baseline_bootstrap=original AND h.baseline_delta IS NOT NULL;
+    h.behind := NOT FOUND OR h.relevant_position>h.acknowledged_position
+      OR h.native_enqueue_revision>h.acknowledged_native_enqueue
+      OR h.native_revision IS DISTINCT FROM h.acknowledged_native_revision
+      OR h.native_claim_revision IS DISTINCT FROM h.acknowledged_native_claim_revision;
+    IF point IS NOT NULL OR h.behind THEN RETURN NEXT h; END IF;
+  END LOOP;
+END $$;
 
 
 --
@@ -3975,7 +4082,7 @@ JOIN semantic.public_filter_read_definition d ON (d.partition_no,d.read_definiti
 JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration)=(0,d.source_id,d.configuration)
 JOIN core.partition p ON p.partition_no=0 AND p.epoch=b.owner_epoch AND s.owner_epoch=p.epoch AND p.write_state='active'
 JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=(0,r.id,b.bootstrap)
-  AND c.population_protocol=1 AND c.after_home=4096 AND c.generation=b.coverage_generation
+  AND c.ack_protocol=0 AND c.population_protocol=1 AND c.after_home=4096 AND c.generation=b.coverage_generation
   AND c.root=b.coverage_root AND c.definition=d.read_definition AND c.consumer=r.consumer
 JOIN search.public_filter_coverage_baseline last_home ON
   (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=(0,r.id,b.bootstrap,4095)
@@ -4074,7 +4181,7 @@ JOIN LATERAL (
   AND j.execution=b.publication_execution AND b.queried=j.observation AND b.state='adopted'
   AND b.snapshot_kind='prepared' AND b.coverage_sealed AND b.coverage_after=4096 AND b.account_after=4096
 JOIN LATERAL (
-  SELECT seal.complete,seal.ack_after FROM semantic.public_filter_repair_step seal
+  SELECT seal.step,seal.complete,seal.ack_after FROM semantic.public_filter_repair_step seal
   WHERE (seal.partition_no,seal.bootstrap,seal.execution)=(0,b.bootstrap,b.publication_execution)
     AND seal.verified_root IS NOT NULL AND seal.verified_next IS NULL LIMIT 1
 ) seal ON seal.complete AND seal.ack_after=4096
@@ -4110,6 +4217,10 @@ JOIN LATERAL (
   WHERE (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=(0,r.id,b.bootstrap,4095) LIMIT 1
 ) last_home ON last_home.root=c.root
 WHERE (SELECT count(*) FROM candidates)=1
+  AND (c.ack_protocol=0 OR EXISTS (
+    SELECT FROM semantic.public_filter_ack_origin(r.id,b.bootstrap) m
+    WHERE (m.job,m.observation,m.execution,m.terminal,m.ack_after)=(j.job,j.observation,j.execution,seal.step,4096)
+  ))
   AND '["scope","catalogue-text"]'=ANY(d.coverage_keys)
   AND child.coverage_keys <@ (d.coverage_keys || $5)
 $_$;

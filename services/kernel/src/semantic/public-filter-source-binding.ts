@@ -3091,9 +3091,8 @@ export function createNativePublicFilterSourceBinding(
                   p.epoch,p.position,'begun',parent.generation,parent.job,parent.withdrawals
            FROM cut parent JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=$9
            WHERE NOT EXISTS (
-             SELECT 1 FROM search.public_filter_coverage_home h
-             WHERE (h.partition_no,h.registration)=(0,parent.registration) AND h.behind
-               ${bookList ? 'AND semantic.public_filter_book_withdrawal_covers(h,parent.bootstrap,parent.withdrawals) IS NOT TRUE' : ''}
+             SELECT 1 FROM semantic.public_filter_effective_homes(parent.registration,parent.bootstrap,NULL,${bookList ? '9' : '1'}) h
+               ${bookList ? 'WHERE semantic.public_filter_book_withdrawal_covers(h,parent.bootstrap,parent.withdrawals) IS NOT TRUE' : ''}
            ) AND NOT EXISTS (
              SELECT 1 FROM semantic.public_filter_privacy_pending k
              WHERE k.live AND k.input_key=ANY(parent.coverage_keys || $4::text[])
@@ -3130,8 +3129,10 @@ export function createNativePublicFilterSourceBinding(
           // is scanning, verifying writers or acknowledging the receiver homes. The
           // adopted job owns its evidence after the preparation PIT expires.
           const pending = await db.query<{ bootstrap: string; complete: boolean }>(
-            `/* semantic.native-keyed:8:11 */
+            `/* semantic.native-keyed:9:12 */
              SELECT b.bootstrap::text,coalesce(seal.ready,false) AS complete FROM search.public_filter_coverage_home h
+             JOIN search.public_filter_coverage_preparation c ON
+               (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap) AND c.ack_protocol=0
              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,h.baseline_bootstrap)
              JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,b.queried)
              LEFT JOIN LATERAL (

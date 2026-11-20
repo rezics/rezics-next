@@ -171,6 +171,18 @@ test('original Subject receiver manifest survives lost commits and leaves a late
         )
       ).rows,
     ).toHaveLength(0);
+    const cut = [original[0].registration, original[0].bootstrap];
+    const effective = `SELECT source_home,behind,acknowledged_observation,acknowledged_execution,acknowledged_settlement,
+      relevant_position>acknowledged_position AS later FROM semantic.public_filter_effective_homes($1,$2,$3) ORDER BY source_home`;
+    const receipt = {
+      acknowledged_observation: original[0].observation,
+      acknowledged_execution: original[0].execution,
+      acknowledged_settlement: original[0].settlement,
+    };
+    expect((await f.db.admin.query(effective, [...cut, null])).rows).toEqual([]);
+    expect((await f.db.admin.query(effective, [...cut, home])).rows).toEqual([
+      { source_home: home, behind: false, later: false, ...receipt },
+    ]);
     // Loss of the original terminal Search page invalidates its historical
     // evidence even while the execution still holds the same closed settlement.
     const probe = await f.db.admin.connect();
@@ -194,6 +206,10 @@ test('original Subject receiver manifest survives lost commits and leaves a late
           ])
         ).rows,
       ).toEqual([{ valid: false }]);
+      expect((await probe.query(effective, [...cut, home])).rows[0]).toMatchObject({
+        behind: true,
+        acknowledged_settlement: null,
+      });
     } finally {
       await probe.query('ROLLBACK');
       probe.release();
@@ -233,6 +249,72 @@ test('original Subject receiver manifest survives lost commits and leaves a late
     expect(receiverCommits).toBe(1);
     expect(await manifests()).toEqual(original);
     expect((await dirty()).rows).toEqual([{ later: true, baseline_delta: true, changed: true }]);
+    const reader = await f.db.admin.connect();
+    try {
+      await reader.query('BEGIN');
+      const visits = async () =>
+        Number(
+          (
+            await reader.query(`SELECT seq_tup_read+idx_tup_fetch AS visits FROM pg_stat_xact_user_tables
+          WHERE relid='search.public_filter_coverage_home'::regclass`)
+          ).rows[0].visits,
+        );
+      const before = await visits();
+      expect((await reader.query(effective, [...cut, null])).rows).toEqual([
+        { source_home: home, behind: true, later: true, ...receipt },
+      ]);
+      expect((await visits()) - before).toBeLessThanOrEqual(9);
+      // The real settlement ID proves only its original position, even if copied onto a later raw ACK.
+      await reader.query(
+        `UPDATE search.public_filter_coverage_home SET acknowledged_position=relevant_position,
+          acknowledged_native_enqueue=native_enqueue_revision,acknowledged_native_revision=native_revision,
+          acknowledged_native_claim_revision=native_claim_revision,acknowledged_baseline=baseline_bootstrap,
+          acknowledged_observation=$3,acknowledged_execution=$4,acknowledged_settlement=$5,behind=false
+         WHERE (partition_no,registration,source_home)=(0,$1,$2)`,
+        [
+          cut[0],
+          home,
+          receipt.acknowledged_observation,
+          receipt.acknowledged_execution,
+          receipt.acknowledged_settlement,
+        ],
+      );
+      expect((await reader.query(effective, [...cut, home])).rows).toEqual([
+        { source_home: home, behind: true, later: true, ...receipt },
+      ]);
+      await reader.query(
+        `UPDATE search.public_filter_coverage_home SET native_enqueue_revision=native_enqueue_revision+1
+        WHERE (partition_no,registration)=(0,$1) AND source_home BETWEEN 0 AND 11`,
+        [cut[0]],
+      );
+      expect((await reader.query(effective, [...cut, null])).rows.map((row) => row.source_home)).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8,
+      ]);
+      // Retire the current home and its receipt outside the lookahead, under their foreign keys.
+      await reader.query(
+        `DELETE FROM search.public_filter_coverage_home
+         WHERE (partition_no,registration,baseline_bootstrap,source_home)=(0,$1,$2,4095)`,
+        cut,
+      );
+      await reader.query(
+        `DELETE FROM search.public_filter_coverage_baseline
+        WHERE (partition_no,registration,bootstrap,source_home)=(0,$1,$2,4095)`,
+        cut,
+      );
+      expect((await reader.query(effective, [...cut, null])).rows).toEqual([
+        {
+          source_home: null,
+          behind: true,
+          later: null,
+          acknowledged_observation: null,
+          acknowledged_execution: null,
+          acknowledged_settlement: null,
+        },
+      ]);
+    } finally {
+      await reader.query('ROLLBACK');
+      reader.release();
+    }
   } finally {
     try {
       await f.db.admin.query(

@@ -16,7 +16,7 @@ WITH input AS (
   LIMIT 1
 ), dirty AS MATERIALIZED (
   SELECT h.* FROM parent p
-  CROSS JOIN LATERAL semantic.public_filter_book_dirty_homes(p.registration) h
+  CROSS JOIN LATERAL semantic.public_filter_effective_homes(p.registration,p.bootstrap) h
 ), reusable AS MATERIALIZED (
   SELECT prior.book_withdrawals AS withdrawals FROM parent p
   LEFT JOIN LATERAL (

@@ -39,9 +39,9 @@ WITH input AS (SELECT $5::text[] AS text_keys,$6::jsonb AS withdrawals,$7::bigin
 ), behind AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM population b
   CROSS JOIN LATERAL (
-    SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration) AND h.behind
-      AND semantic.public_filter_book_withdrawal_covers(h,b.coverage_bootstrap,b.book_withdrawals) IS NOT TRUE
+    SELECT source_home,source_epoch FROM semantic.public_filter_effective_homes(
+      b.coverage_registration,b.coverage_bootstrap,NULL,CASE WHEN b.book_withdrawals IS NULL THEN 1 ELSE 9 END) h
+    WHERE semantic.public_filter_book_withdrawal_covers(h,b.coverage_bootstrap,b.book_withdrawals) IS NOT TRUE
     ORDER BY source_home LIMIT 1
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
 ), changed AS MATERIALIZED (

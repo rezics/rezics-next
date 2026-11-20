@@ -61,7 +61,11 @@ binding AS MATERIALIZED (
     AND c.after_home=4096 AND c.population_protocol=1
     AND (
       (b.coverage_publication IS NULL AND b.account_after=4096 AND b.coverage_sealed AND b.coverage_after=4096
-       AND c.root=b.coverage_root AND c.generation=b.coverage_generation AND c.definition=d.read_definition AND c.consumer=r.consumer)
+       AND c.root=b.coverage_root AND c.generation=b.coverage_generation AND c.definition=d.read_definition AND c.consumer=r.consumer
+       AND (c.ack_protocol=0 OR EXISTS (
+         SELECT FROM semantic.public_filter_ack_origin(r.id,b.bootstrap) m
+         WHERE (m.job,m.observation,m.execution,m.ack_after)=(b.publication_job,o.observation,b.publication_execution,4096)
+       )))
       OR (attached.job=b.coverage_publication AND attached.generation>=b.coverage_generation
           AND b.coverage_generation>=attached.covered_generation
           AND c.root=attached.coverage_root AND c.generation=attached.covered_generation
@@ -129,9 +133,9 @@ binding AS MATERIALIZED (
 ), behind AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM population b
   CROSS JOIN LATERAL (
-    SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration) AND h.behind
-      AND semantic.public_filter_book_withdrawal_covers(h,b.coverage_bootstrap,b.book_withdrawals) IS NOT TRUE
+    SELECT source_home,source_epoch FROM semantic.public_filter_effective_homes(
+      b.coverage_registration,b.coverage_bootstrap,NULL,CASE WHEN b.book_withdrawals IS NULL THEN 1 ELSE 9 END) h
+    WHERE semantic.public_filter_book_withdrawal_covers(h,b.coverage_bootstrap,b.book_withdrawals) IS NOT TRUE
     ORDER BY source_home LIMIT 1
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
 ), changed AS MATERIALIZED (
