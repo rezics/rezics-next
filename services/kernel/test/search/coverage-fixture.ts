@@ -206,6 +206,7 @@ export async function createCoverageFixture(resources?: CoverageFixtureResources
       raw,
       close,
       accountId,
+      routeKey,
       async settleIdentity() {
         const relay = linkProjection(runtimePool);
         let changed;

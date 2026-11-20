@@ -48,6 +48,13 @@ physical name. Enrollment increments the native generation under that gate's loc
 absence. Native dispatch commits before the transport call, and recovery cannot revoke a dispatched attempt.
 Each home is released before Source or engine work; no connection spans external I/O.
 
+On live Subject outbox replay, enrollment can replace an ordinary still-enrolled token without a repair
+locator in the same home, owner epoch and physical incarnation. It uses the original enrollment's keyed outbox
+position and allows 30 seconds for a concurrent writer to make progress. The open publication and home gates,
+structural close check and atomic token replacement serialize recovery with dispatch. The previous visible
+receipt and Source position survive until the replacement settles. The worker resumes from the existing
+checkpoint on its normal relay scan, re-reads current Source and advances only after refresh-visible settlement.
+
 Each newly created physical Subject index receives a fresh opaque write alias in the same engine creation request.
 The guard never installs or repairs an alias on an existing index. Missing legacy allocation metadata is unavailable.
 Guarded bulk uses that alias with `require_alias`, all active shards, external versions and refresh visibility,
