@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, writeFileSync, utimesSync } from 'node:fs';
+import { readFileSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
 import { PoolPolicyReloader, choosePoolWithFallback, readPoolPolicies } from './pools.ts';
 import { harness, reading } from './test-support.ts';
 
@@ -122,8 +122,11 @@ test('same-mtime pool edits reject invalid roots and adopt corrected and empty p
     utimesSync(path, stamp, stamp);
     const reloader = new PoolPolicyReloader(path, h.settings.pools, (message) => events.push(message));
     const replace = (value: object | null) => {
-      writeFileSync(path, JSON.stringify(value));
-      utimesSync(path, stamp, stamp);
+      // Atomic replacements preserve the chosen mtime and provide distinct file identities.
+      const replacement = `${path}.next`;
+      writeFileSync(replacement, JSON.stringify(value));
+      utimesSync(replacement, stamp, stamp);
+      renameSync(replacement, path);
       return reloader.read();
     };
     local.pools[0].policy.reservePercent = 1;

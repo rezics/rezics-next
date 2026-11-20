@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
-import { harness, markdown } from './test-support.ts';
+import { harness, markdown, temporaryDirectory } from './test-support.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
 import { fixturePool } from './test-support.ts';
 import { storybookServers } from './storybook.ts';
@@ -404,29 +403,40 @@ test('official CLI flags preserve dash-leading prompts, per-pool configuration, 
 });
 
 test('Codex workers keep the account MCP servers and add only the worktree Storybook servers', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-mcp-'));
+  const directory = temporaryDirectory();
+  const path = join(directory.path, 'config.toml');
   const config = '[mcp_servers.browser]\nurl = "http://127.0.0.1:1/mcp"\n[mcp_servers."two.part"]\ncommand = "x"\n';
-  writeFileSync(join(directory, 'config.toml'), config);
-  const servers = (worktree: string) =>
-    storybookServers(worktree, { kind: 'interface', paths: ['apps/web/src/a.tsx'] });
-  const overrides = (worktree: string, extra: { resumeSession?: string; consultation?: boolean } = {}) => {
+  const servers = [
+    { name: 'storybook_ui', url: 'http://127.0.0.1:21001/mcp' },
+    { name: 'storybook_web', url: 'http://127.0.0.1:21002/mcp' },
+  ];
+  const launchArgs = (extra: { resumeSession?: string; consultation?: boolean } = {}) => {
     const [, args] = launchCommand({
       profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
-      pool: fixturePool(directory),
-      worktree,
+      pool: fixturePool(directory.path),
+      worktree: '/trees/one',
       prompt: 'contract',
       logPath: '/fixture/log',
-      mcpServers: servers(worktree),
+      mcpServers: servers,
       ...extra,
     });
-    return args.filter((arg) => arg.startsWith('mcp_servers'));
+    return args;
   };
-  const one = servers('/trees/one');
-  expect(one.map((server) => server.project)).toEqual(['packages/ui', 'apps/web']);
-  expect(overrides('/trees/one')).toEqual(one.map((server) => `mcp_servers."${server.name}".url="${server.url}"`));
-  expect(overrides('/trees/one', { resumeSession: 'session' })).toEqual(overrides('/trees/one'));
-  expect(servers('/trees/two').map((server) => server.port)).not.toEqual(one.map((server) => server.port));
-  expect(overrides('/trees/one', { consultation: true })).toEqual([]);
-  expect(storybookServers('/trees/one', { kind: 'implementation', paths: ['tools/goal/src/a.ts'] })).toEqual([]);
-  expect(readFileSync(join(directory, 'config.toml'), 'utf8')).toBe(config);
+  const mcpOverrides = (args: string[]) => args.filter((arg) => arg.startsWith('mcp_servers'));
+  try {
+    writeFileSync(path, config);
+    const expected = servers.map((server) => `mcp_servers."${server.name}".url="${server.url}"`);
+    for (const args of [launchArgs(), launchArgs({ resumeSession: 'session' })]) {
+      expect(args).not.toContain('--ignore-user-config');
+      expect(mcpOverrides(args)).toEqual(expected);
+    }
+    const consultation = launchArgs({ consultation: true });
+    expect(consultation).toContain('--ignore-user-config');
+    expect(mcpOverrides(consultation)).toEqual([]);
+    expect(storybookServers('/trees/one', { kind: 'interface', paths: ['apps/web/src/a.tsx'] })).toEqual([]);
+    expect(storybookServers('/trees/one', { kind: 'implementation', paths: ['tools/goal/src/a.ts'] })).toEqual([]);
+    expect(readFileSync(path, 'utf8')).toBe(config);
+  } finally {
+    directory.close();
+  }
 });

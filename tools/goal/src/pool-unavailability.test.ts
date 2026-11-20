@@ -9,10 +9,8 @@ import { WorkerTasks } from './tasks.ts';
 import type { Pool, PoolReading } from './types.ts';
 import { violations } from './watchdog.ts';
 
-function pinnedBrief(h: ReturnType<typeof harness>): string {
-  const file = join(h.settings.stateDirectory, 'pinned-codex.md');
-  writeFileSync(file, markdown.replace('waiting: []', 'waiting: []\nmodel: gpt-6.1-sol\neffort: xhigh'));
-  return file;
+function pinnedBrief(h: ReturnType<typeof harness>, instruction = 'Write the requested result and commit it.'): string {
+  return h.writeBrief(instruction, markdown.replace('waiting: []', 'waiting: []\nmodel: gpt-6.1-sol\neffort: xhigh'));
 }
 
 function poolReading(pool: Pool, refused: boolean): PoolReading {
@@ -128,24 +126,12 @@ test('an aged exited retry remains watchdog-waiting through a recovery pass and 
     const lead = h.settings.policy!.worker.retryIntentLeadMs;
     expect(waiting).toMatchObject({ status: 'pending', options: { evidence, escalation: 'environment' } });
     expect(notBefore - Date.now()).toBeGreaterThan(recovery - 2_000);
-    expect(
-      violations(
-        h.store,
-        Date.now() + recovery - 1,
-        h.store.activeTasks(),
-        h.settings.stateDirectory,
-        h.settings.policy!,
-      ),
-    ).toEqual([]);
-    expect(
-      violations(
-        h.store,
-        notBefore + 1,
-        h.store.activeTasks(),
-        h.settings.stateDirectory,
-        h.settings.policy!,
-      ).map(({ key }) => key),
-    ).toContain(`no-worker:${task.id}:1`);
+    const watchdogAt = (now: number) =>
+      violations(h.store, now, h.store.activeTasks(), h.settings.stateDirectory, h.settings.policy!);
+    expect(watchdogAt(Date.now() + recovery - 1)).toEqual([]);
+    const overdueAt = notBefore + h.settings.policy!.watchdog.noWorkerMs;
+    expect(watchdogAt(overdueAt - 1)).toEqual([]);
+    expect(watchdogAt(overdueAt).map(({ key }) => key)).toContain(`no-worker:${task.id}:1`);
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(launches).toEqual([1]);
     expect(notifications).toEqual([]);
@@ -170,14 +156,12 @@ test('an aged exited retry remains watchdog-waiting through a recovery pass and 
 }, 30_000);
 
 test('an offloaded first-start and retry treat a child pool refusal as a durable wait', async () => {
-  const h = harness();
+  const h = harness(`#!/usr/bin/env bun
+setInterval(() => {}, 1000);
+`);
   const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')) as {
     pools: { policy: Record<string, unknown> }[];
   };
-  const fixtureTask = h.tasks.dispatch(pinnedBrief(h));
-  await h.tasks.retry(fixtureTask.id);
-  expect(h.store.runningAttemptsByPool()[h.settings.pools[0]!.name]).toBe(1);
-
   local.pools = local.pools.map((pool) => ({
     ...pool,
     policy: { ...pool.policy, maxConcurrent: 1 },
@@ -207,15 +191,25 @@ test('an offloaded first-start and retry treat a child pool refusal as a durable
       }),
   );
   try {
+    const fixtureTask = h.tasks.dispatch(pinnedBrief(h, 'Hold the only worker slot in the fixture pool.'));
+    await h.tasks.retry(fixtureTask.id);
+    expect(h.store.runningAttemptsByPool()[h.settings.pools[0]!.name]).toBe(1);
+
     const task = h.tasks.dispatch(pinnedBrief(h));
+    expect(task.id).not.toBe(fixtureTask.id);
     const ref = { taskId: task.id, attempt: 0 };
     await job.start(task.id, { expectedAttempt: 0 });
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'pending' });
+    expect(Date.parse(h.store.retryIntent(ref)!.options.notBefore!)).toBeGreaterThan(Date.now());
     expect(h.store.attempts(task.id)).toEqual([]);
 
+    h.store.updateRetryIntent(ref, (intent) => {
+      intent.options.notBefore = new Date(Date.now() - 1).toISOString();
+    });
     job.resumePendingRetries();
     await job.drain();
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'pending' });
+    expect(Date.parse(h.store.retryIntent(ref)!.options.notBefore!)).toBeGreaterThan(Date.now());
     expect(h.store.attempts(task.id)).toEqual([]);
     expect(notifications).toEqual([]);
   } finally {

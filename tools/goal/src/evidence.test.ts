@@ -92,12 +92,10 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     expect(readFileSync(logPath, 'utf8')).toBe('complete session log\n');
     expect(readdirSync(directory).sort()).toEqual(['approaches.json', 'contract.md', 'diff.patch', 'failure.json']);
     const prompt = workerPrompt({ ...task, branch: 'worker/task' } as Task, directory, undefined, [], '/repo/main');
-    expect(prompt).toContain('# Retry manifest');
+    expect(prompt).toContain('Continue from this retry manifest:\n# Retry manifest');
     expect(prompt).toContain('First failing command: bun test src/failing.test.ts');
+    expect(prompt).toContain('Rerun the failing command once before reporting any blocker about that failure');
     expect(prompt).not.toContain(`Continue from this retry manifest:\n${directory}`);
-    expect(prompt).toContain(
-      'Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches.',
-    );
     expect(prompt).not.toContain('"additionalProperties"');
   } finally {
     rmSync(root, { recursive: true, force: true });

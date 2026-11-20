@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readMeasurement } from './records.ts';
+import { tempDirectory } from './test-support.ts';
 import type { Attempt } from './types.ts';
 
 const session = '01a17045-0000-7000-8000-000000000001';
@@ -14,13 +14,19 @@ const usage = (input: number, cached: number, output: number) => ({
 const lines = (events: object[]) => events.map((event) => JSON.stringify(event)).join('\n') + '\n';
 
 function fixture(stream: object[]) {
-  const root = mkdtempSync(join(tmpdir(), 'goal-rollout-'));
+  const root = tempDirectory();
   const configDirectory = join(root, 'codex-home'),
     day = join(configDirectory, 'sessions', '2026', '10', '25');
   mkdirSync(day, { recursive: true });
   writeFileSync(
     join(day, `rollout-2026-10-25T00-23-12-${session}.jsonl`),
     lines([
+      // A cumulative rollout needs a pre-attempt observation or a supplied baseline to establish exact usage.
+      {
+        timestamp: '2026-10-25T00:23:11.000Z',
+        type: 'event_msg',
+        payload: { type: 'token_count', info: { total_token_usage: usage(0, 0, 0) } },
+      },
       {
         timestamp: '2026-10-25T00:23:20.000Z',
         type: 'event_msg',
@@ -44,7 +50,7 @@ function fixture(stream: object[]) {
     startedAt: '2026-10-25T00:23:12.000Z',
     endedAt: '2026-10-25T00:24:53.000Z',
   } as unknown as Attempt;
-  return { attempt, configDirectory };
+  return { attempt, configDirectory, root };
 }
 
 const started = [{ type: 'thread.started', thread_id: session }, { type: 'turn.started' }];
@@ -72,8 +78,8 @@ test('a baseline still yields the increment of a resumed session', () => {
 });
 
 test('without a rollout an unfinished attempt measures zero', () => {
-  const { attempt } = fixture([...started]);
-  expect(readMeasurement(attempt, { configDirectory: join(tmpdir(), 'goal-no-such-home') }).tokens).toEqual({
+  const { attempt, root } = fixture([...started]);
+  expect(readMeasurement(attempt, { configDirectory: join(root, 'absent-home') }).tokens).toEqual({
     input: 0,
     cached: 0,
     output: 0,
