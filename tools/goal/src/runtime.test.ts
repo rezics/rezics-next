@@ -48,16 +48,21 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     '-e',
     "const fs=require('fs'); if(fs.existsSync('dependency.txt') && fs.existsSync('result.txt') && fs.readFileSync('result.txt','utf8')==='incompatible'){console.error('AssertionError: expected compatible result');process.exit(1)}",
   ];
-  writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', `command: ${JSON.stringify(command)}`));
+  writeFileSync(
+    h.briefFile,
+    markdown
+      .replace('goal: fixture', 'goal: fixture\ntarget: stabilize')
+      .replace('command: [bun, test]', `command: ${JSON.stringify(command)}`),
+  );
   try {
     const runtime = createRuntime({ tasks: h.tasks });
+    git(h.root, ['branch', 'stabilize', 'main']);
     const task = h.tasks.dispatch(h.briefFile);
-    const devBeforeDependency = git(h.root, ['rev-parse', 'dev']);
+    // Advance the checked landing target after dispatch so only the merged candidate has both changes.
     writeFileSync(join(h.root, 'dependency.txt'), 'landed predecessor');
     git(h.root, ['add', 'dependency.txt']);
     git(h.root, ['commit', '-m', 'Add predecessor']);
-    const dependency = git(h.root, ['rev-parse', 'main']);
-    git(h.root, ['update-ref', 'refs/heads/dev', dependency, devBeforeDependency]);
+    git(h.root, ['branch', '-f', 'stabilize', 'main']);
     await runtime.job.start(task.id);
     await runtime.job.drain();
     const records = h.store.records();
@@ -96,6 +101,7 @@ test('an enqueue while the train is finishing waits for the lease and lands with
     enqueued = resolve;
   });
   let once = false;
+  const starts: Promise<void>[] = [];
   try {
     const runtime = createRuntime({
       tasks: h.tasks,
@@ -109,33 +115,32 @@ test('an enqueue while the train is finishing waits for the lease and lands with
         },
       },
     });
-    const first = h.tasks.dispatch(h.briefFile),
-      second = h.tasks.dispatch(h.briefFile);
-    const started = runtime.job.start(first.id);
+    const first = h.tasks.dispatch(h.briefFile);
+    starts.push(runtime.job.start(first.id));
     await ready;
     // The second task changes a separate file to keep this test focused on the train handoff.
     const script = h.settings.pools[0]!.command;
     writeFileSync(script, readFileSync(script, 'utf8').replaceAll('result.txt', 'second.txt'));
-    h.store.updateTask({ taskId: second.id, attempt: 0 }, (task) => {
-      task.brief.paths = ['second.txt'];
-    });
+    writeFileSync(h.briefFile, readFileSync(h.briefFile, 'utf8').replace('paths: [result.txt]', 'paths: [second.txt]'));
+    const second = h.tasks.dispatch(h.briefFile);
     const enqueue = runtime.queue.enqueue.bind(runtime.queue);
     runtime.queue.enqueue = (request) => {
       enqueue(request);
       if (request.taskId === second.id) enqueued();
     };
-    const other = runtime.job.start(second.id);
+    starts.push(runtime.job.start(second.id));
     await published;
     expect(runtime.queue.next()?.request.taskId).toBe(second.id);
     release();
-    await Promise.all([started, other]);
+    await Promise.all(starts);
     await runtime.job.drain();
     await runtime.pump();
     expect(h.store.tasks().map((task) => task.state)).toEqual(['merged', 'merged']);
     expect(runtime.queue.next()).toBeUndefined();
   } finally {
     release();
-    h.dispose();
+    await Promise.allSettled(starts);
+    await h.disposeAsync();
   }
 }, 15000);
 
@@ -144,7 +149,10 @@ for (const when of ['dev', 'promotion'] as const)
     const h = harness();
     simpleBrief(h.briefFile);
     let train: ReturnType<typeof spawn> | undefined, retry: ReturnType<typeof spawn> | undefined;
+    let trainExit: Promise<number | null> | undefined, retryExit: Promise<number | null> | undefined;
     try {
+      const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+      writeFileSync(h.settings.localFile, JSON.stringify({ ...local, gate: ['true'] }));
       const runtime = createRuntime({ tasks: h.tasks });
       const task = h.tasks.dispatch(h.briefFile),
         worker = await h.tasks.retry(task.id);
@@ -170,7 +178,7 @@ catch(error){
 }
 store.db.close();`;
       retry = spawn(process.execPath, ['-e', contender], { env, stdio: ['pipe', 'pipe', 'pipe'] });
-      const retryExit = new Promise<number | null>((resolve) => retry!.once('exit', resolve));
+      retryExit = new Promise<number | null>((resolve) => retry!.once('close', resolve));
       const lines = createInterface({ input: retry.stdout! });
       const messages: string[] = [];
       let ready!: () => void, attempted!: () => void;
@@ -185,17 +193,37 @@ store.db.close();`;
         if (line === 'ready') ready();
         if (line === 'blocked' || line === 'superseded') attempted();
       });
-      await prepared;
+      await Promise.race([
+        prepared,
+        retryExit.then((code) => {
+          throw new Error(`Contender exited before readiness (${code})`);
+        }),
+      ]);
       train = spawn(process.execPath, ['-e', source], { env, stdio: ['pipe', 'pipe', 'pipe'] });
-      const trainExit = new Promise<number | null>((resolve) => train!.once('exit', resolve));
+      trainExit = new Promise<number | null>((resolve) => train!.once('close', resolve));
       let errors = '';
       train.stderr!.on('data', (data) => {
         errors += data;
       });
-      await new Promise<void>((resolve) => createInterface({ input: train!.stdout! }).once('line', () => resolve()));
+      const held = new Promise<void>((resolve) => {
+        createInterface({ input: train!.stdout! }).on('line', (line) => {
+          if (line === 'held') resolve();
+        });
+      });
+      await Promise.race([
+        held,
+        trainExit.then((code) => {
+          throw new Error(`Train exited before the ${when} fence (${code})\n${errors}`);
+        }),
+      ]);
       retry.stdin!.write('x');
       retry.stdin!.end();
-      await contended;
+      await Promise.race([
+        contended,
+        retryExit.then((code) => {
+          throw new Error(`Contender exited before the lock attempt (${code})`);
+        }),
+      ]);
       expect(messages).toContain('blocked');
       train.stdin!.write('x');
       train.stdin!.end();
@@ -217,7 +245,8 @@ store.db.close();`;
     } finally {
       train?.kill('SIGKILL');
       retry?.kill('SIGKILL');
-      h.dispose();
+      await Promise.all([trainExit, retryExit]);
+      await h.disposeAsync();
     }
   }, 15000);
 
@@ -315,7 +344,12 @@ test('the production CLI dispatch, train and inbox commands compose the real run
     expect(await command('train')).toBe('');
     expect(h.store.task(id).state).toBe('merged');
     expect(h.store.records()[0]!.outcome).toBe('passed');
-    expect(JSON.parse(await command('inbox', 'read', 'fixture'))).toEqual([]);
+    expect(JSON.parse(await command('inbox', 'read', 'fixture'))).toEqual({
+      entries: [],
+      hasMore: false,
+      limit: 50,
+      nextCursor: null,
+    });
   } finally {
     h.dispose();
   }
