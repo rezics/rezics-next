@@ -12,6 +12,7 @@ import {
   platformRegistry,
   profileDigest,
   resolveTemplate,
+  resolveView,
   validateProfile,
 } from '../src/index.ts';
 import platform from '../profiles/platform.json' with { type: 'json' };
@@ -239,5 +240,25 @@ test('BookSeries overview plans the series counterparts inverse window of three 
     id: subject,
     property: 'rezics:crossMediaCounterpart',
     limit: 3,
+  });
+});
+
+test('BookSeries Relations offers a paged inverse counterpart stream', () => {
+  const resolved = resolveView(
+    platform as PresentationProfile,
+    { type: 'schema:BookSeries', bases: ['schema:CreativeWorkSeries', 'schema:CreativeWork'] },
+    'relations',
+  )!;
+  expect(resolved.key).toBe('schema:CreativeWorkSeries');
+  const node = resolved.document.content.find(({ props }) => props.id === 'counterparts');
+  expect(node).toMatchObject({ type: 'RelationGroups', props: { paged: true } });
+  expect(Object.keys(node!.props.title as object).sort()).toEqual([...UI_LOCALES].sort());
+  const subject = '00000000-0000-4000-8000-000000000001';
+  const plan = planReads(platformRegistry, resolved.document, { subject });
+  expect(plan.reads[plan.nodes.counterparts!]).toEqual({
+    kind: 'links',
+    id: subject,
+    property: 'rezics:crossMediaCounterpart',
+    limit: 12,
   });
 });
