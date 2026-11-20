@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createWorkClient, DBOS_SCHEMA, WORK_APPLICATION } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { createPublicPreparation, type PublicPreparationOptions } from '../../src/search/public-preparation.ts';
 import { createSearchServiceGate, registerPublicPreparationWork } from '../../src/search/work.ts';
 import { subjectIndexName } from '../../src/search/indices.ts';
-import { activeRelease } from '../../src/semantic/definitions.ts';
+import { activeRelease, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import {
   PUBLIC_PREPARATION_WORKFLOW,
   createPublicPreparationStore,
@@ -265,8 +266,13 @@ test('expired claims recover once and a stale claimed revision cannot overwrite 
   const frontier = population('recover');
   const id = track(await store.retain(frontier, Date.now() + 86_400_000));
   const original = await read(owner, id);
-  const claimed = await store.claim(id, original!.revision, Date.now() - 1);
+  const claimed = await store.claim(id, original!.revision, Date.now() + 30_000);
   expect(claimed).not.toBeNull();
+  await pool.query(
+    `UPDATE search.public_preparation SET lease_until = $4
+     WHERE partition_no = 0 AND prefix = $1 AND id = $2 AND revision = $3`,
+    [owner, id, claimed!.revision, Date.now() - 1],
+  );
   for (let n = 0; n < 5; n++) await store.due();
   const recovered = await read(owner, id);
   expect(Number(recovered!.revision)).toBeGreaterThan(Number(claimed!.revision));
@@ -296,6 +302,7 @@ test('expired claims recover once and a stale claimed revision cannot overwrite 
 });
 
 test('stale unpublished population advances to the active native release before preparation', async () => {
+  await bootstrapRelease(pool, bundledRelease);
   const owner = prefix();
   const frontier = { ...population('active-release-change'), meaning: 'stale-release' };
   const store = createPublicPreparationStore(pool, work, owner);
