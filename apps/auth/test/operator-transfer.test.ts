@@ -349,9 +349,8 @@ test('The default operator-transfer page supports request and acceptance file ha
   URL.revokeObjectURL = (url) => {
     revoked.push(url);
   };
-  window.HTMLAnchorElement.prototype.click = function () {
-    downloads.at(-1)!.filename = this.download;
-  };
+  const anchorPrototype = window.HTMLAnchorElement.prototype;
+  const originalClick = Object.getOwnPropertyDescriptor(anchorPrototype, 'click');
   const mutations: { path: string; body: any }[] = [];
   let reads = 0;
   const saved = () => JSON.parse(window.sessionStorage.getItem('rezics.operator-transfer.attempt') ?? 'null');
@@ -406,6 +405,10 @@ test('The default operator-transfer page supports request and acceptance file ha
     },
   };
   try {
+    // Happy DOM shares this prototype across windows, including later mounted-page tests.
+    anchorPrototype.click = function () {
+      downloads.at(-1)!.filename = this.download;
+    };
     await mount(stories.SourceRequest);
     const original = saved();
     await click(m.auth_transfer_handoff_download_request());
@@ -545,13 +548,20 @@ test('The default operator-transfer page supports request and acceptance file ha
     expect(oversizedReads).toBe(0);
     expect(revoked).toEqual(['blob:handoff-1', 'blob:handoff-2']);
   } finally {
-    await act(async () => root.unmount());
+    if (originalClick) Object.defineProperty(anchorPrototype, 'click', originalClick);
+    else Reflect.deleteProperty(anchorPrototype, 'click');
     URL.createObjectURL = createUrl;
     URL.revokeObjectURL = revokeUrl;
-    await window.happyDOM.abort();
-    for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
+    try {
+      await act(async () => {
+        root.unmount();
+        await window.happyDOM.close();
+      });
+    } finally {
+      for (const [key, descriptor] of previous) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
     }
   }
 });
