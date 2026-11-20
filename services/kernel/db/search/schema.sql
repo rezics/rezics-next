@@ -274,7 +274,7 @@ BEGIN
   NEW.bootstrap := a.bootstrap;
   NEW.revision := gen_random_uuid();
   NEW.identity_digest := a.identity_digest;
-  IF NEW.width<=16 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
+  IF NEW.width<=32 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
     UPDATE search.public_filter_coverage_home h SET baseline_delta=true
     WHERE (h.partition_no,h.registration,h.baseline_bootstrap)=(0,a.registration,a.bootstrap)
       AND h.source_home>=NEW.first_home AND h.source_home<NEW.first_home+NEW.width AND h.baseline_delta IS NULL;
@@ -284,21 +284,29 @@ BEGIN
     ON CONFLICT DO NOTHING;
   foreign_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
   NEW.witness := search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,foreign_cut);
-  IF NEW.width<=16 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
-    WITH members AS MATERIALIZED (
+  IF NEW.width<=32 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
+    WITH steps AS MATERIALIZED (
+      (SELECT s.step,s.state,s.verified_root,s.verified_ordinal,s.verified_home
+       FROM semantic.public_filter_repair_step s
+       WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_binding=NEW.binding
+         AND s.verified_home<=NEW.first_home AND s.verified_root IS NOT NULL AND NOT s.complete
+       ORDER BY s.verified_home DESC LIMIT 1)
+      UNION ALL
+      SELECT s.step,s.state,s.verified_root,s.verified_ordinal,s.verified_home FROM semantic.public_filter_repair_step s
+       WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_binding=NEW.binding
+         AND s.verified_home>NEW.first_home AND s.verified_home<NEW.first_home+NEW.width
+         AND s.verified_root IS NOT NULL AND NOT s.complete
+    ), windows AS (
+      SELECT steps.*,lead(verified_home,1,NEW.first_home+NEW.width) OVER (ORDER BY verified_home) AS end_home FROM steps
+    ), members AS MATERIALIZED (
       SELECT i.home,w.step,w.verified_root,w.verified_ordinal,win.through_pos,b.predecessor,b.root,
         b.receipt,b.creation_position,b.source_epoch,b.source_position,b.native_enqueue_revision,
         b.native_revision,b.native_claim_revision,h.acknowledged_position,h.acknowledged_native_enqueue,
         h.relevant_position,h.native_enqueue_revision AS current_enqueue,h.native_revision AS current_revision,
         h.native_claim_revision AS current_claim,h.last_change_generation,h.baseline_delta,
         ph.position AS privacy_position,ac.revision AS account_revision,ac.claim_revision AS account_claim
-      FROM generate_series(NEW.first_home,NEW.first_home+NEW.width-1) i(home)
-      CROSS JOIN LATERAL (
-        SELECT s.step,s.state,s.verified_root,s.verified_ordinal FROM semantic.public_filter_repair_step s
-        WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_binding=NEW.binding
-          AND s.verified_home<=i.home AND s.verified_root IS NOT NULL AND NOT s.complete
-        ORDER BY s.verified_home DESC LIMIT 1
-      ) w
+      FROM windows w
+      CROSS JOIN LATERAL generate_series(greatest(w.verified_home,NEW.first_home),w.end_home-1) i(home)
       CROSS JOIN LATERAL search.public_filter_ack_window(w.state,i.home) win
       JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(i.home,a.bootstrap)
         AND e.complete AND e.registration_partition=0 AND e.registration=a.registration AND e.read_definition=a.read_definition
@@ -735,6 +743,108 @@ BEGIN
   INSERT INTO search.public_filter_ack_range(partition_no,job,binding,first_home,width,left_child,right_child)
     VALUES (0,job_id,chain,first,span,left_id,right_id) ON CONFLICT DO NOTHING;
   RETURN CASE WHEN left_id IS NULL THEN span ELSE 0 END + 1;
+END $$;
+
+
+--
+-- Name: prepare_public_filter_ack_batch(uuid, integer, integer); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.prepare_public_filter_ack_batch(job_id uuid, key_limit integer, byte_limit integer) RETURNS TABLE(points integer, proof_bytes integer, range_writes integer, result_writes integer)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  a search.public_filter_ack_authority%ROWTYPE;
+  chain text;
+  available integer;
+  foreign_cut bytea;
+  local_cut bytea;
+  span integer := 4096;
+  first_no integer := 0;
+  leaf_limit integer;
+  members integer;
+  left_id uuid;
+  right_id uuid;
+  changed integer;
+  comparison_points integer;
+BEGIN
+  IF key_limit IS NULL OR key_limit NOT BETWEEN 180 AND 1000 OR
+     byte_limit IS NULL OR byte_limit NOT BETWEEN 90112 AND 4194304 THEN
+    RAISE EXCEPTION 'Invalid receiver range allowance' USING ERRCODE='22023';
+  END IF;
+  points := 20; proof_bytes := 65536; range_writes := 0; result_writes := 0;
+  leaf_limit := least(32,(key_limit-160)/20,(byte_limit-65536)/24576);
+  SELECT * INTO a FROM search.public_filter_ack_authority WHERE job=job_id AND phase='reconciled' AND pass=1
+    AND fence IS NULL AND NOT fenced_pass;
+  IF FOUND AND NOT EXISTS (SELECT FROM search.public_filter_ack_manifest WHERE (partition_no,job)=(0,job_id)) THEN
+    SELECT s.verified_binding,s.verified_home+coalesce(search.public_filter_ack_field(
+      search.public_filter_ack_field(s.state::jsonb->1,'windowBatch'),'count')::integer,1)
+      INTO chain,available FROM semantic.public_filter_repair_step s
+      WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_home IS NOT NULL
+      ORDER BY s.verified_home DESC LIMIT 1;
+  END IF;
+  IF chain IS NOT NULL THEN
+    points := points+28;
+    foreign_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+    local_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,foreign_cut);
+    IF local_cut IS NOT NULL AND NOT EXISTS (SELECT FROM search.public_filter_ack_range n WHERE
+      (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,0,4096,local_cut)) THEN
+      LOOP
+        EXIT WHEN first_no>=available;
+        members := 0;
+        left_id := NULL;
+        right_id := NULL;
+        IF span<=leaf_limit THEN
+          -- The next verified window completes this same leaf. Smaller
+          -- fragments here would be compared again by its eventual direct leaf.
+          EXIT WHEN first_no+span>available;
+          members := span;
+        ELSE
+          -- Two indexed child lookups, each with its gate and local clock.
+          EXIT WHEN points+3>key_limit;
+          points := points+3;
+          local_cut := search.public_filter_ack_range_witness(a.bootstrap,first_no,span/2,foreign_cut);
+          SELECT revision INTO left_id FROM search.public_filter_ack_range n WHERE
+            (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,first_no,span/2,local_cut);
+          IF left_id IS NULL THEN span := span/2; CONTINUE; END IF;
+          EXIT WHEN points+3>key_limit;
+          points := points+3;
+          local_cut := search.public_filter_ack_range_witness(a.bootstrap,first_no+span/2,span/2,foreign_cut);
+          SELECT revision INTO right_id FROM search.public_filter_ack_range n WHERE
+            (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,first_no+span/2,span/2,local_cut);
+          IF right_id IS NULL THEN first_no := first_no+span/2; span := span/2; CONTINUE; END IF;
+        END IF;
+
+        -- Reserve the comparison's native authority, witness, replay and FK
+        -- reads. A direct leaf also consumes the original step for every home.
+        comparison_points := CASE WHEN members>0 THEN 40+20*members ELSE 64 END;
+        EXIT WHEN points+comparison_points>key_limit;
+        points := points+comparison_points;
+        proof_bytes := proof_bytes+24576*members;
+        -- Stage the same inputs the before-insert verifier requires. Count only
+        -- actual writes, including first use of a clock or a home marker.
+        IF members>0 THEN
+          UPDATE search.public_filter_coverage_home h SET baseline_delta=true
+            WHERE (h.partition_no,h.registration,h.baseline_bootstrap)=(0,a.registration,a.bootstrap)
+              AND h.source_home>=first_no AND h.source_home<first_no+span AND h.baseline_delta IS NULL;
+          GET DIAGNOSTICS changed = ROW_COUNT;
+          result_writes := result_writes+changed;
+        END IF;
+        INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
+          VALUES(0,a.registration,a.bootstrap,first_no/greatest(span,16)*greatest(span,16),greatest(span,16))
+          ON CONFLICT DO NOTHING;
+        GET DIAGNOSTICS changed = ROW_COUNT;
+        result_writes := result_writes+changed;
+        INSERT INTO search.public_filter_ack_range(partition_no,job,binding,first_home,width,left_child,right_child)
+          VALUES(0,job_id,chain,first_no,span,left_id,right_id) ON CONFLICT DO NOTHING;
+        GET DIAGNOSTICS changed = ROW_COUNT;
+        range_writes := range_writes+changed;
+        result_writes := result_writes+changed;
+        EXIT;
+      END LOOP;
+    END IF;
+  END IF;
+  RETURN NEXT;
 END $$;
 
 
@@ -2173,7 +2283,7 @@ CREATE TABLE search.public_filter_ack_range (
     right_child uuid,
     CONSTRAINT public_filter_ack_range_binding_check CHECK ((binding ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT public_filter_ack_range_check CHECK (((first_home % width) = 0)),
-    CONSTRAINT public_filter_ack_range_check1 CHECK ((((left_child IS NULL) = (right_child IS NULL)) AND ((width <= 16) OR (left_child IS NOT NULL)))),
+    CONSTRAINT public_filter_ack_range_children CHECK ((((left_child IS NULL) = (right_child IS NULL)) AND ((width <= 32) OR (left_child IS NOT NULL)))),
     CONSTRAINT public_filter_ack_range_digest_check CHECK ((octet_length(digest) = 32)),
     CONSTRAINT public_filter_ack_range_first_home_check CHECK (((first_home >= 0) AND (first_home <= 4095))),
     CONSTRAINT public_filter_ack_range_partition_no_check CHECK ((partition_no = 0)),

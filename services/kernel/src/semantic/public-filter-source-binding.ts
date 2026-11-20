@@ -5034,32 +5034,34 @@ export function createNativePublicFilterSourceBinding(
       }
       if (cut.row.ack_protocol === 1) {
         if (!boundSubjectPublication(cut, publication)) throw new BindingError('binding_mismatch');
-        // Charge the depth-twelve tree descent, witness reads, original binding and
-        // FKs. Each leaf member also reads the original verified 16 KiB step.
-        const inputs = preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0);
-        const bytes = 4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0);
-        const homes = Math.min(16, Math.floor((inputs - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
-        if (homes > 0) {
-          const reservedBytes = (64 + 24 * homes) * 1024;
-          cost.bytes += reservedBytes;
-          const prepared = await db.query<{ work: number }>(
-            `/* semantic.native-keyed:${160 + 20 * homes}:${160 + 20 * homes} */
-             SELECT search.prepare_public_filter_ack($1,$2) AS work`,
-            [publication.job, homes],
+        const points = Math.min(160 + 20 * 32, preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0));
+        // Leave room for this statement, its three arguments and its four scalar results.
+        const bytes = Math.min((64 + 24 * 32) * 1024, 4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0) - 1024);
+        if (points >= 180 && bytes >= 88 * 1024) {
+          // A lost reply can include the home markers, their clock and one range.
+          const homes = Math.min(32, Math.floor((points - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
+          const writes = homes + 2;
+          cost.frontierWrites++;
+          cost.bytes += bytes;
+          const prepared = await db.query<{
+            points: number;
+            proof_bytes: number;
+            range_writes: number;
+            result_writes: number;
+          }>(
+            `/* semantic.native-keyed:${points}:${points}:${writes} */
+             SELECT * FROM search.prepare_public_filter_ack_batch($1,$2,$3)`,
+            [publication.job, points, bytes],
           );
-          const work = prepared.rows[0]!.work;
-          // Zero stops at the original authority or first verified home probe.
-          // A negative result walked the tree. Positive work includes the range write.
-          const charged = work === 0 ? 20 : work === -2 ? 48 : 160 + 20 * Math.max(0, work - 1);
-          const unused = 160 + 20 * homes - charged;
+          const batch = prepared.rows[0]!;
+          const unused = points - batch.points;
           cost.inputKeys -= unused;
           cost.rows -= unused;
           cost.dependencyPoints -= unused;
-          const actualBytes = work > 0 ? (64 + 24 * (work - 1)) * 1024 : 64 * 1024;
-          cost.bytes -= reservedBytes - actualBytes;
-          if (work > 0) {
-            cost.frontierWrites++;
-            cost.resultWrites += work + 1;
+          cost.bytes -= bytes - batch.proof_bytes;
+          cost.frontierWrites -= 1 - batch.range_writes;
+          cost.resultWrites -= writes - batch.result_writes;
+          if (batch.range_writes > 0) {
             return {
               status: 'pending' as const,
               publication,
