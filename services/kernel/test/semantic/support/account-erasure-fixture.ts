@@ -90,16 +90,20 @@ export async function accountErasureFixture() {
     });
     expect(signed.status, await signed.clone().text()).toBe(200);
     const headers = cookies(signed);
+    const bearer = await sessionBearer(headers);
+    return { ...registered, handle: key, headers, bearer };
+  }
+  async function sessionBearer(headers: Headers) {
     const token = await native.request('/token', {}, headers);
     expect(token.status, await token.clone().text()).toBe(200);
-    const { access_token: bearer } = (await token.json()) as { access_token: string };
-    return { ...registered, handle: key, headers, bearer };
+    return ((await token.json()) as { access_token: string }).access_token;
   }
   type Person = Awaited<ReturnType<typeof person>>;
   const governor = await person();
   await bootstrapGovernance(db.pool, governor.accountId);
   async function grant(id: string, subject: Person, granted: string[]) {
-    const actor = await native.access.authenticate(governor.bearer, { pool: db.pool, deadline: Date.now() + 30_000 });
+    const bearer = await sessionBearer(governor.headers);
+    const actor = await native.access.authenticate(bearer, { pool: db.pool, deadline: Date.now() + 30_000 });
     await native.COMMANDS.grants.create(
       { pool: db.pool, actor, deadline: Date.now() + 30_000 },
       {
