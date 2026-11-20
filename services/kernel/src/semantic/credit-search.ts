@@ -14,13 +14,14 @@ import {
   type CreditSearchSource,
   type CreditSearchWitness,
 } from '../search/credit-search.ts';
+import { SEARCH_IDENTITY_WRITER_CHUNK } from '../search/writer-limits.ts';
 import {
   canonicalCreators,
   type CreditCreatorObservation,
   type CreditCreatorSnapshot,
   type PublicCreator,
 } from './credit-search-creators.ts';
-import { withReadTransaction } from './read.ts';
+import { currentReadSnapshot, withReadTransaction } from './read.ts';
 import {
   digestOf,
   installedLimits,
@@ -34,6 +35,7 @@ import {
   creditPlan,
   currentObservation,
   discloseCredits,
+  emptyCreditObservations,
   exactCredit,
   observationOf,
   parseCredit,
@@ -290,7 +292,24 @@ function creditSearchReader(
 export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): CreditSearchSource {
   const reader = creditSearchReader(pool, routeKey);
   const indexReader = creditSearchReader(pool, routeKey, { indexReplay: true });
-  return { ...reader, projectForIndex: (workId) => projectCreditSearch(indexReader, workId) };
+  return {
+    ...reader,
+    projectForIndex: (workId) => projectCreditSearch(indexReader, workId),
+    async projectEmptyForIndex(partition, workIds) {
+      const projections = new Map<string, CreditSearchIndexProjection>();
+      if (!workIds.length || workIds.length > SEARCH_IDENTITY_WRITER_CHUNK || currentReadSnapshot(pool))
+        return projections;
+      const initial = await emptyCreditObservations(pool, partition, workIds);
+      if (!initial.size) return projections;
+      const rechecked = await emptyCreditObservations(pool, partition, [...initial.keys()]);
+      for (const [id, observation] of initial)
+        projections.set(
+          id,
+          rechecked.get(id) === observation ? { state: 'complete', names: [] } : { state: 'restart' },
+        );
+      return projections;
+    },
+  };
 }
 
 /** Search paging stays the owner; this maps restart onto changed for native receiving. */

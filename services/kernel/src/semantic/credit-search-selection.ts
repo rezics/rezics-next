@@ -23,6 +23,7 @@ import readSubjects from './search-source-subjects.sql';
 import readReleases from './search-source-releases.sql';
 import rebuildSelection from './search-selected-rebuild.sql';
 import readCreditPage from './credit-search-page.sql';
+import readNonemptyCreditKeys from './credit-search-empty-keys.sql';
 import readCreditStatement from './credit-search-statement.sql';
 
 export type SelectedCredit = {
@@ -88,6 +89,63 @@ export async function workCut(pool: Pool, workId: string): Promise<WorkCut | 'un
     const work = rows[0];
     if (!work) return 'unavailable';
     return { work, epoch: home.epoch, generation, ready: work.selection_ready && work.current_revision !== null };
+  });
+}
+
+/** One home snapshot for the work headers, released plans and raw selected-key seeks. */
+export async function emptyCreditObservations(pool: Pool, partition: number, ids: readonly string[]) {
+  const routes = ids.map(routeOf);
+  const empty = new Map<string, string>();
+  if (routes.some((route) => route === null || partitionOf(route) !== partition)) return empty;
+  return inSearchSnapshot(pool, async (client) => {
+    const home = await readPartition(client, partition);
+    if (!home || home.writeState === 'moved') return empty;
+    const generation = await readSearchCanonicalGeneration(client);
+    const rows = (await readSubjects.run(client, {
+      partition_no: partition,
+      routes: routes as number[],
+      subject_ids: [...ids],
+    })) as WorkHeader[];
+    const cuts = rows
+      .map((work) => ({
+        work,
+        epoch: home.epoch,
+        generation,
+        ready: work.selection_ready && work.current_revision !== null,
+      }))
+      .filter(publicWorkCut);
+    const releases = await loadReleases(
+      client,
+      cuts.flatMap(({ work }) => (work.currentRelease ? [work.currentRelease] : [])),
+    );
+    const plans = new Map<Release, Map<string, string[]>>();
+    const requests = [];
+    for (const cut of cuts) {
+      const { work } = cut;
+      const release = work.currentRelease && releases.get(work.currentRelease);
+      if (!release) continue;
+      let types = plans.get(release);
+      if (!types) plans.set(release, (types = new Map()));
+      let properties = types.get(work.type);
+      if (!properties) {
+        properties = [...creditSearchProperties(release, work.type)];
+        types.set(work.type, properties);
+      }
+      if (!properties.length) continue;
+      requests.push({ route: work.route, subject_id: work.id, properties });
+      empty.set(work.id, observationOf(cut, 'empty-selection'));
+    }
+    if (requests.length) {
+      const nonempty = await readNonemptyCreditKeys.run(client, {
+        partition_no: partition,
+        requests,
+      });
+      for (const { id } of nonempty) {
+        if (id === null) return new Map<string, string>();
+        empty.delete(id);
+      }
+    }
+    return empty;
   });
 }
 
