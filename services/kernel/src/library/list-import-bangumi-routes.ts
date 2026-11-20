@@ -85,7 +85,7 @@ function detail(operationId: string, write = true) {
   return {
     operationId,
     'x-action': write ? 'library_entry:update' : 'library_entry:list',
-    'x-exposure': 'gate:personal_library',
+    'x-exposure': 'gate:library_portability',
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: [{ bearerAuth: [] }],

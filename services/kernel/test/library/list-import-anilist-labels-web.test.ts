@@ -7,7 +7,7 @@ import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes
 import { createSessionCommands } from '../../src/library/sessions.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  f = await createProfileEntryFixture({ openLibraryPortability: true, ownerScopes: ['rating:vote'] });
 }, 120000);
 afterAll(async () => {
   await f?.close();

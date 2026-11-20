@@ -1,7 +1,7 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
-import { prepareExposure } from '../../kernel/exposure';
+import { prepareExposure, useOperation } from '../../kernel/exposure';
 import { PersonalVndbImportPage } from '../../library/personal-list-import';
 import { nativeVndbImport } from '../../library/personal-list-import/native';
 import { VndbUnavailable } from '../../library/personal-list-import/states';
@@ -33,10 +33,11 @@ export const Route = createFileRoute('/library/import-vndb')({
 
 function VndbImportRoute() {
   const { available } = Route.useLoaderData();
+  const admitted = useOperation('library_vndb.preview');
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const libraryReturn = useLocation({ select: (location) => location.hash.replace(/^#/, '') === importLibraryAnchor });
-  if (!available) return <VndbUnavailable />;
+  if (!available || !admitted) return <VndbUnavailable />;
   return (
     <PersonalVndbImportPage
       libraryReturn={libraryReturn}

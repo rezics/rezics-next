@@ -93,7 +93,7 @@ function failures() {
 const detail = (name: string) => ({
   operationId: `library_mal.${name}`,
   'x-action': 'library_entry:update',
-  'x-exposure': 'gate:personal_library',
+  'x-exposure': 'gate:library_portability',
   'x-authority-anchor': 'own-account',
   'x-authority-resource-types': Object.keys(bundledRelease.types),
   'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),

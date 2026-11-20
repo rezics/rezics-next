@@ -176,6 +176,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       for (const group of [
         'collections',
         'personal_library',
+        'library_portability',
         'reading_progress',
         'purchases',
         'selling',

@@ -50,7 +50,7 @@ async function apply(id: string, token: string) {
   return json(await send(`/${id}:applyLabels`, { ordinal: 0, reviewToken: token }));
 }
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
 }, 120000);
 afterAll(async () => {
   await f?.close();

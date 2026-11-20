@@ -80,7 +80,9 @@ async function proveClosedScope(
   const probes = [
     ['subject offers', 'GET', `/v1/subjects/${workId}/offers`],
     ['seller offers', 'GET', '/v1/offers'],
+    ['private Library export', 'GET', `/v1/libraryExports/${workId}`],
     ['personal VNDB list', 'GET', `/v1/libraryImports/vndb/${workId}`],
+    ['personal VNDB labels', 'GET', `/v1/libraryImports/vndb/${workId}/labels`],
     ['personal Bangumi list', 'GET', `/v1/libraryImports/bangumi/${workId}`],
     ['personal MyAnimeList list', 'GET', `/v1/libraryImports/mal/${workId}`],
     ['personal AniList list', 'GET', `/v1/libraryImports/anilist/${workId}`],

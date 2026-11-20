@@ -3,6 +3,7 @@
 The mounted Kernel journey imports the authenticated person's uploaded JSON, without contacting AniList,
 requesting credentials, creating catalogue subjects or claiming account synchronization. Commerce owns native
 semantics; Web owns presentation. Preview stores private evidence but changes no native personal facts.
+The mounted methods require `library_portability` admission.
 
 The supported dialect is `v1`, derived from retained primary AniList docs at commit
 `03281c0a4bbf0c7f2097e0c935cddaed1096aa65`: `object/medialist.md`, `medialistcollection.md`,

@@ -15,7 +15,8 @@ owners explicitly select supported facts; provider evidence stays retained and c
 
 All methods require a bearer account and `library_entry:list`, `library_entry:read`, `copy:list`,
 `progress_session:list`, `progress_session:read` and `collection:read` scopes. Native owner admission and the
-personal_library, reading_progress and collections gates apply on every invocation, including retries.
+`library_portability`, `personal_library`, `reading_progress` and `collections` gates apply on every invocation,
+including retries.
 All responses are `application/json`, `Cache-Control: private, no-store`. There is no public download token.
 
 | Method                                       | Request                                         | Response                                             |

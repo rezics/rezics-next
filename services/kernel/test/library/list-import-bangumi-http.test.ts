@@ -98,7 +98,7 @@ async function admitBangumiClaim(externalId: number, label: string, digest = 'a'
   return result.value.id as string;
 }
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
   matched = await admitBangumiClaim(providerId, 'Source title');
   await f.awaitCurrentIdentity(matched);
 }, 120000);

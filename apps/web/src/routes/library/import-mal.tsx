@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
-import { prepareExposure } from '../../kernel/exposure';
+import { prepareExposure, useOperation } from '../../kernel/exposure';
 import { PersonalMalImportPage } from '../../library/personal-mal-import';
 import { nativeMalImport } from '../../library/personal-mal-import/native';
 import { m } from '../../paraglide/messages.js';
@@ -29,7 +29,8 @@ export const Route = createFileRoute('/library/import-mal')({
 
 function MalImportRoute() {
   const { available } = Route.useLoaderData();
-  if (!available) {
+  const admitted = useOperation('library_mal.preview');
+  if (!available || !admitted) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <h1 className="text-4xl font-semibold tracking-tight">{m.library_mal_title()}</h1>

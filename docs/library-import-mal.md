@@ -2,7 +2,7 @@
 
 Commerce owns native semantics; Web owns presentation. This imports the signed-in person's uploaded anime or
 manga export, with no live provider credentials or catalogue ingestion. Native methods require both
-`library_entry:read` and `library_entry:update`, current account authority and the personal Library exposure.
+`library_entry:read` and `library_entry:update`, current account authority and the `library_portability` gate.
 All responses and retained evidence are private. No notes, XML or titles enter public Search, logs or errors.
 
 Decision: use `mal_anime` and `mal_manga` external claims and explicit confirmation of a unique released state

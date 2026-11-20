@@ -26,7 +26,7 @@ async function send(method: string, url: string, body?: unknown, status = 200, k
   return value;
 }
 beforeAll(async () => {
-  native = await createProfileEntryFixture();
+  native = await createProfileEntryFixture({ openLibraryPortability: true });
   sessions = createSessionCommands(native);
   for (const retained of [true, false]) {
     const profile = libraryProfile(retained ? 'fixture.reading' : 'fixture.replaced', 'chapter');

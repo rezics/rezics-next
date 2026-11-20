@@ -14,7 +14,7 @@ current viewer/CSRF check, while assignment readback always uses fresh credentia
 
 ## Installed owner methods
 
-All three methods use the existing authenticated own-account Library actions, personal_library exposure,
+All three methods use the existing authenticated own-account Library actions, `library_portability` exposure,
 request admission and `Cache-Control: private, no-store`. Mounted route types define the following client methods (declaration regeneration remains required):
 
 - `libraryImports.bangumi({ uploadId }).rows({ ordinal }).tags.get({ query: { after: -1 } })`

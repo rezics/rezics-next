@@ -134,7 +134,7 @@ beforeAll(async () => {
     }),
     ratePeer: () => '127.0.0.1',
   });
-  await sql`INSERT INTO access.exposure_opening("group",valid,transaction_id) SELECT g,tstzrange('2020-01-01',NULL,'[)'),${owner} FROM unnest(${['personal_library', 'reading_progress', 'collections']}::text[]) g`;
+  await sql`INSERT INTO access.exposure_opening("group",valid,transaction_id) SELECT g,tstzrange('2020-01-01',NULL,'[)'),${owner} FROM unnest(${['personal_library', 'library_portability', 'reading_progress', 'collections']}::text[]) g`;
   for (let i = 0; i < 18; i++) {
     const response = await command('POST', '/v1/subjects', {
       type: 'schema:Book',

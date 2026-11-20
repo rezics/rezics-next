@@ -49,7 +49,7 @@ const body = (sessionId: string): ReviewInput => ({
 });
 
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ openLibraryPortability: true });
   owner = await f.identity([
     'subject:read',
     'subject:create',

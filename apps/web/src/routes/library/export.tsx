@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
-import { prepareExposure } from '../../kernel/exposure';
+import { prepareExposure, useOperation } from '../../kernel/exposure';
 import { PrivateLibraryExportPage } from '../../library/private-export';
 import { nativeLibraryExport } from '../../library/private-export/native';
 import { ExportUnavailable } from '../../library/private-export/states';
@@ -30,6 +30,7 @@ export const Route = createFileRoute('/library/export')({
 
 function LibraryExportRoute() {
   const { available } = Route.useLoaderData();
-  if (!available) return <ExportUnavailable />;
+  const admitted = useOperation('library_export.create');
+  if (!available || !admitted) return <ExportUnavailable />;
   return <PrivateLibraryExportPage />;
 }

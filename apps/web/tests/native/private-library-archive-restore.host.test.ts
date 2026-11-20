@@ -359,7 +359,7 @@ async function message(locale: (typeof locales)[number], key: string) {
 }
 
 async function openGates(stack: NativeWebStack, includeSearch = true) {
-  const groups = ['personal_library', 'collections', 'reading_progress', 'search'] as const;
+  const groups = ['personal_library', 'library_portability', 'collections', 'reading_progress', 'search'] as const;
   for (const group of groups) {
     if (group === 'search' && !includeSearch) continue;
     const opened = await stack.kernel(

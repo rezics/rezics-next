@@ -8,7 +8,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
+  f = await createProfileEntryFixture({ openLibraryPortability: true, gameUnits: ['minute', 'episode'] });
 }, 120000);
 afterAll(async () => {
   await f?.close();

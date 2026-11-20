@@ -81,7 +81,7 @@ Decision: native score, merge and receipt-recovery checks reuse the fixture stew
 
 ## Web HTTP contract
 
-All methods require an authenticated current owner, the personal_library gate, existing Library scopes,
+All methods require an authenticated current owner, the `library_portability` gate, existing Library scopes,
 and private/no-store responses. IDs are UUIDs; errors contain native problem codes without upload contents.
 Write methods except apply use the ordinary quoted `Idempotency-Key` header. Apply uses each review token.
 

@@ -633,6 +633,9 @@ and font readiness; a recorded response or source export is not a screenshot or 
 
 ## Personal Library portability
 
+The mounted personal-list imports and private whole-Library export use the `library_portability` gate.
+This group starts closed under the [first-public scope](../scope.md).
+
 New native captures use V4 (`private-library-owner-facts-v4`): the fixed V3 sections followed by `vndbUploads`,
 `vndbEvidence`, `anilistUploads`, `anilistEvidence`, with 21 section totals and epoch 4 cursors. Retained unexpired
 VNDB and retained AniList parsed source rows preserve provider identifiers, unknown/invalid vocabulary, score scale,
