@@ -132,20 +132,43 @@ test('approval and execution use the exact same account, typed operation and key
   ).toBe(true);
 });
 
-test('a lost execution response retries the same approval, body and key; authentication loss is an unknown outcome', async () => {
+test('deletion keeps unreadable execution unknown and replays only a readable unavailable response', async () => {
   const operation = { kind: 'delete' as const, accountId: 'own-account' };
-  const calls = respond((call, index) => {
+  const browser = { isCurrent: () => true, retryUncertain: true, confirmation: 'reviewed-handle' };
+  const execute = () => runAccountOperation('stable-key', operation, browser);
+  const lost = respond((_, index) => {
     if (index === 0) return approval();
-    if (index === 1) throw new TypeError('Lost response');
-    return Response.json({ error: 'account_operation_denied' }, { status: 401 });
+    throw new TypeError('Lost response');
   });
-  expect(await runAccountOperation('stable-key', operation)).toEqual({ ok: false, reason: 'unknown' });
-  expect(calls.map(({ path }) => path)).toEqual([
-    '/account-operations/approve',
-    '/account-operations/execute',
-    '/account-operations/execute',
-  ]);
-  expect(calls[2]!.body).toEqual(calls[1]!.body);
+  expect(await execute()).toEqual({ ok: false, reason: 'unknown' });
+  const originalPaths = ['/account-operations/approve', '/account-operations/execute'];
+  expect(lost.map(({ path }) => path)).toEqual(originalPaths);
+
+  for (const [reply, reason] of [
+    [{ error: 'account_operation_denied' }, 'unknown'],
+    [{ error: 'account_operation_denied', effect_status: 'not_applied' }, 'denied'],
+  ] as const) {
+    const unauthorized = () => Response.json(reply, { status: 401 });
+    const direct = respond((_, index) => (index === 0 ? approval() : unauthorized()));
+    expect(await execute()).toEqual({ ok: false, reason });
+    expect(direct.map(({ path }) => path)).toEqual(originalPaths);
+
+    const replay = respond((_, index) => {
+      if (index === 0) return approval();
+      if (index === 1) return Response.json({ error: 'unavailable' }, { status: 503 });
+      return unauthorized();
+    });
+    expect(await execute()).toEqual({ ok: false, reason: 'unknown' });
+    expect(replay.map(({ path }) => path)).toEqual([...originalPaths, '/account-operations/execute']);
+    expect(replay[0]!.body).toEqual({ operationKey: 'stable-key', operation });
+    expect(replay[1]!.body).toEqual({
+      operationKey: 'stable-key',
+      operation,
+      reference: 'fresh-native-reference',
+      confirmation: 'reviewed-handle',
+    });
+    expect(replay[2]!.init.body).toBe(replay[1]!.init.body);
+  }
 });
 
 test('native freshness, platform and responsibility refusals cannot execute an operation', async () => {
