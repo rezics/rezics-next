@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
+import { acquireDirectoryLease } from './lease.ts';
 import { openDb } from './db.ts';
 import { hasLiveProcessUnderAsync } from './process.ts';
 import { WorkerStore } from './store.ts';
@@ -388,6 +389,56 @@ test('a blocked cleanup does not stop controller recovery from removing an indep
     expect(count.value).toBe(1);
     expect(inbox.pending(blocked.brief.manager)).toHaveLength(1);
     expect(git(h.root, ['rev-parse', independent.branch])).toBeTruthy();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a malformed cleanup lease preserves its worktree while recovery removes an independent finished worktree', async () => {
+  const { h, task: blocked } = setup('integrated');
+  try {
+    const independent = h.tasks.dispatch(h.writeBrief('Independent finished worktree with a valid lease.'));
+    h.store.updateTask({ taskId: independent.id, attempt: 0 }, (row) => {
+      row.state = 'merged';
+    });
+    const leases = join(h.settings.stateDirectory, 'leases');
+    const blockedLease = join(leases, blocked.id);
+    const owner = join(blockedLease, 'owner.json');
+    const malformedOwner = '{"pid":"not a process"}';
+    mkdirSync(blockedLease, { recursive: true });
+    writeFileSync(owner, malformedOwner);
+    const sentinel = join(blocked.worktree, 'sentinel');
+    writeFileSync(sentinel, 'preserved');
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox, undefined, undefined, undefined, fake());
+
+    const globalLease = acquireDirectoryLease(join(leases, 'worktree-lifetime'));
+    try {
+      await job.recoverOrphans();
+      await job.drain();
+      expect(existsSync(independent.worktree)).toBe(true);
+      expect(inbox.pending(h.settings.integration.supermanager)).toHaveLength(0);
+    } finally {
+      globalLease.release();
+    }
+
+    await job.recoverOrphans();
+    await job.drain();
+    expect(existsSync(independent.worktree)).toBe(false);
+    expect(gitListsWorktree(h.root, independent.worktree)).toBe(false);
+    // The durable cursor wraps before it revisits the blocked task.
+    for (let pass = 0; pass < 2; pass++) {
+      await job.recoverOrphans();
+      await job.drain();
+    }
+    const reports = inbox.pending(h.settings.integration.supermanager);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.event).toMatchObject({
+      taskId: blocked.id,
+      summary: expect.stringContaining('Unrecognised lease owner'),
+    });
+    expect(readFileSync(owner, 'utf8')).toBe(malformedOwner);
+    expect(readFileSync(sentinel, 'utf8')).toBe('preserved');
   } finally {
     h.dispose();
   }
