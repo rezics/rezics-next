@@ -13,6 +13,7 @@ export type WalletBalance = Readonly<{
   posted: string;
   held: string;
   restricted: string;
+  pending: string;
   available: string;
 }>;
 

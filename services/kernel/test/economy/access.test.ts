@@ -5,6 +5,7 @@ import { createAccess } from '../../src/access/index.ts';
 import type { EconomyWalletPort } from '../../src/economy/contract.ts';
 import { createNativeEconomyLedger, createNativeEconomyWallet } from '../../src/composition/economy.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -31,6 +32,7 @@ const economy: EconomyWalletPort = {
         posted: '9007199254740993',
         held: '0',
         restricted: '0',
+        pending: '0',
         available: '9007199254740993',
       },
     };
@@ -141,6 +143,13 @@ afterAll(async () => {
 });
 
 test('Economy admission, discovery and replay require the exact current account grant', async () => {
+  const economyPaths = Object.entries(openApiDocument(app).paths).filter(([path]) => path.startsWith('/v1/economy/'));
+  expect(economyPaths.length).toBeGreaterThan(0);
+  for (const [, path] of economyPaths) {
+    for (const operation of Object.values(path)) {
+      expect(operation).toMatchObject({ 'x-exposure': grant, security: [{ bearerAuth: [] }] });
+    }
+  }
   await addGrant(ordinary, 'gate:any');
   await addGrant('00000000-0000-0000-0000-000000000000', grant, 'active_accounts');
   await db.admin.query(
@@ -177,7 +186,11 @@ test('Economy admission, discovery and replay require the exact current account 
   const balance = await request(walletPath, senderToken);
   expect(balance.status).toBe(200);
   expect(balance.headers.get('cache-control')).toBe('private, no-store');
-  expect(await balance.json()).toMatchObject({ posted: '9007199254740993', available: '9007199254740993' });
+  expect(await balance.json()).toMatchObject({
+    posted: '9007199254740993',
+    pending: '0',
+    available: '9007199254740993',
+  });
   expect((await request(`${walletPath}/statement?before=8&limit=3`, senderToken)).status).toBe(200);
 
   const transferPath = `${walletPath}/transfers`;
@@ -236,7 +249,11 @@ test('a private wallet transfer persists exact units and can be replayed through
   expect(await senderWallet.json()).toMatchObject({ posted: '12', available: '12' });
   const receiverWallet = await request(walletPath, nativeReceiverToken, undefined, nativeApp);
   expect(receiverWallet.status).toBe(200);
-  expect(await receiverWallet.json()).toMatchObject({ posted: '9007199254740993', available: '9007199254740993' });
+  expect(await receiverWallet.json()).toMatchObject({
+    posted: '9007199254740993',
+    pending: '0',
+    available: '9007199254740993',
+  });
   const statement = await request(`${walletPath}/statement`, nativeReceiverToken, undefined, nativeApp);
   expect(statement.status).toBe(200);
   const { entries, next } = await statement.json();

@@ -554,24 +554,28 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       const { assetId } = input;
       if (accountId === null || !validIdentifier(assetId)) return Promise.resolve(failure('invalid_operation'));
       return database.read(async (client) => {
-        const result = await client.query<EconomyAsset & Position>(
+        const result = await client.query<EconomyAsset & Position & { pending: string }>(
           `SELECT asset.asset_id AS id, asset.scale, asset.transferable, $3::uuid::text AS "accountId",
                   COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS held,
-                  COALESCE(position.restricted, 0)::text AS restricted, COALESCE(position.revision, 0)::text AS revision
+                  COALESCE(position.restricted, 0)::text AS restricted, COALESCE(position.revision, 0)::text AS revision,
+                  COALESCE(pending.units, 0)::text AS pending
            FROM economy.asset AS asset
            LEFT JOIN economy.position AS position
              ON position.book_id = asset.book_id AND position.asset_id = asset.asset_id AND position.account_id = $3
+           LEFT JOIN economy.pending_deposit AS pending
+             ON pending.book_id = asset.book_id AND pending.asset_id = asset.asset_id AND pending.wallet_id = $3
            WHERE asset.book_id = $1 AND asset.asset_id = $2`,
           [bookId, assetId, accountId],
         );
         const row = result.rows[0];
         if (row === undefined) return failure('asset_missing');
-        const { id, scale, transferable, posted, held, restricted } = row;
+        const { id, scale, transferable, posted, held, restricted, pending } = row;
         return success({
           asset: { id, scale, transferable },
           posted,
           held,
           restricted,
+          pending,
           available: available(row).toString(),
         });
       });

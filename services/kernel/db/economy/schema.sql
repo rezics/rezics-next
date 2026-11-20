@@ -24,6 +24,46 @@ CREATE SCHEMA economy;
 
 
 --
+-- Name: project_pending_deposit(); Type: FUNCTION; Schema: economy; Owner: -
+--
+
+CREATE FUNCTION economy.project_pending_deposit() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+DECLARE
+  was_pending boolean := false;
+  is_pending boolean;
+BEGIN
+  IF NEW.direction <> 'deposit' THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    was_pending := OLD.phase IN ('submitted', 'unknown');
+  END IF;
+  is_pending := NEW.phase IN ('submitted', 'unknown');
+  IF is_pending = was_pending THEN
+    RETURN NEW;
+  END IF;
+
+  IF is_pending THEN
+    INSERT INTO economy.pending_deposit AS balance (book_id, asset_id, wallet_id, units)
+    VALUES (NEW.book_id, NEW.asset_id, NEW.wallet_id, NEW.units)
+    ON CONFLICT (book_id, asset_id, wallet_id) DO UPDATE SET units = balance.units + EXCLUDED.units;
+  ELSE
+    UPDATE economy.pending_deposit
+    SET units = units - NEW.units
+    WHERE book_id = NEW.book_id AND asset_id = NEW.asset_id AND wallet_id = NEW.wallet_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Pending deposit projection is missing for a dispatched intent';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: reject_history_edit(); Type: FUNCTION; Schema: economy; Owner: -
 --
 
@@ -315,6 +355,19 @@ CREATE TABLE economy.market_work (
 
 
 --
+-- Name: pending_deposit; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.pending_deposit (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    wallet_id uuid NOT NULL,
+    units numeric(39,0) NOT NULL,
+    CONSTRAINT pending_deposit_units_check CHECK ((units >= (0)::numeric))
+);
+
+
+--
 -- Name: position; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -519,6 +572,14 @@ ALTER TABLE ONLY economy.market_work
 
 
 --
+-- Name: pending_deposit pending_deposit_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.pending_deposit
+    ADD CONSTRAINT pending_deposit_pkey PRIMARY KEY (book_id, asset_id, wallet_id);
+
+
+--
 -- Name: position position_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -595,6 +656,13 @@ CREATE TRIGGER entry_immutable BEFORE DELETE OR UPDATE ON economy.entry FOR EACH
 --
 
 CREATE TRIGGER funding_evidence_immutable BEFORE DELETE OR UPDATE ON economy.funding_evidence FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: funding_intent funding_intent_pending_deposit; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER funding_intent_pending_deposit AFTER INSERT OR UPDATE OF phase ON economy.funding_intent FOR EACH ROW EXECUTE FUNCTION economy.project_pending_deposit();
 
 
 --
@@ -752,6 +820,14 @@ ALTER TABLE ONLY economy.market_work
 
 ALTER TABLE ONLY economy.market_work
     ADD CONSTRAINT market_work_book_id_trade_id_fkey FOREIGN KEY (book_id, trade_id) REFERENCES economy.market_trade(book_id, trade_id);
+
+
+--
+-- Name: pending_deposit pending_deposit_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.pending_deposit
+    ADD CONSTRAINT pending_deposit_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
 
 
 --

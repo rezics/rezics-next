@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import type { EconomyResult } from '../../src/economy/contract.ts';
-import type { EconomyDatabase } from '../../src/economy/ledger.ts';
+import { createEconomyLedger, type EconomyDatabase } from '../../src/economy/ledger.ts';
 import type { FundingIntent, FundingObservation } from '../../src/economy/settlement/funding.ts';
 import { createFundingStore, type FundingLedgerBinder } from '../../src/economy/storage/funding-store.ts';
 
@@ -253,4 +253,45 @@ test('native chargeback plan reads the locked wallet only after claiming the pro
   ]);
   expect(ok(await store.observe(intent.intentId, chargeback))).toEqual({ kind: 'replayed' });
   expect(await effects(intent.bookId)).toEqual(['post', 'post']);
+});
+
+test('only dispatched deposits contribute exact pending credit, independently of spendable units', async () => {
+  const { intent, failure, store } = await fixture();
+  const first = { ...intent, units: '9007199254740993' };
+  const second = { ...intent, intentId: 'intent-2', units: '7' };
+  const ledger = createEconomyLedger(database, intent.bookId);
+  const balance = () => ledger.readBalance({ accountId: intent.walletId, assetId: intent.assetId });
+  await store.begin(first);
+  await store.begin(second);
+  expect(ok(await balance())).toMatchObject({ pending: '0', posted: '0', available: '0' });
+  await Promise.all([store.prepare(first.intentId), store.prepare(second.intentId)]);
+  await store.prepare(first.intentId);
+  expect(ok(await balance())).toMatchObject({ pending: '9007199254741000', posted: '0', available: '0' });
+  expect(ok(await ledger.readBalance({ accountId: crypto.randomUUID(), assetId: intent.assetId })).pending).toBe('0');
+
+  failure.posting = true;
+  await expect(store.observe(first.intentId, confirmed(first))).rejects.toThrow('book posting failed');
+  expect(ok(await balance()).pending).toBe('9007199254741000');
+  failure.posting = false;
+  expect(ok(await store.observe(first.intentId, confirmed(first))).kind).toBe('applied');
+  expect(ok(await store.observe(first.intentId, confirmed(first))).kind).toBe('replayed');
+  expect(ok(await balance()).pending).toBe('7');
+  const withdrawal = { ...intent, intentId: 'withdrawal', direction: 'withdrawal' } as const;
+  await store.begin(withdrawal);
+  await store.prepare(withdrawal.intentId);
+  expect(ok(await balance()).pending).toBe('7');
+  const { attemptId, provider, assetId, units } = confirmed(second);
+  expect(
+    ok(
+      await store.observe(second.intentId, {
+        kind: 'refused',
+        attemptId,
+        provider,
+        assetId,
+        units,
+        evidenceId: 'declined',
+      }),
+    ).kind,
+  ).toBe('applied');
+  expect(ok(await balance()).pending).toBe('0');
 });

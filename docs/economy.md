@@ -43,7 +43,9 @@ at the protected position. Policy-restricted units preserve their restrictions t
 ## External funds and trading
 
 Ingest authenticated, distinct external movements by provider namespace, mode and movement ID. Pending or ambiguous
-movements remain reconciliation obligations. Deposit, refund, dispute, reserves, available creator payable and actual
+movements remain reconciliation obligations. The wallet reports queued and uncertain deposit units separately as
+pending credit. Confirmation or refusal removes those units in the same transaction as the outcome. Spendability
+follows confirmed wallet postings. Deposit, refund, dispute, reserves, available creator payable and actual
 payout are separate facts. Withdrawal reserves value before rail submission; retry reuses its original dispatch
 identity. Late returns and shortfalls receive explicit accounting adjustments. Use reconciled source watermarks and
 one fenced writer when switching an authoritative book.

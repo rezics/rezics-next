@@ -24,7 +24,17 @@ const positive = t.String({ maxLength: 19, pattern: '^[1-9][0-9]*$' });
 const signed = t.String({ maxLength: 20, pattern: '^(?:0|-?[1-9][0-9]*)$' });
 const params = t.Object({ assetId }, closed);
 const asset = t.Object({ id: assetId, scale: t.Integer(), transferable: t.Boolean() }, closed);
-const balance = t.Object({ asset, posted: amount, held: amount, restricted: amount, available: amount }, closed);
+const balance = t.Object(
+  {
+    asset,
+    posted: amount,
+    held: amount,
+    restricted: amount,
+    pending: t.String({ maxLength: 39, pattern: '^(?:0|[1-9][0-9]*)$' }),
+    available: amount,
+  },
+  closed,
+);
 const operationId = t.String({ minLength: 1, maxLength: 255 });
 const entry = t.Object(
   {
