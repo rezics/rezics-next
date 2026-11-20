@@ -58,6 +58,7 @@ import {
 } from './public-filter-repair-chain.ts';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
+import repairLink from './public-filter-source-binding-repair-link.sql';
 import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
@@ -1983,6 +1984,12 @@ export function createNativePublicFilterSourceBinding(
     )
       throw new BindingError('binding_mismatch');
     const chain = repairChain(bootstrap, joined);
+    const originalSubject = boundSubjectPublication(joined.cut, {
+      execution: request.execution,
+      queried: joined.queried,
+    });
+    const keys = { bootstrap: id, execution: request.execution, predecessor: request.frontier ?? '' };
+    const link = originalSubject ? await nativeSourceQuery(db, repairLink, { ...keys, binding: chain.binding }) : null;
     async function readVerifiedFrontier(step: string) {
       const row = await nativeSourceQuery(db, repairState, {
         bootstrap: id,
@@ -1993,7 +2000,14 @@ export function createNativePublicFilterSourceBinding(
         ? row
         : null;
     }
-    let previous = request.frontier === null ? null : await readVerifiedFrontier(request.frontier);
+    let previous =
+      request.frontier === null
+        ? null
+        : link
+          ? link.predecessor_verified && link.predecessor_state !== null && link.predecessor_complete !== null
+            ? { state: link.predecessor_state, complete: link.predecessor_complete }
+            : null
+          : await readVerifiedFrontier(request.frontier);
     if (request.scanOnly && (!previous || previous.complete || request.homeLimit !== repairHomeBatchLimit))
       throw new BindingError('owner_unavailable');
     if (request.frontier !== null && !previous) {
@@ -2013,11 +2027,11 @@ export function createNativePublicFilterSourceBinding(
       previous = await readVerifiedFrontier(request.frontier);
       if (!previous) return fail('owner_unavailable', cost);
     }
-    const old = await nativeSourceQuery(db, repairRead, {
-      bootstrap: id,
-      execution: request.execution,
-      predecessor: request.frontier ?? '',
-    });
+    const old = !link
+      ? await nativeSourceQuery(db, repairRead, keys)
+      : link.step !== null && link.state !== null && link.complete !== null
+        ? { ...link, step: link.step, state: link.state, complete: link.complete }
+        : null;
     if (old && (old.receipt_protocol !== 1 || old.input_limit === null)) throw new BindingError('owner_unavailable');
     const retainedLocatorDigests = old
       ? unpackRepairLocatorDigests(old.repair_locator_digests, old.input_limit!)
@@ -2026,7 +2040,7 @@ export function createNativePublicFilterSourceBinding(
     if (request.scanOnly) {
       const predecessor = decode<RepairRecord>(previous!.state);
       if (
-        !boundSubjectPublication(joined.cut, { execution: request.execution, queried: joined.queried }) ||
+        !originalSubject ||
         predecessor.scan?.kind !== 'semantic' ||
         !subjectHomeScan(predecessor.next) ||
         (replay &&
@@ -2078,6 +2092,31 @@ export function createNativePublicFilterSourceBinding(
       !(mixedCreation && inputLimit === fundedHomes)
     )
       throw new BindingError('owner_unavailable');
+    // A lost Search reply can leave a verified empty key scan at this exact
+    // predecessor. Return that immutable intent and let the independent reader
+    // reopen current Source authority and check the original range.
+    if (
+      link &&
+      old &&
+      replay &&
+      !old.complete &&
+      replay.scan?.kind === 'semantic' &&
+      subjectHomeScan(replay.input) &&
+      replay.output === null &&
+      replay.account === undefined &&
+      retainedLocatorDigests?.length === 0 &&
+      link.linked &&
+      link.verified_root ===
+        publicFilterRepairPageRoot(link.predecessor_root ?? chain.binding, {
+          step,
+          predecessor: request.frontier,
+          state: old.state,
+          complete: false,
+          inputLimit,
+          digests: old.repair_locator_digests!,
+        })
+    )
+      return { status: 'progress', repairs: [], frontier: step, cost };
     let next = structuredClone(state);
     let repairs: PublicSourceRepair[] = [],
       output: RepairRecord['output'] = null,
@@ -3643,6 +3682,7 @@ export function createNativePublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         if (scope) scope.joined = joined;
         const chain = repairChain(cut.bootstrap, joined);
+        const originalSubject = boundSubjectPublication(cut, input);
         const keys = {
           bootstrap: bootstrapId,
           execution: input.execution,
@@ -3651,16 +3691,31 @@ export function createNativePublicFilterSourceBinding(
         // Settlement reopens a durable verification prefix. Resolve its original
         // page, predecessor and native link together before rechecking live evidence.
         const proof = scope ? await nativeSourceQuery(db, repairProof, { ...keys, binding: chain.binding }) : null;
-        const row = scope ? proof : await nativeSourceQuery(db, repairRead, keys);
-        if (!row || row.receipt_protocol !== 1 || row.input_limit === null || row.predecessor !== input.predecessor)
+        const link =
+          !scope && originalSubject
+            ? await nativeSourceQuery(db, repairLink, { ...keys, binding: chain.binding })
+            : null;
+        const row = scope ? proof : (link ?? (await nativeSourceQuery(db, repairRead, keys)));
+        if (
+          !row ||
+          row.step === null ||
+          row.state === null ||
+          row.complete === null ||
+          row.receipt_protocol !== 1 ||
+          row.input_limit === null ||
+          row.predecessor !== input.predecessor
+        )
           throw new BindingError('owner_unavailable');
         const record = decode<RepairRecord>(row.state);
         const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
         // Resolve the actual native predecessor, not an asserted matching cursor.
         // Its immutable successor binds the next input even on a crash/replay.
         if (input.predecessor !== null) {
-          let predecessorState = proof?.predecessor_state;
-          if (!proof) {
+          let predecessorState = proof?.predecessor_state ?? link?.predecessor_state;
+          if (link) {
+            if (link.predecessor_complete !== false || link.predecessor_protocol !== 1)
+              throw new BindingError('binding_mismatch');
+          } else if (!proof) {
             const predecessor = await nativeSourceQuery(db, repairState, {
               bootstrap: bootstrapId,
               execution: input.execution,
@@ -3689,7 +3744,7 @@ export function createNativePublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         }
         if (!uuid.test(row.step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
-        const subjectPublication = boundSubjectPublication(cut, input) && record.account === undefined;
+        const subjectPublication = originalSubject && record.account === undefined;
         if (
           input.scanOnly &&
           (!subjectPublication ||
@@ -4039,13 +4094,21 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
         } else {
-          await retainPublicFilterRepairVerification(db, chain, page, { deadline }, (controls) => {
-            cost.rows += controls.rows;
-            cost.dependencyPoints += controls.rows;
-            cost.inputKeys += controls.keys;
-            cost.bytes += controls.bytes;
-            cost.frontierWrites += controls.frontierWrites ?? 0;
-          });
+          const alreadyVerified =
+            link?.linked === true && !row.complete && subjectHomeScan(record.input) && record.scan?.kind === 'semantic';
+          await retainPublicFilterRepairVerification(
+            db,
+            chain,
+            { ...page, alreadyVerified },
+            { deadline },
+            (controls) => {
+              cost.rows += controls.rows;
+              cost.dependencyPoints += controls.rows;
+              cost.inputKeys += controls.keys;
+              cost.bytes += controls.bytes;
+              cost.frontierWrites += controls.frontierWrites ?? 0;
+            },
+          );
         }
         const result = {
           status: 'verified' as const,
