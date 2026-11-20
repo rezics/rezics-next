@@ -392,63 +392,88 @@ function assertCurrentIdentity(read: PublicSubject, target: JourneyBrowserTarget
   assert.ok(expected.includes(read.subject.type), `${target.id} is current ${target.kind} (${read.subject.type})`);
 }
 
-function browserLinkFor(
-  links: readonly { href: string; text: string }[],
-  origin: string,
-  target: JourneyBrowserTarget,
-) {
-  return links.find((link) => new URL(link.href, origin).pathname.includes(`/subjects/${target.id}`));
+const targetTabs = {
+  episode: 'contents',
+  person: 'credits',
+  organization: '',
+  book: 'contents',
+  'book-series': 'relations',
+  anime: 'relations',
+  character: 'characters',
+} as const satisfies Record<JourneyBrowserTarget['kind'], string>;
+
+async function followSubjectPage(page: any, path: string, label: string) {
+  if (new URL(page.url()).pathname === path) return;
+  const links: string[] = await page
+    .locator('main a[href]')
+    .evaluateAll((nodes: HTMLAnchorElement[]) => nodes.map((node) => node.href));
+  const href = links.find((link) => new URL(link).pathname === path);
+  assert.ok(href, `missing public ${label} link`);
+  const response = await page.goto(href, { waitUntil: 'domcontentloaded' });
+  assert.equal(response?.status(), 200, `${label} navigation`);
 }
 
 async function checkBrowserTarget(
   page: any,
-  origin: string,
+  overview: URL,
   sourceId: string,
   target: JourneyBrowserTarget,
   viewport: string,
 ) {
-  const sourcePath = new URL(page.url()).pathname;
-  const links = await page
-    .locator('main a[href]')
-    .evaluateAll((nodes: any[]) =>
-      nodes.map((node: any) => ({ href: node.href as string, text: (node.textContent ?? '') as string })),
-    );
-  const link = browserLinkFor(links, origin, target);
-  assert.ok(link, `${viewport} ${sourceId} links to ${target.kind} ${target.id}`);
-  const destination = new URL(link.href, origin);
+  const tab = targetTabs[target.kind];
+  await followSubjectPage(page, tab ? `${overview.pathname}/${tab}` : overview.pathname, tab || 'Overview');
+  const node =
+    tab === 'credits'
+      ? `credit-${target.property.replace(':', '-')}`
+      : target.property === 'rezics:crossMediaCounterpart'
+        ? 'counterparts'
+        : undefined;
+  if (node) {
+    const stream = page.locator(`main a[href$="#${node}"]:visible`).first();
+    const href = await stream.getAttribute('href');
+    assert.ok(href, `missing public ${node} stream link`);
+    const response = await page.goto(new URL(href, overview).href, { waitUntil: 'domcontentloaded' });
+    assert.equal(response?.status(), 200, `${node} navigation`);
+  }
+
+  const source = new URL(page.url());
+  const link = page.locator(`main a[href*="/subjects/${target.id}"][href*="via="]:visible`).first();
+  const href = await link.getAttribute('href');
+  assert.ok(href, `${viewport} ${sourceId} links to ${target.kind} ${target.id}`);
+  const destination = new URL(href, source);
   const via = destination.searchParams.get('via');
   assert.ok(via, `${viewport} ${sourceId} link to ${target.id} carries return navigation`);
-  assert.equal(new URL(via!, origin).pathname, new URL(page.url()).pathname, `${target.id} returns to its holder`);
-  await page
-    .locator(`[data-work-holder="${target.holder}"][data-work-statement="${target.statementId}"]`)
-    .locator('[data-work-action="evidence"]')
-    .click();
-  const card = page.locator(`[data-work-holder="${target.holder}"][data-work-statement="${target.statementId}"]`);
-  const citations = await card
-    .locator('a[href]')
-    .evaluateAll((nodes: any[]) => nodes.map((node: any) => node.href as string));
-  assert.ok(citations.includes(target.citation), `${viewport} ${sourceId} ${target.property} shows ${target.citation}`);
-  await page.locator(`main a[href*="/subjects/${target.id}"]`).first().click();
-  await page.waitForURL((url: URL) => url.pathname.includes(`/subjects/${target.id}`), { timeout: 30_000 });
-  await page.goBack({ waitUntil: 'networkidle' });
-  assert.equal(new URL(page.url()).pathname, sourcePath, `${target.id} returns to ${sourceId}`);
+  assert.equal(new URL(via, source).pathname, source.pathname, `${target.id} returns to its holder`);
+  const opensNewTab = (await link.getAttribute('target')) === '_blank';
+  const reader = opensNewTab ? (await Promise.all([page.waitForEvent('popup'), link.click()]))[0] : page;
+  try {
+    if (!opensNewTab) await link.click();
+    await reader.waitForURL((url: URL) => url.pathname.split('/')[3] === target.id, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
+    if (target.holder === target.id) await checkBrowserDetails(reader, [], [target.citation]);
+  } finally {
+    if (opensNewTab) await reader.close();
+  }
+  if (!opensNewTab) await page.goBack({ waitUntil: 'domcontentloaded' });
+  await page.waitForURL(source.href, { waitUntil: 'domcontentloaded' });
 }
 
-/** Details exposes the current name statements, including spellings outside the selected title. */
-async function checkBrowserNames(page: any, names: readonly string[]) {
-  if (names.length === 0) return;
+/** Details exposes the exact current spellings and source URLs of the Subject that holds each statement. */
+async function checkBrowserDetails(page: any, names: readonly string[], citations: readonly string[]) {
+  if (names.length === 0 && citations.length === 0) return;
   const overview = new URL(page.url());
-  const details = page.locator('main a[href]').filter({ hasText: /^Details$/u });
-  const href = (
-    (await details.evaluateAll((links: HTMLAnchorElement[]) => links.map((link) => link.href))) as string[]
-  ).find((link) => new URL(link).pathname === `${overview.pathname}/details`);
-  assert.ok(href, 'missing public Details link');
-  const response = await page.goto(href);
-  assert.equal(response?.status(), 200, 'Details navigation');
+  await followSubjectPage(page, `${overview.pathname}/details`, 'Details');
   const rendered: string[] = await page.locator('main [lang="und"]:visible').allTextContents();
   for (const name of names) assert.ok(rendered.includes(name), `missing und name ${name}`);
-  await page.goBack();
-  assert.equal(new URL(page.url()).pathname, overview.pathname, 'Details returns to the overview');
+  for (const citation of citations)
+    assert.ok(
+      (await page.locator(`main #sources a[href="${citation}"]:visible`).count()) > 0,
+      `Details missing ${citation}`,
+    );
+  await page.goBack({ waitUntil: 'domcontentloaded' });
+  await page.waitForURL(overview.href, { waitUntil: 'domcontentloaded' });
 }
 
 async function checkTarget(work: JourneyWork, subjectIds: ReadonlyMap<string, string>, api: string) {
@@ -685,9 +710,15 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
             await page.locator('main').waitFor();
             text = await page.locator('main').innerText();
             url = page.url();
-            await checkBrowserNames(page, undNames(currentReads.get(work.sourceKey)!));
+            // The current API checks bind these exact URLs to statements on this Subject.
+            await checkBrowserDetails(
+              page,
+              undNames(currentReads.get(work.sourceKey)!),
+              targets.filter((target) => target.holder === work.row.subjectId).map((target) => target.citation),
+            );
             assert.ok((await page.locator('main a[href*="bgm.tv"]').count()) > 0, 'missing Bangumi citation');
-            for (const target of targets) await checkBrowserTarget(page, web, work.row.subjectId, target, name);
+            for (const target of targets)
+              await checkBrowserTarget(page, new URL(url), work.row.subjectId, target, name);
             if (work.sourceKey === '26') assert.ok(text.includes('文学少女'), 'missing exact Book Girl title');
             if (work.sourceKey === '233')
               assert.ok(text.includes('劇場版 空の境界 第一章 俯瞰風景'), 'missing exact anime title');
