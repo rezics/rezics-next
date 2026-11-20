@@ -8,7 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { fullView } from '../../src/library/views.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';
+import { accessCheck, accessCommandAuthorization, actorOf, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
@@ -89,12 +89,14 @@ async function create(part: number, label: string, target?: string, privateState
   const owner = await actor('owner');
   const route = part * 16;
   const id = newId(route);
-  const authorize = await accessCheck(
+  const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const authorization = await accessCommandAuthorization(
     access,
     owner,
     'subject:create',
     { route: 0, id: GLOBAL_CONTEXT },
-    { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+    { pool, deadline },
+    () => new Error('Subject creation denied'),
   );
   const result = await createSubject(pool, {
     actor: owner,
@@ -102,7 +104,8 @@ async function create(part: number, label: string, target?: string, privateState
     idempotencyKey: randomUUID(),
     digest: digest(id),
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize,
+    authorization,
+    deadline,
     item: {
       type: 'schema:Person',
       labels: { en: label },
