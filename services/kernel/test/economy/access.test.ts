@@ -143,7 +143,7 @@ test('Economy admission, discovery and replay require the exact current account 
   await addGrant(ordinary, 'gate:any');
   await addGrant('00000000-0000-0000-0000-000000000000', grant, 'active_accounts');
   await db.admin.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ('economy', '(,)', $1)`,
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ('economy', tstzrange(statement_timestamp() - interval '1 second', NULL, '[)'), $1)`,
     [Bun.randomUUIDv7()],
   );
   for (const token of [undefined, ordinaryToken, senderToken]) {

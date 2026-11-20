@@ -51,7 +51,7 @@ export async function readExplicitExposureGrant(
     resource_id: GLOBAL_CONTEXT.id,
     account_id: accountId,
     action: `gate:${group}`,
-    at: at ?? null,
+    at: at ?? '',
   });
   return row?.granted === true;
 }
