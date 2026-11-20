@@ -70,7 +70,7 @@ CREATE TABLE economy.command_receipt (
     CONSTRAINT command_receipt_digest_check CHECK ((octet_length(digest) = 32)),
     CONSTRAINT command_receipt_namespace_check CHECK ((namespace = ANY (ARRAY['wallet'::text, 'owner'::text]))),
     CONSTRAINT command_receipt_operation_id_check CHECK (((char_length(operation_id) >= 1) AND (char_length(operation_id) <= 255))),
-    CONSTRAINT command_receipt_outcome_check CHECK ((outcome = ANY (ARRAY['ok'::text, 'asset_missing'::text, 'operation_conflict'::text, 'insufficient_funds'::text, 'asset_not_transferable'::text, 'hold_missing'::text, 'hold_closed'::text, 'invalid_amount'::text, 'invalid_operation'::text])))
+    CONSTRAINT command_receipt_outcome_check CHECK ((outcome = ANY (ARRAY['ok'::text, 'asset_missing'::text, 'operation_conflict'::text, 'insufficient_funds'::text, 'asset_not_transferable'::text, 'hold_missing'::text, 'hold_closed'::text, 'allocation_missing'::text, 'allocation_closed'::text, 'invalid_amount'::text, 'invalid_operation'::text])))
 );
 
 
@@ -107,14 +107,44 @@ CREATE TABLE economy.hold (
     released bigint DEFAULT 0 NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     closed_at timestamp with time zone,
+    allocated bigint DEFAULT 0 NOT NULL,
     CONSTRAINT hold_account_id_check CHECK ((account_id <> '00000000-0000-0000-0000-000000000000'::uuid)),
     CONSTRAINT hold_captured_check CHECK ((captured >= 0)),
     CONSTRAINT hold_check CHECK (((original)::numeric = (((remaining)::numeric + (captured)::numeric) + (released)::numeric))),
     CONSTRAINT hold_check1 CHECK (((remaining = 0) = (closed_at IS NOT NULL))),
+    CONSTRAINT hold_check2 CHECK (((allocated >= 0) AND (allocated <= remaining))),
     CONSTRAINT hold_hold_id_check CHECK (((char_length(hold_id) >= 1) AND (char_length(hold_id) <= 255))),
     CONSTRAINT hold_original_check CHECK ((original > 0)),
     CONSTRAINT hold_released_check CHECK ((released >= 0)),
     CONSTRAINT hold_remaining_check CHECK ((remaining >= 0))
+);
+
+
+--
+-- Name: hold_allocation; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.hold_allocation (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    account_id uuid NOT NULL,
+    hold_id text NOT NULL,
+    purpose text NOT NULL,
+    reference text NOT NULL,
+    amount bigint NOT NULL,
+    status text NOT NULL,
+    recipient_id uuid,
+    allocation_transaction_id uuid NOT NULL,
+    allocated_at timestamp with time zone NOT NULL,
+    terminal_transaction_id uuid,
+    resolved_at timestamp with time zone,
+    CONSTRAINT hold_allocation_amount_check CHECK ((amount > 0)),
+    CONSTRAINT hold_allocation_check CHECK (((status = 'captured'::text) = (recipient_id IS NOT NULL))),
+    CONSTRAINT hold_allocation_check1 CHECK (((status = 'protected'::text) = (terminal_transaction_id IS NULL))),
+    CONSTRAINT hold_allocation_check2 CHECK (((terminal_transaction_id IS NULL) = (resolved_at IS NULL))),
+    CONSTRAINT hold_allocation_purpose_check CHECK ((purpose = ANY (ARRAY['spot_fill'::text, 'market_trade'::text, 'withdrawal'::text]))),
+    CONSTRAINT hold_allocation_reference_check CHECK (((char_length(reference) >= 1) AND (char_length(reference) <= 255))),
+    CONSTRAINT hold_allocation_status_check CHECK ((status = ANY (ARRAY['protected'::text, 'captured'::text, 'released'::text])))
 );
 
 
@@ -133,8 +163,8 @@ CREATE TABLE economy.journal (
     hold_id text,
     recorded_at timestamp with time zone NOT NULL,
     CONSTRAINT journal_check CHECK (((kind = 'transfer'::text) = (namespace = 'wallet'::text))),
-    CONSTRAINT journal_check1 CHECK (((kind = ANY (ARRAY['reserve'::text, 'capture'::text, 'release'::text, 'expire'::text])) = (hold_id IS NOT NULL))),
-    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text])))
+    CONSTRAINT journal_hold_kind_check CHECK (((kind <> ALL (ARRAY['issue'::text, 'transfer'::text])) = (hold_id IS NOT NULL))),
+    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text])))
 );
 
 
@@ -189,6 +219,30 @@ ALTER TABLE ONLY economy.entry
 
 
 --
+-- Name: hold_allocation hold_allocation_book_id_asset_id_allocation_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_book_id_asset_id_allocation_transaction_id_key UNIQUE (book_id, asset_id, allocation_transaction_id);
+
+
+--
+-- Name: hold_allocation hold_allocation_book_id_asset_id_terminal_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_book_id_asset_id_terminal_transaction_id_key UNIQUE (book_id, asset_id, terminal_transaction_id);
+
+
+--
+-- Name: hold_allocation hold_allocation_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_pkey PRIMARY KEY (book_id, asset_id, account_id, hold_id, purpose, reference);
+
+
+--
 -- Name: hold hold_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -224,7 +278,7 @@ ALTER TABLE ONLY economy."position"
 -- Name: hold_due_idx; Type: INDEX; Schema: economy; Owner: -
 --
 
-CREATE INDEX hold_due_idx ON economy.hold USING btree (book_id, expires_at, asset_id, account_id, hold_id) WHERE (remaining > 0);
+CREATE INDEX hold_due_idx ON economy.hold USING btree (book_id, expires_at, asset_id, account_id, hold_id) WHERE (remaining > allocated);
 
 
 --
@@ -269,6 +323,30 @@ ALTER TABLE ONLY economy.entry
 
 ALTER TABLE ONLY economy.entry
     ADD CONSTRAINT entry_book_id_asset_id_transaction_id_fkey FOREIGN KEY (book_id, asset_id, transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: hold_allocation hold_allocation_book_id_asset_id_account_id_hold_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_book_id_asset_id_account_id_hold_id_fkey FOREIGN KEY (book_id, asset_id, account_id, hold_id) REFERENCES economy.hold(book_id, asset_id, account_id, hold_id);
+
+
+--
+-- Name: hold_allocation hold_allocation_book_id_asset_id_allocation_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_book_id_asset_id_allocation_transaction_id_fkey FOREIGN KEY (book_id, asset_id, allocation_transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: hold_allocation hold_allocation_book_id_asset_id_terminal_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.hold_allocation
+    ADD CONSTRAINT hold_allocation_book_id_asset_id_terminal_transaction_id_fkey FOREIGN KEY (book_id, asset_id, terminal_transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
 
 
 --

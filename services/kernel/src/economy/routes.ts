@@ -87,6 +87,8 @@ function valueOf<T>(result: EconomyResult<T>): T {
       throw new ProblemError('invalid_request');
     case 'hold_missing':
     case 'hold_closed':
+    case 'allocation_missing':
+    case 'allocation_closed':
     case 'unavailable':
       throw new ProblemError('dependency_unavailable');
   }

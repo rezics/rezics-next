@@ -37,6 +37,8 @@ export type EconomyFailure =
   | 'asset_not_transferable'
   | 'hold_missing'
   | 'hold_closed'
+  | 'allocation_missing'
+  | 'allocation_closed'
   | 'invalid_amount'
   | 'invalid_operation'
   | 'unavailable';
@@ -47,6 +49,20 @@ export type EconomyReceipt = Readonly<{ operationId: string }>;
 type WalletKey = Readonly<{ accountId: string; assetId: string }>;
 type WalletCommand = WalletKey & Readonly<{ operationId: string }>;
 type WalletHold = WalletCommand & Readonly<{ holdId: string }>;
+
+export type HoldAllocationPurpose = 'spot_fill' | 'market_trade' | 'withdrawal';
+export type HoldAllocationKey = WalletKey &
+  Readonly<{ holdId: string; purpose: HoldAllocationPurpose; reference: string }>;
+export type HoldAllocation = Readonly<{
+  purpose: HoldAllocationPurpose;
+  reference: string;
+  amount: string;
+  status: 'protected' | 'captured' | 'released';
+  recipientId: string | null;
+  allocatedAt: string;
+  resolvedAt: string | null;
+}>;
+type AllocationCommand = HoldAllocationKey & Pick<WalletCommand, 'operationId'>;
 
 export interface EconomyWalletPort {
   readBalance(input: WalletKey): Promise<EconomyResult<WalletBalance>>;
@@ -68,4 +84,11 @@ export interface EconomyLedger extends EconomyWalletPort {
   ): Promise<EconomyResult<EconomyReceipt>>;
   release(input: WalletHold): Promise<EconomyResult<EconomyReceipt>>;
   expire(input: WalletHold): Promise<EconomyResult<EconomyReceipt>>;
+  releaseAmount(input: WalletHold & Readonly<{ amount: string }>): Promise<EconomyResult<EconomyReceipt>>;
+  allocate(input: AllocationCommand & Readonly<{ amount: string }>): Promise<EconomyResult<EconomyReceipt>>;
+  readAllocation(input: HoldAllocationKey): Promise<EconomyResult<HoldAllocation>>;
+  captureAllocation(
+    input: AllocationCommand & Readonly<{ recipientId: string }>,
+  ): Promise<EconomyResult<EconomyReceipt>>;
+  releaseAllocation(input: AllocationCommand): Promise<EconomyResult<EconomyReceipt>>;
 }
