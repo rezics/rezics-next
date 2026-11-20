@@ -499,9 +499,14 @@ describe('Close current Context and Realm Subject navigation cache and continuat
     const query = subjectPageQuery(recording.subject, 'en', 'overview', realm, 'reader-a');
     let reads = 0;
     const current = { ...query, queryFn: async () => ({ revision: ++reads }) };
+    const currentView = { ...first, queryFn: async () => ({ revision: ++reads }) };
     expect(await client.fetchQuery(current)).toEqual({ revision: 1 });
-    expect(await client.fetchQuery(current)).toEqual({ revision: 2 });
-    expect(query.gcTime).toBe(0);
+    expect(await client.fetchQuery(currentView)).toEqual({ revision: 2 });
+    await Bun.sleep(0);
+    expect(client.getQueryData(query.queryKey)).toEqual({ revision: 1 });
+    expect(client.getQueryData(first.queryKey)).toEqual({ revision: 2 });
+    expect(await client.fetchQuery(current)).toEqual({ revision: 3 });
+    expect(await client.fetchQuery(currentView)).toEqual({ revision: 4 });
     expect(query.retry).toBe(false);
     client.clear();
   });

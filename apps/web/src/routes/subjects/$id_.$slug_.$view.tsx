@@ -3,6 +3,7 @@ import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { isView, type PageContinuation, type View } from '@rezics/composition';
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
@@ -358,6 +359,12 @@ function SubjectViewRoute() {
   const navigate = Route.useNavigate();
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
+  // The region checks this exact loader source. Observe it without starting a second read.
+  useQuery({
+    ...subjectViewPagesQuery(page.subject!, locale, view, cursor, realm, node, initialReader, page.requestedBoard),
+    enabled: false,
+    notifyOnChangeProps: [],
+  });
   const onWorkContinue = (continuation: PageContinuation) => {
     void navigate({
       search: (previous) => ({ ...previous, node: continuation.node, cursor: continuation.cursor }),
