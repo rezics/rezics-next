@@ -215,6 +215,7 @@ test('a Fedora host installs missing packages with dnf', () => {
     'glibc-devel',
     'sqlite',
     'sqlite-devel',
+    'tmux',
     'python3',
   ];
   expect(events.filter((event) => event.command === 'rpm').map((event) => event.args)).toEqual(
@@ -275,6 +276,7 @@ test('a Debian host still installs missing packages with apt', () => {
     'libc6-dev',
     'sqlite3',
     'libsqlite3-dev',
+    'tmux',
     'python3',
   ];
   expect(events.filter((event) => event.command === 'dpkg').map((event) => event.args)).toEqual(

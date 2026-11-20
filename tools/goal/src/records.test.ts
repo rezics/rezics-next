@@ -89,7 +89,7 @@ test('import refuses to replace a waiting attempt', async () => {
       }),
     ).toThrow('cannot import over a running or waiting attempt');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 

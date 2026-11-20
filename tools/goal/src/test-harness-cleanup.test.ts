@@ -241,8 +241,6 @@ test('unknown original group visibility refuses cancellation and orphan terminal
       return kill(pid, signal);
     });
     restore = () => inspection.mockRestore();
-    await expect(h.tasks.cancel(task.id)).rejects.toThrow('visibility unknown');
-    expect(h.store.task(task.id).state).toBe('running');
     const notices: unknown[] = [];
     const job = new WorkerJob(
       h.tasks,
@@ -264,12 +262,27 @@ test('unknown original group visibility refuses cancellation and orphan terminal
     expect(h.store.runningAttemptsCount()).toBe(1);
     expect(h.store.events(task.id).some((event) => event.kind === 'process-cleanup-unconfirmed')).toBe(true);
     expect(notices).toHaveLength(1);
+
+    await expect(h.tasks.cancel(task.id)).rejects.toThrow('visibility unknown');
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.attempt(worker.attempt).terminationIntent).toMatchObject({
+      operation: 'cancel',
+      state: 'unknown',
+      processIdentity: 'known',
+    });
+    expect(h.store.attempt(worker.attempt).state).toBe('running');
+    expect(h.store.task(task.id).state).toBe('running');
+    expect(h.store.runningAttemptsCount()).toBe(1);
     expect(sameProcess(unrelated.identity)).toBe(true);
     restore();
     restore = undefined;
     await job.recoverOrphans();
     await job.drain();
+    expect(h.store.attempt(worker.attempt).state).toBe('cancelled');
+    expect(h.store.task(task.id).state).toBe('cancelled');
     expect(h.store.runningAttemptsCount()).toBe(0);
+    expect(sameProcess(unrelated.identity)).toBe(true);
   } finally {
     restore?.();
     unrelated.child.kill('SIGKILL');

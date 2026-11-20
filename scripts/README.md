@@ -1224,7 +1224,8 @@ scripts/provision-check-host.sh root@check.example .secrets/server/check-small/o
 The script detects Debian-family or Fedora/RHEL-family systems from `/etc/os-release`.
 It installs missing Git, rsync, archive, download, certificate, locking, Bash and Python 3 tools with apt or dnf.
 Goal checks use a C compiler and the C library and SQLite headers to build a SQLite extension. They also use
-the `sqlite3` CLI. The provisioner installs missing packages for these tools and headers with apt or dnf.
+the `sqlite3` CLI and tmux for the resident transport fixture. The provisioner installs missing packages for
+these tools and headers with apt or dnf.
 Python 3 must provide `os.pidfd_open` and `signal.pidfd_send_signal` (3.9 or newer), and Linux must support pidfds
 and `PR_SET_CHILD_SUBREAPER`. Provisioning validates those primitives before admitting the host.
 It installs pinned Bun and Node versions under `/usr/local` when their versions differ.

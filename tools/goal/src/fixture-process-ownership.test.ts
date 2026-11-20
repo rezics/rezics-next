@@ -143,26 +143,39 @@ test('malformed process state is unknown rather than an empty original group', (
 
 test('a vanished detached leader leaves a live original child that must be reaped before group exit', async () => {
   const leader = spawn(
-    process.execPath,
+    'python3',
     [
-      '-e',
+      '-c',
       `
-    const { spawn } = require('node:child_process');
-    const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: 'ignore' });
-    child.unref(); console.log(child.pid); setTimeout(() => process.exit(0), 150);
+import os, signal
+if os.fork():
+    os.close(1)
+    os.read(0, 1)
+    os._exit(0)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+print(os.getpid(), flush=True)
+os.close(1)
+while True:
+    signal.pause()
   `,
     ],
-    { detached: true, stdio: ['ignore', 'pipe', 'ignore'] },
+    { detached: true, stdio: ['pipe', 'pipe', 'ignore'] },
   );
-  const childPid = await new Promise<number>((done, reject) => {
-    leader.once('error', reject);
-    leader.stdout!.once('data', (line) => done(Number(String(line).trim())));
-  });
-  const identity = processIdentity(leader.pid!)!;
+  const exited = new Promise<void>((done) => leader.once('close', () => done()));
+  let identity: ReturnType<typeof processIdentity> = null;
   let settled = false;
   let waiting: Promise<void> | undefined;
   try {
+    const childPid = await new Promise<number>((done, reject) => {
+      leader.once('error', reject);
+      leader.stdout!.once('data', (line) => done(Number(String(line).trim())));
+      leader.stdout!.once('end', () => reject(new Error('fixture child did not report readiness')));
+    });
+    identity = processIdentity(leader.pid!);
+    if (!identity) throw new Error('fixture leader vanished before releasing it');
+    leader.stdin!.end();
     await waitForProcess(identity);
+    await exited;
     expect(processIdentity(childPid)?.group).toBe(identity.group);
     const read = fs.readFileSync;
     const blocked = spyOn(fs, 'readFileSync').mockImplementation(((path: unknown, ...args: unknown[]) => {
@@ -186,8 +199,13 @@ test('a vanished detached leader leaves a live original child that must be reape
     await waiting;
     expect(processIdentity(childPid)).toBeNull();
   } finally {
-    await terminateProcessGroup(identity, 20);
-    await waiting;
+    try {
+      await terminateProcessGroup(identity ?? (leader.pid ? processIdentity(leader.pid) : null), 20);
+    } finally {
+      leader.stdin!.destroy();
+      await exited;
+      await waiting;
+    }
   }
 });
 

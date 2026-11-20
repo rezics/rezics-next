@@ -3,7 +3,7 @@ import { existsSync, unlinkSync, watch, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { WorkerJob } from './job.ts';
-import { sameProcess } from './process.ts';
+import { processIdentity, sameProcess, waitForProcessGroup } from './process.ts';
 import { harness } from './test-support.ts';
 import type { Attempt } from './types.ts';
 
@@ -46,12 +46,8 @@ function waitForFile(path: string): Promise<void> {
     }
   });
 }
-async function until(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 300 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 50));
-  if (!condition()) throw new Error('condition never held');
-}
 /** Run the manager's retry tool call, then start its persisted intent from the host recovery path. */
-async function launchThenKillLauncher(h: ReturnType<typeof harness>, taskId: string): Promise<Attempt> {
+async function launchAfterRetryCliExits(h: ReturnType<typeof harness>, taskId: string): Promise<Attempt> {
   // `retry` records a retry, so first create and stop an attempt as a manager would.
   const first = await h.tasks.retry(taskId);
   const worktree = h.store.task(taskId).worktree;
@@ -85,21 +81,21 @@ async function launchThenKillLauncher(h: ReturnType<typeof harness>, taskId: str
   return attempt;
 }
 
-test("a worker keeps running after the process that launched it and that process's whole tree are killed", async () => {
+test('the host starts a detached worker from retry intent after the retry CLI exits', async () => {
   const h = harness(heldWorker(0));
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const attempt = await launchThenKillLauncher(h, task.id);
+    const attempt = await launchAfterRetryCliExits(h, task.id);
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(sameProcess(attempt.process!)).toBe(true);
     const worktree = h.store.task(task.id).worktree;
     expect(existsSync(join(worktree, 'result.txt'))).toBe(false);
     writeFileSync(join(worktree, '.worker-release'), 'go');
-    await until(() => !sameProcess(attempt.process!));
+    await waitForProcessGroup(attempt.process!);
     expect(existsSync(join(worktree, 'result.txt'))).toBe(true);
     expect(existsSync(`${attempt.logPath}.exit`)).toBe(true);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }, 30000);
 
@@ -119,19 +115,19 @@ test('the follower still settles that worker with its real exit code read after 
     expect(requests).toHaveLength(1);
     expect(requests[0]!.attempt).toBe(worker.attempt.attempt);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }, 30000);
 
-test('a restarted controller adopts such a worker and settles it only after it has really exited', async () => {
+test('a restarted controller adopts a detached worker and settles it only after it has really exited', async () => {
   const h = harness(heldWorker(7));
   try {
     const task = h.tasks.dispatch(h.briefFile),
       requests: { attempt: number }[] = [];
-    const attempt = await launchThenKillLauncher(h, task.id);
-    const ref = { taskId: task.id, attempt: attempt.attempt };
+    // Launch without an old follower competing with the replacement controller for settlement.
+    const { attempt: ref } = await h.tasks.retry(task.id);
     const worktree = h.store.task(task.id).worktree;
-    // The helper's in-process recovery stands in for a host that has since restarted.
+    await waitForFile(join(worktree, '.worker-started'));
     h.store.updateAttempt(ref, (current) => {
       current.driver = { pid: -1, start: 'missing', boot: 'missing', group: -1 };
     });
@@ -141,16 +137,20 @@ test('a restarted controller adopts such a worker and settles it only after it h
       .then(() => {
         done = true;
       });
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const driver = processIdentity()!;
+    for (let n = 0; !done && h.store.attempt(ref).driver?.pid !== driver.pid && n < 300; n++) await Bun.sleep(10);
+    expect(h.store.attempt(ref).driver).toEqual(driver);
+    await Bun.sleep(1500);
     expect(done).toBe(false);
-    expect(sameProcess(attempt.process!)).toBe(true);
+    expect(sameProcess(ref.process!)).toBe(true);
     expect(h.store.attempt(ref).state).toBe('running');
     expect(requests).toEqual([]);
     writeFileSync(join(worktree, '.worker-release'), 'go');
     await recovery;
+    expect(sameProcess(ref.process!)).toBe(false);
     expect(h.store.attempt(ref).state).toBe('exited');
     expect(h.store.attempt(ref).exitCode).toBe(7);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }, 30000);

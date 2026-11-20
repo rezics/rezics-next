@@ -128,7 +128,7 @@ trap 'rm -rf "$work"' EXIT
 # Goal checks compile a SQLite extension with cc and query databases with the sqlite3 CLI.
 missing=()
 if [ "$package_manager" = fedora ]; then
-  for package in git rsync unzip xz curl ca-certificates util-linux bash gcc glibc-devel sqlite sqlite-devel; do
+  for package in git rsync unzip xz curl ca-certificates util-linux bash gcc glibc-devel sqlite sqlite-devel tmux; do
     rpm -q "$package" >/dev/null 2>&1 || missing+=("$package")
   done
   rpm -q python3 >/dev/null 2>&1 || missing+=(python3)
@@ -136,7 +136,7 @@ if [ "$package_manager" = fedora ]; then
     dnf install -y "${missing[@]}"
   fi
 else
-  for package in git rsync unzip xz-utils curl ca-certificates util-linux bash gcc libc6-dev sqlite3 libsqlite3-dev; do
+  for package in git rsync unzip xz-utils curl ca-certificates util-linux bash gcc libc6-dev sqlite3 libsqlite3-dev tmux; do
     dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
   done
   dpkg -s python3 >/dev/null 2>&1 || missing+=(python3)

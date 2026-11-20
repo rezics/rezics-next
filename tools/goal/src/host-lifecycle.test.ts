@@ -715,7 +715,17 @@ setInterval(() => {}, 1000);
   );
   writeFileSync(
     join(bin, 'systemd-run'),
-    `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(scopeArgs)}\nwhile [ "$#" -gt 0 ]; do\n  case "$1" in --user|--scope|--collect|--quiet|--slice=*|--unit=*) shift ;; *) break ;; esac\ndone\n"$@"\nexit 1\n`,
+    `#!/bin/sh
+printf '%s\\n' "$@" >> ${JSON.stringify(scopeArgs)}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --user|--scope|--collect|--quiet|--slice=*|--unit=*|--property=MemoryMax=*) shift ;;
+    *) break ;;
+  esac
+done
+"$@"
+exit 1
+`,
   );
   chmodSync(join(bin, 'systemctl'), 0o755);
   chmodSync(join(bin, 'systemd-run'), 0o755);
@@ -726,23 +736,33 @@ setInterval(() => {}, 1000);
   const module = (name: string) => JSON.stringify(join(import.meta.dir, name));
   writeFileSync(
     hostScript,
-    `import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+    `import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadSettings } from ${module('config.ts')};
 import { openDb } from ${module('db.ts')};
+import { fixtureProcessOwnershipAdapter } from ${module('fixture-process-ownership.ts')};
 import { WorkerJob } from ${module('job.ts')};
+import { installProcessOwnershipAdapter } from ${module('process.ts')};
 import { WorkerStore } from ${module('store.ts')};
 import { WorkerTasks } from ${module('tasks.ts')};
+installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
 const [root, mode, taskId, readyPath, donePath] = process.argv.slice(2);
 const settings = loadSettings({ cwd: root!, env: {} });
 const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite')));
 const tasks = new WorkerTasks(settings, store);
 const job = new WorkerJob(tasks, { enqueue() {} }, { deliver() {} });
 const current = () => { const task = store.task(taskId!); return store.attempt({ taskId: taskId!, attempt: task.currentAttempt }); };
+const publishReady = (attempt) => {
+  const temporary = readyPath + '.tmp';
+  writeFileSync(temporary, JSON.stringify({ hostPid: process.pid, attempt: attempt.attempt, process: attempt.process, logPath: attempt.logPath }));
+  renameSync(temporary, readyPath!);
+};
 let attempt;
 if (mode === 'launch') {
-  const work = job.start(taskId!);
+  let launchFailure;
+  const work = job.start(taskId!).catch((error) => { launchFailure = error; });
   for (let n = 0; n < 1000; n++) {
+    if (launchFailure) throw launchFailure;
     const task = store.task(taskId!);
     if (task.currentAttempt) {
       const candidate = current();
@@ -751,12 +771,13 @@ if (mode === 'launch') {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   if (!attempt) throw new Error('worker did not start');
-  writeFileSync(readyPath!, JSON.stringify({ hostPid: process.pid, attempt: attempt.attempt, process: attempt.process, logPath: attempt.logPath }));
+  publishReady(attempt);
   await work;
+  if (launchFailure) throw launchFailure;
 } else {
   attempt = current();
   const work = job.recover(taskId!);
-  writeFileSync(readyPath!, JSON.stringify({ hostPid: process.pid, attempt: attempt.attempt, process: attempt.process, logPath: attempt.logPath }));
+  publishReady(attempt);
   await work;
 }
 writeFileSync(donePath!, 'settled');
@@ -765,12 +786,18 @@ store.db.close();
   );
 
   const environment = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` };
-  const startHost = (mode: string, readyPath: string) =>
-    spawn(process.execPath, [hostScript, h.root, mode, task.id, readyPath, done], {
+  const startWorkerHost = (mode: string, readyPath: string) => {
+    const child = spawn(process.execPath, [hostScript, h.root, mode, task.id, readyPath, done], {
       env: environment,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
-  const readWhenReady = async (path: string, host: ChildProcess) => {
+    let diagnostics = '';
+    child.stderr!.on('data', (chunk) => {
+      diagnostics = (diagnostics + String(chunk)).slice(-4096);
+    });
+    return { child, diagnostics: () => diagnostics };
+  };
+  const readWhenReady = async (path: string, host: ReturnType<typeof startWorkerHost>) => {
     for (let n = 0; n < 1000; n++) {
       if (existsSync(path))
         return JSON.parse(readFileSync(path, 'utf8')) as {
@@ -779,11 +806,13 @@ store.db.close();
           process: ProcessIdentity;
           logPath: string;
         };
-      if (host.exitCode !== null || host.signalCode !== null)
-        throw new Error(`worker host exited before readiness (${host.exitCode ?? host.signalCode})`);
+      if (host.child.exitCode !== null || host.child.signalCode !== null)
+        throw new Error(
+          `worker host exited before readiness (${host.child.exitCode ?? host.child.signalCode}): ${host.diagnostics()}`,
+        );
       await Bun.sleep(10);
     }
-    throw new Error('timed out waiting for worker host readiness');
+    throw new Error(`timed out waiting for worker host readiness: ${host.diagnostics()}`);
   };
   const waitForDone = async () => {
     for (let n = 0; n < 1000; n++) {
@@ -799,21 +828,23 @@ store.db.close();
     await exited;
   };
 
-  let first: ChildProcess | undefined;
-  let replacement: ChildProcess | undefined;
+  let first: ReturnType<typeof startWorkerHost> | undefined;
+  let replacement: ReturnType<typeof startWorkerHost> | undefined;
   try {
-    first = startHost('launch', ready);
+    first = startWorkerHost('launch', ready);
     const launched = await readWhenReady(ready, first);
     expect(launched.attempt).toBe(1);
+    expect(launched.hostPid).toBe(first.child.pid!);
     expect(readFileSync(scopeArgs, 'utf8').split('\n')).toContain('--scope');
     expect(sameProcess(launched.process)).toBe(true);
     expect(readFileSync(launched.logPath, 'utf8')).toContain('restart-survivor');
 
-    await stopHost(first);
+    await stopHost(first.child);
     expect(sameProcess(launched.process)).toBe(true);
 
-    replacement = startHost('recover', recovered);
+    replacement = startWorkerHost('recover', recovered);
     const adopted = await readWhenReady(recovered, replacement);
+    expect(adopted.hostPid).toBe(replacement.child.pid!);
     expect(adopted.attempt).toBe(launched.attempt);
     expect(adopted.process).toEqual(launched.process);
     expect(sameProcess(adopted.process)).toBe(true);
@@ -830,8 +861,8 @@ store.db.close();
     expect(await waitForDone()).toBe('settled');
     expect(h.store.task(task.id).state).toBe('stopped');
   } finally {
-    await stopHost(replacement);
-    await stopHost(first);
+    await stopHost(replacement?.child);
+    await stopHost(first?.child);
     await h.disposeAsync();
   }
 }, 30_000);
