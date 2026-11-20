@@ -113,9 +113,10 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
 
 function errorContent(
   error: unknown,
-  retryProps: Pick<Parameters<typeof RouteState>[0], 'onRetry' | 'retrying' | 'retryDisabled' | 'retryFailed'> & {
-    recovery?: string;
-  },
+  retryProps: Pick<
+    Parameters<typeof DependencyUnavailablePage>[0],
+    'onRetry' | 'retrying' | 'retryDisabled' | 'retryFailed' | 'recovery'
+  >,
 ) {
   if (isPlatformClosedError(error)) return <ClosedPage />;
   if (
