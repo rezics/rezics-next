@@ -122,15 +122,24 @@ test('worker prompts and verification guidance reflect caller policy without cha
   const policy = readControlPolicy({
     guidance: { longCommandWaitMs: 5000, summaryWords: 40, blockerWords: 30, toolFailureRetries: 4 },
   });
-  const task = { worktree: '/missing', branch: 'worker/test', brief: brief() } as Task;
+  const task = { worktree: '/missing', branch: 'worker/test', brief: { ...brief(), goal: 'control-plane' } } as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/main', undefined, '/state', policy);
-  for (const text of [
-    'at least 5 seconds',
-    'yield_time_ms: 5000',
-    'Summary at most 40 words',
-    'Blocker detail at most 30 words',
-    'persisting after 4 retries',
-  ])
-    expect(prompt).toContain(text);
-  expect(workerCheckProtocol('/missing')).toContain('at least 300 seconds');
+  expect(prompt).toMatch(/persisting after\s+4 retries/);
+  expect(workerPrompt(task, undefined, undefined, [], '/main', undefined, '/state')).toMatch(
+    /persisting after\s+two retries/,
+  );
+  const protocol = workerCheckProtocol(task.worktree, task.brief, '/state', undefined, undefined, policy);
+  expect(prompt).toContain(protocol);
+  expect(protocol).toContain('at least 5 seconds (Codex: `write_stdin`, `yield_time_ms: 5000`)');
+  expect(workerCheckProtocol(task.worktree, task.brief, '/state')).toContain(
+    'at least 300 seconds (Codex: `write_stdin`, `yield_time_ms: 300000`)',
+  );
+
+  const research: Task = { ...task, brief: { ...task.brief, kind: 'research' } };
+  expect(workerPrompt(research, undefined, undefined, [], '/main', undefined, '/state', policy)).toContain(
+    'Summary at most 40 words; blocker detail at most 30.',
+  );
+  expect(workerPrompt(research, undefined, undefined, [], '/main', undefined, '/state')).toContain(
+    'Summary at most 120 words; blocker detail at most 80.',
+  );
 });

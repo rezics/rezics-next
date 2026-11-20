@@ -667,7 +667,7 @@ test('a check whose start record shows a live runner keeps the attempt waiting; 
   }
 });
 
-test('worker instructions start detached checks, keep working, and return waiting without polling', () => {
+test('worker instructions start detached checks once and return waiting without polling', () => {
   const h = harness();
   try {
     const task = {
@@ -682,8 +682,8 @@ test('worker instructions start detached checks, keep working, and return waitin
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
     expect(prompt).toContain('end the turn at once with `{"status":"waiting","checks":["<bare UUID>"]}`');
     expect(prompt).toContain('using that bare UUID');
-    expect(prompt).toContain('Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say)');
-    expect(prompt).toContain('never start a duplicate');
+    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say), status polls, log or process reads');
+    expect(prompt).toContain('do not return waiting again for those ids');
     expect(prompt).toContain(
       'Do not run the root typecheck or other regression suites yourself; the landing runs them.',
     );
