@@ -1,60 +1,13 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { historicalManager } from '../test-support/historical-manager.ts';
 import { importAttempt } from './import-attempt.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { git } from './tasks.ts';
 import type { Attempt, Task } from './types.ts';
 import { harness, markdown } from './test-support.ts';
-import { connectPool } from './app-server.ts';
-import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { authenticatedManager } from './priority-authority.ts';
-
-const controlledCodex = `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-const args = process.argv.slice(2);
-if (args[0] !== 'app-server') {
-  const index = args.indexOf('resume');
-  const threadId = index < 0 ? '' : args[index + 1];
-  if (!threadId) process.exit(2);
-  const env = { ...process.env, CODEX_THREAD_ID: threadId };
-  if (env.PRIORITY_FIXTURE_CAPTURE)
-    appendFileSync(env.PRIORITY_FIXTURE_CAPTURE, JSON.stringify({ kind: 'tool', env: {
-      CODEX_THREAD_ID: env.CODEX_THREAD_ID,
-      CLAUDE_CODE_SESSION_ID: env.CLAUDE_CODE_SESSION_ID,
-      GOAL_MANAGER: env.GOAL_MANAGER,
-      CODEX_HOME: env.CODEX_HOME,
-    } }) + String.fromCharCode(10));
-  const result = spawnSync(process.execPath, ['-e', 'process.exit(process.env.CODEX_THREAD_ID ? 0 : 3)'], { env });
-  process.exit(result.status || 0);
-}
-const listen = new URL(args[args.indexOf('--listen') + 1]);
-const server = Bun.serve({
-  hostname: '127.0.0.1',
-  port: Number(listen.port || 0),
-  fetch(request, server) {
-    if (new URL(request.url).pathname === '/readyz') return new Response('ok');
-    return server.upgrade(request) ? undefined : new Response('upgrade required', { status: 426 });
-  },
-  websocket: {
-    message(ws, data) {
-      const message = JSON.parse(String(data));
-      if (message.id === undefined) return;
-      const params = message.params || {};
-      let result = {};
-      if (message.method === 'thread/start') result = { thread: { id: 'thread-' + crypto.randomUUID() } };
-      else if (message.method === 'thread/goal/set') result = { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: params.tokenBudget } };
-      else if (message.method === 'thread/goal/get') result = { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } };
-      else if (message.method === 'turn/start') result = { turn: { id: 'turn-' + crypto.randomUUID() } };
-      ws.send(JSON.stringify({ id: message.id, result }));
-    }
-  }
-});
-process.stderr.write('readyz: http://127.0.0.1:' + server.port + '/readyz' + String.fromCharCode(10));
-`;
 
 function runtimeFor(h: ReturnType<typeof harness>) {
   return { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks, drain: async () => {} } as never;
@@ -103,76 +56,19 @@ async function makeCritical(h: ReturnType<typeof harness>, task: Task, ownerSess
   return JSON.parse(grants[0]!) as { id: string };
 }
 
-async function startOwnerProvider(h: ReturnType<typeof harness>, task: Task) {
-  const directory = join(h.settings.stateDirectory, 'priority-provider');
-  mkdirSync(directory, { recursive: true });
-  const executable = join(directory, 'codex');
-  const capture = join(directory, 'tools.jsonl');
-  writeFileSync(executable, controlledCodex);
-  chmodSync(executable, 0o755);
-  const codexHome = join(directory, 'account');
-  mkdirSync(codexHome, { recursive: true });
-  const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
-  const services = {
-    command: ['goal'],
-    connect: (pool: { id: string; codexHome: string }, onStart?: (identity: any) => void) =>
-      connectPool({ ...pool, executable }, onStart),
-    windows: {
-      register(_id: string, argv: string[], cwd: string) {
-        const result = spawnSync(argv[0]!, argv.slice(1), {
-          cwd,
-          env: { ...process.env, PRIORITY_FIXTURE_CAPTURE: capture },
-          encoding: 'utf8',
-          timeout: 10_000,
-        });
-        if (result.status !== 0)
-          throw new Error(result.stderr || result.error?.message || 'controlled Codex launch failed');
-        return '@controlled-provider';
-      },
-      unregister() {},
-    },
-    checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'not complete' }),
-  };
-  const spec: ManagerSpec = {
-    id: task.brief.manager,
+function existingOwner(h: ReturnType<typeof harness>, task: Task) {
+  h.store.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const manager = task.brief.manager;
+  const { threadId: sessionId } = historicalManager(h.store.db, h.root, {
+    id: manager,
     goal: task.brief.goal,
-    objective: 'Establish the task owner through the production Codex manager launcher.',
-    brief: 'Use the controlled provider session for owner-authenticated retry tests.',
-    cwd: h.root,
     engine: 'codex',
-    pool: { id: 'priority-provider', codexHome, executable },
-    budget: 1000,
-    effort: 'low',
-    supermanager: 'supermanager',
-    limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
-  };
-  const managers = new ManagerSessions(h.store.db, inbox, services);
-  const started = await managers.start(spec);
-  if (started.kind !== 'managed' || !started.threadId) {
-    await managers.close();
-    throw new Error('controlled Codex manager did not establish a provider session');
-  }
-  const sessionId = started.threadId;
-  const tool = readFileSync(capture, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .at(-1);
-  if (
-    !tool ||
-    tool.kind !== 'tool' ||
-    tool.env?.CODEX_THREAD_ID !== sessionId ||
-    tool.env?.CLAUDE_CODE_SESSION_ID !== undefined ||
-    authenticatedManager(h.store.db, { ...tool.env, GOAL_MANAGER: task.brief.manager })?.sessionId !== sessionId
-  ) {
-    await managers.close();
-    throw new Error('controlled provider did not establish the persisted manager identity');
-  }
-  return {
-    sessionId,
-    environment: ownerEnvironment(task, sessionId),
-    close: () => managers.close(),
-  };
+    status: 'running',
+  });
+  if (!sessionId) throw new Error('The fixture owner must have an active thread');
+  const environment = ownerEnvironment(task, sessionId);
+  expect(authenticatedManager(h.store.db, environment)).toEqual({ id: manager, sessionId });
+  return { sessionId, environment };
 }
 
 function seedStoppedAttempt(h: ReturnType<typeof harness>, task: Task, state: 'stopped' | 'held' = 'stopped') {
@@ -240,11 +136,10 @@ async function retryCommand(
 
 test('retry --brief retains a consumed critical grant and its exact audit without another priority decision', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const ref = seedStoppedAttempt(h, task);
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     const grant = await makeCritical(h, task, owner.sessionId);
     const before = h.store.task(task.id);
     const beforeAttempt = h.store.attempt(ref);
@@ -277,22 +172,20 @@ test('retry --brief retains a consumed critical grant and its exact audit withou
     expect(intent).toMatchObject({ taskId: task.id, attempt: ref.attempt, status: 'pending', options: {} });
     expect(h.store.retryIntents().filter((value) => value.taskId === task.id)).toHaveLength(1);
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
 
 test('a held stopped retry reshapes its one pending intent while retaining critical priority', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
-    const dependency = h.tasks.dispatch(h.briefFile);
+    const dependency = h.tasks.dispatch(h.writeBrief('Complete the prerequisite for the held retry.'));
     const heldSource = markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`);
     const sourcePath = join(h.settings.stateDirectory, 'held-source.md');
     writeFileSync(sourcePath, heldSource);
     const task = h.tasks.dispatch(sourcePath);
     const ref = seedStoppedAttempt(h, task, 'held');
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     const grant = await makeCritical(h, task, owner.sessionId);
     h.store.saveRetryIntent(ref, { evidence: 'prior-evidence' });
     const before = h.store.task(task.id);
@@ -317,18 +210,16 @@ test('a held stopped retry reshapes its one pending intent while retaining criti
     expect(h.store.retryIntents().filter((value) => value.taskId === task.id)).toHaveLength(1);
     expect(h.store.attempts(task.id)).toHaveLength(1);
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
 
 test('retained normal priority and its audit survive an authenticated-owner corrective retry', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const ref = seedStoppedAttempt(h, task);
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     const grant = await makeCritical(h, task, owner.sessionId);
     await runWorkerCommand('priority', [task.id, 'normal'], {
       runtime: runtimeFor(h),
@@ -352,14 +243,12 @@ test('retained normal priority and its audit survive an authenticated-owner corr
     expect(h.store.attempt(ref).session).toBe('stopped-session');
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'pending' });
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
 
 test('an imported critical task keeps unknown priority provenance when a corrective retry retains it', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const logPath = join(h.settings.stateDirectory, 'legacy.jsonl');
@@ -387,7 +276,7 @@ test('an imported critical task keeps unknown priority provenance when a correct
       delete current.priorityHistory;
       delete current.priorityGrants;
     });
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     authenticatePriorityManagers(h, task, owner.sessionId);
     mkdirSync(join(task.worktree, '.temp/goal'), { recursive: true });
     writeFileSync(priorityPath(task), 'critical\n');
@@ -405,18 +294,16 @@ test('an imported critical task keeps unknown priority provenance when a correct
     expect(h.store.attempt(ref)).toMatchObject({ escalation: 'import', session: beforeAttempt.session });
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'pending' });
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
 
 test('an unchanged-critical amended retry still requires the current unambiguous owner session', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const ref = seedStoppedAttempt(h, task);
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     await makeCritical(h, task, owner.sessionId);
     const before = h.store.task(task.id);
     const beforeBriefFiles = readdirSync(join(h.settings.stateDirectory, 'briefs'));
@@ -450,7 +337,6 @@ test('an unchanged-critical amended retry still requires the current unambiguous
     expect(h.store.retryIntent(ref)).toBeUndefined();
     expect(readdirSync(join(h.settings.stateDirectory, 'briefs'))).toEqual(beforeBriefFiles);
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
@@ -470,7 +356,7 @@ test('unauthenticated substantive retries cannot escalate or demote priority and
     expect(h.store.retryIntent(normalRef)).toBeUndefined();
     expect(readdirSync(join(h.settings.stateDirectory, 'briefs'))).toEqual(briefFilesBefore);
 
-    const critical = h.tasks.dispatch(h.briefFile);
+    const critical = h.tasks.dispatch(h.writeBrief('Complete the separate critical task.'));
     const criticalRef = seedStoppedAttempt(h, critical);
     await makeCritical(h, critical);
     const criticalBefore = h.store.task(critical.id);
@@ -491,7 +377,6 @@ test('unauthenticated substantive retries cannot escalate or demote priority and
 
 test('retry brief identity, stale generations and concurrent intent submission remain fenced', async () => {
   const h = harness();
-  let owner: Awaited<ReturnType<typeof startOwnerProvider>> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const ref = seedStoppedAttempt(h, task);
@@ -527,7 +412,7 @@ test('retry brief identity, stale generations and concurrent intent submission r
     expect(h.store.task(task.id)).toEqual(before);
     expect(h.store.retryIntent(ref)).toBeUndefined();
 
-    owner = await startOwnerProvider(h, task);
+    const owner = existingOwner(h, task);
     const [first, second] = await Promise.allSettled([
       runWorkerCommand('retry', [task.id], { runtime: runtimeFor(h), env: {} }),
       runWorkerCommand('retry', [task.id, '--brief', correction], {
@@ -545,7 +430,6 @@ test('retry brief identity, stale generations and concurrent intent submission r
     expect(h.store.attempt(ref).session).toBe('stopped-session');
     expect(h.store.attempts(task.id)).toHaveLength(1);
   } finally {
-    await owner?.close();
     h.dispose();
   }
 });
