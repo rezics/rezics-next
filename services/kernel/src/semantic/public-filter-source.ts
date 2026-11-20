@@ -411,6 +411,9 @@ export function createNativePublicFilterSource(
     readPrivacyReductionHeads,
     async readPrivacyReductionPage(request: PrivacyReductionLogRequest): Promise<PrivacyReductionLogPage> {
       if (
+        (request.retentionProtocol !== undefined &&
+          request.retentionProtocol !== 0 &&
+          request.retentionProtocol !== 1) ||
         !Number.isInteger(request.partition) ||
         request.partition < 0 ||
         request.partition > 4095 ||
@@ -462,6 +465,8 @@ export function createNativePublicFilterSource(
               const entries: PrivacyReductionLogEntry[] = [];
               for (const row of found) {
                 const { affected, impacts } = row;
+                const epoch = request.retentionProtocol === 1 ? row.owner_epoch : owner.epoch;
+                if (epoch !== request.epoch) return { status: 'changed', cost: cost(found.length) };
                 if (
                   !Array.isArray(affected) ||
                   !affected.every((value) => validDependency(value, request.partition)) ||
@@ -470,7 +475,7 @@ export function createNativePublicFilterSource(
                 )
                   return { ...unready('metadata_missing'), cost: cost(found.length) };
                 entries.push({
-                  head: privacyHead(request.partition, owner.epoch, row.position),
+                  head: privacyHead(request.partition, epoch, row.position),
                   transactionId: row.transaction_id,
                   cause: row.cause,
                   affected,

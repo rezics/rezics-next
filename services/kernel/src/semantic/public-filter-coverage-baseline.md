@@ -129,6 +129,29 @@ eight withdrawals. A missing cut yields pending. The changed-generation seek rem
 start and final. Discovery uses its materialized ACK protocol. Ordinary v1 selection awaits composed serving,
 writer admission, copy erasure and target retirement qualification.
 
+## Shared Subject privacy fanout
+
+The pending-row capture freezes `core.subject_membership_revision_v1()` in the original transaction.
+`semantic.subject_privacy_fanout_v1` retains the original `(partition_no, input_key, enqueue_revision)`,
+owner epoch, home generation, inclusive first and through positions, membership revision and accepted birth
+prefix. The same SQL mutation guard applies to an older maintainer. A capture already open at activation
+precedes the first shared birth. Account enqueue and per-home enrollment keep their original protocols.
+
+For a matching `core.subject_subscription_key_v1(input_key,birth)` at or below the cutoff, Search resolves
+the immutable cut with `semantic.subject_privacy_member_base_v1(fanout, birth)`. A missing or mismatched cut
+keeps the interval live. A cut at or above the interval's through position covers that interval in original
+population repair. For a later interval, Search records the home behind in the same transaction that inserts
+`search.subject_privacy_intake_v1(birth, partition_no, input_key, enqueue_revision, privacy_base)`.
+Search retries the same identity and uses that retained intake in its shared-home reads and repair.
+The SQL intake guard checks the original committed interval, exact cut and current lineage. Semantic advances
+over post-base work only after that receiver transaction commits. Intake grants no population or physical ACK.
+
+The maintainer pages by matching birth with one bounded lookahead, sharing the limit with the legacy traversal.
+The SQL CAS requires a completed disposition for the original home, epoch, generation, key, range and enqueue
+revision. A concurrent enqueue preserves the live barrier and its later first position. Shared replay requests
+set `retentionProtocol: 1` on `readPrivacyReductionPage` and check the epoch stored in every log row.
+Shared Search admission stays closed until its readers and repair consume this intake.
+
 ## Serving from published catalogue coverage
 
 Full Subject publication enrolls a catalogue-text key for label, alias, description, name-order and relevance

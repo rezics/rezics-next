@@ -2816,6 +2816,21 @@ CREATE TABLE search.scope_preparation_ordinal (
 
 
 --
+-- Name: subject_privacy_intake_v1; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.subject_privacy_intake_v1 (
+    birth bigint NOT NULL,
+    partition_no integer NOT NULL,
+    input_key text NOT NULL COLLATE pg_catalog."C",
+    enqueue_revision bigint NOT NULL,
+    privacy_base bigint NOT NULL,
+    received_by xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT subject_privacy_intake_v1_privacy_base_check CHECK ((privacy_base >= 0))
+);
+
+
+--
 -- Name: trending_blocked; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -3444,6 +3459,14 @@ ALTER TABLE ONLY search.scope_preparation_ordinal
 
 ALTER TABLE ONLY search.scope_preparation
     ADD CONSTRAINT scope_preparation_pkey PRIMARY KEY (partition_no, prefix, scope_id);
+
+
+--
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_v1_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.subject_privacy_intake_v1
+    ADD CONSTRAINT subject_privacy_intake_v1_pkey PRIMARY KEY (birth, partition_no, input_key, enqueue_revision);
 
 
 --
@@ -4101,6 +4124,27 @@ CREATE TRIGGER public_filter_repair_writer_revision AFTER INSERT OR DELETE OR UP
 
 
 --
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_immutable_v1; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER subject_privacy_intake_immutable_v1 BEFORE DELETE OR UPDATE ON search.subject_privacy_intake_v1 FOR EACH ROW EXECUTE FUNCTION core.retain_subject_original_v1();
+
+
+--
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_truncate_v1; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER subject_privacy_intake_truncate_v1 BEFORE TRUNCATE ON search.subject_privacy_intake_v1 FOR EACH STATEMENT EXECUTE FUNCTION core.retain_subject_original_v1();
+
+
+--
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_v1; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER subject_privacy_intake_v1 BEFORE INSERT ON search.subject_privacy_intake_v1 FOR EACH ROW EXECUTE FUNCTION semantic.guard_subject_privacy_intake_v1();
+
+
+--
 -- Name: facet_stage facet_stage_partition_no_definition_generation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -4434,6 +4478,22 @@ ALTER TABLE ONLY search.release_relevance_position
 
 ALTER TABLE ONLY search.release_relevance_position
     ADD CONSTRAINT release_relevance_position_membership_root_fkey FOREIGN KEY (execution_id, membership_root) REFERENCES search.release_relevance_membership_node(execution_id, id);
+
+
+--
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_v1_input_key_birth_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.subject_privacy_intake_v1
+    ADD CONSTRAINT subject_privacy_intake_v1_input_key_birth_fkey FOREIGN KEY (input_key, birth) REFERENCES core.subject_subscription_key_v1(input_key, birth);
+
+
+--
+-- Name: subject_privacy_intake_v1 subject_privacy_intake_v1_partition_no_input_key_enqueue_r_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.subject_privacy_intake_v1
+    ADD CONSTRAINT subject_privacy_intake_v1_partition_no_input_key_enqueue_r_fkey FOREIGN KEY (partition_no, input_key, enqueue_revision) REFERENCES semantic.subject_privacy_fanout_v1(partition_no, input_key, enqueue_revision);
 
 
 --

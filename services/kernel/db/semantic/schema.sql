@@ -237,6 +237,58 @@ END $$;
 
 
 --
+-- Name: advance_subject_privacy_fanout_v1(integer, text, bigint, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.advance_subject_privacy_fanout_v1(home integer, key text, captured bigint, page_limit integer) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE pending semantic.public_filter_privacy_pending; f semantic.subject_privacy_fanout_v1;
+  native record; member_birth bigint; base bigint; frontier bigint; visited integer:=0; exhausted boolean:=true;
+BEGIN
+  IF page_limit IS NULL OR page_limit NOT BETWEEN 1 AND 100 THEN RAISE EXCEPTION 'Invalid Subject fanout limit'; END IF;
+  SELECT * INTO pending FROM semantic.public_filter_privacy_pending p
+    WHERE (p.partition_no,p.input_key,p.captured_revision)=(home,key,captured) AND p.live FOR UPDATE;
+  IF NOT FOUND THEN RETURN 'pending'; END IF;
+  IF NOT pending.captured_shared_v1 THEN RETURN 'pending'; END IF;
+
+  IF core.subject_membership_revision_v1() IS NULL THEN RETURN 'pending'; END IF;
+  SELECT * INTO native FROM core.subject_retention_heads_v1(home);
+  IF (pending.owner_epoch,pending.captured_epoch) IS DISTINCT FROM (native.epoch,native.epoch)
+    OR native.privacy_base<pending.captured_through THEN RETURN 'pending'; END IF;
+  SELECT * INTO f FROM semantic.subject_privacy_fanout_v1
+    WHERE (partition_no,input_key,enqueue_revision)=(home,key,captured);
+  IF NOT FOUND OR f.captured_by=pg_current_xact_id()
+    OR (f.owner_epoch,f.home_generation,f.first_position,f.through_position) IS DISTINCT FROM
+      (native.epoch,native.generation,pending.first_position,pending.captured_through) THEN RETURN 'pending'; END IF;
+  IF f.complete THEN RETURN 'complete'; END IF;
+
+  frontier:=f.after_birth;
+  FOR member_birth IN SELECT k.birth FROM core.subject_subscription_key_v1 k
+    WHERE k.input_key=key AND k.birth>f.after_birth AND k.birth<=f.membership_revision
+    ORDER BY k.birth LIMIT page_limit+1
+  LOOP
+    visited:=visited+1;
+    IF visited>page_limit THEN exhausted:=false; EXIT; END IF;
+    base:=semantic.subject_privacy_member_base_v1(f,member_birth);
+    IF base IS NULL OR base>native.privacy_base OR (base<f.through_position AND NOT EXISTS (
+      SELECT FROM search.subject_privacy_intake_v1 i
+      WHERE (i.birth,i.partition_no,i.input_key,i.enqueue_revision,i.privacy_base)=
+        (member_birth,f.partition_no,f.input_key,f.enqueue_revision,base)
+        AND i.received_by<>pg_current_xact_id()))
+    THEN exhausted:=false; EXIT; END IF;
+    frontier:=member_birth;
+  END LOOP;
+
+  IF exhausted OR frontier>f.after_birth THEN
+    UPDATE semantic.subject_privacy_fanout_v1 SET after_birth=frontier,complete=exhausted
+      WHERE (partition_no,input_key,enqueue_revision)=(home,key,captured);
+  END IF;
+  RETURN CASE WHEN exhausted THEN 'complete' WHEN frontier>f.after_birth THEN 'progress' ELSE 'pending' END;
+END $$;
+
+
+--
 -- Name: append_record_source_set(integer, uuid, integer, jsonb); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3009,6 +3061,84 @@ END; $$;
 
 
 --
+-- Name: guard_subject_privacy_intake_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_privacy_intake_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE f semantic.subject_privacy_fanout_v1; base bigint;
+BEGIN
+  SELECT * INTO STRICT f FROM semantic.subject_privacy_fanout_v1
+    WHERE (partition_no,input_key,enqueue_revision)=(NEW.partition_no,NEW.input_key,NEW.enqueue_revision);
+  base:=semantic.subject_privacy_member_base_v1(f,NEW.birth);
+  IF f.captured_by=pg_current_xact_id() OR base IS NULL OR base IS DISTINCT FROM NEW.privacy_base
+    OR base>=f.through_position OR core.subject_membership_revision_v1() IS NULL OR NOT EXISTS (
+      SELECT FROM core.subject_retention_heads_v1(f.partition_no) h
+      WHERE (h.epoch,h.generation)=(f.owner_epoch,f.home_generation))
+  THEN
+    RAISE EXCEPTION 'Invalid Subject privacy intake' USING ERRCODE='23514';
+  END IF;
+  NEW.received_by:=pg_current_xact_id();
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_subject_privacy_pending_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_privacy_pending_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE installed boolean; revision bigint; native record;
+BEGIN
+  SELECT restore_generation IS NOT NULL INTO STRICT installed
+    FROM core.subject_retention_domain WHERE singleton FOR SHARE;
+  IF NOT installed THEN RETURN NEW; END IF;
+
+  IF (NEW.partition_no,NEW.input_key,NEW.owner_epoch,NEW.through_position,NEW.enqueue_revision)
+    IS DISTINCT FROM (OLD.partition_no,OLD.input_key,OLD.owner_epoch,OLD.through_position,OLD.enqueue_revision)
+  THEN RAISE EXCEPTION 'Subject privacy capture changed its native queue' USING ERRCODE='23514'; END IF;
+
+  revision:=core.subject_membership_revision_v1();
+  SELECT * INTO native FROM core.subject_retention_heads_v1(OLD.partition_no);
+  IF OLD.captured_revision IS NULL AND NEW.captured_revision IS NOT NULL AND OLD.live AND NEW.live THEN
+    IF revision IS NULL OR native.epoch IS DISTINCT FROM OLD.owner_epoch THEN RETURN NULL; END IF;
+    IF (NEW.captured_epoch,NEW.first_position,NEW.captured_through,NEW.captured_revision)
+      IS DISTINCT FROM (OLD.owner_epoch,OLD.first_position,OLD.through_position,OLD.enqueue_revision)
+      OR native.privacy_base<OLD.through_position THEN
+      RAISE EXCEPTION 'Invalid Subject privacy capture' USING ERRCODE='23514';
+    END IF;
+    INSERT INTO semantic.subject_privacy_fanout_v1
+      (partition_no,input_key,enqueue_revision,owner_epoch,home_generation,first_position,through_position,membership_revision)
+      VALUES (OLD.partition_no,OLD.input_key,OLD.enqueue_revision,OLD.owner_epoch,native.generation,
+        OLD.first_position,OLD.through_position,revision);
+    NEW.captured_shared_v1:=true;
+    RETURN NEW;
+  END IF;
+
+  IF revision IS NULL OR NOT OLD.live OR OLD.captured_revision IS NULL OR NEW.captured_revision IS NOT NULL
+    OR (OLD.owner_epoch,OLD.captured_epoch) IS DISTINCT FROM (native.epoch,native.epoch)
+    OR native.privacy_base<OLD.captured_through
+    OR NEW.live IS DISTINCT FROM (OLD.enqueue_revision<>OLD.captured_revision)
+    OR NEW.first_position IS DISTINCT FROM (CASE WHEN NEW.live THEN OLD.next_first_position ELSE OLD.first_position END)
+    OR (OLD.captured_shared_v1 AND NOT EXISTS (
+      SELECT FROM semantic.subject_privacy_fanout_v1 f
+      WHERE (f.partition_no,f.input_key,f.enqueue_revision)=(OLD.partition_no,OLD.input_key,OLD.captured_revision)
+        AND (f.owner_epoch,f.home_generation,f.first_position,f.through_position)=
+            (native.epoch,native.generation,OLD.first_position,OLD.captured_through)
+        AND f.complete))
+  THEN
+    RAISE EXCEPTION 'Subject privacy interval has no current disposition' USING ERRCODE='23514';
+  END IF;
+  -- An interval already captured at activation predates the first birth.
+  NEW.captured_shared_v1:=false;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: guard_subject_security(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5276,6 +5406,56 @@ BEGIN
   IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
   RETURN NEW;
 END $$;
+
+
+--
+-- Name: subject_privacy_fanout_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_privacy_fanout_v1 (
+    partition_no integer NOT NULL,
+    input_key text NOT NULL COLLATE pg_catalog."C",
+    enqueue_revision bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    home_generation uuid NOT NULL,
+    first_position bigint NOT NULL,
+    through_position bigint NOT NULL,
+    membership_revision bigint NOT NULL,
+    after_birth bigint DEFAULT 0 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    captured_by xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT subject_privacy_fanout_v1_check CHECK ((through_position >= first_position)),
+    CONSTRAINT subject_privacy_fanout_v1_check1 CHECK (((after_birth >= 0) AND (after_birth <= membership_revision))),
+    CONSTRAINT subject_privacy_fanout_v1_enqueue_revision_check CHECK ((enqueue_revision > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_first_position_check CHECK ((first_position > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_input_key_check CHECK ((input_key <> '["domain","accounts"]'::text)),
+    CONSTRAINT subject_privacy_fanout_v1_membership_revision_check CHECK ((membership_revision >= 0)),
+    CONSTRAINT subject_privacy_fanout_v1_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: subject_privacy_member_base_v1(semantic.subject_privacy_fanout_v1, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_privacy_member_base_v1(f semantic.subject_privacy_fanout_v1, member_birth bigint) RETURNS bigint
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT (cut.doc->>'privacy')::bigint
+  FROM core.subject_subscription_v1 s JOIN core.subject_retention_domain d
+    ON d.singleton AND (s.registration_generation,s.restore_generation)=(d.registration_generation,d.restore_generation)
+  CROSS JOIN LATERAL (
+    SELECT p.end_home,p.xmin,p.cuts->(f.partition_no-p.first_home) AS doc
+    FROM core.subject_retention_page_v1 p
+    WHERE p.birth=s.birth AND p.first_home<=f.partition_no
+    ORDER BY p.first_home DESC LIMIT 1
+  ) cut
+  WHERE s.birth=member_birth AND s.birth<=f.membership_revision AND f.partition_no<cut.end_home
+    AND cut.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+    AND (cut.doc->>'home',cut.doc->>'epoch',cut.doc->>'generation')=
+        (f.partition_no::text,f.owner_epoch::text,f.home_generation::text)
+$$;
 
 
 --
@@ -9562,6 +9742,7 @@ CREATE TABLE semantic.public_filter_privacy_pending (
     captured_native_revision bigint,
     captured_native_claim_revision bigint,
     captured_enrollment_generation bigint,
+    captured_shared_v1 boolean DEFAULT false NOT NULL,
     CONSTRAINT public_filter_pending_enrollment_window CHECK (((COALESCE(native_captured_enqueue, captured_revision) IS NULL) = (captured_enrollment_generation IS NULL))),
     CONSTRAINT public_filter_pending_native_domain CHECK ((((input_key = '["domain","accounts"]'::text) AND (first_position IS NULL) AND (through_position IS NULL) AND (native_revision IS NOT NULL) AND (native_revision > 0) AND (native_claim_revision IS NOT NULL) AND (native_claim_revision > 0) AND (native_transaction IS NOT NULL)) OR ((input_key <> '["domain","accounts"]'::text) AND (first_position IS NOT NULL) AND (through_position IS NOT NULL) AND (native_revision IS NULL) AND (native_claim_revision IS NULL) AND (native_transaction IS NULL)))),
     CONSTRAINT public_filter_privacy_pendin_captured_enrollment_generati_check CHECK ((captured_enrollment_generation >= 0)),
@@ -9571,7 +9752,8 @@ CREATE TABLE semantic.public_filter_privacy_pending (
     CONSTRAINT public_filter_privacy_pending_check3 CHECK (((captured_through IS NULL) OR (((captured_through >= first_position) AND (captured_through <= through_position)) AND (captured_revision > 0) AND (captured_revision <= enqueue_revision) AND (captured_epoch > 0)))),
     CONSTRAINT public_filter_privacy_pending_enqueue_revision_check CHECK ((enqueue_revision > 0)),
     CONSTRAINT public_filter_privacy_pending_first_position_check CHECK ((first_position > 0)),
-    CONSTRAINT public_filter_privacy_pending_owner_epoch_check CHECK ((owner_epoch > 0))
+    CONSTRAINT public_filter_privacy_pending_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT subject_privacy_capture_v1 CHECK (((NOT captured_shared_v1) OR (captured_revision IS NOT NULL)))
 );
 
 
@@ -12753,6 +12935,14 @@ ALTER TABLE ONLY semantic.subject_page_work_home
 
 ALTER TABLE ONLY semantic.subject
     ADD CONSTRAINT subject_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: subject_privacy_fanout_v1 subject_privacy_fanout_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_privacy_fanout_v1
+    ADD CONSTRAINT subject_privacy_fanout_v1_pkey PRIMARY KEY (partition_no, input_key, enqueue_revision);
 
 
 --
@@ -16754,6 +16944,15 @@ CREATE TRIGGER subject_page_fanout_work_home AFTER INSERT OR UPDATE OF state ON 
 --
 
 CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_repair FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--
+-- Name: public_filter_privacy_pending subject_privacy_pending_v1; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_privacy_pending_v1 BEFORE UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN (((old.input_key <> '["domain","accounts"]'::text) AND ((old.live AND (NOT new.live)) OR ((((old.captured_revision IS DISTINCT FROM new.captured_revision) OR (old.captured_through IS DISTINCT FROM new.captured_through)) OR (old.captured_epoch IS DISTINCT FROM new.captured_epoch)) OR (old.captured_shared_v1 IS DISTINCT FROM new.captured_shared_v1)) OR ((old.captured_revision IS NOT NULL) AND (old.first_position IS DISTINCT FROM new.first_position))))) EXECUTE FUNCTION semantic.guard_subject_privacy_pending_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_privacy_pending_v1;
 
 
 --
