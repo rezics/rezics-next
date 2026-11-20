@@ -137,7 +137,8 @@ export type SearchGenerationPublicationConfig = Readonly<{
   registry?: DiscoveryRegistry;
 }>;
 
-type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number };
+const validationBytes = Symbol('validationBytes');
+type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number } & { [validationBytes]: number };
 const cost = (): Meter => ({
   inputKeys: 0,
   candidates: 0,
@@ -148,11 +149,20 @@ const cost = (): Meter => ({
   outputSlots: 0,
   resultWrites: 0,
   frontierWrites: 0,
+  [validationBytes]: 0,
 });
 const PAGE = 50;
 const SUBJECT_ENROLLMENT_PAGES = 32;
 const SUBJECT_SETTLEMENT_TURNS = 8;
 const SUBJECT_VALIDATION_HOMES = 256;
+const SUBJECT_VALIDATION_SLICES = 4;
+const VALIDATION_BYTE_LIMIT = 4 * 1024 * 1024;
+// Three native target reads and the frontier checkpoint. The SQL comparison
+// only returns fixed-width heads, revisions, ownership state and refresh flags.
+const SUBJECT_VALIDATION_TRAILING_INPUTS = 4;
+const SUBJECT_VALIDATION_ROW_BYTES = 512;
+const SUBJECT_VALIDATION_SQL_BYTES = 4096;
+const SUBJECT_VALIDATION_CHECKPOINT_BYTES = 4096;
 const SUBJECT_VALIDATION_REPLAY = 'subject-validation-replay';
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -177,10 +187,11 @@ function check(context: PublicFilterConsumerContext) {
   if (context.deadline <= Date.now()) throw new Pending('deadline');
 }
 function add(meter: Meter, value: SearchPublicFilterCost) {
-  for (const key of Object.keys(meter) as (keyof Meter)[]) {
+  for (const key of Object.keys(meter) as (keyof SearchPublicFilterCost)[]) {
     requireValue(Number.isSafeInteger(value[key]) && value[key] >= 0);
     meter[key] += value[key];
   }
+  if ('bytes' in value && typeof value.bytes === 'number') meter[validationBytes] += value.bytes;
   if (meter.inputKeys > 1000 || meter.resultWrites > 1000) throw new Pending('dependency_unavailable');
 }
 function locator(consumer: PublicFilterConsumer) {
@@ -369,7 +380,7 @@ export function createSearchGenerationPublication(
       timeoutMs: Math.max(1, context.deadline - Date.now()),
     });
   }
-  async function native(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext) {
+  async function native(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext, transport = search) {
     const target = locator(consumer);
     check(context);
     if (consumer.meaningDigest !== meaning.digest) throw new Pending('registration_missing');
@@ -386,7 +397,7 @@ export function createSearchGenerationPublication(
         }))
     )
       throw new Pending('registration_missing');
-    if ((await discoveryIndexUuid(search, consumer.physicalTarget)) !== consumer.incarnation)
+    if ((await discoveryIndexUuid(transport, consumer.physicalTarget)) !== consumer.incarnation)
       throw new Pending('incarnation_changed');
     let incarnation = consumer.incarnation;
     let activeSubjectGeneration: number | null = null;
@@ -400,7 +411,7 @@ export function createSearchGenerationPublication(
         !same(row.kinds, kinds.map(({ kind }) => kind).sort())
       )
         throw new Pending('registration_missing');
-      const response = await search.request<Record<string, { mappings?: { _meta?: { incarnation?: string } } }>>(
+      const response = await transport.request<Record<string, { mappings?: { _meta?: { incarnation?: string } } }>>(
         'GET',
         `/${consumer.physicalTarget}/_mapping`,
       );
@@ -412,11 +423,11 @@ export function createSearchGenerationPublication(
         throw new Pending('incarnation_changed');
       incarnation = row.incarnation;
     } else {
-      const generations = await subjectGenerations(search, target.prefix);
+      const generations = await subjectGenerations(transport, target.prefix);
       activeSubjectGeneration = generations.active;
       if (
         !generations.generations.includes(target.generation) ||
-        (await readSubjectSortFormat(search, target.prefix, target.generation)) !== SUBJECT_SORT_FORMAT
+        (await readSubjectSortFormat(transport, target.prefix, target.generation)) !== SUBJECT_SORT_FORMAT
       )
         throw new Pending('registration_missing');
     }
@@ -610,6 +621,7 @@ export function createSearchGenerationPublication(
     );
     if (!result) return null;
     add(meter, result.cost);
+    if (result.status === 'enrollment-sealed') return 'sealed' as const;
     if (capturingOnly) return result.status === 'preparing' && result.enrollmentAdvanced;
     if (
       (result.status === 'begun' && !result.enrollmentAdvanced) ||
@@ -720,7 +732,7 @@ export function createSearchGenerationPublication(
       client: PoolClient,
       current: string | null,
       capture?: ReturnType<typeof populationDefinition>,
-      enrollmentAdvanced?: boolean,
+      enrollment?: boolean | 'sealed',
       additionalEnrollmentCosts?: readonly SearchPublicFilterCost[],
     ) => Promise<T>,
   ): Promise<T> {
@@ -827,11 +839,10 @@ export function createSearchGenerationPublication(
               }
               // Preserve the reconciliation cursor while the original cold cut
               // commits contiguous receipt pages. Sealing resumes the ordinary pass.
-              if (
-                earlyEnrollment &&
-                physical?.activeSubjectGeneration === null &&
-                (await continueSubjectEnrollment(job, client, context, meter, true))
-              ) {
+              if (earlyEnrollment && physical?.activeSubjectGeneration === null) {
+                const enrollment = await continueSubjectEnrollment(job, client, context, meter, true);
+                if (enrollment === 'sealed') return work(job, client, current, capture, enrollment);
+                if (enrollment !== true) return work(job, client, current, capture);
                 // The publication lock already excludes this alias's other native jobs.
                 // Each Source page rechecks custody, and its receipt chain and cursors
                 // commit together. Reconciling or publishing still requires a new turn.
@@ -843,7 +854,7 @@ export function createSearchGenerationPublication(
                   const pageMeter = cost();
                   const advanced = await continueSubjectEnrollment(job, client, context, pageMeter, true);
                   additionalEnrollmentCosts.push(pageMeter);
-                  if (!advanced) break;
+                  if (advanced !== true) break;
                   duration = Math.max(duration, Date.now() - started);
                 }
                 return work(job, client, current, capture, true, additionalEnrollmentCosts);
@@ -1151,7 +1162,161 @@ export function createSearchGenerationPublication(
     job.pit = null;
     job.engine_after = null;
   }
-  async function advance(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+  async function compareHomes(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    validationHomes: number,
+    beforeRewind?: () => Promise<unknown>,
+  ) {
+    const end = Math.min(4096, job.home + validationHomes);
+    // An empty Subject home without writer custody can be witnessed at its current position.
+    // The completed engine pass accounted for existing keys. Occupied homes and homes that
+    // may own an engine copy still replay on any change.
+    const query = `WITH homes AS (
+         SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
+                p.epoch AS current_epoch,p.position AS current_position,p.write_state
+           FROM search.generation_publication_home h
+           LEFT JOIN core.partition p ON p.partition_no=h.partition_no
+          WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
+       ),
+       refreshed AS (
+         UPDATE search.generation_publication_home h
+            SET position=homes.current_position
+           FROM homes
+           LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
+          WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
+            AND homes.epoch=homes.current_epoch AND homes.write_state='active'
+            AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
+            AND NOT EXISTS (
+              SELECT 1 FROM search.identity_writer w
+              WHERE w.physical_target=$5 AND w.partition_no=homes.partition
+            )
+         RETURNING h.partition_no
+       )
+       SELECT homes.partition,homes.epoch,
+              (CASE WHEN refreshed.partition_no IS NULL THEN homes.position ELSE homes.current_position END)::text
+                AS position,
+              homes.account_revision::text,homes.claim_revision::text,homes.current_epoch,
+              homes.current_position::text,homes.write_state,(refreshed.partition_no IS NOT NULL) AS refreshed
+         FROM homes LEFT JOIN refreshed ON refreshed.partition_no=homes.partition
+        ORDER BY homes.partition`;
+    const parameters = [job.home, end, job.job, job.pass, job.family === 'subjects' ? job.physical_target : null];
+    const compared = await client.query<
+      Home & {
+        current_epoch: number | null;
+        current_position: string | null;
+        write_state: string | null;
+        refreshed: boolean;
+      }
+    >(query, parameters);
+    if (beforeRewind)
+      meter[validationBytes] +=
+        Buffer.byteLength(query) +
+        Buffer.byteLength(encodePublicFilterNativeState(parameters)) +
+        Buffer.byteLength(encodePublicFilterNativeState(compared.rows));
+    meter.inputKeys += compared.rows.length;
+    meter.frontierWrites += compared.rows.filter(({ refreshed }) => refreshed).length;
+    if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
+    for (const { current_epoch, current_position, write_state, refreshed: _refreshed, ...row } of compared.rows) {
+      if (write_state !== 'active') throw new Pending('routing_incomplete');
+      // The subject pass compares every native home in one statement snapshot. Mixed
+      // publication additionally needs the Account owner's current reduction witness.
+      const matches =
+        job.family === 'subjects'
+          ? row.epoch === current_epoch &&
+            row.position === current_position &&
+            row.account_revision === '0' &&
+            row.claim_revision === '0'
+          : same(row, await head(row.partition, context));
+      if (matches) continue;
+      const sameOwnerAdvance =
+        current_position !== null &&
+        row.account_revision === '0' &&
+        row.claim_revision === '0' &&
+        advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position));
+      if (job.family === 'subjects' && (!job.fenced_pass || sameOwnerAdvance)) {
+        if (beforeRewind) await beforeRewind();
+        await rewindSubjectHome(job, row.partition, client, meter);
+        if (sameOwnerAdvance) return false;
+      } else {
+        await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
+          row.partition,
+          job.job,
+        ]);
+        job.phase = 'subject';
+        job.home = row.partition;
+        job.after_id = null;
+        job.after_route = null;
+        await save(client, job, meter);
+      }
+      throw new Pending('source_pending');
+    }
+    job.home = end;
+    if (job.home === 4096) job.phase = 'reconciled';
+    return true;
+  }
+
+  async function validateSealedSubject(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    const recheckTarget = async () => {
+      meter.inputKeys += SUBJECT_VALIDATION_TRAILING_INPUTS;
+      const transport: OpenSearch = {
+        ...search,
+        request: (method, path, body, options) =>
+          search.request(method, path, body, {
+            ...options,
+            work: {
+              bytes: VALIDATION_BYTE_LIMIT - meter[validationBytes] - SUBJECT_VALIDATION_CHECKPOINT_BYTES,
+              deadline: context.deadline,
+              settle: (bytes) => (meter[validationBytes] += bytes),
+            },
+          }),
+      };
+      return native(job.consumer, context, transport);
+    };
+    let longest = 0;
+    for (let slice = 0; slice < SUBJECT_VALIDATION_SLICES && job.home < 4096; slice++) {
+      const inputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys - SUBJECT_VALIDATION_TRAILING_INPUTS;
+      const bytes =
+        VALIDATION_BYTE_LIMIT -
+        meter[validationBytes] -
+        SUBJECT_VALIDATION_CHECKPOINT_BYTES -
+        SUBJECT_VALIDATION_SQL_BYTES;
+      const count = Math.min(
+        SUBJECT_VALIDATION_HOMES,
+        4096 - job.home,
+        inputs,
+        Math.floor(bytes / SUBJECT_VALIDATION_ROW_BYTES),
+      );
+      if (count <= 0) {
+        if (slice === 0) throw new Pending('dependency_unavailable');
+        break;
+      }
+      const started = Date.now();
+      if (started + 10 + 2 * longest >= context.deadline) {
+        if (slice === 0) throw new Pending('deadline');
+        break;
+      }
+      await compareHomes(job, client, context, meter, count, recheckTarget);
+      longest = Math.max(longest, Date.now() - started);
+    }
+    await recheckTarget();
+    await save(client, job, meter);
+  }
+
+  async function advance(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    batchValidation = false,
+  ) {
     if (job.phase === 'active') return;
     if (job.fenced_pass) await held(job, context, meter);
     if (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent') return;
@@ -1437,86 +1602,11 @@ export function createSearchGenerationPublication(
         const remaining = job.fenced_pass ? PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys : 0;
         validationHomes = Math.max(SUBJECT_VALIDATION_HOMES, remaining);
       }
-      const end = Math.min(4096, job.home + validationHomes);
-      // An empty Subject home without writer custody can be witnessed at its current position.
-      // The completed engine pass accounted for existing keys. Occupied homes and homes that
-      // may own an engine copy still replay on any change.
-      const compared = await client.query<
-        Home & {
-          current_epoch: number | null;
-          current_position: string | null;
-          write_state: string | null;
-          refreshed: boolean;
-        }
-      >(
-        `WITH homes AS (
-           SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
-                  p.epoch AS current_epoch,p.position AS current_position,p.write_state
-             FROM search.generation_publication_home h
-             LEFT JOIN core.partition p ON p.partition_no=h.partition_no
-            WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
-         ),
-         refreshed AS (
-           UPDATE search.generation_publication_home h
-              SET position=homes.current_position
-             FROM homes
-             LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
-            WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
-              AND homes.epoch=homes.current_epoch AND homes.write_state='active'
-              AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
-              AND NOT EXISTS (
-                SELECT 1 FROM search.identity_writer w
-                WHERE w.physical_target=$5 AND w.partition_no=homes.partition
-              )
-           RETURNING h.partition_no
-         )
-         SELECT homes.partition,homes.epoch,
-                (CASE WHEN refreshed.partition_no IS NULL THEN homes.position ELSE homes.current_position END)::text
-                  AS position,
-                homes.account_revision::text,homes.claim_revision::text,homes.current_epoch,
-                homes.current_position::text,homes.write_state,(refreshed.partition_no IS NOT NULL) AS refreshed
-           FROM homes LEFT JOIN refreshed ON refreshed.partition_no=homes.partition
-          ORDER BY homes.partition`,
-        [job.home, end, job.job, job.pass, job.family === 'subjects' ? job.physical_target : null],
-      );
-      meter.inputKeys += compared.rows.length;
-      meter.frontierWrites += compared.rows.filter(({ refreshed }) => refreshed).length;
-      if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
-      for (const { current_epoch, current_position, write_state, refreshed: _refreshed, ...row } of compared.rows) {
-        if (write_state !== 'active') throw new Pending('routing_incomplete');
-        // The subject pass compares every native home in one statement snapshot. Mixed
-        // publication additionally needs the Account owner's current reduction witness.
-        const matches =
-          job.family === 'subjects'
-            ? row.epoch === current_epoch &&
-              row.position === current_position &&
-              row.account_revision === '0' &&
-              row.claim_revision === '0'
-            : same(row, await head(row.partition, context));
-        if (matches) continue;
-        const sameOwnerAdvance =
-          current_position !== null &&
-          row.account_revision === '0' &&
-          row.claim_revision === '0' &&
-          advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position));
-        if (job.family === 'subjects' && (!job.fenced_pass || sameOwnerAdvance)) {
-          await rewindSubjectHome(job, row.partition, client, meter);
-          if (sameOwnerAdvance) return;
-        } else {
-          await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-            row.partition,
-            job.job,
-          ]);
-          job.phase = 'subject';
-          job.home = row.partition;
-          job.after_id = null;
-          job.after_route = null;
-          await save(client, job, meter);
-        }
-        throw new Pending('source_pending');
+      if (batchValidation) {
+        await validateSealedSubject(job, client, context, meter);
+        return;
       }
-      job.home = end;
-      if (job.home === 4096) job.phase = 'reconciled';
+      if (!(await compareHomes(job, client, context, meter, validationHomes))) return;
     }
     await native(job.consumer, context);
     await save(client, job, meter);
@@ -1706,7 +1796,7 @@ export function createSearchGenerationPublication(
           meter,
           phase,
           async (job, client, _current, capture, enrolled, additionalEnrollmentCosts) => {
-            if (enrolled)
+            if (enrolled === true)
               return {
                 status: 'progress' as const,
                 job: reference(job),
@@ -1715,11 +1805,12 @@ export function createSearchGenerationPublication(
                 ...(additionalEnrollmentCosts?.length ? { additionalEnrollmentCosts } : {}),
               };
             const mayEnroll = phase === 'step-enroll' && canEnrollSubject(job);
+            const batchValidation = enrolled === 'sealed' && job.phase === 'validate' && job.pass === '1';
             let waiting: Pending | undefined;
             let sourceAdvanced = false;
             try {
               try {
-                await advance(job, client, context, meter);
+                await advance(job, client, context, meter, batchValidation);
               } catch (error) {
                 if (!mayEnroll || !(error instanceof Pending) || error.reason !== 'source_pending') throw error;
                 waiting = error;
@@ -1728,11 +1819,12 @@ export function createSearchGenerationPublication(
               // enrollment can still commit. Only that progress bypasses backoff.
               if (
                 mayEnroll &&
+                !batchValidation &&
                 meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
               ) {
                 sourceAdvanced =
-                  (await continueSubjectEnrollment(job, client, context, meter)) ??
-                  (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced;
+                  ((await continueSubjectEnrollment(job, client, context, meter)) ??
+                    (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced) === true;
               }
               if (waiting && !sourceAdvanced) throw waiting;
               if (waiting) await save(client, job, meter);
@@ -1745,7 +1837,8 @@ export function createSearchGenerationPublication(
                 job.phase !== 'active'
               )
                 await restart(job, client, context, meter);
-              else if (error instanceof Pending && error.reason === 'source_pending') await save(client, job, meter);
+              else if (!batchValidation && error instanceof Pending && error.reason === 'source_pending')
+                await save(client, job, meter);
               throw error;
             }
             // Fencing and intent do no step work; the existing scheduler must resume activate.
@@ -1777,7 +1870,8 @@ export function createSearchGenerationPublication(
             ...(sourceAdvanced ? { sourceAdvanced } : {}),
             cost: meter,
           });
-          if (enrollmentAdvanced !== undefined) return preparing('activate', enrollmentAdvanced, enrollmentAdvanced);
+          if (typeof enrollmentAdvanced === 'boolean')
+            return preparing('activate', enrollmentAdvanced, enrollmentAdvanced);
           const superseded = newerSubjectAlias(job, current);
           if (job.phase === 'active') {
             if (current !== job.physical_target && !superseded) throw new Pending('source_pending');

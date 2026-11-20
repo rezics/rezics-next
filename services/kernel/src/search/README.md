@@ -2208,9 +2208,14 @@ Preparation adopts existing physical generation metadata and immutable native cu
 physical name/UUID, the discovery incarnation and registry, consumer/projection generation, meaning and native
 Source definition/configuration. Native Source key pages provide explicit completeness, epoch and position;
 Account pages preserve handleless rows. Each step advances one retained key frontier or a bounded set of validation
-homes. Mixed Discovery compares at most 50 homes per step. Subject compares up to 256 homes before fencing and can use
-the remaining preparation input allowance for exact home comparisons after rechecking the held fence and original
-Source completion. Ordinary keys use the existing writer; mixed keys use `createDiscoveryProjection`, its permanent keyed
+homes. Mixed Discovery compares at most 50 homes per step. Subject normally compares up to 256 homes before fencing.
+When the first cold pass observes the exact original Source enrollment seal, a single locked turn may compare up to four
+contiguous slices of at most 256 homes each on the same input and byte allowance. It reserves the trailing target checks
+and checkpoint, stops admitting slices as the deadline approaches, and checks the native target before saving the
+verified frontier. A lost checkpoint can repeat work. The seal is a scheduling hint for that turn. Activation still
+owns Source adoption and the publication pin. The held pass can use the remaining preparation input allowance for
+exact home comparisons after rechecking the held fence and original Source completion. Ordinary keys use the existing
+writer; mixed keys use `createDiscoveryProjection`, its permanent keyed
 deletion high water and native copy inventory. `nativeGenerationActions` supplies native keyed expectations.
 A refreshed physical PIT/composite traversal also examines engine-only keys. Native `after_key`, rather than
 page length, proves engine traversal exhaustion. Keyed search-visible identities and exact external versions

@@ -625,6 +625,12 @@ export async function readNativePublicFilterPublicationCompletion(
 }
 
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
+type SubjectEnrollment = Readonly<{
+  consumer: PublicFilterConsumer;
+  source: PublicFilterSourceDefinition['source'];
+  registration: { partition: number; id: string };
+  capturingOnly?: true;
+}>;
 type NativePreparationInput =
   | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
       Readonly<{
@@ -635,12 +641,7 @@ type NativePreparationInput =
   | Readonly<{
       bootstrap: string;
       inputLimit?: number;
-      subjectEnrollment?: Readonly<{
-        consumer: PublicFilterConsumer;
-        source: PublicFilterSourceDefinition['source'];
-        registration: { partition: number; id: string };
-        capturingOnly?: true;
-      }>;
+      subjectEnrollment?: SubjectEnrollment;
     }>;
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
@@ -658,9 +659,12 @@ export type NativePublicFilterPreparation =
       enrollmentAdvanced: boolean;
       cost: PublicFilterCost;
     }>;
+type NativePreparationResult =
+  | NativePublicFilterPreparation
+  | Readonly<{ status: 'enrollment-sealed'; cost: PublicFilterCost }>;
 const nativePreparations = new WeakMap<
   PublicFilterSourceBinding,
-  (input: NativePreparationInput, context: PublicFilterConsumerContext) => Promise<NativePublicFilterPreparation>
+  (input: NativePreparationInput, context: PublicFilterConsumerContext) => Promise<NativePreparationResult>
 >();
 
 // These private factory associations locate original native bodies. The bodies
@@ -786,7 +790,12 @@ export function advanceNativePublicFilterPreparation(
 ): Promise<NativePublicFilterPreparation[] | null>;
 export function advanceNativePublicFilterPreparation(
   binding: PublicFilterSourceBinding,
-  input: NativePreparationInput,
+  input: { bootstrap: string; inputLimit?: number; subjectEnrollment: SubjectEnrollment },
+  context: PublicFilterConsumerContext,
+): Promise<NativePreparationResult | null>;
+export function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding,
+  input: Exclude<NativePreparationInput, { bootstrap: string }> | { bootstrap: string; inputLimit?: number },
   context: PublicFilterConsumerContext,
 ): Promise<NativePublicFilterPreparation | null>;
 export async function advanceNativePublicFilterPreparation(
@@ -4544,25 +4553,63 @@ export function createNativePublicFilterSourceBinding(
       );
     const retained = await run(context, async (cost, db) => {
       // Finish the original Source read before Search registration or Access enrollment takes a checkout.
-      const cut = input.subjectEnrollment
-        ? await withReadTransaction(db, (client) => loadBootstrap(input.bootstrap, client), context.deadline)
-        : await loadBootstrap(input.bootstrap, db);
-      if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
       const expected = input.subjectEnrollment;
-      if (
-        expected &&
-        ((expected.capturingOnly &&
-          (cut.row.state !== 'capturing' || cut.row.queried !== null || cut.row.publication_job !== null)) ||
-          cut.row.coverage_publication !== null ||
-          cut.bootstrap.snapshot !== 'prepared' ||
-          !('catalogueCoverage' in cut.definition.capture) ||
-          cut.definition.capture.catalogueCoverage !== true ||
-          'representation' in cut.definition.capture ||
-          !isDeepStrictEqual(cut.definition.source, expected.source) ||
-          encode(cut.bootstrap.consumer) !== encode(expected.consumer))
-      )
-        throw new BindingError('binding_mismatch');
-      return { status: 'retained' as const, cut, cost };
+      const read = async (client: CommandTransaction) => {
+        const cut = await loadBootstrap(input.bootstrap, client);
+        const { row, definition, bootstrap } = cut;
+        if (row.state !== 'capturing' && row.state !== 'begun') throw new BindingError('observation_lost');
+        if (
+          expected &&
+          ((expected.capturingOnly && (row.queried !== null || row.publication_job !== null)) ||
+            row.coverage_publication !== null ||
+            bootstrap.snapshot !== 'prepared' ||
+            !('catalogueCoverage' in definition.capture) ||
+            definition.capture.catalogueCoverage !== true ||
+            'representation' in definition.capture ||
+            !isDeepStrictEqual(definition.source, expected.source) ||
+            encode(bootstrap.consumer) !== encode(expected.consumer))
+        )
+          throw new BindingError('binding_mismatch');
+        if (!expected?.capturingOnly || row.state === 'capturing') return { status: 'retained' as const, cut, cost };
+        if (
+          definition.readDefinition !== expected.consumer.readDefinition ||
+          definition.meaning.digest !== expected.consumer.meaningDigest
+        )
+          throw new BindingError('binding_mismatch');
+        requirePopulationBaseline(row);
+        const { rowCount } = await client.query(
+          `/* semantic.native-keyed:5:5 */
+           SELECT 1 FROM search.public_filter_registration r
+           JOIN search.public_filter_target t USING (partition_no,physical_target)
+           JOIN search.public_filter_coverage_preparation c
+             ON (c.partition_no,c.registration,c.bootstrap)=(r.partition_no,r.id,$3::uuid)
+           WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active'
+             AND r.consumer_bootstrap=$4 AND r.consumer_work IS NOT NULL
+             AND r.consumer=$5 AND r.physical_target=$6 AND t.incarnation=$7
+             AND c.consumer=r.consumer AND c.definition=$8 AND c.generation=$9 AND c.root=$10
+             AND c.population_protocol=1 AND c.after_home=4096
+             AND NOT EXISTS (SELECT FROM search.public_filter_observation o
+               WHERE (o.partition_no,o.registration)=(r.partition_no,r.id) AND o.state<>'closed')
+             AND NOT EXISTS (SELECT FROM search.identity_writer_gate g
+               WHERE (g.partition_no,g.physical_target)=(r.partition_no,r.physical_target)
+                 AND g.publication_fence IS NOT NULL)`,
+          [
+            expected.registration.partition,
+            expected.registration.id,
+            row.bootstrap,
+            bootstrap.id,
+            ports.search.encodeConsumer(expected.consumer),
+            expected.consumer.physicalTarget,
+            expected.consumer.incarnation,
+            definition.readDefinition,
+            row.coverage_generation,
+            row.coverage_root,
+          ],
+        );
+        if (rowCount !== 1) throw new BindingError('binding_mismatch');
+        return { status: 'enrollment-sealed' as const, cost };
+      };
+      return expected ? await withReadTransaction(db, read, context.deadline) : await read(db);
     });
     if (retained.status !== 'retained') return retained;
     if (retained.cut.row.state === 'begun') {
