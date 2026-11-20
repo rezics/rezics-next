@@ -3132,9 +3132,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         previous = encodeNative(state);
       }
       const subjectPublication = publication !== undefined && !('representation' in retained.definition.capture);
-      const repairCoverage = { capture: retained.definition.capture, subjectPublication };
       const mixedPreparation =
         config.discoveryPreparation === 'repair' && 'representation' in retained.definition.capture;
+      const repairCoverage = { capture: retained.definition.capture, subjectPublication, mixedPreparation };
       const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
       let advanced = 0;
       while (!state.closed) {
