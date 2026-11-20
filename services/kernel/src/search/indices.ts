@@ -471,6 +471,40 @@ export async function upgradeSubjectRefreshInterval(search: OpenSearch, prefix: 
   );
 }
 
+/** Scope the faster refresh to a cold publication and confirm its reset on the same physical allocation. */
+export async function setSubjectPublicationRefresh(
+  search: OpenSearch,
+  index: string,
+  incarnation: string,
+  preparing: boolean,
+): Promise<void> {
+  const path = `/${index}/_settings`;
+  const interval = async () => {
+    const response = await search.request('GET', `${path}/index.uuid,index.refresh_interval`);
+    const entry = record(response.body) ? response.body[index] : undefined;
+    const settings = record(entry) ? entry.settings : undefined;
+    const native = record(settings) ? settings.index : undefined;
+    if (
+      response.status !== 200 ||
+      !record(native) ||
+      native.uuid !== incarnation ||
+      typeof native.refresh_interval !== 'string'
+    )
+      throw new SearchUnavailableError('Subject publication refresh setting is unavailable');
+    return native.refresh_interval;
+  };
+  const standard = subjects.settings.refresh_interval;
+  const temporary = '10ms';
+  const current = await interval();
+  if (current !== (preparing ? standard : temporary)) return;
+  const refresh_interval = preparing ? temporary : standard;
+  await observedWrite(
+    () => search.request('PUT', path, { index: { refresh_interval } }),
+    async () => (await interval()) === refresh_interval,
+    'Subject publication refresh interval could not be established',
+  );
+}
+
 /** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
 export async function ensureSubjectRatingMapping(
   search: OpenSearch,

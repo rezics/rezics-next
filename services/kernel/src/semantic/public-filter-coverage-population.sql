@@ -30,6 +30,7 @@ binding AS MATERIALIZED (
     (d.partition_no,d.source_id,d.configuration)
   JOIN core.partition p ON p.partition_no=s.partition_no AND p.epoch=s.owner_epoch AND p.write_state='active'
   LEFT JOIN LATERAL (
+    /* semantic.attached-coverage */
     SELECT proof.* FROM semantic.public_filter_published_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,i.catalogue_text_keys
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target !~ 'discovery-g[1-9][0-9]*$'
@@ -37,6 +38,7 @@ binding AS MATERIALIZED (
     SELECT proof.* FROM semantic.public_filter_mixed_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'
+    /* semantic.end-attached-coverage */
   ) attached ON true
   JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=
     (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
@@ -105,6 +107,7 @@ binding AS MATERIALIZED (
     AND ((SELECT plans FROM width)=1 OR (SELECT sum(page_ceiling/6) FROM binding)<=$6::integer)
     -- A withdrawn ID can be completely absent from the PIT. Its original home
     -- still participates in the independent start and final owner checks.
+    /* semantic.book-withdrawals */
     AND NOT EXISTS (
       SELECT 1 FROM jsonb_to_recordset(scope.book_withdrawals) w(home integer,epoch integer,route integer,id uuid,visibility text,revision text)
       LEFT JOIN core.partition owner ON owner.partition_no=w.home
@@ -114,6 +117,7 @@ binding AS MATERIALIZED (
         OR n.owner_epoch IS DISTINCT FROM w.epoch OR n.population_fenced IS DISTINCT FROM false
         OR s.visibility IS DISTINCT FROM w.visibility OR s.security_revision::text IS DISTINCT FROM w.revision
     )
+    /* semantic.end-book-withdrawals */
 ), pending AS MATERIALIZED (
   -- The exact complete compiler closure is persisted by the original definition
   -- writer. LIMIT precedes every receiver-summary or own-row lookup.
@@ -146,8 +150,9 @@ binding AS MATERIALIZED (
   UNION ALL
   SELECT 'changed',h.source_home,h.source_epoch,n.owner_epoch,n.position::text,n.population_fenced
   FROM changed h LEFT JOIN semantic.public_filter_privacy_head n ON n.partition_no=h.source_home
-),
-checked AS MATERIALIZED (
+)
+/* semantic.own-window */
+, checked AS MATERIALIZED (
   SELECT b.*,checks.* FROM binding b CROSS JOIN LATERAL (
     WITH member AS MATERIALIZED (SELECT b.*),
     children AS MATERIALIZED (
