@@ -56,8 +56,10 @@ eight-input group probe. The 872-input maximum Search offer and five shared inpu
 4,096 homes take at least 274 enrollment turns. Each adopted page writes two durable cursors.
 
 A default Search preparation delivery can claim exact ready revisions inline while Source advances and time remains
-in the delivery's deadline. Every revision keeps a separate Search meter. The due scan discovers a ready revision
-after interruption, and the ordinary enqueue path owns the final revision of each burst.
+in the delivery's deadline. During cold Subject publication, one revision can enroll up to 32 Source pages under
+the same publication lock. Each page keeps its own Search meter, revalidates registration custody and commits its
+own receipt chain and cursor. The due scan rediscovers interrupted work and the next delivery resumes from the
+committed Source cursor. The ordinary enqueue path owns the final revision of each delivery.
 
 Cold Subject publication can continue the registration's original prepared bootstrap directly after reconciliation.
 Search checks the physical incarnation and alias under its publication lock. Source reloads the exact definition,
