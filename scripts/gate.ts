@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The repository's landing gate runs every workspace check and the control plane's own gate. When a readable
+// The repository's landing gate qualifies every workspace check and runs the control plane's own gate. When a readable
 // KERNEL_CHECK_REMOTE hosts file is configured, the root gate splits the work between two check-host runs.
 import {
   accessSync,
@@ -17,6 +17,7 @@ import { dirname, join, resolve } from 'node:path';
 import { readHosts } from './remote-check.ts';
 import { hostsLocation, onCheckHost } from './stack-run.ts';
 import { classifyLoadInducedOutput } from './test-lanes.ts';
+import { openGateWorkspaceResults, workspaceResultReusable } from './gate-workspace-results.ts';
 
 const root = process.cwd();
 const CONTROL_GATE = 'tools/goal/scripts/gate.ts';
@@ -45,6 +46,10 @@ export type Workspace = { name: string; directory: string; checkScript: string }
 function workspaceCheckScript(directory: string): string {
   return directory === 'apps/web' ? 'check:release' : 'check';
 }
+
+function workspaceCommand(workspace: Workspace): string[] {
+  return ['bun', 'run', workspaceCheckScript(workspace.directory)];
+}
 export type WorkspaceOutcome = {
   name: string;
   directory: string;
@@ -53,6 +58,7 @@ export type WorkspaceOutcome = {
   durationSeconds: number;
   failingFiles: string[];
   loadSensitiveTests: string[];
+  reused?: { run: string; revision: string };
 };
 type WorkspaceResult = {
   block: string;
@@ -126,7 +132,14 @@ function validateWorkspaceOutcome(value: unknown): WorkspaceOutcome | null {
     !Array.isArray(value.failingFiles) ||
     !value.failingFiles.every((entry) => typeof entry === 'string') ||
     !Array.isArray(value.loadSensitiveTests) ||
-    !value.loadSensitiveTests.every((entry) => typeof entry === 'string')
+    !value.loadSensitiveTests.every((entry) => typeof entry === 'string') ||
+    (value.reused !== undefined &&
+      (!value.passed ||
+        !isRecord(value.reused) ||
+        typeof value.reused.run !== 'string' ||
+        !/^[a-z0-9-]{1,64}$/.test(value.reused.run) ||
+        typeof value.reused.revision !== 'string' ||
+        !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value.reused.revision)))
   ) {
     return null;
   }
@@ -138,6 +151,7 @@ function validateWorkspaceOutcome(value: unknown): WorkspaceOutcome | null {
     durationSeconds: value.durationSeconds,
     failingFiles: value.failingFiles,
     loadSensitiveTests: value.loadSensitiveTests,
+    ...(value.reused === undefined ? {} : { reused: value.reused as WorkspaceOutcome['reused'] }),
   };
 }
 
@@ -446,6 +460,9 @@ async function runRemoteAttempt(
     process.execPath,
     remoteCheck,
     '--gate',
+    ...(workspaces.some((workspace) => workspaceResultReusable(workspace, workspaceCommand(workspace)))
+      ? ['--bind-source']
+      : []),
     '--slots',
     String(slots),
     '--returns',
@@ -715,7 +732,7 @@ async function checkWorkspace(
   gateRoot = root,
   env: Record<string, string | undefined> = process.env,
 ): Promise<WorkspaceResult> {
-  const command = ['bun', 'run', workspaceCheckScript(workspace.directory)];
+  const command = workspaceCommand(workspace);
   const startedAt = performance.now();
   const child = Bun.spawn(resolveBunCommand(command, gateRoot), {
     cwd: join(gateRoot, workspace.directory),
@@ -866,6 +883,7 @@ export async function runLocalGate(
   args: string[],
   gateRoot = root,
   env: Record<string, string | undefined> = process.env,
+  openResults = openGateWorkspaceResults,
 ): Promise<number> {
   const selection = readWorkspaceSelection(args);
   const allWorkspaces = await readWorkspaces(gateRoot);
@@ -896,6 +914,18 @@ export async function runLocalGate(
   }
 
   const source = workspaceProgressSource(gateRoot, env.REZICS_CHECK_RUN);
+  // A failed or unavailable cache operation leaves the native check responsible for the outcome.
+  const optionalReuse = <T>(operation: () => T): T | undefined => {
+    try {
+      return operation();
+    } catch {
+      return undefined;
+    }
+  };
+  const reusable =
+    code === 0 && workspaces.some((workspace) => workspaceResultReusable(workspace, workspaceCommand(workspace)))
+      ? optionalReuse(() => openResults(gateRoot, env, source))
+      : undefined;
   const reportWorkspaceProgress = (outcome: WorkspaceOutcome, first: WorkspaceResult, retry?: WorkspaceResult) => {
     if (!source) return;
     const record = {
@@ -915,16 +945,48 @@ export async function runLocalGate(
   const worker = async (): Promise<void> => {
     while (nextWorkspace < workspaces.length) {
       const index = nextWorkspace++;
-      const result = await checkWorkspace(workspaces[index]!, gateRoot, env);
+      const workspace = workspaces[index]!;
+      const command = workspaceCommand(workspace);
+      const key = optionalReuse(() => reusable?.key(workspace, command));
+      const hit = key ? optionalReuse(() => reusable?.lookup(key, workspace)) : undefined;
+      if (hit) {
+        const { durationMs, ...origin } = hit;
+        outcomes.push({
+          name: workspace.name,
+          directory: workspace.directory,
+          passed: true,
+          host: env.REMOTE_CHECK_HOST!,
+          durationSeconds: durationMs / 1000,
+          failingFiles: [],
+          loadSensitiveTests: [],
+          reused: origin,
+        });
+        writeOutput(
+          `[gate-reuse] ${workspace.directory} reused ${origin.run} (${durationMs / 1000}s previous workspace time)\n`,
+          'stdout',
+          env,
+        );
+        continue;
+      }
+      const result = await checkWorkspace(workspace, gateRoot, env);
       const outcome = outcomeFrom(result, env);
       outcomes.push(outcome);
+      if (key && outcome.passed && outcome.failingFiles.length === 0 && outcome.loadSensitiveTests.length === 0) {
+        optionalReuse(() => {
+          if (reusable?.key(workspace, command) === key) reusable.record(key, workspace, result.durationMs);
+        });
+      }
       reportWorkspaceProgress(outcome, result);
       if (result.code === 0) writeOutput(result.block, 'stdout', env);
       else failures.push(result);
     }
   };
 
-  if (code === 0) await Promise.all(Array.from({ length: Math.min(concurrency, workspaces.length) }, () => worker()));
+  try {
+    if (code === 0) await Promise.all(Array.from({ length: Math.min(concurrency, workspaces.length) }, () => worker()));
+  } finally {
+    optionalReuse(() => reusable?.close());
+  }
 
   const failedByDirectory = new Map(failures.map((failure) => [failure.workspace.directory, failure]));
   const remainingFailures: WorkspaceResult[] = [];

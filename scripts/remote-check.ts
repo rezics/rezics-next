@@ -376,6 +376,8 @@ export type RemoteCheck = {
     }>;
     deleted: string[];
   };
+  /** Direct CLI source binding has no controller that can release the Git publication later. */
+  releaseSourcePublication?: boolean;
   /** Bounded retry count. Check-run invocations use one physical run and reconcile that identity after loss. */
   maxTransportAttempts?: number;
   slots?: number;
@@ -8400,9 +8402,13 @@ type PreparedRun = {
 
 type CheckGitTransfer = { stage?: { directory: string; manifest: string } };
 
+function retainCheckGit(options: Pick<RemoteCheck, 'expectedSourceManifest' | 'releaseSourcePublication'>): boolean {
+  return options.expectedSourceManifest !== undefined && options.releaseSourcePublication !== true;
+}
+
 /** One publication survives host retries and is deleted only after the logical check finishes. */
 export async function withCheckGitTransfer<T>(
-  options: Pick<RemoteCheck, 'workspace' | 'expectedSourceManifest'>,
+  options: Pick<RemoteCheck, 'workspace' | 'expectedSourceManifest' | 'releaseSourcePublication'>,
   operation: (transfer: CheckGitTransfer) => Promise<T>,
 ): Promise<T> {
   const transfer: CheckGitTransfer = {};
@@ -8414,7 +8420,7 @@ export async function withCheckGitTransfer<T>(
       // Result/settlement delivery does not wait on GitHub cleanup. Frozen callers retain controller custody.
       void import('./check-git.ts')
         .then(async ({ releaseCheckGit, sweepCheckGit }) => {
-          if (!options.expectedSourceManifest) await releaseCheckGit(options.workspace, stage.manifest);
+          if (!retainCheckGit(options)) await releaseCheckGit(options.workspace, stage.manifest);
           await sweepCheckGit(options.workspace);
         })
         .catch(() => {})
@@ -8531,7 +8537,7 @@ async function uploadRun(
         try {
           const publication = {
             ref: `refs/checks/${randomUUID()}`,
-            retain: options.expectedSourceManifest !== undefined,
+            retain: retainCheckGit(options),
             deadlineMs:
               Date.now() +
               configuredTimeout(
@@ -10076,7 +10082,7 @@ async function tryRemoteCheckOwned(
   }
 }
 
-function parse(argv: string[]): RemoteCheck {
+async function parse(argv: string[]): Promise<RemoteCheck> {
   const hostsFile = process.env.KERNEL_CHECK_REMOTE;
   if (!hostsFile) throw new Error('KERNEL_CHECK_REMOTE must name the hosts file');
   const priorityValue = process.env.REMOTE_CHECK_PRIORITY;
@@ -10089,6 +10095,7 @@ function parse(argv: string[]): RemoteCheck {
   let estimateMs: number | undefined;
   let maxMs: number | undefined;
   let gate = false;
+  let bindSource = false;
   let returns: string[] | undefined;
   let allowedHosts: string[] | undefined;
   let excludedHosts: string[] | undefined;
@@ -10125,6 +10132,10 @@ function parse(argv: string[]): RemoteCheck {
     }
     if (flag === '--gate') {
       gate = true;
+      continue;
+    }
+    if (flag === '--bind-source') {
+      bindSource = true;
       continue;
     }
     if (flag === '--max-ms') {
@@ -10179,6 +10190,11 @@ function parse(argv: string[]): RemoteCheck {
   const phaseEvent = remoteCheckPhaseReporter();
   const custody = remoteCheckCustodyCallbacks(rest, returns ?? [], hostsFile);
   const { completed: persistCompleted, ...custodyCallbacks } = custody;
+  const source = bindSource
+    ? await currentCheckSourceManifest(workspace, returns).catch(() => {
+        console.error('remote-check: candidate source binding unavailable; workspace reuse disabled');
+      })
+    : undefined;
   return {
     hosts: readHosts(hostsFile),
     ...(allowedHosts === undefined ? {} : { allowedHosts }),
@@ -10190,6 +10206,13 @@ function parse(argv: string[]): RemoteCheck {
     },
     ...(phaseEvent === undefined ? {} : { phaseEvent }),
     ...custodyCallbacks,
+    ...(source
+      ? {
+          expectedSourceSha256: source.sourceSha256,
+          expectedSourceManifest: source,
+          releaseSourcePublication: true,
+        }
+      : {}),
     workspace,
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
@@ -10399,7 +10422,7 @@ if (import.meta.main) {
     });
   }
   try {
-    process.exitCode = await remoteCheck(parse(process.argv.slice(2)), controller.signal);
+    process.exitCode = await remoteCheck(await parse(process.argv.slice(2)), controller.signal);
   } catch (error) {
     if (error instanceof RemoteTransportError) {
       console.error(error.message);

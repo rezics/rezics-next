@@ -11,6 +11,8 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DEFAULT_DURATIONS, loadDurationTable, runLocalGate, splitWorkspaces, type Workspace } from './gate.ts';
+import { currentCheckSourceManifest } from './check-source.ts';
+import { GateWorkspaceResults } from './gate-workspace-results.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const gate = join(repository, 'scripts/gate.ts');
@@ -35,7 +37,7 @@ if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
   script = bytes.toString();
 }
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, at: Date.now(), ...event }) + '\\n');
-const runId = script.match(/runs\\/([a-z0-9-]+)/)?.[1] ?? 'none';
+const runId = script.match(/(?:runs|receipts)\\/([a-z0-9-]+)/)?.[1] ?? 'none';
 const returnsDir = dir + '/remote-returns/' + runId;
 const hold = (release: () => void) => {
   process.stdin.on('data', () => {});
@@ -59,6 +61,12 @@ if (script.includes('REMOTE_CHECK_RETURNS')) {
   }
   console.log('MANIFEST ' + Buffer.from(JSON.stringify(inventory)).toString('base64'));
   console.log('ZSTD 0');
+} else if (script.startsWith('# REMOTE_CHECK_PREPARED_INPUTS')) {
+  const source = JSON.parse(readFileSync(returnsDir + '/.temp/check-host/source-manifest-' + runId + '.json', 'utf8'));
+  console.log(JSON.stringify({
+    schema: 1, host: address.includes('@b.') ? 'b' : 'c', run: runId, sourceSha256: source.sourceSha256,
+    manifestSha256: 'a'.repeat(64), fileCount: source.entries.length, totalBytes: 1024,
+  }));
 } else if (script.includes('MemAvailable')) {
   log({ kind: 'probe' });
   console.log('MEMORY_CURRENT -');
@@ -199,6 +207,12 @@ if (returned) {
       mkdirSync(dirname(to), { recursive: true });
       copyFileSync(from, to);
     }
+  }
+} else {
+  for (const path of files.filter((path) => path.startsWith('.temp/check-host/source-manifest-'))) {
+    const target = join(process.env.FAKE_DIR, 'remote-returns', destination.match(remoteRun)[1], path);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(source, path), target);
   }
 }
 `;
@@ -597,6 +611,92 @@ test.each(['matching', 'stale'] as const)('Gate checkpoints with a %s manifest',
     { ...file.workspaces[1], ...identity, attempt: 1, result: 'failed', exitCode: 1 },
     { ...file.workspaces[0], ...identity, attempt: 2, result: 'passed', exitCode: 0 },
   ]);
+});
+
+test('an interrupted Gate preserves an independently bound pass until a transitive input changes', async () => {
+  const { env, dir, events } = scenario();
+  const checkout = candidateCheckout(dir);
+  const pinned = join(checkout, 'node_modules/.bin/bun');
+  rmSync(pinned);
+  symlinkSync(join(root, 'gate-bin/bun'), pinned);
+  env.GATE_CONCURRENCY = '1';
+  env.REMOTE_CHECK_HOST = 'b';
+  fixtureWorkspace(checkout, 'packages/a-passed', '@fixture/passed');
+  fixtureWorkspace(checkout, 'packages/c-dependency', '@fixture/dependency');
+  fixtureWorkspace(checkout, 'packages/d-leaf', '@fixture/leaf');
+  writeFileSync(
+    join(checkout, 'packages/c-dependency/package.json'),
+    JSON.stringify({
+      name: '@fixture/dependency',
+      scripts: { check: 'bun test' },
+      dependencies: { '@fixture/leaf': 'workspace:*' },
+    }),
+  );
+  writeFileSync(
+    join(checkout, 'packages/a-passed/package.json'),
+    JSON.stringify({
+      name: '@fixture/passed',
+      scripts: { check: 'bun test' },
+      dependencies: { '@fixture/dependency': 'workspace:*' },
+    }),
+  );
+  const inputs = ['--workspaces', 'packages/a-passed', 'packages/b-runner'];
+  const sourceDirectory = join(checkout, '.temp/check-host');
+  mkdirSync(sourceDirectory, { recursive: true });
+  const run = async (id: string) => {
+    const manifest = await currentCheckSourceManifest(checkout);
+    const receipts = join(dir, 'receipts', id);
+    mkdirSync(receipts, { recursive: true });
+    writeFileSync(
+      join(receipts, 'prepared-inputs.json'),
+      JSON.stringify({
+        schema: 1,
+        host: 'b',
+        run: id,
+        sourceSha256: manifest.sourceSha256,
+        manifestSha256: 'b'.repeat(64),
+        fileCount: 1,
+        totalBytes: 1,
+      }),
+    );
+    writeFileSync(join(sourceDirectory, `source-manifest-${id}.json`), JSON.stringify(manifest));
+    return runLocalGate(inputs, checkout, { ...env, REZICS_CHECK_RUN: id }, (root, env, source) => {
+      if (source?.run && source.revision && source.sourceSha256) {
+        return GateWorkspaceResults.open(root, dir, env, {
+          run: source.run,
+          revision: source.revision,
+          sourceSha256: source.sourceSha256,
+        });
+      }
+    });
+  };
+  const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
+    if (String(text).includes('[gate-workspace]') && String(text).includes('interrupted-run')) {
+      throw new Error('fixture interrupted after the first native completion');
+    }
+    return true;
+  });
+  const checks = () =>
+    events()
+      .filter((entry) => entry.kind === 'check')
+      .map((entry) => entry.workspace);
+  try {
+    await expect(run('interrupted-run')).rejects.toThrow('fixture interrupted');
+    expect(existsSync(env.GATE_RESULT_FILE)).toBe(false);
+    expect(checks()).toEqual(['a-passed']);
+
+    writeFileSync(join(checkout, 'apps/a-plain/unrelated.ts'), 'export const unrelated = 1;');
+    expect(await run('unrelated-change')).toBe(0);
+    expect(checks()).toEqual(['a-passed', 'b-runner']);
+    const result = JSON.parse(readFileSync(env.GATE_RESULT_FILE, 'utf8'));
+    expect(result.workspaces[0]).toMatchObject({ passed: true, reused: { run: 'interrupted-run' } });
+
+    writeFileSync(join(checkout, 'packages/d-leaf/relevant.ts'), 'export const relevant = 1;');
+    expect(await run('dependency-change')).toBe(0);
+    expect(checks()).toEqual(['a-passed', 'b-runner', 'a-passed']);
+  } finally {
+    output.mockRestore();
+  }
 });
 
 test.each([
