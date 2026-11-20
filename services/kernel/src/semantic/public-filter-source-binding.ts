@@ -169,36 +169,32 @@ async function acknowledgePublicFilterRepairBaseline(
       ).rows[0];
       if (!owner || owner.write_state !== 'active')
         throw new CommandUnavailableError('fenced', baseline.registrationPartition);
-      // Registration installs the physical target before its registration row.
-      // Keep that native lock order while fencing the incarnation through ACK.
-      const target = (
-        await client.query<{ incarnation: string }>(
-          `/* semantic.native-keyed:1:2 */
-         SELECT incarnation FROM search.public_filter_target
-         WHERE (partition_no,physical_target)=($1,$2) FOR SHARE`,
-          [baseline.registrationPartition, baseline.physicalTarget],
-        )
-      ).rows[0];
-      if (target?.incarnation !== baseline.incarnation)
-        throw new CommandUnavailableError('fenced', baseline.registrationPartition);
-      const registration = (
-        await client.query<{
-          state: string;
-          consumer: string;
-          physical_target: string;
-        }>(
-          `/* semantic.native-keyed:1:2 */
-         SELECT state,consumer,physical_target FROM search.public_filter_registration
-         WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
-          [baseline.registrationPartition, baseline.registration],
-        )
-      ).rows[0];
-      if (
-        registration?.state !== 'active' ||
-        registration.consumer !== baseline.consumer ||
-        registration.physical_target !== baseline.physicalTarget
-      )
-        throw new CommandUnavailableError('fenced', baseline.registrationPartition);
+      // The registration lock consumes the locked target key, matching the
+      // order in which registration installs the target and registration rows.
+      const authority = await client.query(
+        `/* semantic.native-keyed:2:4 */
+         WITH target AS MATERIALIZED (
+           SELECT partition_no,physical_target FROM search.public_filter_target
+           WHERE (partition_no,physical_target)=($1,$2) AND incarnation=$3
+           FOR SHARE
+         )
+         SELECT registration.id FROM target
+         CROSS JOIN LATERAL (
+           SELECT r.id FROM search.public_filter_registration r
+           WHERE (r.partition_no,r.id)=(target.partition_no,$4)
+             AND r.physical_target=target.physical_target
+             AND r.state='active' AND r.consumer=$5
+           FOR UPDATE OF r
+         ) registration`,
+        [
+          baseline.registrationPartition,
+          baseline.physicalTarget,
+          baseline.incarnation,
+          baseline.registration,
+          baseline.consumer,
+        ],
+      );
+      if (authority.rowCount !== 1) throw new CommandUnavailableError('fenced', baseline.registrationPartition);
       // Lock and confirm the whole original receiver prefix before changing it.
       // Later obligations remain behind their actual native revision and position.
       // Give the cold planner index bounds even before it has registration statistics.

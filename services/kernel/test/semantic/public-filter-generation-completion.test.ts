@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { fixture, nativeProducer, readContext, statement } from './support/public-filter-source.ts';
 import {
   createPublicFilterSourceBinding,
@@ -397,11 +398,46 @@ test('native publication starts repair from the original adopted Source executio
       registration.rows[0]!.definition,
     );
     expect(retained.data.meaning.release).toEqual({ authority: 'semantic.readRelease', digest: f.meaning.digest });
+    const observed = new WeakSet<PoolClient>();
+    const receiverCommits: { authorityReads: number; prefix: unknown[] }[] = [];
+    let lostReceiverReply = false;
+    f.db.pool.on('acquire', (client: PoolClient) => {
+      if (observed.has(client)) return;
+      observed.add(client);
+      const query = client.query.bind(client);
+      let authorityReads = 0;
+      let prefix: unknown[] | undefined;
+      client.query = ((sql: unknown, ...args: unknown[]) => {
+        if (typeof sql === 'string') {
+          if (sql === 'BEGIN' || sql === 'ROLLBACK') {
+            authorityReads = 0;
+            prefix = undefined;
+          }
+          if (sql.includes('WITH target AS MATERIALIZED') && sql.includes('SELECT registration.id FROM target'))
+            authorityReads++;
+          if (sql.includes('acknowledged_settlement=$7')) prefix = structuredClone(args[0]) as unknown[];
+        }
+        const response = Reflect.apply(query, undefined, [sql, ...args]);
+        if (sql !== 'COMMIT' || !prefix) return response;
+        const committed = { authorityReads, prefix };
+        return Promise.resolve(response).then((result) => {
+          receiverCommits.push(committed);
+          if (!lostReceiverReply) {
+            lostReceiverReply = true;
+            throw Object.assign(new Error('Lost committed receiver ACK reply'), { code: '08006' });
+          }
+          return result;
+        });
+      }) as typeof client.query;
+    });
     const query = f.db.pool.query.bind(f.db.pool);
+    const commitsAtSourceCas: number[] = [];
     let lostAckReply = false;
     f.db.pool.query = ((sql: unknown, ...args: unknown[]) => {
+      const sourceCas = typeof sql === 'string' && sql.includes('SET ack_after=$6');
+      if (sourceCas) commitsAtSourceCas.push(receiverCommits.length);
       const response = Reflect.apply(query, undefined, [sql, ...args]);
-      if (lostAckReply || typeof sql !== 'string' || !sql.includes('SET ack_after=$6')) return response;
+      if (lostAckReply || !sourceCas) return response;
       return Promise.resolve(response).then((result) => {
         if (result.rowCount !== 1) return result;
         lostAckReply = true;
@@ -421,6 +457,7 @@ test('native publication starts repair from the original adopted Source executio
         activate = step.status === 'reconciled';
         continue;
       }
+      const recoveringReceiver = !lostReceiverReply;
       const recoveringAck = !lostAckReply;
       const result = await runtime.publication.activate(job, context());
       last = { status: result.status, ...('reason' in result && { reason: result.reason }), cost: result.cost };
@@ -484,8 +521,28 @@ test('native publication starts repair from the original adopted Source executio
       expect(advanced).toBeGreaterThanOrEqual(0);
       expect(advanced).toBeLessThanOrEqual(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT);
       acknowledged = original.ack_after;
+      if (recoveringReceiver && lostReceiverReply) {
+        expect(advanced).toBe(0);
+        expect(commitsAtSourceCas).toEqual([]);
+        expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: false });
+        continue;
+      }
       if (recoveringAck && lostAckReply) {
         expect(advanced).toBeGreaterThan(0);
+        expect(commitsAtSourceCas).toEqual([2]);
+        const [first, retry] = receiverCommits;
+        expect(first!.authorityReads).toBe(1);
+        expect(retry!.authorityReads).toBe(1);
+        // Native budget can change a retry's width. It still starts at the
+        // original Source frontier and preserves every overlapping receipt.
+        expect(retry!.prefix.slice(0, 2)).toEqual(first!.prefix.slice(0, 2));
+        expect(retry!.prefix.slice(3, 8)).toEqual(first!.prefix.slice(3, 8));
+        const firstHomes = JSON.parse(String(first!.prefix[2])) as unknown[];
+        const retryHomes = JSON.parse(String(retry!.prefix[2])) as unknown[];
+        const overlap = Math.min(firstHomes.length, retryHomes.length);
+        expect(overlap).toBeGreaterThan(0);
+        expect(retryHomes.slice(0, overlap)).toEqual(firstHomes.slice(0, overlap));
+        expect(original.ack_after).toBe(retry!.prefix[8]);
         expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: false });
         expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
         continue;
@@ -526,8 +583,10 @@ test('native publication starts repair from the original adopted Source executio
       expect(batched).toMatchObject({ status: 'preparing', next: 'activate', sourceAdvanced: true });
       if (batched.status !== 'preparing' || !batched.additionalSourceCosts?.length)
         throw new Error('Expected independently budgeted Source turns in the same activation');
-      for (const turn of [batched.cost, ...batched.additionalSourceCosts])
+      for (const turn of [batched.cost, ...batched.additionalSourceCosts]) {
         expect(turn.inputKeys).toBeLessThanOrEqual(1000);
+      }
+      expect(receiverCommits.every(({ authorityReads }) => authorityReads === 1)).toBe(true);
       expect(batchedScans).toBe(true);
       const afterBatch = await f.db.pool.query<{ ack_after: number }>(
         `SELECT ack_after FROM semantic.public_filter_repair_step
