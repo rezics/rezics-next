@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FeedSelection } from './feed-contract.ts';
+import { homeDiscoverySelection } from './feed-discovery.ts';
 import type { Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
@@ -34,6 +35,9 @@ export function feedBinding(
       languages: languages.join(','),
       authority: fingerprint(actor),
       ...(kind === undefined ? {} : { kind }),
+      ...(stream === 'home' && kind === undefined
+        ? { discoveryKinds: JSON.stringify(homeDiscoverySelection(kind).kinds) }
+        : {}),
       ...selection,
     },
   };

@@ -1,7 +1,18 @@
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { ProblemError } from '../http/problem-error.ts';
 import type { DiscoveryUnionHit } from '../search/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { FeedItem } from './feed-contract.ts';
+
+export function homeDiscoverySelection(kind: string | undefined): {
+  kinds: readonly string[];
+  publicCatalogue: boolean;
+} {
+  return {
+    kinds: kind === undefined ? BOOK_CATALOGUE_TYPES : [kind],
+    publicCatalogue: kind === undefined || BOOK_CATALOGUE_TYPES.some((type) => type === kind),
+  };
+}
 
 /** Search owns native summaries and final eligibility. Mapping does no owner reads or refills. */
 export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { source: 'discovery' }> {

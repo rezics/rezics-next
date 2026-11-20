@@ -2,6 +2,7 @@ import { loadRoutePage } from './route';
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
 import { kernelClient } from '../../kernel/client';
@@ -12,6 +13,7 @@ import {
   type DiscoveryRequest,
   type DiscoveryKindsState,
 } from '../../search/discovery';
+import { readDirectoryDescriptor } from '../catalogue/type-directory-client';
 import {
   homeFeedId,
   homeSpaceAddress,
@@ -135,7 +137,7 @@ export const readPrivateHomePage = createServerFn({ method: 'GET' })
     }
   });
 
-/** Anonymous bounded registry metadata, read only when the Home control needs choices. No hits are retained. */
+/** Home keeps admitted native choices and serves exact catalogue Types when Search is closed. */
 export const readHomeKinds = createServerFn({ method: 'GET', strict: false })
   .validator((input: { locale: string; cursor?: string }) => {
     localeInput(input.locale);
@@ -148,6 +150,7 @@ export const readHomeKinds = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }): Promise<DiscoveryKindsState> => {
     const client = kernelClient(data.locale);
+    const { signal } = getRequest();
     const request: DiscoveryRequest = {
       representation: 'discovery-v1',
       languages: requestLanguages(data.locale),
@@ -155,9 +158,7 @@ export const readHomeKinds = createServerFn({ method: 'GET', strict: false })
       kindPage: { limit: 8 },
     };
     const send = (body: DiscoveryRequest) =>
-      client.subjects.$search.post(body, {
-        fetch: { signal: getRequest().signal, cache: 'no-store', redirect: 'manual' },
-      });
+      client.subjects.$search.post(body, { fetch: { signal, cache: 'no-store', redirect: 'manual' } });
     const result =
       data.cursor !== undefined
         ? await readDiscoveryKinds(request, data.cursor, send)
@@ -170,10 +171,28 @@ export const readHomeKinds = createServerFn({ method: 'GET', strict: false })
       try {
         for (const kind of result.kinds.values) homeFeedKind(kind.id);
       } catch {
-        return { status: 'unavailable' as const };
+        return { status: 'unavailable' };
       }
     }
-    return result;
+    if (result.status !== 'closed') return result;
+    if (data.cursor !== undefined) return { status: 'restart' };
+    const reads = await Promise.all(
+      BOOK_CATALOGUE_TYPES.map((id) => readDirectoryDescriptor(client, id, data.locale, signal)),
+    );
+    const descriptors = reads.flatMap((read) => (read.ok ? [read.descriptor] : []));
+    if (descriptors.length !== BOOK_CATALOGUE_TYPES.length) return { status: 'unavailable' };
+    return {
+      status: 'ready',
+      kinds: {
+        values: descriptors.map(({ typeId, label, language }) => ({
+          id: typeId,
+          labels: { [language ?? 'und']: label },
+          icon: 'file-text',
+        })),
+        next: null,
+      },
+      asOf: new Date().toISOString(),
+    };
   });
 
 /** Exact Home metadata stays out of shared query caches and hydration, including viewer-derived Realm. */

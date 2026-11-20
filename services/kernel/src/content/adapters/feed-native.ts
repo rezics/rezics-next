@@ -24,7 +24,7 @@ import type { FeedContentContextReference } from '../feed-context.ts';
 import { projectFeedReactions } from '../feed-reactions.ts';
 import { prepareFeedReactionAdvice } from '../feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from '../feed-subject-reactions.ts';
-import { feedDiscoveryItem } from '../feed-discovery.ts';
+import { feedDiscoveryItem, homeDiscoverySelection } from '../feed-discovery.ts';
 import { readFeedViewerFollows } from './feed-follows.ts';
 import { createFeedQuestionSession } from '../feed-question.ts';
 import { openFollowingSpace, type FollowingSpace } from '../feed-space.ts';
@@ -274,11 +274,12 @@ export function createNativeFeedPorts(
           async page(input) {
             const actor = asPlatformActor(input.actor, liveActor());
             const principal = actor.kind === 'account' ? (`account:${actor.accountId}` as const) : 'anonymous';
+            const { kinds, publicCatalogue } = homeDiscoverySelection(input.kind);
             const request = {
               representation: 'discovery-v1' as const,
               limit: input.limit,
               languages: [...input.languages],
-              ...(input.kind === undefined ? {} : { filter: { kind: { in: [input.kind] } } }),
+              filter: { kind: { in: [...kinds] } },
               ...(input.spaceId === undefined ? {} : { spaceId: input.spaceId }),
               ...(input.cursor ? { cursor: input.cursor } : {}),
             };
@@ -291,10 +292,12 @@ export function createNativeFeedPorts(
             const retained = deps.feedDiscovery ? await deps.feedDiscovery(principal, request, context) : undefined;
             try {
               const page = retained?.page ?? (await deps.discovery!(principal, request, context));
-              const candidate = (hit: (typeof page.hits)[number]) => ({
-                item: feedDiscoveryItem(hit),
-                ...discoveryQuestionWitness(hit),
-              });
+              const candidate = (hit: (typeof page.hits)[number]) => {
+                const item = feedDiscoveryItem(hit);
+                if (publicCatalogue && (item.key.owner !== 'semantic' || !kinds.includes(item.key.kind)))
+                  throw new ProblemError('dependency_unavailable');
+                return { item, ...discoveryQuestionWitness(hit) };
+              };
               const candidates = page.hits.map(candidate);
               const keys = new Map(candidates.map(({ item }, index) => [item.id, page.hits[index]!.key]));
               return {
@@ -441,9 +444,10 @@ export function createNativeFeedPorts(
         const live = asPlatformActor(actor, liveActor());
         await producers.admit(live, 'reading_progress', 'progress_session:list', deadline);
       },
-      async discovery(actor, deadline) {
+      async discovery(actor, kind, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        await producers.admit(live, 'search', 'subject:search', deadline);
+        if (!homeDiscoverySelection(kind).publicCatalogue)
+          await producers.admit(live, 'search', 'subject:search', deadline);
       },
     },
     cursor: {

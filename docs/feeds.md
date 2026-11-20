@@ -57,7 +57,8 @@ cursor binding, `6D+3` discovery work, B=160 and one bounded mixed round.
 ## Selection and native summaries
 
 Optional singular `kind` is the exact native kind ID, for example
-`GET /v1/feedItems?stream=home&limit=20&kind=schema%3ABook`. Omission retains all kinds.
+`GET /v1/feedItems?stream=home&limit=20&kind=schema%3ABook`. With no selector, Following and
+Continue retain all their eligible kinds.
 The native `kind.in` literal grammar permits a nonempty string of at most 256 UTF-8
 bytes without control characters; IDs are neither trimmed nor case folded. Empty,
 malformed, oversized or repeated `kind` parameters return RFC 9457 validation problems.
@@ -69,19 +70,20 @@ three sources. A thread about a Book remains kind `thread`, a reply remains `pos
 and a Collection containing Books remains `collection`. An attached Subject or follow
 reason does not change the primary kind or grant disclosure. Following and Continue
 retain all their original current owner, body, parent, container and erasure checks.
-Discovery receives `filter: {kind: {in: [kind]}}` through the existing
-`DiscoverySearch(principal, MixedDiscoveryRequest, DiscoveryReadContext)` provider
-with `representation: 'discovery-v1'`. Native release/input refusal, including
+Home sends an exact `kind.in` population to the existing native Discovery provider
+before it enumerates candidates. Without a kind selector the discovery lane uses Book,
+Book Series and Edition. An exact selection of one of these kinds narrows that public
+population. Other exact kinds require the existing Search gate. The selector still applies
+to all three lanes while the default bibliographic population applies only to Discovery.
+Native release/input refusal, including
 `unsupported_query` (422), is returned as its actual problem rather than an unavailable
 lane or an all-kind fallback. Genuine dependency/preparation failures retain their
 existing source states.
 
-The existing native choice source is `POST /v1/subjects:search` with
-`{representation:'discovery-v1',kindPage:{limit:8}}`. Its response includes
-`kinds:{values:[{id,labels,icon,count?}],next}` with at most eight native choices.
-Continue metadata with `kindPage:{limit:8,cursor:kinds.next}` and the same request
-bindings; this continuation is metadata-only. This source does not claim choice text
-search. There is no separate Content choice directory or all-kind enumeration.
+With Search closed, the Home picker reads the three exact public catalogue identities from the
+released Type directory as one bounded choice page. It uses the same bibliographic classification
+as native Home and Book Catalogue Search. Admitted Search still supplies its native paginated
+kind choices. A cursor from that directory requires a restart if the gate closes.
 
 Each item has a stable native `id`, `source`, canonical `key`, nullable `occurredAt`,
 currently disclosed native `summary`, and typed `destination`. Destinations contain IDs
@@ -93,10 +95,10 @@ optional `excerpt` contains native document plain text, with whitespace collapse
 and cut before a grapheme would cross the cap. Empty or withheld bodies omit the excerpt; missing identities omit
 the author, with no identifier fallback. No row ratings are added. Collection summaries contain its current ID, title and description.
 
-The mounted page cap is 20 rows; the native kind picker returns at most eight choices per metadata page, and the
-existing rating-question directory returns at most 20. Space restoration uses one current Space point read. The
-wire has no aggregate disclosed-summary byte cap, and its Following Collection description has no `maxLength`;
-Public Collection/review/Space summary bounds remain producer-owned; Web does not enrich the supplied rows.
+The mounted page cap is 20 rows, and the existing rating-question directory returns at most 20 choices.
+Space restoration uses one current Space point read. The wire has no aggregate disclosed-summary byte cap,
+and its Following Collection description has no `maxLength`. Public Collection/review/Space summary
+bounds remain producer-owned and Web does not enrich the supplied rows.
 Response row counts do not establish native indexed scan work.
 
 Web Back/Forward and owner-destination return keep a versioned descriptor in the current same-origin Home
@@ -117,8 +119,8 @@ Continue are `not_requested`. Authenticated responses are `private, no-store`; s
 preparation belongs to the consumer. Current actor-home lifecycle and credential floor,
 `follow:list`, and the personal Library gate admit Following. Home additionally requires
 `library_entry:list`, `progress_session:list`, the personal Library gate with the original
-Library action, and the reading-progress gate. Discovery independently admits the Search
-gate. Refusal and closed gates remain RFC 9457 problems. Admission is never converted
+Library action, and the reading-progress gate. The bibliographic discovery population is
+public with both Search groups closed. Refusal and closed gates remain RFC 9457 problems. Admission is never converted
 into an empty or unavailable lane.
 
 The existing `KernelDependencies.discovery` supplies DiscoverySearch unchanged, including
@@ -171,10 +173,10 @@ deduplication and output. No refill or additional candidate read runs for a sele
 The server never derives a frontier from visible output count.
 
 The composite cursor binds the exact viewer/credential authority inputs, stream, page
-size, languages, exact optional kind, format, fixed boundary, next turn and source positions.
+size, languages, exact optional kind, Discovery population, format, fixed boundary, next turn
+and source positions.
 A cursor from all kinds or one selected kind cannot replay under another selection.
-Omitting kind preserves the existing cursor query semantics. Bounded parts
-use the existing native encrypted list-cursor envelopes with a common authenticated
+Bounded parts use the existing native encrypted list-cursor envelopes with a common authenticated
 digest and part/count bindings. Total cursor size is capped at 32 KiB and expires after
 15 minutes. Following's initial keyset boundary is fixed by that page sequence.
 Native discovery membership/freshness remains owned by its retained cursor. `asOf` is
@@ -316,8 +318,8 @@ question's current revision, the complete selection and current viewer authority
 or unreadable selection cannot resume the old page. Qualification consumes no votes or
 aggregates and never widens a lane's candidate or frontier budget. Failed source lanes
 remain omitted; only a ready lane with a native frontier enables Next, while Retry may
-retry a failed lane. The available default sources remain catalogue/Account discovery,
-recent Following and Continue. Adopted public Collection/review/Space discovery awaits the native producers
+retry a failed lane. The available default sources are bibliographic discovery, recent Following and Continue.
+Adopted public Collection/review/Space discovery awaits the native producers
 above. Public Board/Realm/discussion discovery and Context membership remain outside those delivered sources.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed

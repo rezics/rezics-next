@@ -31,7 +31,7 @@ type DefinitionTypesApi = {
     query: { locale: string; query?: string; typeId?: string; cursor?: string; limit: number };
   }): Promise<ApiResult<{ types: TypeDirectorySummary[]; next: string | null }>>;
   (input: { typeId: string }): {
-    get(input: { query: { locale: string } }): Promise<ApiResult<TypeDirectoryDescriptor>>;
+    get(input: { query: { locale: string }; fetch?: RequestInit }): Promise<ApiResult<TypeDirectoryDescriptor>>;
   };
 };
 
@@ -50,11 +50,15 @@ export async function readDirectoryDescriptor(
   client: KernelClient,
   typeId: string,
   locale: string,
+  signal?: AbortSignal,
 ): Promise<DescriptorRead> {
   if (typeof typeId !== 'string' || typeId.length === 0 || typeId.length > 4_194_304)
     return { ok: false, reason: 'missing' };
   try {
-    const response = await definitionTypes(client)({ typeId }).get({ query: { locale } });
+    const response = await definitionTypes(client)({ typeId }).get({
+      query: { locale },
+      ...(signal === undefined ? {} : { fetch: { signal, cache: 'no-store', redirect: 'manual' } }),
+    });
     if (response.error) return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
     const descriptor = response.data;
     if (
