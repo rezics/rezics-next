@@ -644,6 +644,7 @@ export async function readPublicFilterRepairSettlement(
   request: Readonly<{
     queried: PublicFilterQueriedObservation;
     execution: string;
+    commitReceiverManifest?: true;
   }>,
   context: PublicFilterConsumerContext,
 ): Promise<PublicFilterRepairSettlementResult> {
@@ -1326,6 +1327,17 @@ export async function readPublicFilterRepairSettlement(
       });
       if (stored.length !== 1) throw new Failure('binding_mismatch');
       if (!previous?.done || previous.basis !== basis) await save(db, current, { ...progress, winners: cursor });
+      if (input.commitReceiverManifest) {
+        if (!subjectPublication) throw new Failure('binding_mismatch');
+        // The database binds this insert to repairFinish's own fenced transaction.
+        // Original range, terminal, authority lanes and their FKs are bounded points.
+        meter.inputKeys += 76;
+        meter.rows += 76;
+        meter.dependencyPoints += 76;
+        meter.frontierWrites++;
+        admit();
+        await db.query(`INSERT INTO search.public_filter_ack_manifest(job) VALUES ($1::uuid)`, [input.execution]);
+      }
       return {
         status: 'settled' as const,
         definition: retained.definition,

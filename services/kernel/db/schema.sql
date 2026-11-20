@@ -4126,6 +4126,13 @@ CREATE TRIGGER partition_publication_authority_move AFTER UPDATE OF node, write_
 
 
 --
+-- Name: consumer_checkpoint public_filter_ack_checkpoint_loss; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_checkpoint_loss AFTER DELETE OR UPDATE OF epoch, "position", partition_no, consumer ON core.consumer_checkpoint FOR EACH ROW EXECUTE FUNCTION search.public_filter_ack_checkpoint_loss();
+
+
+--
 -- Name: consumer_checkpoint public_filter_creation_checkpoint_retained; Type: TRIGGER; Schema: core; Owner: -
 --
 

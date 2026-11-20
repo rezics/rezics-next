@@ -44,6 +44,29 @@ Observation, repair, ACK and serving use their existing authority checks.
   ordinary continuation.
   It records input keys, statements and bytes for the prepared pair.
 
+## Subject receiver ACK protocol
+
+The original Search preparation pins its ACK protocol at insertion. Production selects version 0.
+Version 1 is reserved for a cold catalogue Subject job. Its receiver compares the original verified
+creation windows, including empty homes, against enrollment, the retained creation checkpoint, Search
+baseline and current coverage. Each funded comparison covers at most 16 homes. Parents bind the two
+adjacent child revisions. A complete root covers homes 0 through 4095 before Source closes the terminal.
+
+Receiver changes update the affected subtree clocks synchronously. Loss of an original enrollment,
+baseline or creation pin changes the preparation's continuity witness. Native owner, Semantic and
+Access changes without a narrower witness can require a full comparison again. Each classified home
+retains a separately indexed delta against its original native tuple.
+
+Search commits one immutable manifest in the transaction that verifies and fences the original repair
+settlement. Source locates it using its own terminal and checks the committed root, execution, observation,
+settlement and continuity in the same transaction as its 0-to-4096 CAS. The trigger rejects adoption by
+the inserting transaction. A later withdrawal keeps its pending key and current delta across historical
+readback. Publication still reopens the settlement and original population start.
+
+Before ordinary selection changes, Semantic population and Book withdrawal readers must qualify effective
+ACK membership and explicit superseding receipts. Discovery keeps its materialized protocol. Search
+writer admission, copy erasure and target retirement must qualify the retained proof lifetime.
+
 ## Serving from published catalogue coverage
 
 Full Subject publication enrolls a catalogue-text key for label, alias, description, name-order and relevance

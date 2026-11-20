@@ -59,6 +59,90 @@ $$;
 
 
 --
+-- Name: begin_public_filter_ack_clock(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.begin_public_filter_ack_clock() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
+    VALUES(NEW.partition_no,NEW.registration,NEW.bootstrap,0,4096);
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: bind_public_filter_ack_manifest(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.bind_public_filter_ack_manifest() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  a search.public_filter_ack_authority%ROWTYPE;
+  t semantic.public_filter_repair_step%ROWTYPE;
+  root search.public_filter_ack_range%ROWTYPE;
+  state jsonb;
+  proof jsonb;
+  last_page jsonb;
+  pages integer;
+  current_cut bytea;
+BEGIN
+  -- Same short lock order as explicit ACK and receiver fanout.
+  PERFORM FROM core.partition WHERE partition_no=0 AND write_state='active' FOR SHARE;
+  PERFORM FROM search.public_filter_target target JOIN search.generation_publication j
+    ON (target.partition_no,target.physical_target,target.incarnation)=(j.partition_no,j.physical_target,j.native_incarnation)
+    WHERE (j.partition_no,j.job)=(0,NEW.job) FOR SHARE OF target,j;
+  PERFORM FROM search.public_filter_registration r JOIN search.public_filter_ack_authority v
+    ON (r.partition_no,r.id)=(v.partition_no,v.registration) WHERE v.job=NEW.job FOR UPDATE OF r;
+  SELECT * INTO STRICT a FROM search.public_filter_ack_authority
+    WHERE job=NEW.job AND phase='reconciled' AND pass=1 AND NOT fenced_pass AND fence IS NULL FOR SHARE;
+  SELECT * INTO STRICT t FROM semantic.public_filter_repair_step s
+    WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.complete
+      AND s.verified_binding IS NOT NULL AND s.verified_root IS NOT NULL AND s.verified_next IS NULL AND s.ack_after=0 FOR SHARE;
+  current_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,
+    search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']));
+  SELECT * INTO STRICT root FROM search.public_filter_ack_range
+    WHERE (partition_no,job,binding,first_home,width,witness)=(0,a.job,t.verified_binding,0,4096,current_cut)
+      AND registration=a.registration AND bootstrap=a.bootstrap AND enrollment_root=a.enrollment_root AND identity_digest=a.identity_digest;
+  state := a.repair_settlement::jsonb->1;
+  pages := search.public_filter_ack_field(state,'pages')::integer;
+  SELECT v.progress::jsonb->1,v.evidence_revision INTO STRICT proof,NEW.evidence_revision FROM search.public_filter_repair_verification v
+    WHERE (v.partition_no,v.observation,v.execution)=(0,a.observation,a.execution) FOR SHARE;
+  SELECT CASE WHEN page.intent::jsonb->>0='references' THEN page.intent::jsonb#>'{1,1,1}' ELSE page.intent::jsonb->1 END
+    INTO STRICT last_page FROM search.public_filter_repair_page page
+    WHERE (page.partition_no,page.observation,page.execution,page.ordinal)=(0,a.observation,a.execution,pages-1) FOR SHARE;
+  IF (search.public_filter_ack_field(state,'closed')='true' AND search.public_filter_ack_field(state,'frontier')='null'
+    AND search.public_filter_ack_field(state,'bootstrap')#>>'{}'='0:'||a.bootstrap::text
+    AND search.public_filter_ack_field(state,'execution')#>>'{}'=a.execution
+    AND search.public_filter_ack_field(search.public_filter_ack_field(state,'fence'),'transaction')#>>'{}'=pg_current_xact_id()::text
+    AND search.public_filter_ack_field(search.public_filter_ack_field(state,'fence'),'incarnation')#>>'{}'=a.incarnation
+    AND search.public_filter_ack_field(search.public_filter_ack_field(state,'fence'),'sourceEpoch')::integer=a.owner_epoch
+    AND search.public_filter_ack_field(proof,'after')::integer=pages-1 AND search.public_filter_ack_field(proof,'linked')::integer=pages-1
+    AND search.public_filter_ack_field(search.public_filter_ack_field(proof,'winners'),'done')='true'
+    AND search.public_filter_ack_field(last_page,'sourceStep')#>>'{}'=t.step::text
+    AND search.public_filter_ack_field(last_page,'complete')='true') IS NOT TRUE THEN
+    RAISE EXCEPTION 'Receiver manifest requires the original fenced terminal settlement' USING ERRCODE='40001';
+  END IF;
+  NEW.partition_no := 0; NEW.registration := a.registration; NEW.bootstrap := a.bootstrap;
+  NEW.version := 1; NEW.root_revision := root.revision; NEW.root_digest := root.digest;
+  NEW.generation := a.generation; NEW.enrollment_root := a.enrollment_root; NEW.owner_epoch := a.owner_epoch;
+  NEW.physical_target := a.physical_target; NEW.incarnation := a.incarnation;
+  NEW.observation := a.observation; NEW.execution := a.execution; NEW.terminal := t.step;
+  NEW.binding := t.verified_binding; NEW.ordinal := t.verified_ordinal; NEW.terminal_root := t.verified_root;
+  NEW.settlement := search.public_filter_ack_field(state,'id')#>>'{}';
+  NEW.settlement_digest := search.public_filter_ack_settlement_digest(state);
+  NEW.identity_digest := a.identity_digest;
+  NEW.continuity := (SELECT sha256(uuid_send(clock.incarnation)||int8send(clock.continuity)||
+        search.public_filter_ack_witness(ARRAY['','@ack-retention'])) FROM search.public_filter_ack_home_clock clock
+        WHERE (clock.bootstrap,clock.first_home,clock.width)=(a.bootstrap,0,4096) FOR SHARE OF clock);
+  NEW.committed_by := pg_current_xact_id();
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: capture_freshness_position(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -101,6 +185,54 @@ $$;
 
 
 --
+-- Name: classify_public_filter_ack_home(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.classify_public_filter_ack_home() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE b search.public_filter_coverage_baseline%ROWTYPE;
+BEGIN
+  -- A NULL marker has no staged comparison. Leave v0 and unvisited v1
+  -- homes out of the delta index; a full manifest requires every marker.
+  IF TG_OP='INSERT' THEN NEW.baseline_delta := NULL; RETURN NEW; END IF;
+  IF OLD.baseline_delta IS NOT NULL THEN
+    IF TG_OP='DELETE' OR
+      (NEW.partition_no,NEW.registration,NEW.source_home,NEW.source_epoch,NEW.baseline_bootstrap) IS DISTINCT FROM
+      (OLD.partition_no,OLD.registration,OLD.source_home,OLD.source_epoch,OLD.baseline_bootstrap) THEN
+      PERFORM search.lose_public_filter_ack_cut(OLD.baseline_bootstrap);
+      IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+      NEW.baseline_delta := NULL;
+      RETURN NEW;
+    END IF;
+    IF (NEW.relevant_position,NEW.native_enqueue_revision,NEW.native_revision,NEW.native_claim_revision,
+      NEW.acknowledged_position,NEW.acknowledged_native_enqueue,NEW.acknowledged_baseline,NEW.acknowledged_settlement,
+      NEW.acknowledged_native_revision,NEW.acknowledged_native_claim_revision,NEW.last_change_generation)
+      IS DISTINCT FROM (OLD.relevant_position,OLD.native_enqueue_revision,OLD.native_revision,OLD.native_claim_revision,
+      OLD.acknowledged_position,OLD.acknowledged_native_enqueue,OLD.acknowledged_baseline,OLD.acknowledged_settlement,
+      OLD.acknowledged_native_revision,OLD.acknowledged_native_claim_revision,OLD.last_change_generation) THEN
+      INSERT INTO search.public_filter_ack_home_clock AS h(partition_no,registration,bootstrap,first_home,width,revision)
+        SELECT 0,OLD.registration,OLD.baseline_bootstrap,OLD.source_home/span*span,span,1
+        FROM unnest(ARRAY[4096,2048,1024,512,256,128,64,32,16]) span ORDER BY span DESC
+        ON CONFLICT (bootstrap,first_home,width) DO UPDATE SET revision=h.revision+1;
+    END IF;
+  ELSIF TG_OP='DELETE' THEN RETURN OLD;
+  ELSIF NEW.baseline_delta IS NULL THEN RETURN NEW;
+  END IF;
+  SELECT base.* INTO b FROM search.public_filter_coverage_preparation c
+    JOIN search.public_filter_coverage_baseline base USING(partition_no,registration,bootstrap)
+    WHERE (c.partition_no,c.registration,c.bootstrap)=(NEW.partition_no,NEW.registration,NEW.baseline_bootstrap)
+      AND c.ack_protocol=1 AND base.source_home=NEW.source_home AND base.source_epoch=NEW.source_epoch;
+  IF NOT FOUND THEN NEW.baseline_delta := NULL; RETURN NEW; END IF;
+  NEW.baseline_delta := NEW.relevant_position>b.source_position
+    OR NEW.native_enqueue_revision>b.native_enqueue_revision
+    OR NEW.native_revision IS DISTINCT FROM b.native_revision
+    OR NEW.native_claim_revision IS DISTINCT FROM b.native_claim_revision;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: clear_settled_relay_intent(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -113,6 +245,121 @@ BEGIN
   RETURN NEW;
 END
 $$;
+
+
+--
+-- Name: compare_public_filter_ack_range(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.compare_public_filter_ack_range() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  a search.public_filter_ack_authority%ROWTYPE;
+  l search.public_filter_ack_range%ROWTYPE;
+  r search.public_filter_ack_range%ROWTYPE;
+  homes integer;
+  chain_ok boolean;
+  foreign_cut bytea;
+  child_cut bytea;
+  previous_node search.public_filter_ack_range%ROWTYPE;
+BEGIN
+  IF NEW.partition_no<>0 OR NEW.first_home NOT BETWEEN 0 AND 4095 OR NEW.width NOT IN
+    (1,2,4,8,16,32,64,128,256,512,1024,2048,4096) OR NEW.first_home%NEW.width<>0 THEN
+    RAISE EXCEPTION 'Invalid receiver interval' USING ERRCODE='22023';
+  END IF;
+  SELECT * INTO STRICT a FROM search.public_filter_ack_authority
+    WHERE job=NEW.job AND phase='reconciled' AND pass=1 AND NOT fenced_pass AND fence IS NULL;
+  NEW.registration := a.registration;
+  NEW.bootstrap := a.bootstrap;
+  NEW.revision := gen_random_uuid();
+  NEW.identity_digest := a.identity_digest;
+  IF NEW.width<=16 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
+    UPDATE search.public_filter_coverage_home h SET baseline_delta=true
+    WHERE (h.partition_no,h.registration,h.baseline_bootstrap)=(0,a.registration,a.bootstrap)
+      AND h.source_home>=NEW.first_home AND h.source_home<NEW.first_home+NEW.width AND h.baseline_delta IS NULL;
+  END IF;
+  INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
+    VALUES(0,a.registration,a.bootstrap,NEW.first_home/greatest(NEW.width,16)*greatest(NEW.width,16),greatest(NEW.width,16))
+    ON CONFLICT DO NOTHING;
+  foreign_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  NEW.witness := search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,foreign_cut);
+  IF NEW.width<=16 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
+    WITH members AS MATERIALIZED (
+      SELECT i.home,w.step,w.verified_root,w.verified_ordinal,win.through_pos,b.predecessor,b.root,
+        b.receipt,b.creation_position,b.source_epoch,b.source_position,b.native_enqueue_revision,
+        b.native_revision,b.native_claim_revision,h.acknowledged_position,h.acknowledged_native_enqueue,
+        h.relevant_position,h.native_enqueue_revision AS current_enqueue,h.native_revision AS current_revision,
+        h.native_claim_revision AS current_claim,h.last_change_generation,h.baseline_delta,
+        ph.position AS privacy_position,ac.revision AS account_revision,ac.claim_revision AS account_claim
+      FROM generate_series(NEW.first_home,NEW.first_home+NEW.width-1) i(home)
+      CROSS JOIN LATERAL (
+        SELECT s.step,s.state,s.verified_root,s.verified_ordinal FROM semantic.public_filter_repair_step s
+        WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_binding=NEW.binding
+          AND s.verified_home<=i.home AND s.verified_root IS NOT NULL AND NOT s.complete
+        ORDER BY s.verified_home DESC LIMIT 1
+      ) w
+      CROSS JOIN LATERAL search.public_filter_ack_window(w.state,i.home) win
+      JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(i.home,a.bootstrap)
+        AND e.complete AND e.registration_partition=0 AND e.registration=a.registration AND e.read_definition=a.read_definition
+        AND (e.owner_epoch,e.receipt,e.creation_position)=(win.epoch,win.receipt,win.base)
+        AND e.creation_consumer='public_filter_'||replace(a.bootstrap::text,'-','')
+      JOIN core.partition p ON p.partition_no=i.home AND p.epoch=e.owner_epoch AND p.write_state='active' AND p.position>=win.through_pos
+      JOIN core.consumer_checkpoint ck ON (ck.partition_no,ck.consumer)=(i.home,e.creation_consumer)
+        AND ck.position<=win.base AND (ck.epoch IS NULL OR ck.epoch=p.epoch)
+      JOIN semantic.public_filter_privacy_head ph ON ph.partition_no=i.home AND ph.owner_epoch=p.epoch AND ph.position>=e.source_position
+      JOIN access.account_discovery_population ac ON ac.partition_no=i.home
+      JOIN search.public_filter_coverage_baseline b ON (b.partition_no,b.registration,b.bootstrap,b.source_home)=(0,a.registration,a.bootstrap,i.home)
+        AND (b.source_epoch,b.receipt,b.creation_position,b.source_position,b.native_enqueue_revision)=
+            (e.owner_epoch,e.receipt,e.creation_position,e.source_position,e.native_enqueue_revision)
+        AND b.native_revision IS NOT DISTINCT FROM e.native_revision AND b.native_claim_revision IS NOT DISTINCT FROM e.native_claim_revision
+      JOIN search.public_filter_coverage_home h ON (h.partition_no,h.registration,h.source_home)=(0,a.registration,i.home)
+        AND h.source_epoch=e.owner_epoch AND h.baseline_bootstrap=e.bootstrap
+        AND h.acknowledged_position<=b.source_position AND h.acknowledged_native_enqueue<=b.native_enqueue_revision
+      WHERE e.partition_no>=NEW.first_home AND e.partition_no<NEW.first_home+NEW.width
+        AND b.source_home>=NEW.first_home AND b.source_home<NEW.first_home+NEW.width
+        AND h.source_home>=NEW.first_home AND h.source_home<NEW.first_home+NEW.width
+        AND h.baseline_delta=(h.relevant_position>b.source_position OR h.native_enqueue_revision>b.native_enqueue_revision
+        OR h.native_revision IS DISTINCT FROM b.native_revision OR h.native_claim_revision IS DISTINCT FROM b.native_claim_revision)
+    ), ordered AS (
+      SELECT m.*,lag(root) OVER (ORDER BY home) AS prior FROM members m
+    )
+    SELECT count(*),bool_and(prior IS NULL OR prior=predecessor),
+      max(predecessor) FILTER (WHERE home=NEW.first_home),max(root) FILTER (WHERE home=NEW.first_home+NEW.width-1),
+      sha256(convert_to(jsonb_agg(to_jsonb(ordered) ORDER BY home)::text,'UTF8'))
+    INTO homes,chain_ok,NEW.predecessor,NEW.enrollment_root,NEW.digest FROM ordered;
+    IF homes<>NEW.width OR chain_ok IS NOT TRUE THEN
+      RAISE EXCEPTION 'Original receiver home evidence unavailable' USING ERRCODE='40001';
+    END IF;
+  ELSE
+    child_cut := search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width/2,foreign_cut);
+    SELECT * INTO STRICT l FROM search.public_filter_ack_range
+      WHERE (partition_no,job,binding,first_home,width,witness)=(0,a.job,NEW.binding,NEW.first_home,NEW.width/2,child_cut);
+    child_cut := search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home+NEW.width/2,NEW.width/2,foreign_cut);
+    SELECT * INTO STRICT r FROM search.public_filter_ack_range
+      WHERE (partition_no,job,binding,first_home,width,witness)=(0,a.job,NEW.binding,NEW.first_home+NEW.width/2,NEW.width/2,child_cut);
+    IF (l.registration,l.bootstrap,l.enrollment_root) IS DISTINCT FROM (a.registration,a.bootstrap,r.predecessor)
+      OR (r.registration,r.bootstrap) IS DISTINCT FROM (a.registration,a.bootstrap)
+      OR l.identity_digest<>a.identity_digest OR r.identity_digest<>a.identity_digest THEN
+      RAISE EXCEPTION 'Discontinuous receiver range' USING ERRCODE='40001';
+    END IF;
+    NEW.left_child := l.revision;
+    NEW.right_child := r.revision;
+    NEW.predecessor := l.predecessor;
+    NEW.enrollment_root := r.enrollment_root;
+    NEW.digest := sha256(uuid_send(l.revision)||l.digest||uuid_send(r.revision)||r.digest);
+  END IF;
+  NEW.digest := sha256(convert_to(jsonb_build_array('subject-receiver-baseline/v1',a.job,a.registration,a.bootstrap,
+    a.read_definition,a.release_digest,a.owner_epoch,a.physical_target,a.incarnation,a.observation,a.execution,
+    a.identity_digest,a.generation,a.enrollment_root,NEW.binding,NEW.first_home,NEW.width,NEW.witness,NEW.digest)::text,'UTF8'));
+  SELECT * INTO previous_node FROM search.public_filter_ack_range
+    WHERE (partition_no,job,binding,first_home,width,witness)=(0,NEW.job,NEW.binding,NEW.first_home,NEW.width,NEW.witness);
+  IF FOUND AND (previous_node.digest,previous_node.bootstrap,previous_node.registration,previous_node.left_child,previous_node.right_child) IS DISTINCT FROM
+    (NEW.digest,NEW.bootstrap,NEW.registration,NEW.left_child,NEW.right_child) THEN
+    RAISE EXCEPTION 'Conflicting receiver range replay' USING ERRCODE='40001';
+  END IF;
+  RETURN NEW;
+END $$;
 
 
 --
@@ -322,16 +569,28 @@ CREATE FUNCTION search.invalidate_public_filter_repair_evidence() RETURNS trigge
     AS $$
 BEGIN
   IF TG_OP <> 'INSERT' THEN
-    UPDATE search.public_filter_repair_verification SET revision=revision+1,progress=NULL
+    UPDATE search.public_filter_repair_verification SET revision=revision+1,evidence_revision=evidence_revision+1,progress=NULL
     WHERE (partition_no,observation,execution)=(OLD.partition_no,OLD.observation,OLD.execution);
   END IF;
   IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND
       (OLD.partition_no,OLD.observation,OLD.execution)<>(NEW.partition_no,NEW.observation,NEW.execution)) THEN
-    UPDATE search.public_filter_repair_verification SET revision=revision+1,progress=NULL
+    UPDATE search.public_filter_repair_verification SET revision=revision+1,evidence_revision=evidence_revision+1,progress=NULL
     WHERE (partition_no,observation,execution)=(NEW.partition_no,NEW.observation,NEW.execution);
   END IF;
   RETURN NULL;
 END
+$$;
+
+
+--
+-- Name: lose_public_filter_ack_cut(uuid); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.lose_public_filter_ack_cut(cut uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+  UPDATE search.public_filter_ack_home_clock SET continuity=continuity+1,revision=revision+1
+    WHERE (bootstrap,first_home,width)=(cut,0,4096)
 $$;
 
 
@@ -423,6 +682,63 @@ $$;
 
 
 --
+-- Name: prepare_public_filter_ack(uuid, integer); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.prepare_public_filter_ack(job_id uuid, leaf_limit integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  a search.public_filter_ack_authority%ROWTYPE;
+  chain text;
+  available integer;
+  witness_cut bytea;
+  local_cut bytea;
+  span integer := 4096;
+  first integer := 0;
+  left_id uuid;
+  right_id uuid;
+BEGIN
+  IF leaf_limit NOT BETWEEN 1 AND 16 OR leaf_limit IS NULL THEN
+    RAISE EXCEPTION 'Invalid receiver leaf allowance' USING ERRCODE='22023';
+  END IF;
+  SELECT * INTO a FROM search.public_filter_ack_authority WHERE job=job_id AND phase='reconciled' AND pass=1
+    AND fence IS NULL AND NOT fenced_pass;
+  IF NOT FOUND OR EXISTS (SELECT FROM search.public_filter_ack_manifest WHERE (partition_no,job)=(0,job_id)) THEN RETURN 0; END IF;
+  SELECT s.verified_binding,s.verified_home+coalesce(search.public_filter_ack_field(
+    search.public_filter_ack_field(s.state::jsonb->1,'windowBatch'),'count')::integer,1)
+    INTO chain,available FROM semantic.public_filter_repair_step s
+    WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_home IS NOT NULL
+    ORDER BY s.verified_home DESC LIMIT 1;
+  IF NOT FOUND THEN RETURN 0; END IF;
+  witness_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  local_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,witness_cut);
+  IF local_cut IS NULL OR EXISTS (SELECT FROM search.public_filter_ack_range n WHERE
+    (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,0,4096,local_cut)) THEN RETURN -2; END IF;
+  LOOP
+    IF first>=available THEN RETURN -1; END IF;
+    IF span<=leaf_limit AND first+span<=available THEN EXIT; END IF;
+    local_cut := search.public_filter_ack_range_witness(a.bootstrap,first,span/2,witness_cut);
+    SELECT revision INTO left_id FROM search.public_filter_ack_range n WHERE
+      (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,first,span/2,local_cut);
+    IF left_id IS NOT NULL THEN
+      local_cut := search.public_filter_ack_range_witness(a.bootstrap,first+span/2,span/2,witness_cut);
+      SELECT revision INTO right_id FROM search.public_filter_ack_range n WHERE
+        (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,first+span/2,span/2,local_cut);
+      IF right_id IS NOT NULL THEN EXIT; END IF;
+      first := first+span/2;
+    END IF;
+    span := span/2;
+    left_id := NULL;
+    right_id := NULL;
+  END LOOP;
+  INSERT INTO search.public_filter_ack_range(partition_no,job,binding,first_home,width,left_child,right_child)
+    VALUES (0,job_id,chain,first,span,left_id,right_id) ON CONFLICT DO NOTHING;
+  RETURN CASE WHEN left_id IS NULL THEN span ELSE 0 END + 1;
+END $$;
+
+
+--
 -- Name: prevent_receiving_plan_mutation(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -430,6 +746,140 @@ CREATE FUNCTION search.prevent_receiving_plan_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN RAISE EXCEPTION 'Native receiving plans are immutable'; END; $$;
+
+
+--
+-- Name: public_filter_ack_checkpoint_loss(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_checkpoint_loss() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $_$
+BEGIN
+  IF OLD.consumer ~ '^public_filter_[0-9a-f]{32}$' THEN
+    PERFORM search.lose_public_filter_ack_cut(substring(OLD.consumer FROM 15)::uuid);
+  END IF;
+  RETURN NULL;
+END $_$;
+
+
+--
+-- Name: public_filter_ack_field(jsonb, text); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_field(obj jsonb, field_name text) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT entry->1->1 FROM jsonb_array_elements(obj) entry WHERE entry->>0=field_name
+$$;
+
+
+--
+-- Name: public_filter_ack_range_witness(uuid, integer, integer, bytea); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_range_witness(cut uuid, first_no integer, span integer, foreign_cut bytea) RETURNS bytea
+    LANGUAGE plpgsql STRICT
+    AS $$
+DECLARE
+  gate_id uuid;
+  lifetime bigint;
+  local_cut bytea;
+BEGIN
+  SELECT incarnation,continuity INTO gate_id,lifetime FROM search.public_filter_ack_home_clock
+    WHERE (bootstrap,first_home,width)=(cut,0,4096) FOR SHARE;
+  -- A fresh statement snapshot sees a mutation which released the gate while
+  -- this read waited. Repeatable-read callers retry on serialization failure.
+  SELECT uuid_send(incarnation)||int8send(revision) INTO local_cut FROM search.public_filter_ack_home_clock
+    WHERE (bootstrap,first_home,width)=(cut,first_no/greatest(span,16)*greatest(span,16),greatest(span,16));
+  RETURN sha256(foreign_cut||uuid_send(gate_id)||int8send(lifetime)||local_cut);
+END $$;
+
+
+--
+-- Name: public_filter_ack_receipt_loss(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_receipt_loss() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM search.lose_public_filter_ack_cut(OLD.bootstrap);
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: public_filter_ack_settlement_digest(jsonb); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_settlement_digest(state jsonb) RETURNS bytea
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT sha256(convert_to(jsonb_build_array(
+    (SELECT jsonb_agg(entry ORDER BY entry->>0) FROM jsonb_array_elements(state) entry WHERE entry->>0<>'fence'),
+    (SELECT jsonb_agg(entry ORDER BY entry->>0) FROM jsonb_array_elements(search.public_filter_ack_field(state,'fence')) entry
+      WHERE entry->>0 NOT IN ('transaction','refresh'))
+  )::text,'UTF8'))
+$$;
+
+
+--
+-- Name: public_filter_ack_window(text, integer); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_window(step_state text, home integer) RETURNS TABLE(epoch integer, base bigint, through_pos bigint, receipt text)
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $_$
+DECLARE
+  body jsonb := step_state::jsonb->1;
+  input jsonb := search.public_filter_ack_field(body,'input');
+  batch jsonb := search.public_filter_ack_field(body,'windowBatch');
+  bridge jsonb;
+  following jsonb;
+  packed bytea;
+  idx integer;
+  members integer;
+BEGIN
+  IF search.public_filter_ack_field(input,'phase')='"window"' AND batch IS NOT NULL THEN
+    idx := home-(search.public_filter_ack_field(batch,'from')::integer);
+    members := search.public_filter_ack_field(batch,'count')::integer;
+    IF idx NOT BETWEEN 0 AND members-1 OR members NOT BETWEEN 1 AND 128 THEN RETURN; END IF;
+    packed := decode(search.public_filter_ack_field(batch,'packed')#>>'{}','base64');
+    IF length(packed)<>44*members THEN RETURN; END IF;
+    epoch := ('x'||encode(substring(packed FROM idx*44+1 FOR 4),'hex'))::bit(32)::integer;
+    base := ('x'||encode(substring(packed FROM idx*44+5 FOR 8),'hex'))::bit(64)::bigint;
+    receipt := encode(substring(packed FROM idx*44+13 FOR 32),'hex');
+    IF search.public_filter_ack_field(batch,'through') IS NULL THEN through_pos := base;
+    ELSE through_pos := (search.public_filter_ack_field(batch,'through')->idx->>1)::bigint; END IF;
+  ELSIF search.public_filter_ack_field(input,'phase')='"bridge"' THEN
+    bridge := search.public_filter_ack_field(input,'bridge');
+    following := search.public_filter_ack_field(body,'next');
+    IF (search.public_filter_ack_field(bridge,'partition')::integer=home AND
+      search.public_filter_ack_field(following,'phase')='"window"' AND
+      search.public_filter_ack_field(following,'partition')::integer=home+1) IS NOT TRUE THEN RETURN; END IF;
+    epoch := search.public_filter_ack_field(bridge,'epoch')::integer;
+    base := (search.public_filter_ack_field(bridge,'base')#>>'{}')::bigint;
+    through_pos := (search.public_filter_ack_field(bridge,'through')#>>'{}')::bigint;
+    receipt := search.public_filter_ack_field(bridge,'receipt')#>>'{}';
+  ELSE RETURN;
+  END IF;
+  IF epoch>0 AND base>=0 AND through_pos>=base AND receipt ~ '^[0-9a-f]{64}$' THEN RETURN NEXT; END IF;
+END $_$;
+
+
+--
+-- Name: public_filter_ack_witness(text[]); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_witness(targets text[]) RETURNS bytea
+    LANGUAGE sql
+    AS $$
+  SELECT CASE WHEN count(*)=4*cardinality(targets) THEN
+    sha256(convert_to(jsonb_agg(jsonb_build_array(physical_target,lane,revision) ORDER BY physical_target,lane)::text,'UTF8')) END
+  FROM (SELECT * FROM search.public_filter_repair_authority WHERE physical_target=ANY(targets)
+    ORDER BY physical_target,lane FOR SHARE) locked
+$$;
 
 
 --
@@ -699,6 +1149,22 @@ $$;
 
 
 --
+-- Name: retain_public_filter_ack_protocol(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.retain_public_filter_ack_protocol() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT FROM semantic.public_filter_bootstrap b WHERE (b.partition_no,b.bootstrap)=(0,OLD.bootstrap)
+    AND b.state<>'aborted') THEN
+    RAISE EXCEPTION 'An original live preparation retains its ACK protocol' USING ERRCODE='23514';
+  END IF;
+  RETURN OLD;
+END $$;
+
+
+--
 -- Name: retain_public_filter_coverage_baseline(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -770,6 +1236,7 @@ CREATE TABLE search.public_filter_coverage_home (
     acknowledged_observation text,
     acknowledged_execution text,
     acknowledged_settlement text,
+    baseline_delta boolean,
     CONSTRAINT public_filter_coverage_ack_receipt CHECK ((((acknowledged_observation IS NULL) = (acknowledged_execution IS NULL)) AND ((acknowledged_execution IS NULL) = (acknowledged_settlement IS NULL)) AND ((acknowledged_settlement IS NULL) OR (acknowledged_baseline IS NOT NULL)))),
     CONSTRAINT public_filter_coverage_home_ack_prefix CHECK ((behind OR ((baseline_bootstrap IS NOT NULL) AND (acknowledged_baseline IS NOT NULL) AND (acknowledged_baseline = baseline_bootstrap) AND (acknowledged_position >= relevant_position) AND (acknowledged_native_enqueue >= native_enqueue_revision) AND ((native_revision IS NULL) OR ((acknowledged_native_revision IS NOT NULL) AND (acknowledged_native_revision >= native_revision))) AND ((native_claim_revision IS NULL) OR ((acknowledged_native_claim_revision IS NOT NULL) AND (acknowledged_native_claim_revision >= native_claim_revision)))))),
     CONSTRAINT public_filter_coverage_home_acknowledged_execution_check CHECK (((octet_length(acknowledged_execution) >= 1) AND (octet_length(acknowledged_execution) <= 4096))),
@@ -1474,6 +1941,248 @@ CREATE TABLE search.knowledge_discovery_subject (
 
 
 --
+-- Name: public_filter_coverage_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_preparation (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    definition uuid NOT NULL,
+    consumer text NOT NULL,
+    generation bigint NOT NULL,
+    after_home integer DEFAULT 0 NOT NULL,
+    root text NOT NULL,
+    population_protocol integer,
+    ack_protocol smallint DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_coverage_preparation_ack_protocol_check CHECK ((ack_protocol = ANY (ARRAY[0, 1]))),
+    CONSTRAINT public_filter_coverage_preparation_after_home_check CHECK (((after_home >= 0) AND (after_home <= 4096))),
+    CONSTRAINT public_filter_coverage_preparation_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT public_filter_coverage_preparation_population_protocol_check CHECK (((population_protocol IS NULL) OR (population_protocol = 1))),
+    CONSTRAINT public_filter_coverage_preparation_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: public_filter_execution; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_execution (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    id text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL,
+    consumer_repair text,
+    consumer_window text,
+    repair_settlement text,
+    page_id uuid,
+    page_ordinal integer,
+    page_parent text,
+    page_consumed integer,
+    page_size integer,
+    page_raw integer,
+    page_status text,
+    page_engine_started boolean,
+    CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
+    CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576)),
+    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
+    CONSTRAINT public_filter_execution_page_consumed_check CHECK (((page_consumed >= 0) AND (page_consumed <= 200))),
+    CONSTRAINT public_filter_execution_page_ordinal_check CHECK (((page_ordinal >= 1) AND (page_ordinal <= 3))),
+    CONSTRAINT public_filter_execution_page_raw_check CHECK (((page_raw >= 0) AND (page_raw <= 200))),
+    CONSTRAINT public_filter_execution_page_shape CHECK ((((page_id IS NULL) AND (page_ordinal IS NULL) AND (page_parent IS NULL) AND (page_consumed IS NULL) AND (page_size IS NULL) AND (page_raw IS NULL) AND (page_status IS NULL) AND (page_engine_started IS NULL)) OR ((page_id IS NOT NULL) AND (page_ordinal IS NOT NULL) AND (page_consumed IS NOT NULL) AND (page_size IS NOT NULL) AND (page_status IS NOT NULL) AND (((page_status = 'dispatched'::text) AND (page_raw IS NULL)) OR ((page_status = 'complete'::text) AND (page_raw IS NOT NULL) AND (page_raw <= page_size)))))),
+    CONSTRAINT public_filter_execution_page_size_check CHECK (((page_size >= 1) AND (page_size <= 200))),
+    CONSTRAINT public_filter_execution_page_status_check CHECK ((page_status = ANY (ARRAY['dispatched'::text, 'complete'::text]))),
+    CONSTRAINT public_filter_execution_repair_settlement_check CHECK ((octet_length(repair_settlement) <= 16384))
+);
+
+
+--
+-- Name: public_filter_observation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_observation (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    registration text NOT NULL COLLATE pg_catalog."C",
+    queried text NOT NULL,
+    covered text NOT NULL,
+    expires_at bigint NOT NULL,
+    state text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    prepared_rows text,
+    consumer_work text,
+    consumer_bootstrap text,
+    prepared_build text COLLATE pg_catalog."C",
+    prepared_generation numeric,
+    CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
+    CONSTRAINT public_filter_observation_covered_check CHECK ((octet_length(covered) <= 4096)),
+    CONSTRAINT public_filter_observation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_observation_prepared_build_check CHECK ((((prepared_build IS NULL) AND (prepared_generation IS NULL)) OR ((prepared_build IS NOT NULL) AND (prepared_generation > (0)::numeric) AND (scale(prepared_generation) = 0)))),
+    CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
+    CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
+    CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text])))
+);
+
+
+--
+-- Name: public_filter_registration; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_registration (
+    partition_no integer NOT NULL,
+    id text NOT NULL COLLATE pg_catalog."C",
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    consumer text NOT NULL,
+    definition text NOT NULL,
+    state text NOT NULL,
+    consumer_work text,
+    consumer_bootstrap text,
+    coverage_generation bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
+    CONSTRAINT public_filter_registration_coverage_generation_check CHECK ((coverage_generation >= 0)),
+    CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
+    CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: public_filter_target; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_target (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL,
+    copy_revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: public_filter_ack_authority; Type: VIEW; Schema: search; Owner: -
+--
+
+CREATE VIEW search.public_filter_ack_authority AS
+ SELECT j.partition_no,
+    j.job,
+    j.phase,
+    j.fence,
+    j.fenced_pass,
+    j.pass,
+    j.physical_target,
+    j.native_incarnation AS incarnation,
+    o.registration,
+    b.bootstrap,
+    o.observation,
+    x.id AS execution,
+    b.read_definition,
+    d.release_digest,
+    p.epoch AS owner_epoch,
+    c.generation,
+    c.root AS enrollment_root,
+    r.coverage_generation,
+    x.repair_settlement,
+    sha256(convert_to((jsonb_build_array(j.binding, j.consumer, b.consumer, b.source_position, b.owner_epoch, r.consumer, r.definition, o.queried, o.covered, o.prepared_build, o.prepared_generation, x.execution, d.source_id, d.configuration, d.capture_digest, d.release_digest, d.dependency_keys, d.coverage_keys))::text, 'UTF8'::name)) AS identity_digest
+   FROM (((((((((search.generation_publication j
+     JOIN semantic.public_filter_bootstrap b ON ((((b.partition_no = j.partition_no) AND (b.publication_job = j.job)) AND (b.publication_execution = (j.job)::text) AND (b.publication_observation = b.queried) AND (b.snapshot_kind = 'prepared'::text) AND (b.state = 'adopted'::text) AND b.coverage_sealed AND (b.coverage_after = 4096) AND (b.account_after = 4096))))
+     JOIN search.public_filter_observation o ON ((((o.partition_no = b.partition_no) AND (o.observation = b.queried)) AND (o.consumer_bootstrap = ('0:'::text || (b.bootstrap)::text)) AND (o.prepared_build = o.consumer_bootstrap) AND (o.state = 'open'::text))))
+     JOIN search.public_filter_execution x ON (((x.partition_no = o.partition_no) AND (x.observation = o.observation) AND (x.id = b.publication_execution))))
+     JOIN search.public_filter_registration r ON ((((r.partition_no = o.partition_no) AND (r.id = o.registration)) AND (r.state = 'active'::text) AND (r.physical_target = j.physical_target))))
+     JOIN search.public_filter_target t ON (((t.partition_no = r.partition_no) AND (t.physical_target = r.physical_target) AND (t.incarnation = j.native_incarnation))))
+     JOIN semantic.public_filter_read_definition d ON ((((d.partition_no = b.partition_no) AND (d.read_definition = b.read_definition)) AND ((d.read_definition)::text = (j.binding ->> 'readDefinition'::text)) AND (d.release_digest = (j.consumer ->> 'meaningDigest'::text)))))
+     JOIN semantic.public_filter_source s ON (((s.partition_no = d.partition_no) AND (s.source_id = d.source_id) AND (s.configuration = d.configuration))))
+     JOIN core.partition p ON (((p.partition_no = s.partition_no) AND (p.epoch = b.owner_epoch) AND (p.epoch = s.owner_epoch) AND (p.write_state = 'active'::text))))
+     JOIN search.public_filter_coverage_preparation c ON ((((c.partition_no = r.partition_no) AND (c.registration = r.id) AND (c.bootstrap = b.bootstrap)) AND (c.ack_protocol = 1) AND (c.population_protocol = 1) AND (c.after_home = 4096) AND (c.definition = d.read_definition) AND (c.generation = b.coverage_generation) AND (c.root = b.coverage_root) AND (c.consumer = r.consumer))))
+  WHERE ((j.partition_no = 0) AND (j.source_home = 0) AND (j.family = 'subjects'::text) AND ('["scope","catalogue-text"]'::text = ANY (d.coverage_keys)) AND ((j.observation IS NULL) OR (j.observation = o.observation)) AND ((j.bootstrap IS NULL) OR ((j.bootstrap = o.consumer_bootstrap) AND (j.queried = o.queried) AND (j.execution = x.id))));
+
+
+--
+-- Name: public_filter_ack_home_clock; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_ack_home_clock (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    first_home integer NOT NULL,
+    width integer NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    continuity bigint DEFAULT 0 NOT NULL,
+    incarnation uuid DEFAULT gen_random_uuid() NOT NULL,
+    CONSTRAINT public_filter_ack_home_clock_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: public_filter_ack_manifest; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_ack_manifest (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    job uuid NOT NULL,
+    version smallint DEFAULT 1 NOT NULL,
+    root_revision uuid NOT NULL,
+    root_digest bytea NOT NULL,
+    generation bigint NOT NULL,
+    enrollment_root text NOT NULL,
+    owner_epoch integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL COLLATE pg_catalog."C",
+    terminal uuid NOT NULL,
+    binding text NOT NULL,
+    ordinal bigint NOT NULL,
+    terminal_root text NOT NULL,
+    settlement text NOT NULL,
+    settlement_digest bytea NOT NULL,
+    evidence_revision bigint NOT NULL,
+    identity_digest bytea NOT NULL,
+    continuity bytea NOT NULL,
+    committed_by xid8 NOT NULL,
+    CONSTRAINT public_filter_ack_manifest_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT public_filter_ack_manifest_root_digest_check CHECK ((octet_length(root_digest) = 32)),
+    CONSTRAINT public_filter_ack_manifest_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: public_filter_ack_range; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_ack_range (
+    partition_no integer NOT NULL,
+    job uuid NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    binding text NOT NULL,
+    first_home integer NOT NULL,
+    width integer NOT NULL,
+    identity_digest bytea NOT NULL,
+    witness bytea NOT NULL,
+    revision uuid DEFAULT gen_random_uuid() NOT NULL,
+    digest bytea NOT NULL,
+    predecessor text NOT NULL,
+    enrollment_root text NOT NULL,
+    left_child uuid,
+    right_child uuid,
+    CONSTRAINT public_filter_ack_range_binding_check CHECK ((binding ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_ack_range_check CHECK (((first_home % width) = 0)),
+    CONSTRAINT public_filter_ack_range_check1 CHECK ((((left_child IS NULL) = (right_child IS NULL)) AND ((width <= 16) OR (left_child IS NOT NULL)))),
+    CONSTRAINT public_filter_ack_range_digest_check CHECK ((octet_length(digest) = 32)),
+    CONSTRAINT public_filter_ack_range_first_home_check CHECK (((first_home >= 0) AND (first_home <= 4095))),
+    CONSTRAINT public_filter_ack_range_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT public_filter_ack_range_width_check CHECK ((width = ANY (ARRAY[1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]))),
+    CONSTRAINT public_filter_ack_range_witness_check CHECK ((octet_length(witness) = 32))
+);
+
+
+--
 -- Name: public_filter_coverage_baseline; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1545,89 +2254,6 @@ CREATE TABLE search.public_filter_coverage_page (
 
 
 --
--- Name: public_filter_coverage_preparation; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_coverage_preparation (
-    partition_no integer NOT NULL,
-    registration text NOT NULL COLLATE pg_catalog."C",
-    bootstrap uuid NOT NULL,
-    definition uuid NOT NULL,
-    consumer text NOT NULL,
-    generation bigint NOT NULL,
-    after_home integer DEFAULT 0 NOT NULL,
-    root text NOT NULL,
-    population_protocol integer,
-    CONSTRAINT public_filter_coverage_preparation_after_home_check CHECK (((after_home >= 0) AND (after_home <= 4096))),
-    CONSTRAINT public_filter_coverage_preparation_generation_check CHECK ((generation >= 0)),
-    CONSTRAINT public_filter_coverage_preparation_population_protocol_check CHECK (((population_protocol IS NULL) OR (population_protocol = 1))),
-    CONSTRAINT public_filter_coverage_preparation_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text))
-);
-
-
---
--- Name: public_filter_execution; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_execution (
-    partition_no integer NOT NULL,
-    observation text NOT NULL COLLATE pg_catalog."C",
-    id text NOT NULL COLLATE pg_catalog."C",
-    execution text NOT NULL,
-    consumer_repair text,
-    consumer_window text,
-    repair_settlement text,
-    page_id uuid,
-    page_ordinal integer,
-    page_parent text,
-    page_consumed integer,
-    page_size integer,
-    page_raw integer,
-    page_status text,
-    page_engine_started boolean,
-    CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
-    CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576)),
-    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
-    CONSTRAINT public_filter_execution_page_consumed_check CHECK (((page_consumed >= 0) AND (page_consumed <= 200))),
-    CONSTRAINT public_filter_execution_page_ordinal_check CHECK (((page_ordinal >= 1) AND (page_ordinal <= 3))),
-    CONSTRAINT public_filter_execution_page_raw_check CHECK (((page_raw >= 0) AND (page_raw <= 200))),
-    CONSTRAINT public_filter_execution_page_shape CHECK ((((page_id IS NULL) AND (page_ordinal IS NULL) AND (page_parent IS NULL) AND (page_consumed IS NULL) AND (page_size IS NULL) AND (page_raw IS NULL) AND (page_status IS NULL) AND (page_engine_started IS NULL)) OR ((page_id IS NOT NULL) AND (page_ordinal IS NOT NULL) AND (page_consumed IS NOT NULL) AND (page_size IS NOT NULL) AND (page_status IS NOT NULL) AND (((page_status = 'dispatched'::text) AND (page_raw IS NULL)) OR ((page_status = 'complete'::text) AND (page_raw IS NOT NULL) AND (page_raw <= page_size)))))),
-    CONSTRAINT public_filter_execution_page_size_check CHECK (((page_size >= 1) AND (page_size <= 200))),
-    CONSTRAINT public_filter_execution_page_status_check CHECK ((page_status = ANY (ARRAY['dispatched'::text, 'complete'::text]))),
-    CONSTRAINT public_filter_execution_repair_settlement_check CHECK ((octet_length(repair_settlement) <= 16384))
-);
-
-
---
--- Name: public_filter_observation; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_observation (
-    partition_no integer NOT NULL,
-    observation text NOT NULL COLLATE pg_catalog."C",
-    registration text NOT NULL COLLATE pg_catalog."C",
-    queried text NOT NULL,
-    covered text NOT NULL,
-    expires_at bigint NOT NULL,
-    state text NOT NULL,
-    revision bigint DEFAULT 1 NOT NULL,
-    prepared_rows text,
-    consumer_work text,
-    consumer_bootstrap text,
-    prepared_build text COLLATE pg_catalog."C",
-    prepared_generation numeric,
-    CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
-    CONSTRAINT public_filter_observation_covered_check CHECK ((octet_length(covered) <= 4096)),
-    CONSTRAINT public_filter_observation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT public_filter_observation_prepared_build_check CHECK ((((prepared_build IS NULL) AND (prepared_generation IS NULL)) OR ((prepared_build IS NOT NULL) AND (prepared_generation > (0)::numeric) AND (scale(prepared_generation) = 0)))),
-    CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
-    CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
-    CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
-    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text])))
-);
-
-
---
 -- Name: public_filter_pit; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1695,29 +2321,6 @@ CREATE TABLE search.public_filter_reference (
     observation text NOT NULL COLLATE pg_catalog."C",
     token uuid NOT NULL,
     expires_at bigint NOT NULL
-);
-
-
---
--- Name: public_filter_registration; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_registration (
-    partition_no integer NOT NULL,
-    id text NOT NULL COLLATE pg_catalog."C",
-    physical_target text NOT NULL COLLATE pg_catalog."C",
-    consumer text NOT NULL,
-    definition text NOT NULL,
-    state text NOT NULL,
-    consumer_work text,
-    consumer_bootstrap text,
-    coverage_generation bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
-    CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
-    CONSTRAINT public_filter_registration_coverage_generation_check CHECK ((coverage_generation >= 0)),
-    CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
-    CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
 );
 
 
@@ -1795,20 +2398,8 @@ CREATE TABLE search.public_filter_repair_verification (
     execution text NOT NULL COLLATE pg_catalog."C",
     revision bigint DEFAULT 0 NOT NULL,
     progress text,
+    evidence_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT public_filter_repair_verification_progress_check CHECK ((octet_length(progress) <= 16384))
-);
-
-
---
--- Name: public_filter_target; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_target (
-    partition_no integer NOT NULL,
-    physical_target text NOT NULL COLLATE pg_catalog."C",
-    incarnation text NOT NULL,
-    copy_revision bigint DEFAULT 1 NOT NULL,
-    CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
 
@@ -2412,6 +3003,46 @@ ALTER TABLE ONLY search.knowledge_discovery_subject
 
 
 --
+-- Name: public_filter_ack_home_clock public_filter_ack_home_clock_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_home_clock
+    ADD CONSTRAINT public_filter_ack_home_clock_pkey PRIMARY KEY (bootstrap, first_home, width);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_job_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_job_key UNIQUE (partition_no, job);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_pkey PRIMARY KEY (partition_no, registration, bootstrap);
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_pkey PRIMARY KEY (partition_no, job, binding, first_home, width, witness);
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_revision_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_revision_key UNIQUE (revision);
+
+
+--
 -- Name: public_filter_coverage_baseline public_filter_coverage_baseline_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2817,6 +3448,20 @@ CREATE INDEX knowledge_discovery_publication_page ON search.knowledge_discovery_
 
 
 --
+-- Name: public_filter_ack_delta; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_ack_delta ON search.public_filter_coverage_home USING btree (partition_no, registration, source_home) WHERE baseline_delta;
+
+
+--
+-- Name: public_filter_ack_protocol_cut; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_ack_protocol_cut ON search.public_filter_coverage_preparation USING btree (bootstrap) WHERE (ack_protocol = 1);
+
+
+--
 -- Name: public_filter_coverage_behind; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -3125,6 +3770,69 @@ CREATE TRIGGER identity_writer_clear_settled_relay_intent BEFORE UPDATE OF write
 
 
 --
+-- Name: public_filter_coverage_baseline public_filter_ack_baseline_loss; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_baseline_loss AFTER DELETE ON search.public_filter_coverage_baseline FOR EACH ROW EXECUTE FUNCTION search.public_filter_ack_receipt_loss();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_ack_clock_pin; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_clock_pin AFTER INSERT ON search.public_filter_coverage_preparation FOR EACH ROW WHEN ((new.ack_protocol = 1)) EXECUTE FUNCTION search.begin_public_filter_ack_clock();
+
+
+--
+-- Name: public_filter_coverage_home public_filter_ack_home_delta; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_home_delta BEFORE INSERT OR DELETE OR UPDATE ON search.public_filter_coverage_home FOR EACH ROW EXECUTE FUNCTION search.classify_public_filter_ack_home();
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_bind; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_manifest_bind BEFORE INSERT ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION search.bind_public_filter_ack_manifest();
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_manifest_immutable BEFORE DELETE OR UPDATE ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_ack_protocol_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_protocol_immutable BEFORE UPDATE OF ack_protocol ON search.public_filter_coverage_preparation FOR EACH ROW WHEN ((old.ack_protocol IS DISTINCT FROM new.ack_protocol)) EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_ack_protocol_retained; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_protocol_retained BEFORE DELETE ON search.public_filter_coverage_preparation FOR EACH ROW WHEN ((old.ack_protocol = 1)) EXECUTE FUNCTION search.retain_public_filter_ack_protocol();
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_compare; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_range_compare BEFORE INSERT ON search.public_filter_ack_range FOR EACH ROW EXECUTE FUNCTION search.compare_public_filter_ack_range();
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_range_immutable BEFORE UPDATE ON search.public_filter_ack_range FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: public_filter_coverage_baseline public_filter_coverage_baseline_immutable; Type: TRIGGER; Schema: search; Owner: -
 --
 
@@ -3263,6 +3971,94 @@ ALTER TABLE ONLY search.identity_receiving_native_scope_pending
 
 ALTER TABLE ONLY search.index_incarnation
     ADD CONSTRAINT index_incarnation_partition_no_prefix_fkey FOREIGN KEY (partition_no, prefix) REFERENCES search.index_prefix_control(partition_no, prefix);
+
+
+--
+-- Name: public_filter_ack_home_clock public_filter_ack_home_clock_partition_no_registration_boo_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_home_clock
+    ADD CONSTRAINT public_filter_ack_home_clock_partition_no_registration_boo_fkey FOREIGN KEY (partition_no, registration, bootstrap) REFERENCES search.public_filter_coverage_preparation(partition_no, registration, bootstrap) ON DELETE CASCADE;
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_bootstrap_executio_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_bootstrap_executio_fkey FOREIGN KEY (partition_no, bootstrap, execution, terminal) REFERENCES semantic.public_filter_repair_step(partition_no, bootstrap, execution, step);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_job_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_job_fkey FOREIGN KEY (partition_no, job) REFERENCES search.generation_publication(partition_no, job);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_observation_execu_fkey1; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_observation_execu_fkey1 FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_repair_verification(partition_no, observation, execution);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_observation_execut_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_observation_execut_fkey FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_execution(partition_no, observation, id);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_partition_no_registration_boots_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_partition_no_registration_boots_fkey FOREIGN KEY (partition_no, registration, bootstrap) REFERENCES search.public_filter_coverage_preparation(partition_no, registration, bootstrap);
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_root_revision_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_manifest
+    ADD CONSTRAINT public_filter_ack_manifest_root_revision_fkey FOREIGN KEY (root_revision) REFERENCES search.public_filter_ack_range(revision);
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_left_child_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_left_child_fkey FOREIGN KEY (left_child) REFERENCES search.public_filter_ack_range(revision);
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_partition_no_job_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_partition_no_job_fkey FOREIGN KEY (partition_no, job) REFERENCES search.generation_publication(partition_no, job) ON DELETE CASCADE;
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_partition_no_registration_bootstra_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_partition_no_registration_bootstra_fkey FOREIGN KEY (partition_no, registration, bootstrap) REFERENCES search.public_filter_coverage_preparation(partition_no, registration, bootstrap) ON DELETE CASCADE;
+
+
+--
+-- Name: public_filter_ack_range public_filter_ack_range_right_child_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_ack_range
+    ADD CONSTRAINT public_filter_ack_range_right_child_fkey FOREIGN KEY (right_child) REFERENCES search.public_filter_ack_range(revision);
 
 
 --

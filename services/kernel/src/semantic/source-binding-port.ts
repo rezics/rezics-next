@@ -161,7 +161,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
   ): Promise<SourceBindingGenerationResult>;
   readRepairSettlement(
     pool: Pool,
-    request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string }>,
+    request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string; commitReceiverManifest?: true }>,
     context: PublicFilterConsumerContext,
   ): Promise<SourceBindingSettlementResult>;
   withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>, maintenance?: boolean): Promise<T>;

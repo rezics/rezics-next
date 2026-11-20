@@ -57,6 +57,7 @@ import {
   readPublicFilterRepairVerificationTip,
   retainPublicFilterRepairVerification,
   readPublicFilterRepairHomeSeal,
+  adoptPublicFilterManifestAck,
   readPublicFilterRepairHomeBatches,
   advancePublicFilterRepairAckFrontier,
   PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT,
@@ -2145,6 +2146,15 @@ export function createNativePublicFilterSourceBinding(
         // independently checked before extending this native prefix. Completion
         // closes that captured window; it grants neither receiver ACK nor serving.
         if (!terminalRepairState(state) || !previous) throw new BindingError('owner_unavailable');
+        if (joined.cut.row.ack_protocol === 1) {
+          const root = await db.query(
+            `/* semantic.native-keyed:21:24 */
+             SELECT 1 FROM search.public_filter_ack_range WHERE (partition_no,job,binding,first_home,width,witness)=
+               (0,$1,$2,0,4096,search.public_filter_ack_range_witness($3,0,4096,search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source'])))`,
+            [request.execution, chain.binding, chain.bootstrap],
+          );
+          if (!root.rowCount) throw new BindingError('owner_unavailable');
+        }
         complete = true;
       } else if ('representation' in bootstrap.definition.capture && state.owner !== 'accounts') {
         next = {
@@ -3290,6 +3300,59 @@ export function createNativePublicFilterSourceBinding(
         throw new BindingError('binding_mismatch');
       if (mixedMaintenance && !('representation' in cut.definition.capture)) throw new BindingError('binding_mismatch');
       const chain = repairChain(cut.bootstrap, joined);
+      if (cut.row.ack_protocol === 1) {
+        if (mixedMaintenance || !boundSubjectPublication(cut, input)) throw new BindingError('binding_mismatch');
+        const terminal = await readPublicFilterRepairVerificationTip(db, chain);
+        if (!terminal?.complete || terminal.next !== null || !terminal.root)
+          throw new BindingError('owner_unavailable');
+        const readback = async () => {
+          if (publicationCost && publicationCost.inputKeys + cost.inputKeys + 100 > preparationInputLimit)
+            throw new BindingError('owner_unavailable');
+          const result = await adoptPublicFilterManifestAck(db, chain, terminal.step).catch((error) => {
+            ackAttempted = true;
+            throw error;
+          });
+          ackAttempted = result !== null;
+          if (result?.advanced) cost.frontierWrites++;
+          if (result && !result.advanced && result.after !== 4096) throw new BindingError('owner_unavailable');
+          return result;
+        };
+        const original = await readback();
+        if (original?.advanced) return { ...fail('owner_unavailable', cost), advanced: true as const };
+        const spent = { ...cost };
+        if (publicationCost) addCost(spent, publicationCost);
+        // Reserve readback before Search starts; it has its own bounded native
+        // winner proof and can return pending over several funded turns.
+        spent.inputKeys += 100;
+        spent.bytes += 32 * 1024;
+        const settled = await ports.search.withRepairAllowance(
+          spent,
+          () =>
+            ports.search.readRepairSettlement(
+              pool,
+              {
+                queried: input.queried,
+                execution: input.execution,
+                ...(!original && { commitReceiverManifest: true as const }),
+              },
+              { deadline },
+            ),
+          true,
+        );
+        addCost(cost, settled.cost);
+        if (settled.status !== 'settled') return { ...settled, cost };
+        requireSameDefinition(cut.definition, settled.definition);
+        if (
+          !isDeepStrictEqual(settled.queried, joined.queried) ||
+          !isDeepStrictEqual(settled.execution, joined.execution)
+        )
+          throw new BindingError('binding_mismatch');
+        const committed = await readback();
+        if (!committed || committed.settlement !== settled.settlement.id) throw new BindingError('owner_unavailable');
+        return committed.advanced
+          ? { ...fail('owner_unavailable', cost), advanced: true as const }
+          : { ...joined, terminal: { step: terminal.step, root: terminal.root }, settlement: settled.settlement, cost };
+      }
       const seal = await readPublicFilterRepairHomeSeal(db, chain);
       // This is the actual independent terminal prefix, not the producer's
       // complete flag, an exhausted enumeration or a clean serving probe.
@@ -4967,6 +5030,44 @@ export function createNativePublicFilterSourceBinding(
         addCost(cost, adopted.cost);
         if (adopted.status !== 'adopted')
           return { status: 'pending' as const, publication, reason: adopted.reason, cost };
+      }
+      if (cut.row.ack_protocol === 1) {
+        if (!boundSubjectPublication(cut, publication)) throw new BindingError('binding_mismatch');
+        // Charge the depth-twelve tree descent, witness reads, original binding and
+        // FKs. Each leaf member also reads the original verified 16 KiB step.
+        const inputs = preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0);
+        const bytes = 4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0);
+        const homes = Math.min(16, Math.floor((inputs - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
+        if (homes > 0) {
+          const reservedBytes = (64 + 24 * homes) * 1024;
+          cost.bytes += reservedBytes;
+          const prepared = await db.query<{ work: number }>(
+            `/* semantic.native-keyed:${160 + 20 * homes}:${160 + 20 * homes} */
+             SELECT search.prepare_public_filter_ack($1,$2) AS work`,
+            [publication.job, homes],
+          );
+          const work = prepared.rows[0]!.work;
+          // Zero stops at the original authority or first verified home probe.
+          // A negative result walked the tree. Positive work includes the range write.
+          const charged = work === 0 ? 20 : work === -2 ? 48 : 160 + 20 * Math.max(0, work - 1);
+          const unused = 160 + 20 * homes - charged;
+          cost.inputKeys -= unused;
+          cost.rows -= unused;
+          cost.dependencyPoints -= unused;
+          const actualBytes = work > 0 ? (64 + 24 * (work - 1)) * 1024 : 64 * 1024;
+          cost.bytes -= reservedBytes - actualBytes;
+          if (work > 0) {
+            cost.frontierWrites++;
+            cost.resultWrites += work + 1;
+            return {
+              status: 'pending' as const,
+              publication,
+              reason: 'owner_unavailable' as const,
+              advanced: true as const,
+              cost,
+            };
+          }
+        }
       }
       // Until the verified chain closes, the exact original execution still
       // needs repair. The terminal settlement always verifies the full seal.

@@ -6671,6 +6671,13 @@ CREATE TRIGGER principal_assignment_publication_authority AFTER INSERT OR DELETE
 
 
 --
+-- Name: account_discovery_population public_filter_ack_population_loss; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_population_loss AFTER DELETE ON access.account_discovery_population FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@ack-retention');
+
+
+--
 -- Name: account_discovery_population public_filter_repair_account_revision; Type: TRIGGER; Schema: access; Owner: -
 --
 

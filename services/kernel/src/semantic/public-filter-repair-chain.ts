@@ -389,3 +389,36 @@ export async function advancePublicFilterRepairAckFrontier(
     throw error;
   }
 }
+
+/** One fresh Source transaction. The receipt is located by the original job,
+ * independently compared, and consumed by CAS. A visible but unusable receipt
+ * prevents replacement. A lost CAS reply returns the already adopted terminal.
+ */
+export async function adoptPublicFilterManifestAck(pool: Pool, chain: Chain, terminal: string) {
+  try {
+    const result = await pool.query<{ after: number | null; settlement: string; advanced: boolean }>(
+      `/* semantic.native-keyed:64:100 */
+     WITH manifest AS MATERIALIZED (
+       SELECT * FROM search.public_filter_ack_manifest WHERE (partition_no,job)=(0,$2::text::uuid)
+     ), proof AS MATERIALIZED (
+       SELECT t.ack_after FROM manifest m JOIN semantic.public_filter_repair_step t ON
+         (t.partition_no,t.bootstrap,t.execution,t.step,t.verified_binding)=(0,$1,$2,$3,$4)
+       WHERE (m.bootstrap,m.execution,m.terminal,m.binding)=(t.bootstrap,t.execution,t.step,t.verified_binding)
+         AND t.complete AND t.verified_next IS NULL AND t.ack_after IN (0,4096)
+         AND semantic.public_filter_committed_ack(t.bootstrap,t.execution,t.step,t.verified_binding)
+     ), adopted AS (
+       UPDATE semantic.public_filter_repair_step t SET ack_after=4096 FROM proof
+       WHERE (t.partition_no,t.bootstrap,t.execution,t.step,t.verified_binding)=(0,$1,$2,$3,$4)
+         AND proof.ack_after=0 AND t.ack_after=0 RETURNING t.step
+     )
+     SELECT p.ack_after AS after,m.settlement,EXISTS (SELECT FROM adopted) AS advanced
+     FROM manifest m LEFT JOIN proof p ON true`,
+      [chain.bootstrap, chain.execution, terminal, chain.binding],
+    );
+    return result.rows[0] ?? null;
+  } catch (error) {
+    if (error instanceof Error && 'constraint' in error && error.constraint === 'public_filter_repair_ack_manifest')
+      throw new CommandUnavailableError('contention', 0);
+    throw error;
+  }
+}

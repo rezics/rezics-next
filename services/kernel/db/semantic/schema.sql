@@ -3853,6 +3853,42 @@ $$;
 
 
 --
+-- Name: public_filter_committed_ack(uuid, text, uuid, text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_committed_ack(original_bootstrap uuid, original_execution text, original_step uuid, original_binding text) RETURNS boolean
+    LANGUAGE sql
+    AS $$
+  SELECT EXISTS (
+    SELECT FROM search.public_filter_ack_manifest m
+    JOIN search.public_filter_ack_authority a ON (a.partition_no,a.job,a.registration,a.bootstrap,a.observation,a.execution,
+      a.owner_epoch,a.physical_target,a.incarnation,a.generation,a.enrollment_root)=
+      (m.partition_no,m.job,m.registration,m.bootstrap,m.observation,m.execution,
+      m.owner_epoch,m.physical_target,m.incarnation,m.generation,m.enrollment_root)
+    JOIN search.public_filter_repair_verification v ON (v.partition_no,v.observation,v.execution,v.evidence_revision)=
+      (m.partition_no,m.observation,m.execution,m.evidence_revision)
+    JOIN search.public_filter_ack_range r ON (r.revision,r.digest,r.partition_no,r.job,r.registration,r.bootstrap,r.binding,
+      r.first_home,r.width,r.enrollment_root)=(m.root_revision,m.root_digest,m.partition_no,m.job,m.registration,m.bootstrap,
+      m.binding,0,4096,m.enrollment_root)
+    JOIN semantic.public_filter_repair_step t ON (t.partition_no,t.bootstrap,t.execution,t.step,t.verified_binding,
+      t.verified_root,t.verified_ordinal)=(m.partition_no,m.bootstrap,m.execution,m.terminal,m.binding,m.terminal_root,m.ordinal)
+    WHERE (m.partition_no,m.job,m.bootstrap,m.execution,m.terminal,m.binding)=(0,original_execution::uuid,original_bootstrap,
+      original_execution,original_step,original_binding) AND a.identity_digest=m.identity_digest AND r.identity_digest=m.identity_digest AND m.version=1 AND t.complete AND t.verified_next IS NULL
+      AND search.public_filter_ack_settlement_digest(a.repair_settlement::jsonb->1)=m.settlement_digest
+      AND search.public_filter_ack_field(a.repair_settlement::jsonb->1,'id')#>>'{}'=m.settlement
+      AND search.public_filter_ack_field(a.repair_settlement::jsonb->1,'closed')='true'
+      AND search.public_filter_ack_field(a.repair_settlement::jsonb->1,'frontier')='null'
+      AND search.public_filter_ack_field(search.public_filter_ack_field(a.repair_settlement::jsonb->1,'fence'),'incarnation')#>>'{}'=a.incarnation
+      AND m.committed_by<>pg_current_xact_id()
+      AND m.continuity=(SELECT sha256(uuid_send(clock.incarnation)||int8send(clock.continuity)||
+        search.public_filter_ack_witness(ARRAY['','@ack-retention'])) FROM search.public_filter_ack_home_clock clock
+        WHERE (clock.bootstrap,clock.first_home,clock.width)=(a.bootstrap,0,4096) FOR SHARE OF clock)
+    FOR SHARE OF a,m,r,v
+  )
+$$;
+
+
+--
 -- Name: public_filter_mixed_consumer_for_definition(text, uuid, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -4690,6 +4726,16 @@ CREATE FUNCTION semantic.retain_public_filter_repair_ack() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF NEW.ack_after IS DISTINCT FROM OLD.ack_after AND EXISTS (
+    SELECT FROM search.public_filter_coverage_preparation c WHERE c.bootstrap=OLD.bootstrap AND c.ack_protocol=1
+  ) THEN
+    IF OLD.ack_after<>0 OR NEW.ack_after<>4096 OR NEW.verified_home IS DISTINCT FROM OLD.verified_home OR
+      NOT semantic.public_filter_committed_ack(OLD.bootstrap,OLD.execution,OLD.step,OLD.verified_binding) THEN
+      RAISE EXCEPTION 'Source ACK requires the committed original receiver manifest'
+        USING ERRCODE='23514', CONSTRAINT='public_filter_repair_ack_manifest';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF (OLD.verified_home IS NOT NULL AND NEW.verified_home IS DISTINCT FROM OLD.verified_home)
     OR NEW.ack_after<OLD.ack_after OR NEW.ack_after>OLD.ack_after+24
     OR (NEW.ack_after<>OLD.ack_after AND
@@ -5561,6 +5607,82 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
  RETURN NEW;
 END; $$;
+
+
+--
+-- Name: public_filter_bootstrap; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_bootstrap (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    read_definition uuid NOT NULL,
+    request_key text NOT NULL,
+    consumer text NOT NULL,
+    snapshot_kind text NOT NULL,
+    native_snapshot pg_snapshot NOT NULL,
+    owner_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    state text NOT NULL,
+    account_after integer DEFAULT 0 NOT NULL,
+    queried text,
+    coverage_generation bigint,
+    coverage_after integer DEFAULT 0 NOT NULL,
+    coverage_root text,
+    coverage_sealed boolean DEFAULT false NOT NULL,
+    publication_job uuid,
+    publication_observation text,
+    publication_execution text,
+    coverage_publication uuid,
+    book_withdrawals jsonb,
+    CONSTRAINT public_filter_book_withdrawals_check CHECK (((book_withdrawals IS NULL) OR ((coverage_publication IS NOT NULL) AND (snapshot_kind = 'pit'::text) AND (jsonb_typeof(book_withdrawals) = 'array'::text) AND ((jsonb_array_length(book_withdrawals) >= 1) AND (jsonb_array_length(book_withdrawals) <= 8))))),
+    CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
+    CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
+    CONSTRAINT public_filter_bootstrap_coverage_after_check CHECK (((coverage_after >= 0) AND (coverage_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_coverage_generation_check CHECK ((coverage_generation >= 0)),
+    CONSTRAINT public_filter_bootstrap_coverage_root_check CHECK ((coverage_root ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_bootstrap_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_bootstrap_publication_coverage_check CHECK (((coverage_publication IS NULL) OR ((coverage_generation IS NOT NULL) AND (coverage_after = 0) AND (account_after = 0) AND (NOT coverage_sealed) AND (coverage_root IS NULL) AND (publication_job IS NULL)))),
+    CONSTRAINT public_filter_bootstrap_publication_tuple CHECK ((((publication_job IS NULL) AND (publication_observation IS NULL) AND (publication_execution IS NULL)) OR ((publication_job IS NOT NULL) AND (publication_observation IS NOT NULL) AND (publication_execution IS NOT NULL) AND ((octet_length(publication_observation) >= 1) AND (octet_length(publication_observation) <= 4096)) AND ((octet_length(publication_execution) >= 1) AND (octet_length(publication_execution) <= 4096))))),
+    CONSTRAINT public_filter_bootstrap_snapshot_kind_check CHECK ((snapshot_kind = ANY (ARRAY['pit'::text, 'prepared'::text]))),
+    CONSTRAINT public_filter_bootstrap_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'begun'::text, 'adopted'::text, 'aborting'::text, 'aborted'::text])))
+);
+
+
+--
+-- Name: public_filter_read_definition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_read_definition (
+    partition_no integer NOT NULL,
+    read_definition uuid DEFAULT gen_random_uuid() NOT NULL,
+    source_id uuid NOT NULL,
+    configuration uuid NOT NULL,
+    release_digest text NOT NULL,
+    capture_digest text NOT NULL,
+    capture text NOT NULL,
+    dependency_keys jsonb NOT NULL,
+    coverage_keys text[],
+    CONSTRAINT public_filter_read_definition_capture_check CHECK ((octet_length(capture) <= 1048576)),
+    CONSTRAINT public_filter_read_definition_dependency_keys_check CHECK ((jsonb_typeof(dependency_keys) = 'array'::text))
+);
+
+
+--
+-- Name: public_filter_source; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_source (
+    partition_no integer NOT NULL,
+    source_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    configuration uuid DEFAULT gen_random_uuid() NOT NULL,
+    route_digest text NOT NULL,
+    owner_epoch integer NOT NULL,
+    family text NOT NULL,
+    CONSTRAINT public_filter_source_family_check CHECK ((family = 'global-subject-v1'::text)),
+    CONSTRAINT public_filter_source_owner_epoch_check CHECK ((owner_epoch > 0))
+);
 
 
 --
@@ -9162,47 +9284,6 @@ CREATE TABLE semantic.provider_review_queue_ready (
 
 
 --
--- Name: public_filter_bootstrap; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.public_filter_bootstrap (
-    partition_no integer NOT NULL,
-    bootstrap uuid NOT NULL,
-    read_definition uuid NOT NULL,
-    request_key text NOT NULL,
-    consumer text NOT NULL,
-    snapshot_kind text NOT NULL,
-    native_snapshot pg_snapshot NOT NULL,
-    owner_epoch integer NOT NULL,
-    source_position bigint NOT NULL,
-    state text NOT NULL,
-    account_after integer DEFAULT 0 NOT NULL,
-    queried text,
-    coverage_generation bigint,
-    coverage_after integer DEFAULT 0 NOT NULL,
-    coverage_root text,
-    coverage_sealed boolean DEFAULT false NOT NULL,
-    publication_job uuid,
-    publication_observation text,
-    publication_execution text,
-    coverage_publication uuid,
-    book_withdrawals jsonb,
-    CONSTRAINT public_filter_book_withdrawals_check CHECK (((book_withdrawals IS NULL) OR ((coverage_publication IS NOT NULL) AND (snapshot_kind = 'pit'::text) AND (jsonb_typeof(book_withdrawals) = 'array'::text) AND ((jsonb_array_length(book_withdrawals) >= 1) AND (jsonb_array_length(book_withdrawals) <= 8))))),
-    CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
-    CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
-    CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
-    CONSTRAINT public_filter_bootstrap_coverage_after_check CHECK (((coverage_after >= 0) AND (coverage_after <= 4096))),
-    CONSTRAINT public_filter_bootstrap_coverage_generation_check CHECK ((coverage_generation >= 0)),
-    CONSTRAINT public_filter_bootstrap_coverage_root_check CHECK ((coverage_root ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT public_filter_bootstrap_owner_epoch_check CHECK ((owner_epoch > 0)),
-    CONSTRAINT public_filter_bootstrap_publication_coverage_check CHECK (((coverage_publication IS NULL) OR ((coverage_generation IS NOT NULL) AND (coverage_after = 0) AND (account_after = 0) AND (NOT coverage_sealed) AND (coverage_root IS NULL) AND (publication_job IS NULL)))),
-    CONSTRAINT public_filter_bootstrap_publication_tuple CHECK ((((publication_job IS NULL) AND (publication_observation IS NULL) AND (publication_execution IS NULL)) OR ((publication_job IS NOT NULL) AND (publication_observation IS NOT NULL) AND (publication_execution IS NOT NULL) AND ((octet_length(publication_observation) >= 1) AND (octet_length(publication_observation) <= 4096)) AND ((octet_length(publication_execution) >= 1) AND (octet_length(publication_execution) <= 4096))))),
-    CONSTRAINT public_filter_bootstrap_snapshot_kind_check CHECK ((snapshot_kind = ANY (ARRAY['pit'::text, 'prepared'::text]))),
-    CONSTRAINT public_filter_bootstrap_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'begun'::text, 'adopted'::text, 'aborting'::text, 'aborted'::text])))
-);
-
-
---
 -- Name: public_filter_bootstrap_account; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -9449,25 +9530,6 @@ CREATE TABLE semantic.public_filter_projection_replay (
 
 
 --
--- Name: public_filter_read_definition; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.public_filter_read_definition (
-    partition_no integer NOT NULL,
-    read_definition uuid DEFAULT gen_random_uuid() NOT NULL,
-    source_id uuid NOT NULL,
-    configuration uuid NOT NULL,
-    release_digest text NOT NULL,
-    capture_digest text NOT NULL,
-    capture text NOT NULL,
-    dependency_keys jsonb NOT NULL,
-    coverage_keys text[],
-    CONSTRAINT public_filter_read_definition_capture_check CHECK ((octet_length(capture) <= 1048576)),
-    CONSTRAINT public_filter_read_definition_dependency_keys_check CHECK ((jsonb_typeof(dependency_keys) = 'array'::text))
-);
-
-
---
 -- Name: public_filter_repair_advance; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -9523,22 +9585,6 @@ CREATE TABLE semantic.public_filter_repair_step (
     CONSTRAINT public_filter_repair_step_verified_ordinal_check CHECK ((verified_ordinal > 0)),
     CONSTRAINT public_filter_repair_step_verified_root_check CHECK ((verified_root ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT public_filter_repair_verified_fields CHECK ((((verified_binding IS NULL) = (verified_root IS NULL)) AND ((verified_binding IS NULL) = (verified_ordinal IS NULL)) AND ((verified_next IS NULL) OR (verified_root IS NOT NULL))))
-);
-
-
---
--- Name: public_filter_source; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.public_filter_source (
-    partition_no integer NOT NULL,
-    source_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    configuration uuid DEFAULT gen_random_uuid() NOT NULL,
-    route_digest text NOT NULL,
-    owner_epoch integer NOT NULL,
-    family text NOT NULL,
-    CONSTRAINT public_filter_source_family_check CHECK ((family = 'global-subject-v1'::text)),
-    CONSTRAINT public_filter_source_owner_epoch_check CHECK ((owner_epoch > 0))
 );
 
 
@@ -16161,6 +16207,20 @@ CREATE TRIGGER page_publication_search_canonical_generation AFTER INSERT OR DELE
 --
 
 CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE ON semantic.source_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_provider_review_queue_key();
+
+
+--
+-- Name: public_filter_home_enrollment public_filter_ack_enrollment_loss; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_enrollment_loss AFTER DELETE ON semantic.public_filter_home_enrollment FOR EACH ROW EXECUTE FUNCTION search.public_filter_ack_receipt_loss();
+
+
+--
+-- Name: public_filter_privacy_head public_filter_ack_privacy_loss; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_privacy_loss AFTER DELETE ON semantic.public_filter_privacy_head FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@ack-retention');
 
 
 --
