@@ -1,23 +1,41 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
+import { withQueryAccounting } from '../../src/database/pool.ts';
+import { createKernelCreditSearchSource } from '../../src/composition/runtime-defaults.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndexer, type SubjectApplyGuard } from '../../src/search/indexer.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { CREDIT_SEARCH_LIMITS } from '../../src/search/credit-search.ts';
+import type { CreditSearchFields } from '../../src/search/credit-search-document.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { createCoverageFixture, holdBulk } from './coverage-fixture.ts';
 
 let f: Awaited<ReturnType<typeof createCoverageFixture>>;
 beforeAll(async () => {
-  f = await createCoverageFixture();
+  f = await createCoverageFixture(
+    undefined,
+    createWriteRateLimiter({
+      secret: 'subject-relay-fixture-write-rate-key',
+      overrides: JSON.stringify(
+        Object.fromEntries(
+          ['new-account', 'member', 'trusted', 'service'].map((kind) => [
+            kind,
+            { write: { maximum: 100, seconds: 60 } },
+          ]),
+        ),
+      ),
+    }),
+  );
 }, 180_000);
 afterAll(async () => {
   await f?.close();
 }, 180_000);
 
-async function target() {
-  const [id] = await f.books(1);
+async function target(id?: string) {
+  id ??= (await f.books(1))[0];
   const prefix = f.fresh();
   const index = subjectIndexName(prefix, 1);
   await createSubjectIndex(f.search, prefix, 1);
@@ -194,8 +212,28 @@ test('failed admission drains a started apply before the relay can fail or retry
   expect(await checkpoint(t)).toBeGreaterThan(0n);
 });
 
-test('live Subject replay replaces aged pre-dispatch custody and reaches later creates in the same home', async () => {
-  const t = await target();
+test('live Subject replay batches foreign creator identities and reaches later creates after reclaim', async () => {
+  const cast = new Map<number, string>();
+  for (let attempt = 0; attempt < 64 && cast.size <= CREDIT_SEARCH_LIMITS.creditsPerPage; attempt++) {
+    const { subject } = await f.post('/v1/subjects', {
+      type: 'schema:Person',
+      labels: { en: `Voice ${attempt}` },
+    });
+    cast.set(subjectPartition(subject.id), subject.id);
+  }
+  expect(cast.size).toBe(CREDIT_SEARCH_LIMITS.creditsPerPage + 1);
+  const { subject: series } = await f.post('/v1/subjects', {
+    type: 'schema:TVSeries',
+    labels: { en: 'Series with a distributed cast' },
+    statements: {
+      'wdt:P725': [...cast.values()].map((id) => ({
+        property: { id: 'wdt:P725' },
+        value: { type: 'value', content: id },
+      })),
+    },
+  });
+  const t = await target(series.id);
+  const nativeSource = { ...f.source, creditSearch: createKernelCreditSearchSource(f.pool, f.routeKey) };
   const { id } = t;
   let laterKey: ReturnType<typeof crypto.randomUUID> | undefined;
   for (let attempt = 0; attempt < 100_000; attempt++) {
@@ -206,7 +244,7 @@ test('live Subject replay replaces aged pre-dispatch custody and reaches later c
     }
   }
   if (!laterKey) throw new Error('Could not select a later create in the same home');
-  const relay = (recover: boolean, source = f.source, search = f.search) => {
+  const relay = (recover: boolean, source = nativeSource, search = f.search) => {
     const options = { ...f.options(t.prefix, search), ...t, source };
     const writer = createSearchWriterGuard({ ...options, ...(recover && { recoverRelayEnrollment: true }) });
     return createSubjectIndexer({ ...options, writer });
@@ -236,7 +274,7 @@ test('live Subject replay replaces aged pre-dispatch custody and reaches later c
   const release = Promise.withResolvers<void>();
   const old = observe(
     relay(false, {
-      ...f.source,
+      ...nativeSource,
       async read(...args) {
         entered.resolve();
         await release.promise;
@@ -281,7 +319,20 @@ test('live Subject replay replaces aged pre-dispatch custody and reaches later c
     await expect(relay(false).run(t.partition)).rejects.toThrow('Search writer is enrolled');
     expect(await checkpoint(t)).toBe(previous);
 
-    replay = observe(relay(true, f.source, bulk.transport).run(t.partition));
+    const identityBatchSizes: number[] = [];
+    replay = observe(
+      withQueryAccounting(
+        {
+          connection: (dispatch) => dispatch(),
+          query(sql, operands, dispatch) {
+            if (sql.includes('semantic.identity_epoch_mapping_sources'))
+              identityBatchSizes.push((operands[0] as string[]).length);
+            return dispatch();
+          },
+        },
+        () => relay(true, nativeSource, bulk.transport).run(t.partition),
+      ),
+    );
     await Promise.race([
       bulk.entered,
       replay.outcome.then(() => {
@@ -289,6 +340,8 @@ test('live Subject replay replaces aged pre-dispatch custody and reaches later c
       }),
     ]);
     const replacement = await writerState();
+    // Project both selected pages and revalidate their whole dependency window.
+    expect(identityBatchSizes).toEqual([CREDIT_SEARCH_LIMITS.creditsPerPage, 1, cast.size]);
     expect(replacement.dispatch_state).toBe('dispatched');
     expect(replacement.writer_token).not.toBe(enrolled.writer_token);
     expect(replacement.visible_transaction_id).toBe(receipt);
@@ -304,10 +357,15 @@ test('live Subject replay replaces aged pre-dispatch custody and reaches later c
     bulk.release();
     expect(await replay.outcome).toEqual({ ok: true });
     expect(await checkpoint(t)).toBe(BigInt(event!.position));
-    const hits = await f.search.request<{ hits: { hits: { _id: string }[] } }>('POST', `/${t.index}/_search`, {
-      query: { ids: { values: [id, later.id] } },
-    });
+    const hits = await f.search.request<{ hits: { hits: { _id: string; _source: CreditSearchFields }[] } }>(
+      'POST',
+      `/${t.index}/_search`,
+      { query: { ids: { values: [id, later.id] } } },
+    );
     expect(hits.body.hits.hits.map(({ _id }) => _id).sort()).toEqual([id, later.id].sort());
+    const indexed = hits.body.hits.hits.find(({ _id }) => _id === id)!._source;
+    expect(indexed.credit_search_complete).toBe(true);
+    expect(indexed.credited_names.map(({ targetId }) => targetId).sort()).toEqual([...cast.values()].sort());
   } finally {
     release.resolve();
     bulk.release();

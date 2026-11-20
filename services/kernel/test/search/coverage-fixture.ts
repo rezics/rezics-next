@@ -3,6 +3,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { admitFilter, parseFilter } from '@rezics/filter';
 import pg, { type Pool } from 'pg';
 import { createHash } from 'node:crypto';
+import type { WriteRateLimiter } from '../../src/access/write-rate.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
@@ -43,7 +44,7 @@ export type CoverageFixtureResources = {
 };
 
 /** Real baseline first; no missing export or stub can stand in for working commands/source/engine. */
-export async function createCoverageFixture(resources?: CoverageFixtureResources) {
+export async function createCoverageFixture(resources?: CoverageFixtureResources, writeRate?: WriteRateLimiter) {
   if (
     resources !== undefined &&
     (!resources || resources.pool === undefined || resources.admin === undefined || resources.search === undefined)
@@ -129,7 +130,7 @@ export async function createCoverageFixture(resources?: CoverageFixtureResources
       pool: runtimePool,
       routeKey,
       access: access.access,
-      writeRate: access.writeRate,
+      writeRate: writeRate ?? access.writeRate,
       receiptKeys: testReceiptKeys(),
     });
     const filter = parseFilter({ type: { in: ['schema:Book'] } });
