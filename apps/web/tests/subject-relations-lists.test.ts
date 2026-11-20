@@ -6,7 +6,7 @@ import { planReads, platformRegistry, type CompositionDocument } from '@rezics/c
 import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { relationDefinitions } from '../src/subject/relations.ts';
-import { withPageVisitHost } from './helpers/subject-render';
+import { renderSubject, withPageVisitHost } from './helpers/subject-render';
 
 const SubjectPage = withPageVisitHost(SubjectPageContent);
 
@@ -228,6 +228,38 @@ test('relations are grouped by relation group, each group with its count, cover,
   expect(groupBlock(html, 'order')).not.toContain('/relations?property=');
 
   expect(counts(groupBlock(html, 'world'))).toEqual(['1']);
+});
+
+test('a selected paged relation group renders after its earlier siblings are hidden', async () => {
+  const cursor = 'opaque:/+?=&';
+  const document = {
+    ...relationDocument,
+    content: relationDocument.content.map((node) => ({ ...node, props: { ...node.props, paged: true } })),
+  };
+  const page = pageOf(document, (read) =>
+    read.kind !== 'links'
+      ? { status: 200, body: subjectBody }
+      : read.property === 'wdt:P144'
+        ? { status: 200, body: { links: [holder(81, read.property)], next: cursor } }
+        : { status: 204, body: {} },
+  );
+  page.streams = {
+    selected: 'adaptations',
+    entries: relationDocument.content.map(({ props }) => ({
+      node: props.id as string,
+      property: props.property as string,
+      direction: 'inverse',
+    })),
+  };
+  const href = `/en/subjects/${subjectId}/the-little-prince/relations?node=adaptations#adaptations`;
+  const html = await renderSubject(
+    createElement(SubjectPageContent, { page, locale: 'en', messages, view: 'relations', currentHref: href }),
+    href,
+  );
+  expect(html).toContain(`/subjects/${row(81)}/holder-81?via=${encodeURIComponent(href)}`);
+  expect(html).toContain(`node=adaptations&amp;cursor=${encodeURIComponent(cursor)}`);
+  expect(html).toContain('id="adaptations"');
+  expect(html).not.toContain('id="sequels"');
 });
 
 test('SubjectList and TypeList show an exact or at-least count and a See all link to a paged view', () => {

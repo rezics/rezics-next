@@ -1278,6 +1278,7 @@ export function SubjectPage({
                 {...(operator ? { operator } : {})}
                 {...(base ? { base } : {})}
                 document={page.document}
+                streamDocument={page.streams?.selected ? selectedDocument : undefined}
                 reads={page.reads}
                 context={page.context}
                 {...(realm !== undefined ? { realm } : {})}

@@ -780,6 +780,7 @@ export function PageData({
   operator,
   base,
   document,
+  streamDocument,
   reads,
   messages,
   link = PlainLink,
@@ -820,6 +821,8 @@ export function PageData({
   operator?: { id: string; handle: string | null; displayName: string | null };
   base?: string;
   document: PageDocument;
+  /** The selected stream's render document. Reads still use the full template. */
+  streamDocument?: PageDocument | undefined;
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
   messages: PageMessages;
   link?: PageLink;
@@ -982,7 +985,8 @@ export function PageData({
     ...(aboutRead?.classifications?.length ? { classifications: aboutRead.classifications } : {}),
     relations,
     ...(directions !== undefined ? { relationDirections: directions } : {}),
-    relationNodes: nodesOfType(composition.content, 'RelationGroups'),
+    // The first rendered group owns the section. A selected stream can remove the original first group.
+    relationNodes: nodesOfType((streamDocument ?? document).content, 'RelationGroups'),
     ...(viewer ? { viewer } : {}),
     ...(releaseDigest ? { releaseDigest } : {}),
     ...(overviewRelated
