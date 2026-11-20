@@ -8420,6 +8420,8 @@ export async function withCheckGitTransfer<T>(
       // Result/settlement delivery does not wait on GitHub cleanup. Frozen callers retain controller custody.
       void import('./check-git.ts')
         .then(async ({ releaseCheckGit, sweepCheckGit }) => {
+          const snapshot = JSON.parse(readFileSync(stage.manifest, 'utf8')) as Partial<CheckGitPublication>;
+          if (!snapshot.remote) return;
           if (!retainCheckGit(options)) await releaseCheckGit(options.workspace, stage.manifest);
           await sweepCheckGit(options.workspace);
         })

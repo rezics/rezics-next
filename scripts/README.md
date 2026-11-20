@@ -865,6 +865,9 @@ remain separate questions for the existing compiler/health chain; this cohort su
    links; the overlay does not broaden to every tracked file.
    Decision: fetched Git overlays include only frozen regular candidates whose permissions differ from the frozen index
    tree's checkout mode; exact source verification remains authoritative.
+   A check publishes only after a live origin branch advertisement proves that the selected HEAD, dev commit and
+   staged tree are already reachable from public branches. Private inputs or unavailable proof select the same
+   native pack and rsync transfer directly to the check host, without creating a publication journal.
    GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
    (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;
    final failure retains full snapshot upload. Local authentication never enters a manifest or host checkout.

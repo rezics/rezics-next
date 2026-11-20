@@ -166,6 +166,12 @@ function publicOrigin(root: string, source: string) {
   git(source, 'push', '-q', 'origin', 'HEAD:refs/heads/dev');
   return origin;
 }
+function advertiseStagedTree(source: string, branch: string) {
+  const tree = git(source, 'write-tree');
+  const commit = git(source, 'commit-tree', tree, '-p', 'HEAD', '-m', 'public staged tree fixture');
+  git(source, 'push', '-q', 'origin', `${commit}:refs/heads/${branch}`);
+  return tree;
+}
 function fetchPublication(publication: CheckGitPublication, checkout: string, store: string, origin: string) {
   return Bun.spawnSync(['sh', '-c', fetchCheckGitScript(publication, checkout, store, origin)], {
     stdout: 'pipe',
@@ -224,10 +230,10 @@ test('a fetch owns the run lock before ref mutation and removes its pathname und
 test('concurrent fetches of one store checkout independently after the shared fetch lock', async () => {
   const root = sandbox();
   const { source } = repository(root);
+  const origin = publicOrigin(root, source);
   writeFileSync(join(source, 'staged.txt'), 'staged candidate\n');
   git(source, 'add', 'staged.txt');
-  const indexTree = git(source, 'write-tree');
-  const origin = publicOrigin(root, source);
+  const indexTree = advertiseStagedTree(source, 'staged-fixture');
   const manifestPath = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/shared-store' });
   const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
   const store = join(root, 'check-git.git');
@@ -253,7 +259,7 @@ test('concurrent fetches of one store checkout independently after the shared fe
   expect(readFileSync(join(checkouts[1]!, 'tracked.txt'), 'utf8')).toBe('committed\n');
 }, 30000);
 
-test('a check-only publication sends only new objects and both hosts restore the exact native identities', async () => {
+test('a public check sends only its synthetic commit and both hosts restore the exact native identities', async () => {
   const root = sandbox();
   const { source, base } = repository(root);
   writeFileSync(join(source, 'large.bin'), randomBytes(128000));
@@ -261,14 +267,14 @@ test('a check-only publication sends only new objects and both hosts restore the
   git(source, 'commit', '-qm', 'shared public objects');
   const head = git(source, 'rev-parse', 'HEAD');
   const origin = publicOrigin(root, source);
+  writeFileSync(join(source, 'staged.txt'), 'staged candidate\n');
+  git(source, 'add', 'staged.txt');
+  const indexTree = advertiseStagedTree(source, 'staged-fixture');
   const previous = new Set(
     git(root, '--git-dir', origin, 'rev-list', '--objects', '--all')
       .split('\n')
       .map((line) => line.split(' ')[0]),
   );
-  writeFileSync(join(source, 'staged.txt'), 'staged candidate\n');
-  git(source, 'add', 'staged.txt');
-  const indexTree = git(source, 'write-tree');
   const status = git(source, 'status', '--porcelain');
   const manifestPath = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/worker-check' });
   const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
@@ -278,7 +284,7 @@ test('a check-only publication sends only new objects and both hosts restore the
     .split('\n')
     .map((line) => line.split(' ')[0]!)
     .filter((oid) => !previous.has(oid));
-  expect(added).toHaveLength(3); // candidate commit, staged tree and changed blob; history is already public.
+  expect(added).toEqual([publication.remote.commit]);
   const bytes = added.reduce(
     (sum, oid) => sum + statSync(join(origin, 'objects', oid.slice(0, 2), oid.slice(2))).size,
     0,
@@ -300,17 +306,17 @@ test('a check-only publication sends only new objects and both hosts restore the
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
 }, 30000);
 
-test.each(['push', 'fetch'])(
+test.each(['authority', 'fetch'])(
   '%s failure falls back to a full snapshot with identical HEAD, index and dev',
   async (failure) => {
     const root = sandbox();
     const { source, head, base } = repository(root);
-    const origin = publicOrigin(root, source);
+    publicOrigin(root, source);
     writeFileSync(join(source, 'staged.txt'), 'staged\n');
     git(source, 'add', 'staged.txt');
-    const indexTree = git(source, 'write-tree');
+    const indexTree = advertiseStagedTree(source, 'staged-fixture');
     writeFileSync(join(source, 'tracked.txt'), 'unstaged\n');
-    if (failure === 'push') git(source, 'remote', 'set-url', 'origin', join(root, 'unreachable.git'));
+    if (failure === 'authority') git(source, 'remote', 'set-url', 'origin', join(root, 'unreachable.git'));
     const published = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/fallback' });
     let manifest = published;
     if (failure === 'fetch') {
@@ -361,6 +367,52 @@ function publicationFixture(hook: string) {
   chmodSync(receive, 0o755);
   return { root, source, origin, log };
 }
+
+test.each(['private HEAD', 'ahead dev', 'staged overlay', 'stale tracking ref', 'split origin'])(
+  '%s uses the exact native pack without attempting a check-ref push',
+  async (input) => {
+    const { root, source, origin, log } = publicationFixture('exit 0');
+    const workspace = join(root, 'detached');
+    git(source, 'worktree', 'add', '--detach', workspace, 'HEAD');
+    if (input === 'ahead dev') {
+      const privateDev = git(source, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'unpublished dev');
+      git(source, 'update-ref', 'refs/heads/dev', privateDev);
+    } else if (input === 'private HEAD') {
+      git(workspace, 'commit', '--allow-empty', '-qm', 'unpublished HEAD');
+    } else if (input === 'staged overlay') {
+      writeFileSync(join(workspace, 'staged.txt'), 'private staged content\n');
+      git(workspace, 'add', 'staged.txt');
+    } else if (input === 'stale tracking ref') {
+      git(source, 'update-ref', 'refs/remotes/origin/dev', 'HEAD');
+      git(root, '--git-dir', origin, 'update-ref', 'refs/checks/old', git(source, 'rev-parse', 'HEAD'));
+      git(root, '--git-dir', origin, 'update-ref', 'refs/heads/dev', git(source, 'rev-parse', 'dev'));
+    } else {
+      const unrelated = join(root, 'different.git');
+      git(root, 'init', '--bare', '-q', unrelated);
+      git(source, 'remote', 'set-url', 'origin', unrelated);
+      git(source, 'remote', 'set-url', '--push', 'origin', origin);
+    }
+    const pushMarker = join(root, 'push-attempt');
+    const prePush = join(source, '.git/hooks/pre-push');
+    writeFileSync(prePush, `#!/bin/sh\ntouch '${pushMarker}'\n`, { mode: 0o755 });
+    const head = git(workspace, 'rev-parse', 'HEAD');
+    const dev = git(workspace, 'rev-parse', 'dev');
+    const indexTree = git(workspace, 'write-tree');
+    const manifest = await stageCheckGit(workspace, join(root, 'publication'), { ref: 'refs/checks/private' });
+    expect(existsSync(pushMarker)).toBe(false);
+    expect(existsSync(log)).toBe(false);
+    expect(existsSync(join(workspace, '.temp/check-git-publications'))).toBe(false);
+    expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
+    const checkout = join(root, 'restored');
+    copyWorkingFiles(workspace, checkout);
+    await restoreCheckGit(manifest, checkout);
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(checkout, 'rev-parse', 'dev')).toBe(dev);
+    expect(git(checkout, 'write-tree')).toBe(indexTree);
+    expect(git(checkout, 'status', '--porcelain')).toBe(git(workspace, 'status', '--porcelain'));
+  },
+  30000,
+);
 
 test('one failed push retries the identical candidate and retains redacted transport diagnostics', async () => {
   const { root, source, origin, log } = publicationFixture(
@@ -602,7 +654,7 @@ async function publishCandidate(source: string, artifacts: string, ref: string, 
   writeFileSync(join(source, 'staged.txt'), staged);
   git(source, 'add', 'staged.txt');
   const blob = git(source, 'hash-object', 'staged.txt');
-  const indexTree = git(source, 'write-tree');
+  const indexTree = advertiseStagedTree(source, `fixture-${ref.split('/').at(-1)}`);
   const manifestPath = await stageCheckGit(source, artifacts, { ref });
   return { blob, indexTree, publication: JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication };
 }
