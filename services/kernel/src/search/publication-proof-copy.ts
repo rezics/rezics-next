@@ -79,13 +79,18 @@ export async function hasRetainedWriterPublicationCopies(
   const retained = await tx.query(
     `SELECT 1 FROM search.public_filter_observation o
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-    WHERE r.partition_no=$1 AND r.physical_target=$2 AND NOT (
-      o.prepared_rows=$3 AND EXISTS (
+    WHERE r.partition_no=$1 AND r.physical_target=$2 AND (
+      o.prepared_rows=$3 AND o.consumer_work::jsonb->>0='object'
+      AND NOT EXISTS (
+        SELECT FROM jsonb_array_elements(o.consumer_work::jsonb->1) entry
+        WHERE entry->>0 IN ('prepared','preparedRows')
+          OR (entry->>0='after' AND entry->1<>'["undefined"]'::jsonb)
+      ) AND EXISTS (
         SELECT 1 FROM semantic.public_filter_bootstrap b
         WHERE (b.partition_no,b.publication_job)=(0,$4::uuid)
           AND (o.partition_no,o.observation,o.consumer_bootstrap)=(0,b.publication_observation,'0:'||b.bootstrap::text)
       ) AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
-        WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation) AND f.expires_at>$5))
+        WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation) AND f.expires_at>$5)) IS NOT TRUE
     UNION ALL
     SELECT 1 FROM search.public_filter_prepared p
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)

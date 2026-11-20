@@ -37,8 +37,9 @@ BEGIN
   THEN
     RAISE EXCEPTION 'Original coverage preparation binding is immutable' USING ERRCODE = '23514';
   END IF;
-  IF NEW IS DISTINCT FROM OLD AND NOT search.public_filter_baseline_interval(
-    OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home,NEW.after_home,OLD.root,NEW.root)
+  IF (NEW.after_home,NEW.root) IS DISTINCT FROM (OLD.after_home,OLD.root)
+    AND NOT search.public_filter_baseline_interval(
+      OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home,NEW.after_home,OLD.root,NEW.root)
   THEN
     RAISE EXCEPTION 'Coverage preparation requires its original contiguous receipt' USING ERRCODE = '23514';
   END IF;
@@ -1259,6 +1260,24 @@ $$;
 
 
 --
+-- Name: require_public_filter_ack_live_cut(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.require_public_filter_ack_live_cut() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM FROM search.public_filter_coverage_preparation c
+    WHERE (c.partition_no,c.registration,c.bootstrap)=(NEW.partition_no,NEW.registration,NEW.bootstrap)
+      AND c.ack_protocol=1 AND NOT c.ack_retired FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Original receiver ACK cut has retired' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: retain_public_filter_ack_protocol(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1301,6 +1320,29 @@ BEGIN
     RAISE EXCEPTION 'Original population protocol is immutable' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
+END $$;
+
+
+--
+-- Name: retire_public_filter_ack_manifest(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.retire_public_filter_ack_manifest() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM FROM search.public_filter_observation o
+    WHERE (o.partition_no,o.observation)=(OLD.partition_no,OLD.observation)
+      AND o.state IN ('closing','closed') FOR SHARE;
+  IF NOT FOUND OR EXISTS (SELECT FROM search.public_filter_reference f
+    WHERE (f.partition_no,f.observation)=(OLD.partition_no,OLD.observation))
+    OR EXISTS (SELECT FROM search.public_filter_pit p
+      WHERE (p.partition_no,p.observation)=(OLD.partition_no,OLD.observation)) THEN
+    RAISE EXCEPTION 'Original receiver manifest still has observation custody' USING ERRCODE='23514';
+  END IF;
+  UPDATE search.public_filter_coverage_preparation SET ack_retired=true
+    WHERE (partition_no,registration,bootstrap)=(OLD.partition_no,OLD.registration,OLD.bootstrap);
+  RETURN OLD;
 END $$;
 
 
@@ -1629,9 +1671,11 @@ CREATE TABLE search.generation_publication (
     bootstrap text,
     queried text,
     execution text,
+    ack_protocol smallint DEFAULT 0 NOT NULL,
     CONSTRAINT generation_publication_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
     CONSTRAINT generation_publication_bootstrap_check CHECK (((octet_length(bootstrap) >= 1) AND (octet_length(bootstrap) <= 4096))),
     CONSTRAINT generation_publication_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
+    CONSTRAINT generation_publication_check1 CHECK (((ack_protocol = 0) OR ((ack_protocol = 1) AND (family = 'subjects'::text) AND (source_home = 0)))),
     CONSTRAINT generation_publication_consumer_check CHECK ((octet_length((consumer)::text) <= 8192)),
     CONSTRAINT generation_publication_engine_after_check CHECK ((octet_length((engine_after)::text) <= 8192)),
     CONSTRAINT generation_publication_execution_check CHECK (((octet_length(execution) >= 1) AND (octet_length(execution) <= 4096))),
@@ -2065,8 +2109,10 @@ CREATE TABLE search.public_filter_coverage_preparation (
     root text NOT NULL,
     population_protocol integer,
     ack_protocol smallint DEFAULT 0 NOT NULL,
+    ack_retired boolean DEFAULT false NOT NULL,
     CONSTRAINT public_filter_coverage_preparation_ack_protocol_check CHECK ((ack_protocol = ANY (ARRAY[0, 1]))),
     CONSTRAINT public_filter_coverage_preparation_after_home_check CHECK (((after_home >= 0) AND (after_home <= 4096))),
+    CONSTRAINT public_filter_coverage_preparation_check CHECK (((NOT ack_retired) OR (ack_protocol = 1))),
     CONSTRAINT public_filter_coverage_preparation_generation_check CHECK ((generation >= 0)),
     CONSTRAINT public_filter_coverage_preparation_population_protocol_check CHECK (((population_protocol IS NULL) OR (population_protocol = 1))),
     CONSTRAINT public_filter_coverage_preparation_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text))
@@ -3565,6 +3611,13 @@ CREATE INDEX public_filter_ack_delta ON search.public_filter_coverage_home USING
 
 
 --
+-- Name: public_filter_ack_manifest_observation; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_ack_manifest_observation ON search.public_filter_ack_manifest USING btree (partition_no, observation);
+
+
+--
 -- Name: public_filter_ack_protocol_cut; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -3866,6 +3919,13 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 
 
 --
+-- Name: generation_publication generation_publication_ack_protocol_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER generation_publication_ack_protocol_immutable BEFORE UPDATE OF ack_protocol ON search.generation_publication FOR EACH ROW WHEN ((old.ack_protocol IS DISTINCT FROM new.ack_protocol)) EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: identity_receiving_native_plan identity_receiving_native_plan_immutable; Type: TRIGGER; Schema: search; Owner: -
 --
 
@@ -3911,7 +3971,21 @@ CREATE TRIGGER public_filter_ack_manifest_bind BEFORE INSERT ON search.public_fi
 -- Name: public_filter_ack_manifest public_filter_ack_manifest_immutable; Type: TRIGGER; Schema: search; Owner: -
 --
 
-CREATE TRIGGER public_filter_ack_manifest_immutable BEFORE DELETE OR UPDATE ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER public_filter_ack_manifest_immutable BEFORE UPDATE ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_live; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_manifest_live BEFORE INSERT ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION search.require_public_filter_ack_live_cut();
+
+
+--
+-- Name: public_filter_ack_manifest public_filter_ack_manifest_retire; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_manifest_retire BEFORE DELETE ON search.public_filter_ack_manifest FOR EACH ROW EXECUTE FUNCTION search.retire_public_filter_ack_manifest();
 
 
 --
@@ -3940,6 +4014,13 @@ CREATE TRIGGER public_filter_ack_range_compare BEFORE INSERT ON search.public_fi
 --
 
 CREATE TRIGGER public_filter_ack_range_immutable BEFORE UPDATE ON search.public_filter_ack_range FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_ack_retirement_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_ack_retirement_immutable BEFORE UPDATE OF ack_retired ON search.public_filter_coverage_preparation FOR EACH ROW WHEN ((old.ack_retired AND (NOT new.ack_retired))) EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --

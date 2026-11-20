@@ -4,6 +4,7 @@ import { fixture } from './support/public-filter-source.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
+import { stepRetainedObservationErasure } from '../../src/search/public-filter-custody.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
@@ -17,7 +18,7 @@ test('original Subject receiver manifest survives lost commits and leaves a late
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `receiver-manifest-${crypto.randomUUID().slice(0, 8)}-`;
   const target = subjectIndexName(prefix, 1);
-  const runtime = createDefaultPublicFilterRuntime({ ...f.config, prefix, search });
+  const runtime = createDefaultPublicFilterRuntime({ ...f.config, prefix, search, subjectAckProtocol: 1 });
   const context = () => ({ deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS });
   const lost = () => Object.assign(new Error('Interrupted native ACK reply'), { code: '08006' });
   let rolledBack = false,
@@ -88,10 +89,6 @@ test('original Subject receiver manifest survives lost commits and leaves a late
     }) as typeof client.query;
   });
   try {
-    // This database belongs to this one native check. Production creates v0 preparations.
-    await f.db.admin.query(
-      'ALTER TABLE search.public_filter_coverage_preparation ALTER COLUMN ack_protocol SET DEFAULT 1',
-    );
     const books = [await f.create('schema:Book'), await f.create('schema:Book')];
     const book = books[0]!;
     const home = partitionOf(routeOf(book)!);
@@ -113,6 +110,14 @@ test('original Subject receiver manifest survives lost commits and leaves a late
     const opened = await runtime.preparePublication(1, context());
     if (opened.status !== 'preparing') throw new Error(opened.reason);
     const { job } = opened;
+    expect(
+      (
+        await f.db.admin.query(
+          'SELECT ack_protocol FROM search.generation_publication WHERE (partition_no,job)=(0,$1)',
+          [job.job],
+        )
+      ).rows,
+    ).toEqual([{ ack_protocol: 1 }]);
     const terminal = async () =>
       (
         await f.db.admin.query(
@@ -315,11 +320,73 @@ test('original Subject receiver manifest survives lost commits and leaves a late
       await reader.query('ROLLBACK');
       reader.release();
     }
+    const m = original[0];
+    await expect(
+      f.db.admin.query('DELETE FROM search.public_filter_ack_manifest WHERE job=$1', [job.job]),
+    ).rejects.toMatchObject({ code: '23514' });
+    const copy = { partition: 0, registration: m.registration, observation: m.observation, incarnation: m.incarnation };
+    const lease = crypto.randomUUID();
+    const pit = await search.request<{ pit_id: string }>('POST', `/${target}/_search/point_in_time?keep_alive=5m`);
+    // Retain a reader and its exact native PIT on the original observation before closing admission.
+    await f.db.admin.query('INSERT INTO search.public_filter_reference VALUES (0,$1,$2,$3)', [
+      m.observation,
+      lease,
+      Date.now() + 60_000,
+    ]);
+    await f.db.admin.query("INSERT INTO search.public_filter_pit VALUES (0,$1,$2,$3,'owned')", [
+      m.observation,
+      lease,
+      pit.body.pit_id,
+    ]);
+    expect(await stepRetainedObservationErasure(f.db.pool, copy, search, context())).toMatchObject({
+      state: 'pending',
+      reason: 'in-use',
+    });
+    await f.db.admin.query(
+      'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=(0,$1,$2)',
+      [m.observation, lease],
+    );
+    expect(await stepRetainedObservationErasure(f.db.pool, copy, undefined, context())).toMatchObject({
+      state: 'pending',
+      reason: 'configuration-unavailable',
+    });
+    expect(await manifests()).toEqual(original);
+    let erased = false;
+    for (let turn = 0; turn < 128; turn++) {
+      const result = await stepRetainedObservationErasure(f.db.pool, copy, search, context());
+      if (result.state === 'pending') throw new Error(`Original ACK retirement is pending: ${result.reason}`);
+      if (result.state === 'removed') {
+        erased = true;
+        break;
+      }
+    }
+    expect(erased).toBe(true);
+    expect(await manifests()).toEqual([]);
+    expect(
+      (
+        await f.db.admin.query(
+          'SELECT ack_protocol,ack_retired FROM search.public_filter_coverage_preparation WHERE bootstrap=$1',
+          [m.bootstrap],
+        )
+      ).rows,
+    ).toEqual([{ ack_protocol: 1, ack_retired: true }]);
+    await expect(
+      f.db.admin.query('UPDATE search.public_filter_coverage_preparation SET ack_retired=false WHERE bootstrap=$1', [
+        m.bootstrap,
+      ]),
+    ).rejects.toMatchObject({ code: '23514' });
+    expect(
+      (
+        await f.db.admin.query('SELECT semantic.public_filter_committed_ack($1,$2,$3,$4) AS valid', [
+          m.bootstrap,
+          m.execution,
+          m.terminal,
+          m.binding,
+        ])
+      ).rows,
+    ).toEqual([{ valid: false }]);
   } finally {
     try {
-      await f.db.admin.query(
-        'ALTER TABLE search.public_filter_coverage_preparation ALTER COLUMN ack_protocol SET DEFAULT 0',
-      );
       await runtime.close();
       await search.request('DELETE', `/${target}`);
     } finally {

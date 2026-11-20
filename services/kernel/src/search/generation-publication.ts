@@ -133,6 +133,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
   clock: KernelClock;
   meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
+  subjectAckProtocol?: 1;
   creditSearch?: CreditSearchSource;
   registry?: DiscoveryRegistry;
 }>;
@@ -2042,7 +2043,7 @@ export function createSearchGenerationPublication(
         add(meter, resolved.cost);
         if (resolved.status !== 'resolved')
           throw new Pending(resolved.reason === 'deadline' ? 'deadline' : 'source_pending');
-        populationDefinition(resolved.definition);
+        const capture = populationDefinition(resolved.definition);
         if (
           resolved.definition.meaning.digest !== input.meaningDigest ||
           resolved.definition.readDefinition !== input.readDefinition ||
@@ -2057,6 +2058,17 @@ export function createSearchGenerationPublication(
           )
         )
           throw new Pending('registration_missing');
+        const ackProtocol =
+          config.subjectAckProtocol === 1 &&
+          nativeMeaning &&
+          !registry &&
+          target.family === 'subjects' &&
+          target.activeSubjectGeneration === null &&
+          resolved.definition.source.partition === 0 &&
+          'catalogueCoverage' in capture &&
+          capture.catalogueCoverage === true
+            ? 1
+            : 0;
         const id = randomUUID();
         const job = await withBoundedReadConnection(
           pool,
@@ -2064,8 +2076,10 @@ export function createSearchGenerationPublication(
           async (client) => {
             const result = await client.query<Job>(
               `INSERT INTO search.generation_publication
-          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+            CASE WHEN $12::smallint=1
+              AND to_regprocedure('semantic.public_filter_ack_origin(text,uuid)') IS NOT NULL THEN 1 ELSE 0 END)
           ON CONFLICT(partition_no,physical_target,consumer) DO NOTHING RETURNING *`,
               [
                 id,
@@ -2079,6 +2093,7 @@ export function createSearchGenerationPublication(
                 resolved.definition.source.partition,
                 bindingKey(resolved.definition),
                 config.clock().toISOString(),
+                ackProtocol,
               ],
             );
             return (

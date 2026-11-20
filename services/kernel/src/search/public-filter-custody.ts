@@ -2851,6 +2851,16 @@ export async function stepRetainedObservationErasure(
       ]);
       return { state: 'more', cost: meter };
     }
+    // Closing the observation already excludes current use. Release the manifest's
+    // immutable foreign keys before removing the underlying native evidence.
+    const ack = await sql(
+      pool,
+      meter,
+      `DELETE FROM search.public_filter_ack_manifest WHERE (partition_no,observation)=($1,$2) RETURNING job`,
+      keys,
+      { points: 5, keys: 8, writes: 2 },
+    );
+    if (ack.rowCount) return { state: 'more', cost: meter };
     const proofSubject = await sql(
       pool,
       meter,

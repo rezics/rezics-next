@@ -434,6 +434,9 @@ export function createSearchWorkModule(
             prefix: searchConfig.prefix,
             clock: context.clock,
             facetAccess: defaults.facetAccess,
+            ...(searchConfig.subjectAckProtocol === undefined
+              ? {}
+              : { subjectAckProtocol: searchConfig.subjectAckProtocol }),
             ...(creditSearch === undefined ? {} : { creditSearch }),
           });
         } catch (error) {

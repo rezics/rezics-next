@@ -165,8 +165,22 @@ export async function beginPublicFilterCoverageBaseline(
     const registration = await lockRegistration(client, binding);
     await client.query(
       `INSERT INTO search.public_filter_coverage_preparation
-         (partition_no,registration,bootstrap,definition,consumer,generation,root,population_protocol)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,1) ON CONFLICT DO NOTHING`,
+         (partition_no,registration,bootstrap,definition,consumer,generation,root,population_protocol,ack_protocol)
+       SELECT $1,$2,$3,$4,$5,$6,$7,1,coalesce(j.ack_protocol,0)
+       FROM search.public_filter_registration r
+       JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(r.partition_no,$3)
+       JOIN search.public_filter_target t
+         ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
+       LEFT JOIN search.generation_publication j
+         ON (j.partition_no,j.physical_target,j.consumer)=(r.partition_no,r.physical_target,
+            semantic.public_filter_native_json(r.consumer::jsonb))
+         AND j.ack_protocol=1 AND j.family='subjects' AND j.source_home=0
+         AND j.pass=1 AND j.fence IS NULL AND j.bootstrap IS NULL
+         AND j.native_incarnation=t.incarnation AND j.binding->>'readDefinition'=b.read_definition::text
+         AND b.snapshot_kind='prepared' AND b.state='capturing' AND b.coverage_generation IS NULL
+         AND semantic.public_filter_native_json(b.consumer::jsonb)=j.consumer
+       WHERE (r.partition_no,r.id)=($1,$2)
+       ON CONFLICT DO NOTHING`,
       [
         binding.registration.partition,
         binding.registration.id,
