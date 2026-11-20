@@ -1793,6 +1793,7 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
     initializeManagers(fixture);
     const message = await sendUnavailableOriginals(fixture);
     const before = publicationCounts(fixture);
+    const receiptFile = join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`);
     const source = join(fixture.stateDirectory, 'legacy-crash.ts');
     const dbModule = pathToFileURL(join(import.meta.dir, 'db.ts')).href;
     const controllerModule = pathToFileURL(join(import.meta.dir, 'publication.ts')).href;
@@ -1812,18 +1813,18 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
         operationsManager: OPERATIONS,
       })};
       const publicationController = new PublicationController({ ...options, db, now: () => ${fixture.now} });
-      if (process.env.LEGACY_CRASH === 'before') process.exit(85);
       const transaction = db.transaction.bind(db);
       db.transaction = (action) => {
-        const original = transaction(action);
-        const immediate = original.immediate.bind(original);
-        original.immediate = (...args) => { immediate(...args); process.exit(86); };
-        return original;
+        const original = transaction(() => {
+          action();
+          if (process.env.LEGACY_CRASH === 'before') process.exit(85);
+        });
+        return { immediate() { original.immediate(); process.exit(86); } };
       };
-      await run(['publication', 'legacy-receive', ${JSON.stringify(String(message))}], () => ({
+      process.exit(await run(['publication', 'legacy-receive', ${JSON.stringify(String(message))}], () => ({
         ...options, db, publicationController,
         settings: { integration: { operationsManager: 'control-plane' } }
-      }));
+      })));
     `,
     );
     for (const [when, exit] of [
@@ -1839,9 +1840,11 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
       delete env.GOAL_TASK_ID;
       delete env.GOAL_ATTEMPT;
       delete env.CLAUDE_CODE_SESSION_ID;
-      const child = Bun.spawn([process.execPath, source], { env, stdout: 'pipe', stderr: 'pipe' });
-      expect(await child.exited).toBe(exit);
+      const child = Bun.spawn([process.execPath, source], { env, stdout: 'ignore', stderr: 'pipe' });
+      const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+      expect(code, stderr).toBe(exit);
       expect(legacyEntries(fixture)).toHaveLength(when === 'before' ? 0 : 8);
+      expect(existsSync(receiptFile)).toBe(false);
       expect(publicationCounts(fixture)).toEqual(before);
     }
     const committed = stateRow<{ receipt: string }>(
@@ -1855,9 +1858,7 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
     expect(
       stateRow<{ count: number }>(fixture, 'SELECT COUNT(*) AS count FROM publication_legacy_requests')!.count,
     ).toBe(1);
-    expect(readFileSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`), 'utf8')).toBe(
-      committed,
-    );
+    expect(readFileSync(receiptFile, 'utf8')).toBe(committed);
     expect(publicationCounts(fixture)).toEqual(before);
   } finally {
     fixture.temporary.close();

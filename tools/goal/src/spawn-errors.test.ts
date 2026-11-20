@@ -74,12 +74,13 @@ test('the release snapshot preserves Git spawn failures and refuses a missing ma
   }
 });
 
-test('prepared release merges preserve the exact merge-process spawn error', () => {
+test('prepared release merges preserve the exact merge-process spawn error', async () => {
   const repo = repository();
   try {
     const source = repo.branch('source', 'source.txt');
     const target = repo.branch('target', 'target.txt');
     const sourceCommit = mergeGit(source.worktree, 'rev-parse', 'HEAD');
+    const refs = mergeGit(repo.main, 'show-ref', '--heads');
     const train = new MergeTrain({
       mainCheckout: repo.main,
       stateDirectory: join(repo.path, 'state'),
@@ -106,10 +107,10 @@ test('prepared release merges preserve the exact merge-process spawn error', () 
         targetBranch: string,
         targetHead: string,
         logPath: string,
-      ): { commit?: string; conflicts?: string[]; cause?: string };
+      ): Promise<{ commit?: string; conflicts?: string[]; cause?: string }>;
     };
 
-    const result = trainWithReleaseMerge.mergeControlPlaneCandidate(
+    const result = await trainWithReleaseMerge.mergeControlPlaneCandidate(
       sourceCommit,
       'source',
       'target',
@@ -119,6 +120,7 @@ test('prepared release merges preserve the exact merge-process spawn error', () 
 
     expect(result.commit).toBeUndefined();
     expect(result.cause).toContain('spawn ENOENT: git merge');
+    expect(mergeGit(repo.main, 'show-ref', '--heads')).toBe(refs);
   } finally {
     repo.close();
   }

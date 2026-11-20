@@ -1,4 +1,4 @@
-import { processIdentity } from './process.ts';
+import { inspectProcessIdentity, processIdentity, waitForProcess } from './process.ts';
 import { installService, RESIDENT_CODE_UNITS, SERVICE_UNITS } from './service.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
@@ -521,6 +521,7 @@ await sync({
   const child = spawn(process.execPath, [runner], { stdio: 'ignore', detached: true });
   expect(child.pid).toBeGreaterThan(0);
   expect(child.pid).not.toBe(process.pid);
+  const exited = new Promise<void>((done) => child.once('exit', () => done()));
   const stopRunner = () => {
     try {
       if (child.pid) process.kill(-child.pid, 'SIGKILL');
@@ -540,16 +541,16 @@ await sync({
     await Bun.sleep(50);
   }
   expect(pid).toBeGreaterThan(0);
+  const owned = inspectProcessIdentity(pid);
+  expect(owned).not.toBeNull();
+  expect(owned?.group).toBe(pid);
   process.kill(child.pid!, 'SIGTERM');
-  await new Promise<void>((done) => child.once('exit', () => done()));
+  await exited;
   expect(readFileSync(logFile, 'utf8')).toContain('SIGTERM; no ref moved by this step');
   expect(git(f.repo, 'rev-parse', 'main')).toBe(f.main);
-  let alive = false;
-  try {
-    process.kill(pid, 0);
-    alive = true;
-  } catch {}
-  expect(alive).toBe(false);
+  // The check can exit before the host reaps its PID.
+  await waitForProcess(owned!, AbortSignal.timeout(2_000));
+  expect(inspectProcessIdentity(pid)).not.toEqual(owned);
 });
 
 test('an included root path is synced too', async () => {
