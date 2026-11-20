@@ -465,10 +465,11 @@ export async function enrollNewAccountDiscoveryHomes(
            ), account AS MATERIALIZED (
              SELECT a.partition_no,a.revision,a.claim_revision
              FROM access.account_discovery_population a JOIN owner USING(partition_no)
-             WHERE owner.write_state='active' ORDER BY a.partition_no FOR UPDATE OF a
+             WHERE a.partition_no=ANY($1::integer[]) AND owner.write_state='active'
+             ORDER BY a.partition_no FOR UPDATE OF a
            ), source AS MATERIALIZED (
              SELECT s.partition_no,s.position FROM semantic.public_filter_privacy_head s JOIN account USING(partition_no)
-             ORDER BY s.partition_no FOR UPDATE OF s
+             WHERE s.partition_no=ANY($1::integer[]) ORDER BY s.partition_no FOR UPDATE OF s
            )
            SELECT owner.partition_no AS partition,owner.epoch,owner.position::text AS creation,
              owner.write_state AS state,account.revision::text AS account,account.claim_revision::text AS claim,
@@ -489,16 +490,25 @@ export async function enrollNewAccountDiscoveryHomes(
         }
         // Read carries in a fresh snapshot after taking the writer locks. A
         // retained pin or receipt leaves the whole group to the single-home path.
+        // Limit each lookup so PostgreSQL keeps the carry reads as per-home probes.
         const carries = await client.query<{ partition: number; enqueue: string; pinned: boolean }>(
           `/* semantic.native-keyed:${5 * count}:${5 * count}:1 */
            WITH carries AS MATERIALIZED (
              SELECT h.partition,coalesce(p.enqueue_revision::text,'0') AS enqueue,
                (e.bootstrap IS NOT NULL OR c.consumer IS NOT NULL) AS retained
              FROM unnest($1::integer[]) h(partition)
-             LEFT JOIN semantic.public_filter_privacy_pending p
-               ON (p.partition_no,p.input_key)=(h.partition,'["domain","accounts"]')
-             LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(h.partition,$2)
-             LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(h.partition,$3)
+             LEFT JOIN LATERAL (
+               SELECT enqueue_revision FROM semantic.public_filter_privacy_pending
+               WHERE (partition_no,input_key)=(h.partition,'["domain","accounts"]') LIMIT 1
+             ) p ON true
+             LEFT JOIN LATERAL (
+               SELECT bootstrap FROM semantic.public_filter_home_enrollment
+               WHERE (partition_no,bootstrap)=(h.partition,$2) LIMIT 1
+             ) e ON true
+             LEFT JOIN LATERAL (
+               SELECT consumer FROM core.consumer_checkpoint
+               WHERE (partition_no,consumer)=(h.partition,$3) LIMIT 1
+             ) c ON true
            ), pins AS (
              INSERT INTO core.consumer_checkpoint(partition_no,consumer)
              SELECT partition,$3 FROM carries WHERE NOT EXISTS (SELECT 1 FROM carries WHERE retained)
