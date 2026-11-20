@@ -338,6 +338,19 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
       });
     },
 
+    findIssuedWork(owner: MarketWorkOwner, id: string, claimId: string): Promise<MarketWork | null> {
+      if (!validOwner(owner) || !workKey.test(id) || !uuid.test(claimId)) return Promise.resolve(null);
+      return database.read(async (client) => {
+        const { rows } = await client.query<Payload>(
+          `SELECT payload::text FROM economy.market_work
+           WHERE book_id = $1 AND instruction_id = $2 AND owner_kind = $3 AND owner_id = $4
+             AND status = 'pending' AND claim_id = $5 AND available_at > statement_timestamp()`,
+          [bookId, id, owner.kind, owner.id, claimId],
+        );
+        return rows[0] ? decodeMarketRecord<MarketWork>(rows[0].payload) : null;
+      });
+    },
+
     async acknowledge(
       owner: MarketWorkOwner,
       id: string,

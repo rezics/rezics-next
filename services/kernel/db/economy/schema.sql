@@ -325,6 +325,40 @@ CREATE TABLE economy.journal (
 
 
 --
+-- Name: market_funds_receipt; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_funds_receipt (
+    book_id text NOT NULL,
+    instruction_id text NOT NULL,
+    trade_id text NOT NULL,
+    work jsonb NOT NULL,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT market_funds_receipt_work_check CHECK ((jsonb_typeof(work) = 'object'::text))
+);
+
+
+--
+-- Name: market_funds_trade; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_funds_trade (
+    book_id text NOT NULL,
+    trade_id text NOT NULL,
+    binding jsonb NOT NULL,
+    escrow_id uuid NOT NULL,
+    funded boolean NOT NULL,
+    phase text NOT NULL,
+    decided_at bigint,
+    CONSTRAINT market_funds_trade_binding_check CHECK ((jsonb_typeof(binding) = 'object'::text)),
+    CONSTRAINT market_funds_trade_check CHECK (((phase = 'prepared'::text) = (decided_at IS NULL))),
+    CONSTRAINT market_funds_trade_check1 CHECK ((funded OR (phase = ANY (ARRAY['fenced'::text, 'released'::text])))),
+    CONSTRAINT market_funds_trade_decided_at_check CHECK ((decided_at >= 0)),
+    CONSTRAINT market_funds_trade_phase_check CHECK ((phase = ANY (ARRAY['prepared'::text, 'fenced'::text, 'released'::text, 'escrowed'::text, 'settled'::text])))
+);
+
+
+--
 -- Name: market_item; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -783,6 +817,30 @@ ALTER TABLE ONLY economy.journal
 
 
 --
+-- Name: market_funds_receipt market_funds_receipt_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_funds_receipt
+    ADD CONSTRAINT market_funds_receipt_pkey PRIMARY KEY (book_id, instruction_id);
+
+
+--
+-- Name: market_funds_trade market_funds_trade_book_id_escrow_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_funds_trade
+    ADD CONSTRAINT market_funds_trade_book_id_escrow_id_key UNIQUE (book_id, escrow_id);
+
+
+--
+-- Name: market_funds_trade market_funds_trade_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_funds_trade
+    ADD CONSTRAINT market_funds_trade_pkey PRIMARY KEY (book_id, trade_id);
+
+
+--
 -- Name: market_item_listing market_item_listing_home_id_item_id_reservation_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1060,6 +1118,13 @@ CREATE TRIGGER journal_immutable BEFORE DELETE OR UPDATE ON economy.journal FOR 
 
 
 --
+-- Name: market_funds_receipt market_funds_receipt_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER market_funds_receipt_immutable BEFORE DELETE OR UPDATE ON economy.market_funds_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
 -- Name: market_item_receipt market_item_receipt_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -1242,6 +1307,14 @@ ALTER TABLE ONLY economy.journal
 
 ALTER TABLE ONLY economy.journal
     ADD CONSTRAINT journal_book_id_origin_id_namespace_operation_id_fkey FOREIGN KEY (book_id, origin_id, namespace, operation_id) REFERENCES economy.command_receipt(book_id, origin_id, namespace, operation_id);
+
+
+--
+-- Name: market_funds_receipt market_funds_receipt_book_id_trade_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_funds_receipt
+    ADD CONSTRAINT market_funds_receipt_book_id_trade_id_fkey FOREIGN KEY (book_id, trade_id) REFERENCES economy.market_funds_trade(book_id, trade_id);
 
 
 --
