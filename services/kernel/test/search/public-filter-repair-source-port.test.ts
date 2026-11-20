@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { verifyPublicFilterRepairSourcePage } from '../../src/search/public-filter-custody-source.ts';
+import { decode, encode, tree } from '../../src/search/public-filter-codec.ts';
+import { encodeRepairIntent, encodeStagedRepairWork } from '../../src/search/public-filter-repair-encoding.ts';
 import type {
   NativeSourceRepairLocator,
   NativeSourceRepairStepRead,
@@ -7,7 +9,10 @@ import type {
   RetainedRepairPage,
   RetainedSourceRepair,
 } from '../../src/search/public-filter-custody-contract.ts';
-import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
+import type {
+  PublicFilterCost,
+  PublicFilterProjectionRecord,
+} from '../../src/semantic/public-filter-source-contract.ts';
 import type { PublicSourceRepair } from '../../src/semantic/public-filter-source-binding.ts';
 
 // Isolated port-composition tests. These values never establish native Source/engine proof.
@@ -146,10 +151,14 @@ test('empty final closure requires the exact owner step and charges its actual w
 
 test('ordered original item locators and actual verified repair bodies are required on replay', async () => {
   const expected = page([repair('first'), repair('second')]);
+  const legacy = decode<RetainedRepairPage>(encode(expected));
+  const legacyWork = { repairPage: { repairs: legacy.repairs, next: 1 }, repair: legacy.repairs[1]! };
+  const oldWork = decode<typeof legacyWork>(JSON.stringify(tree(legacyWork, 'value')));
+  expect(decode(encodeStagedRepairWork(oldWork))).toEqual(legacyWork);
   const trace: string[] = [];
   const costs: PublicFilterCost[] = [];
   expect(
-    await verifyPublicFilterRepairSourcePage(port(expected, trace), request, expected, context(), (next) => {
+    await verifyPublicFilterRepairSourcePage(port(expected, trace), request, legacy, context(), (next) => {
       if (next) costs.push(next);
     }),
   ).toEqual(expected);
@@ -179,6 +188,60 @@ test('ordered original item locators and actual verified repair bodies are requi
   await expect(
     verifyPublicFilterRepairSourcePage(port(expected), request, missing, context(), () => {}),
   ).rejects.toThrow('owner_unavailable');
+});
+
+test('33 ordered repair items share one full projection in the intent and in-flight work', async () => {
+  const repairs = Array.from({ length: 33 }, (_, index) => repair(index.toString(16).padStart(64, '0')));
+  const { source, projection: original } = repairs[0]!;
+  if (original.status !== 'complete') throw new Error('Expected complete projection');
+  const records = repairs.map(({ locator }, ordinal): PublicFilterProjectionRecord => ({
+    subject: source.subject,
+    terminal: source.terminal,
+    slot: locator.slot,
+    candidate: locator.candidate,
+    revision: source.revision,
+    release: source.currentRelease,
+    ordinal,
+    rank: 'normal',
+    source: null,
+    statement: {
+      id: locator.candidate,
+      rank: 'normal',
+      property: { id: locator.property, data_type: 'string' },
+      value: { type: 'value', content: 'é'.repeat(2100) },
+      qualifiers: [],
+      references: [],
+      rezics: { release: source.currentRelease, revision: source.revision },
+    },
+    indexed: ordinal < 17 ? null : { property: locator.property, value: locator.candidate },
+    dependencies: locator.dependencies,
+  }));
+  const projection = {
+    ...original,
+    records,
+    repairLocators: repairs.map((item) => item.locator),
+    requiredHeads: Array.from({ length: 38 }, (_, partition) => ({ partition, epoch: 1, position: 3311n })),
+  };
+  const expected = page(repairs.map((item) => ({ ...item, projection })));
+  const intent = encodeRepairIntent(expected);
+  const replay = decode<RetainedRepairPage>(intent);
+  const work = {
+    repairPage: { repairs: replay.repairs, next: 16 },
+    repair: structuredClone(replay.repairs[16]!),
+    records,
+  };
+  const staged = encodeStagedRepairWork(work);
+  expect(Buffer.byteLength(encode(expected))).toBeGreaterThan(4_194_304);
+  expect(Buffer.byteLength(intent)).toBeLessThan(1_048_576);
+  expect(Buffer.byteLength(staged)).toBeLessThan(1_048_576);
+  expect(await verifyPublicFilterRepairSourcePage(port(expected), request, replay, context(), () => {})).toEqual(
+    expected,
+  );
+  expect(encodeRepairIntent(replay)).toBe(intent);
+  const resumed = decode<typeof work>(staged);
+  expect(resumed).toEqual(work);
+  expect(resumed.repair.projection).toBe(resumed.repairPage.repairs[0]!.projection);
+  expect(encodeStagedRepairWork(resumed)).toBe(staged);
 });
 
 test('original repair body survives different replay accounting while actual verification work is charged', async () => {
