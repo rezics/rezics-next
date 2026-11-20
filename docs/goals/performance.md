@@ -91,6 +91,14 @@ derived before implementation; use the prescribed Auth scales above where applic
 not only calls, and observe projection or worker work within its operation context. Report independently owned
 background work separately.
 
+On the assigned performance host, the initial capacity ranges are 2,000–15,000 indexed database reads/s,
+500–5,000 durable database commits/s, and 1,000–8,000 successful mixed API requests/s. Start at the lower end
+of each range and progress toward 5,000–20,000 mixed API requests/s. Pin the hardware, dataset, request mix, and
+durability. Record successful work, missed arrivals, p95/p99 latency, retries, and indexing freshness at a fixed
+arrival rate. Use [pgbench](https://www.postgresql.org/docs/18/pgbench.html) for the database controls and a
+[fixed-arrival API workload](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/constant-arrival-rate/)
+with the ordinary authentication and search workers active.
+
 Root, module and native evidence retain separate meaning. Root SQL acceptance uses the supported Reylo types through
 the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
