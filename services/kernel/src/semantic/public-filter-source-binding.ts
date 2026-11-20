@@ -624,6 +624,7 @@ type NativePreparationInput =
         consumer: PublicFilterConsumer;
         source: PublicFilterSourceDefinition['source'];
         registration: { partition: number; id: string };
+        capturingOnly?: true;
       }>;
     }>;
 export type NativePublicFilterPreparation =
@@ -2612,6 +2613,7 @@ export function createNativePublicFilterSourceBinding(
     context: PublicFilterConsumerContext,
     existing?: Awaited<ReturnType<typeof loadBootstrap>> & {
       enrollmentRegistration?: { partition: number; id: string };
+      receiptPageOnly?: true;
     },
     inputLimit = preparationInputLimit,
     usePublishedCoverage = false,
@@ -3075,7 +3077,8 @@ export function createNativePublicFilterSourceBinding(
         return {
           status: 'preparing' as const,
           bootstrap: begun.bootstrap,
-          enrollmentAdvanced: keyPageAdvanced || begun.row.account_after > cut.row.account_after,
+          enrollmentAdvanced:
+            begun.row.coverage_after > cut.row.coverage_after || (!existing?.receiptPageOnly && keyPageAdvanced),
           cost,
         };
       if (begun.row.state !== 'begun' || !begun.row.coverage_sealed || begun.row.coverage_after !== 4096)
@@ -4447,7 +4450,9 @@ export function createNativePublicFilterSourceBinding(
       const expected = input.subjectEnrollment;
       if (
         expected &&
-        (cut.row.coverage_publication !== null ||
+        ((expected.capturingOnly &&
+          (cut.row.state !== 'capturing' || cut.row.queried !== null || cut.row.publication_job !== null)) ||
+          cut.row.coverage_publication !== null ||
           cut.bootstrap.snapshot !== 'prepared' ||
           !('catalogueCoverage' in cut.definition.capture) ||
           cut.definition.capture.catalogueCoverage !== true ||
@@ -4485,7 +4490,11 @@ export function createNativePublicFilterSourceBinding(
       },
       context,
       input.subjectEnrollment
-        ? { ...retained.cut, enrollmentRegistration: input.subjectEnrollment.registration }
+        ? {
+            ...retained.cut,
+            enrollmentRegistration: input.subjectEnrollment.registration,
+            ...(input.subjectEnrollment.capturingOnly ? { receiptPageOnly: true } : {}),
+          }
         : retained.cut,
       (input.inputLimit ?? preparationInputLimit) - retained.cost.inputKeys,
     );

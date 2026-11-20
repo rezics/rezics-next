@@ -307,6 +307,19 @@ test('an unfenced engine page completes after exact inline replay of an advanced
     );
     expect(enrollment).toMatchObject({ state: 'capturing', opened_observation: false });
     expect(enrollment!.coverage_after).toBeGreaterThan(0);
+    const reconciliation = async () =>
+      (
+        await f.db.pool.query(
+          'SELECT revision,phase,home,after_route,after_id,pit,engine_after FROM search.generation_publication WHERE job=$1',
+          [job.job],
+        )
+      ).rows[0];
+    const retained = await reconciliation();
+    expect(await runtime.publication.step(job, readContext(), { enrollSource: true })).toMatchObject({
+      status: 'progress',
+      sourceAdvanced: true,
+    });
+    expect(await reconciliation()).toEqual(retained);
     expect(await subjectGenerations(search, prefix)).toMatchObject({ active: null });
     for (const id of [book, person]) await writer.write(partitionOf(routeOf(id)!), [id], BigInt(await position(id)));
     const publication = async () =>

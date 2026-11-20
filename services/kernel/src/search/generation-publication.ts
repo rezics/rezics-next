@@ -537,31 +537,53 @@ export function createSearchGenerationPublication(
     };
   }
 
+  function canEnrollSubject(job: Job) {
+    return (
+      !registry &&
+      job.family === 'subjects' &&
+      !job.fence &&
+      !job.fenced_pass &&
+      !job.observation &&
+      (job.phase === 'subject' || job.phase === 'engine' || job.phase === 'validate')
+    );
+  }
+
   async function continueSubjectEnrollment(
     job: Job,
     client: PoolClient,
     context: PublicFilterConsumerContext,
     meter: Meter,
+    capturingOnly = false,
   ) {
+    const inputs = capturingOnly ? 4 : 2;
+    const reserve =
+      capturingOnly && job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE;
     if (
       !nativeMeaning ||
       registry ||
       job.source_home !== 0 ||
       job.bootstrap ||
+      (capturingOnly && !hasPublicationGuard()) ||
       !advanceNativePublicFilterPreparation ||
-      meter.inputKeys + 2 >= PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
+      meter.inputKeys + inputs >= PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve
     )
       return null;
     guardAvailable();
-    meter.inputKeys += 2;
-    meter.dependencyPoints += 2;
+    meter.inputKeys += inputs;
+    meter.dependencyPoints += inputs;
     const { rows } = await client.query<{ id: string; bootstrap: string }>(
       `SELECT r.id,r.consumer_bootstrap AS bootstrap FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
        WHERE r.partition_no=0 AND r.physical_target=$1 AND md5(r.consumer)=md5($2) AND r.consumer=$2
          AND r.state='active' AND t.incarnation=$3 AND r.consumer_work IS NOT NULL
-         AND r.consumer_bootstrap IS NOT NULL LIMIT 2`,
-      [job.physical_target, encodePublicFilterNativeState(job.consumer), job.native_incarnation],
+         AND r.consumer_bootstrap IS NOT NULL
+         AND (NOT $4::boolean OR (
+           NOT EXISTS (SELECT FROM search.public_filter_observation o
+             WHERE (o.partition_no,o.registration)=(r.partition_no,r.id) AND o.state<>'closed')
+           AND NOT EXISTS (SELECT FROM search.identity_writer_gate g
+             WHERE (g.partition_no,g.physical_target)=(0,r.physical_target) AND g.publication_fence IS NOT NULL)
+         )) LIMIT 2`,
+      [job.physical_target, encodePublicFilterNativeState(job.consumer), job.native_incarnation, capturingOnly],
     );
     if (rows.length !== 1) return null;
     const { id, bootstrap } = rows[0]!;
@@ -569,17 +591,19 @@ export function createSearchGenerationPublication(
       binding,
       {
         bootstrap,
-        inputLimit: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE - meter.inputKeys,
+        inputLimit: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys,
         subjectEnrollment: {
           consumer: job.consumer,
           source: job.binding.source,
           registration: { partition: 0, id },
+          ...(capturingOnly ? { capturingOnly: true } : {}),
         },
       },
       context,
     );
     if (!result) return null;
     add(meter, result.cost);
+    if (capturingOnly) return result.status === 'preparing' && result.enrollmentAdvanced;
     if (
       (result.status === 'begun' && !result.enrollmentAdvanced) ||
       ('reason' in result && (result.reason === 'binding_mismatch' || result.reason === 'observation_lost'))
@@ -613,14 +637,16 @@ export function createSearchGenerationPublication(
     job: job.job,
     fence: job.fence!,
   });
+  function hasPublicationGuard() {
+    return (
+      typeof writerGuard.fencePublication === 'function' &&
+      typeof writerGuard.drainPublication === 'function' &&
+      typeof writerGuard.adoptPublication === 'function' &&
+      typeof writerGuard.releasePublication === 'function'
+    );
+  }
   function guardAvailable() {
-    if (
-      typeof writerGuard.fencePublication !== 'function' ||
-      typeof writerGuard.drainPublication !== 'function' ||
-      typeof writerGuard.adoptPublication !== 'function' ||
-      typeof writerGuard.releasePublication !== 'function'
-    )
-      throw new Pending('source_pending');
+    if (!hasPublicationGuard()) throw new Pending('source_pending');
   }
   async function held(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     guardAvailable();
@@ -681,7 +707,7 @@ export function createSearchGenerationPublication(
     input: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
     meter: Meter,
-    phase: 'step' | 'activate',
+    phase: 'step' | 'step-enroll' | 'activate',
     work: (
       job: Job,
       client: PoolClient,
@@ -743,8 +769,10 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              const earlyEnrollment =
+                phase === 'step-enroll' && canEnrollSubject(job) && !job.bootstrap && !job.queried && !job.execution;
               const physical =
-                phase === 'activate' && target.family === 'subjects' && job.phase !== 'active'
+                (phase === 'activate' || earlyEnrollment) && target.family === 'subjects' && job.phase !== 'active'
                   ? await native(job.consumer, context)
                   : undefined;
               // The native inventory already proves absence during cold preparation. An existing
@@ -788,6 +816,15 @@ export function createSearchGenerationPublication(
                   }
                   throw error;
                 }
+              }
+              // Preserve the reconciliation cursor while the original cold cut
+              // commits contiguous receipt pages. Sealing resumes the ordinary pass.
+              if (
+                earlyEnrollment &&
+                physical?.activeSubjectGeneration === null &&
+                (await continueSubjectEnrollment(job, client, context, meter, true))
+              ) {
+                return work(job, client, current, capture, true);
               }
               return await work(job, client, current, capture);
             } finally {
@@ -1622,16 +1659,11 @@ export function createSearchGenerationPublication(
       });
     },
     step(input, context, options) {
+      const phase = options?.enrollSource === true ? 'step-enroll' : 'step';
       return run(context, (meter) =>
-        locked(input, context, meter, 'step', async (job, client, _current, capture) => {
-          const mayEnroll =
-            options?.enrollSource === true &&
-            !registry &&
-            job.family === 'subjects' &&
-            !job.fence &&
-            !job.fenced_pass &&
-            !job.observation &&
-            (job.phase === 'subject' || job.phase === 'engine' || job.phase === 'validate');
+        locked(input, context, meter, phase, async (job, client, _current, capture, enrolled) => {
+          if (enrolled) return { status: 'progress' as const, job: reference(job), sourceAdvanced: true, cost: meter };
+          const mayEnroll = phase === 'step-enroll' && canEnrollSubject(job);
           let waiting: Pending | undefined;
           let sourceAdvanced = false;
           try {
