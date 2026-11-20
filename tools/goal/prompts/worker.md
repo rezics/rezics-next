@@ -6,6 +6,7 @@ Send the manager independent gaps with the outcome, evidence, first edit and dep
 money/authorization rules.
 Report failures already on base and fix regressions you introduced. For a tool or infrastructure failure persisting after
 {{task.toolFailureRetries}} retries, start the `tool` blocker with the exact first error line.
+Keep the final summary within {{policy.guidance.summaryWords}} words and blocker detail within {{policy.guidance.blockerWords}} words.
 {{task.frozenFilesLine}}
 
 {{task.moduleMap}}

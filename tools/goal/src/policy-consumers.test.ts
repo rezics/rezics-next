@@ -125,9 +125,10 @@ test('worker prompts and verification guidance reflect caller policy without cha
   const task = { worktree: '/missing', branch: 'worker/test', brief: { ...brief(), goal: 'control-plane' } } as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/main', undefined, '/state', policy);
   expect(prompt).toMatch(/persisting after\s+4 retries/);
-  expect(workerPrompt(task, undefined, undefined, [], '/main', undefined, '/state')).toMatch(
-    /persisting after\s+two retries/,
-  );
+  expect(prompt).toContain('Keep the final summary within 40 words and blocker detail within 30 words.');
+  const defaultPrompt = workerPrompt(task, undefined, undefined, [], '/main', undefined, '/state');
+  expect(defaultPrompt).toMatch(/persisting after\s+two retries/);
+  expect(defaultPrompt).toContain('Keep the final summary within 120 words and blocker detail within 80 words.');
   const protocol = workerCheckProtocol(task.worktree, task.brief, '/state', undefined, undefined, policy);
   expect(prompt).toContain(protocol);
   expect(protocol).toContain('at least 5 seconds (Codex: `write_stdin`, `yield_time_ms: 5000`)');
