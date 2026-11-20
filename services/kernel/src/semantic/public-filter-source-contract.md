@@ -889,7 +889,11 @@ never call Search's settlement reader.
 
 The verifier consumes the existing original-page readers in `public-filter-projection.ts`:
 `readOriginalPublicFilterProjectionPage` retains the actual page on production, and
-`readRetainedPublicFilterProjectionPage` re-reads that same page for replay and verification. The existing
+`readRetainedPublicFilterProjectionPage` re-reads that same page for replay and verification. A complete
+projection page rechecks the privacy heads bound by its original digest, including the original,
+terminal and dependency homes, against their active owners. Its proof survives replacement of the
+mutable projection build by another consumer. A progress page still requires its original build to
+resume the projection. Both paths retain the independent Source command and revision checks. The existing
 `public-filter-creation-window.ts` exports `readPublicFilterCreationWindow` and
 `readPublicFilterCreationEvent`; they resolve the enrolled bootstrap's original creation checkpoint and
 bounded outbox interval, then verify each actual event position and event-group continuation. These are
