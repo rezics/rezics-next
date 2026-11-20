@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';
+import { DBOS_SCHEMA, enqueueWorkIntent, WORK_APPLICATION, type WorkClient } from '../work/client.ts';
+import { TERMINAL_WORKFLOW_STATUSES } from '../work/contract/index.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 
@@ -213,7 +214,37 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
             THEN 'discovery' ELSE kind END AS kind`,
           [prefix, Date.now()],
         );
-        for (const row of rows.rows) await enqueueWorkIntent(work, client, intent(row.id, row.revision, row.kind));
+        if (rows.rows.length === 0) return;
+        const deliveries = rows.rows.map((row) => ({ row, delivery: intent(row.id, row.revision, row.kind) }));
+        const existing = await client.query<{ workflow_uuid: string; terminal: boolean }>(
+          `SELECT workflow_uuid, status = ANY($4::text[]) AS terminal
+           FROM ${DBOS_SCHEMA}.workflow_status
+           WHERE workflow_uuid = ANY($1::text[]) AND name = $2 AND application_name = $3
+           ORDER BY workflow_uuid FOR SHARE`,
+          [
+            deliveries.map(({ delivery }) => delivery.workflowId),
+            PUBLIC_PREPARATION_WORKFLOW,
+            WORK_APPLICATION,
+            TERMINAL_WORKFLOW_STATUSES,
+          ],
+        );
+        const terminalById = new Map(existing.rows.map((workflow) => [workflow.workflow_uuid, workflow.terminal]));
+        for (const { row, delivery } of deliveries) {
+          const terminal = terminalById.get(delivery.workflowId);
+          if (terminal === undefined) {
+            await enqueueWorkIntent(work, client, delivery);
+          } else if (terminal) {
+            // A workflow can finish before claiming (for example, during shutdown).
+            // Fence that delivery and enqueue its replacement with the same locator in one commit.
+            const next = await client.query<{ revision: string }>(
+              `UPDATE search.public_preparation SET revision = revision + 1
+               WHERE partition_no = 0 AND prefix = $1 AND id = $2 AND revision = $3
+               RETURNING revision::text`,
+              [prefix, row.id, row.revision],
+            );
+            await enqueueWorkIntent(work, client, intent(row.id, next.rows[0]!.revision, row.kind));
+          }
+        }
       });
     },
   };
