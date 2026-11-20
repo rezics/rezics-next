@@ -30,7 +30,15 @@ export function registerSubjectPagePublicationWork(context: WorkContext, publica
             workflowName: WORKFLOW,
             workflowID: randomUUID(),
           });
-          delay = (await handle.getResult()) ? 100 : 1;
+          // A maintenance workflow can still be queued when its worker starts draining.
+          // Bound the actual SDK poll so shutdown can release this observer and leave the job durable.
+          while (!stopped) {
+            const done = await DBOS.getResult<boolean>(handle.workflowID, { timeoutSeconds: 1 });
+            if (done !== null) {
+              delay = done ? 100 : 1;
+              break;
+            }
+          }
         } catch (error) {
           console.error('Subject page publication repair failed', error);
           delay = 1000;

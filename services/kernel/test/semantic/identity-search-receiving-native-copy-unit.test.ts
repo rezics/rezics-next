@@ -114,8 +114,8 @@ test('both complete copy origins survive the same physical account/role beyond e
   ]);
   expect(p.reads.filter((read) => read.kind === 'copy' && read.transaction === original)).toHaveLength(18);
   expect(p.reads.filter((read) => read.kind === 'copy' && read.transaction === native)).toHaveLength(18);
-  // 36 complete copied/carried roles: each 10 rows/points, 9 statements,
-  // 3072 deferred bytes + 1024 planner/identity bytes, 5 empty seeks. Base 6/6/6/2048/3,
+  // 36 complete copied/carried roles: each 11 rows, 13 points, 10 statements,
+  // 3328 deferred bytes + 1024 planner/identity bytes, 8 empty seeks. Base 6/6/6/2048/3,
   // distinct native probes 3/3/3/256/3, control/identity bytes 1536. SQL is separate.
   const total: { -readonly [Axis in keyof WorkDimensions]: number } = {
     candidateKeys: 0,
@@ -131,13 +131,13 @@ test('both complete copy origins survive the same physical account/role beyond e
     for (const axis of Object.keys(total) as (keyof WorkDimensions)[]) total[axis] += cost[axis];
   expect(total).toEqual({
     candidateKeys: 0,
-    nativeRows: 369,
+    nativeRows: 405,
     identityMetadataRows: 0,
-    nativePoints: 369,
+    nativePoints: 477,
     witnessKeys: 0,
-    statements: 333,
-    bytes: 151296,
-    emptySeeks: 186,
+    statements: 369,
+    bytes: 160512,
+    emptySeeks: 294,
   });
 });
 
@@ -160,7 +160,7 @@ test('a shared original/native transaction traverses and funds its copy prefix o
     ],
   ]);
   expect(p.reads.filter((read) => read.kind === 'copy')).toHaveLength(11);
-  expect(p.costs.filter((cost) => cost.nativePoints === 10)).toHaveLength(10);
+  expect(p.costs.filter((cost) => cost.nativePoints === 13)).toHaveLength(10);
 });
 
 test('a native copy reservation refusal keeps original charges and cannot arm the event', async () => {
@@ -175,10 +175,10 @@ test('a native copy reservation refusal keeps original charges and cannot arm th
   const refusal = Object.assign(new Error('Native copy work refused'), { code: 'identity_epoch_unavailable' });
   await expect(
     p.run((cost) => {
-      if (cost.nativePoints === 10 && admittedRoles++ === 17) throw refusal;
+      if (cost.nativePoints === 13 && admittedRoles++ === 17) throw refusal;
     }),
   ).rejects.toBe(refusal);
   expect(p.arms).toEqual([]);
-  expect(p.costs.filter((cost) => cost.nativePoints === 10)).toHaveLength(17);
+  expect(p.costs.filter((cost) => cost.nativePoints === 13)).toHaveLength(17);
   expect(p.reads.at(-1)).toEqual({ kind: 'copy', transaction: native });
 });

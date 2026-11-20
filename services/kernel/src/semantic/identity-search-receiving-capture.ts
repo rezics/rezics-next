@@ -73,7 +73,8 @@ export const searchReceivingCaptureStatementCosts = Object.freeze(
 type OriginalRole = Readonly<{ account_id: string; role: string | null }>;
 type Basis = Readonly<{ locators: number; bytes: number }>;
 const fixed = dimensions(6, 6, 6, 2048, 3);
-const role = dimensions(10, 10, 9, 3072, 5);
+// An inherited role also resolves one original position through at most three indexed native records.
+const role = dimensions(11, 13, 10, 3328, 8);
 // Only a distinct native origin adds another copy EOF, source EOF and write-basis lookup.
 // The planner's actually dispatched lookups are independently instrumented.
 const nativeOrigin = dimensions(3, 3, 3, 256, 3);

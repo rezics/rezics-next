@@ -1132,7 +1132,7 @@ BEGIN
     RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
    END IF;
    copy_identity:=encode(sha256(convert_to(copy_identity||'|copy|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
-   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,CASE WHEN source_tx=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,source_tx) END);
    previous_account:=r.account_id; previous_role:=r.role;
   END LOOP;
  END LOOP;
@@ -1157,7 +1157,7 @@ BEGIN
     RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
    END IF;
    source_identity:=encode(sha256(convert_to(source_identity||'|source|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
-   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,CASE WHEN source_tx=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,source_tx) END);
    previous_account:=r.account_id; previous_role:=r.role;
   END LOOP;
  END LOOP;
@@ -1215,15 +1215,16 @@ CREATE FUNCTION semantic.capture_erasure_roles_unfunded(p_home integer, p_store 
     LANGUAGE plpgsql
     AS $_$
 DECLARE b editorial.write_basis; provenance_key bigint; r record; native_position bigint; acting_human uuid;
+ native_tx uuid:=nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid;
 BEGIN
  SELECT position INTO native_position FROM core.partition WHERE partition_no=p_home;
  FOR r IN SELECT account_id,role FROM semantic.erasure_copy_role
    WHERE partition_no=p_home AND store=p_store AND record_key=p_key AND transaction_id=p_tx LOOP
-  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,p_tx,native_position);
+  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,p_tx,CASE WHEN p_tx=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,p_tx) END);
  END LOOP;
  FOR r IN SELECT transaction_id,account_id,role FROM semantic.erasure_source_role
    WHERE partition_no=p_home AND transaction_id IN (p_tx,nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid) LOOP
-  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,r.transaction_id,native_position);
+  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,r.transaction_id,CASE WHEN r.transaction_id=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,r.transaction_id) END);
  END LOOP;
  SELECT * INTO b FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx;
  IF NOT FOUND THEN RETURN; END IF;
@@ -2622,6 +2623,27 @@ CREATE FUNCTION semantic.erasure_mutation_allowed(p_store text, p_route integer,
  WHERE l.partition_no=p_route/16 AND l.account_id=nullif(current_setting('semantic.erasure_account',true),'')::uuid
  AND l.store=p_store AND l.record_key=p_key AND l.state='pending' AND h.state='local')
 $$;
+
+
+--
+-- Name: erasure_original_role_position(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.erasure_original_role_position(p_home integer, p_tx uuid) RETURNS bigint
+    LANGUAGE plpgsql STABLE STRICT
+    AS $$
+DECLARE original_position bigint;
+BEGIN
+ SELECT coalesce(
+   (SELECT position FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.erasure_source_commit WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.identity_epoch_native_commit WHERE partition_no=p_home AND transaction_id=p_tx)
+ ) INTO original_position;
+ IF original_position IS NULL THEN
+  RAISE EXCEPTION 'Semantic erased Source role lacks its original transaction position' USING ERRCODE='23514';
+ END IF;
+ RETURN original_position;
+END; $$;
 
 
 --

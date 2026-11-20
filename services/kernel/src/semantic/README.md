@@ -2574,7 +2574,8 @@ collisions still refuse until complete Source support/copy closure is available.
   distinct copy prefixes. The fixed six rows/points/statements cover budget read and consume,
   partition, the original copy and source EOFs, and the original basis probe. A distinct
   native origin adds its own two EOFs and basis probe. Each visited copy/source role
-  still reserves rows/points/statements/bytes/empty-seeks `10/10/9/3072/5`, plus the
+  reserves rows/points/statements/bytes/empty-seeks `11/13/10/3328/8`, including an indexed
+  lookup of an inherited transaction’s position in its write basis, Source commit or Identity native commit, plus the
   planner's separate 512 bytes; the event adds 1024 planner bytes. Candidate, metadata
   and witness axes are zero for these operational bodies. The complete original preparation
   quote also covers the other work in the Source invocation.

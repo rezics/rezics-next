@@ -20,6 +20,7 @@ import {
   readSemanticErasure,
   SEMANTIC_ERASURE_PROGRESS,
 } from '../../src/semantic/account-erasure.ts';
+import { synchronizeAccountAgent } from '../../src/access/account-agent-effect.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
@@ -572,3 +573,20 @@ test('equal-delivery original and native origins traverse into distinct held Sou
     ).toEqual(nativeRows);
   }
 }, 720_000);
+
+test('account agent Subject roles retain the source transaction position across account tombstoning', async () => {
+  const author = await f.author();
+  await f.tombstone(author);
+  await synchronizeAccountAgent(f.db.pool, author.accountId);
+  const roles = await f.db.admin.query(
+    `SELECT r.delivery_position::text,r.source_position::text,r.origin_key,r.native_present,
+      r.source_transaction_id::text,b.position::text AS basis,c.position::text AS committed
+     FROM semantic.erasure_source_record r
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=(r.partition_no,r.source_transaction_id)
+     LEFT JOIN semantic.erasure_source_commit c ON (c.partition_no,c.transaction_id)=(r.partition_no,r.source_transaction_id)
+     WHERE r.account_id=$1 AND r.store='subject' AND r.role='subject' ORDER BY r.delivery_position`,
+    [author.accountId],
+  );
+  expect(roles.rows.some((row) => row.delivery_position !== row.basis && row.basis !== null)).toBe(true);
+  for (const row of roles.rows) expect(row.source_position).toBe(row.basis ?? row.committed);
+}, 120_000);

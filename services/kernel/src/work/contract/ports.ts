@@ -359,7 +359,7 @@ export type WorkSelectedRuntime = Readonly<{
 export type WorkComposedRuntime = {
   effects: WorkRegisteredEffects;
   launch(): Promise<void>;
-  shutdown(): Promise<void>;
+  shutdown(deadline?: number): Promise<void>;
 };
 
 export type WorkSelectedPhase = {

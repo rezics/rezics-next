@@ -592,9 +592,9 @@ function sourceFactory(
               const raw = (
                 await tx.query<Cursor>(
                   `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
-             FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+             FROM semantic.erasure_source_record r WHERE partition_no=$1 AND account_id=$2
              AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
-             ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
+             ORDER BY r.store,r.record_key,r.role,r.delivery_position,r.origin_key LIMIT 1`,
                   [sourceHome, barrier.accountId, ...after],
                 )
               ).rows[0];
@@ -921,9 +921,9 @@ function sourceFactory(
               const still = (
                 await tx.query<Cursor>(
                   `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
-             FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+             FROM semantic.erasure_source_record r WHERE partition_no=$1 AND account_id=$2
              AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
-             ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
+             ORDER BY r.store,r.record_key,r.role,r.delivery_position,r.origin_key LIMIT 1`,
                   [sourceHome, barrier.accountId, ...after],
                 )
               ).rows[0];

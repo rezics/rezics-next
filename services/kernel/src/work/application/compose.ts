@@ -139,7 +139,7 @@ export function createComposer(
             started.push(...running);
           })());
         },
-        shutdown(): Promise<void> {
+        shutdown(deadline?: number): Promise<void> {
           return (stopping ??= (async () => {
             let failure: unknown;
             try {
@@ -150,7 +150,9 @@ export function createComposer(
             const stopFailure = await stopServices(started.splice(0));
             failure ??= stopFailure;
             try {
-              await ports.sdkRuntime.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
+              // A durable workflow can be waiting for external custody beyond this process lifetime.
+              const remaining = deadline === undefined ? 2_147_483_647 : Math.max(0, deadline - Date.now());
+              await ports.sdkRuntime.shutdown({ workflowCompletionTimeoutMS: Math.min(remaining, 2_147_483_647) });
             } catch (error) {
               failure ??= error;
             }
