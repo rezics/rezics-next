@@ -9,7 +9,7 @@ import {
   observeLocaleComponent,
   restoreDocumentLocale,
 } from '../src/locale-observation';
-import { cookieName, getLocale, locales } from '../src/paraglide/runtime.js';
+import { cookieName, getLocale, isServer, locales } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
@@ -28,7 +28,21 @@ const Page = observeLocaleComponent(function Page() {
 const apply = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('.auth-locale-actions button')!.click();
 const selectedLabel = (control: Element) => control.querySelector('[data-slot="select-value"]')?.textContent;
 
-test('real shell offers eight autonyms, stages/cancels with focus, and preserves rapid/restored choices', async () => {
+const shellChoices =
+  'real shell offers eight autonyms, stages/cancels with focus, and preserves rapid/restored choices';
+test(shellChoices, async () => {
+  // Paraglide captures its realm at import time. An earlier SSR test can cache its server runtime.
+  if (isServer && process.env.REZICS_LOCALE_CHOICE_CHILD !== '1') {
+    const child = Bun.spawn([process.execPath, 'test', import.meta.path, '--test-name-pattern', shellChoices], {
+      env: { ...process.env, REZICS_LOCALE_CHOICE_CHILD: '1' },
+      stdout: 'ignore',
+      stderr: 'pipe',
+    });
+    const [error, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+    expect(code, error).toBe(0);
+    return;
+  }
+
   initializeDocumentLocale('en');
   const p = await open(<Page />, {});
   await flush(() => p.host.querySelector<HTMLButtonElement>('[role=combobox]')!.click());

@@ -1,9 +1,17 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send, chooseLocale } from './creation-page-fixture';
 import { AuthShell } from '../src/frame';
 import { initializeDocumentLocale, observeLocaleComponent } from '../src/locale-observation';
 import { Route } from '../src/routes/signup';
+import * as registration from '../src/registration-page';
 import type { RegistrationPage } from '../src/registration-page';
 import { m } from '../src/paraglide/messages.js';
 
@@ -16,6 +24,7 @@ afterAll(() => {
 });
 const spies: { mockRestore(): void }[] = [];
 afterEach(() => {
+  delete window.turnstile;
   for (const spy of spies.splice(0)) spy.mockRestore();
 });
 let serial = 0;
@@ -43,13 +52,12 @@ async function setup() {
     scriptUrl: `https://challenge.test/locale-${++serial}.js`,
   };
   let page: RegistrationPage = initial;
-  const route = Route.update({
-    id: '/signup',
+  spies.push(spyOn(registration, 'readRegistrationPage').mockImplementation(async () => page));
+  const route = createRoute({
     path: '/signup',
     getParentRoute: () => root,
-    loader: () => page,
-  } as never);
-  route.options.component = observeLocaleComponent(route.options.component!);
+    component: observeLocaleComponent(Route.options.component!),
+  });
   const query = '?client_id=reader&state=a%2fb+z&scope=&scope=openid&unknown=1&unknown=2';
   const router = createRouter({
     routeTree: root.addChildren([route]),
@@ -76,11 +84,9 @@ async function setup() {
     reset() {},
     remove() {},
   };
-  await flush(() =>
-    document
-      .querySelector(`script[src="${initial.scriptUrl}"]`)!
-      .dispatchEvent(new dom.Event('load') as unknown as Event),
-  );
+  const script = document.querySelector(`script[src="${initial.scriptUrl}"]`);
+  expect(script, p.host.textContent ?? '').not.toBeNull();
+  await flush(() => script!.dispatchEvent(new dom.Event('load') as unknown as Event));
   const input = (name: string) => p.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const choose = (label: string) => flush(() => button(document.body, label)!.click());
   const locale = async (value: string) => {
@@ -113,7 +119,7 @@ async function setup() {
     assign,
     token: () => flush(() => token('fresh-token')),
     replaceViewer: () =>
-      flush(async () => {
+      flush(() => {
         page = {
           kind: 'already-signed-in',
           viewer: { account_id: 'replacement' },
@@ -121,7 +127,7 @@ async function setup() {
           verification: { configured: true },
           actions: { register: false, continue: true },
         };
-        await router.invalidate();
+        window.dispatchEvent(new dom.Event('focus') as unknown as Event);
       }),
   };
 }
@@ -164,7 +170,8 @@ test('language preserves draft, pending write, sticky unknown and exact retry th
   await flush(() => p.calls[1]!.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
   expect(p.calls).toHaveLength(2);
   expect(p.assign).not.toHaveBeenCalled();
-  expect(p.input('password').value).toBe('');
+  expect(password.value).toBe('');
+  expect(p.input('password')).toBeNull();
 });
 
 test('replacement viewer and persisted return fence a late creation after language selection', async () => {

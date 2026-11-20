@@ -136,6 +136,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         ? 'complete'
         : 'start',
   );
+  const reading = advice.state.kind === 'loading';
   const page = advice.state.kind === 'ready' ? advice.state.page : null;
   const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
@@ -156,6 +157,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const [adviceControl, setAdviceControl] = useState<AdviceControl | null>(null);
   const retiring = useRef(false);
   const initialized = useRef(false);
+  const initialAlertFocus = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const shouldWarn = useCallback(
@@ -268,6 +270,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       if (recovered.accountId && recovered.token) {
         setCredentials({ accountId: recovered.accountId, token: recovered.token });
       } else {
+        initialAlertFocus.current = true;
         setMessage(failureMessage(401, 'invalid_recovery', null));
       }
       setHasFragment(true);
@@ -275,6 +278,13 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       setHasFragment(false);
     }
   }, [attempt]);
+
+  const malformedAlertReady = page !== null && hasFragment && !credentials;
+  useLayoutEffect(() => {
+    if (reading || !initialAlertFocus.current) return;
+    initialAlertFocus.current = false;
+    if (malformedAlertReady && document.activeElement === document.body) alert.current?.focus();
+  }, [malformedAlertReady, reading]);
 
   useLayoutEffect(() => {
     if (emailError) emailInput.current?.focus();
@@ -383,7 +393,6 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   if (hasFragment === null) return <AuthPage heading={m.auth_recovery_heading()} />;
 
-  const reading = advice.state.kind === 'loading';
   const readAdvice = (
     <>
       {reading ? <p role="status">{m.auth_recovery_advice_loading()}</p> : null}
@@ -416,7 +425,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     );
   }
 
-  if ((page && hasFragment && !credentials) || (reading && adviceControl === 'fresh-link')) {
+  if (malformedAlertReady || (reading && adviceControl === 'fresh-link')) {
     return (
       <AuthPage heading={m.auth_recovery_heading()}>
         <ErrorAlert tabIndex={-1} ref={alert}>
