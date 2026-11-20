@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { loadSettings } from './config.ts';
 import { launchCommand, workerPrompt } from './launch.ts';
 import type { Pool, Profile, Task } from './types.ts';
-import { harness } from './test-support.ts';
+import { brief, harness } from './test-support.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 // scripts/worker-check.ts is dev tooling; on main (where the control plane runs) it arrives with promotion.
@@ -127,20 +127,24 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
     const task = {
       worktree: h.root,
       branch: 'worker/test',
-      brief: { markdown: 'Check the change.', kind: 'implementation' },
+      brief: { ...brief(), goal: 'control-plane' },
     } as unknown as Task;
-    // A base without the check runner (main, where control-plane tasks start) runs its checks directly.
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
-    expect(bare).toContain('has no scripts/worker-check.ts');
+    expect(bare).toContain("`'bun' 'test'` in the foreground from the worktree root, without a wrapper");
+    expect(bare).toContain('it gives no check id and no waiting result');
+    expect(bare).toContain('never start a duplicate');
     expect(bare).toContain('run your acceptance command once after your last relevant edit');
     expect(bare).toContain('Do not run the root typecheck or other regression suites yourself');
     expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    expect(bare).not.toContain('"status":"waiting"');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
     expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
+    expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    expect(prompt).toContain('The controller wakes this session with the result');
     expect(prompt).not.toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(prompt).not.toContain('Never poll');
   } finally {
