@@ -21,7 +21,7 @@ import {
 } from '../request/access.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { Admission } from './admission.ts';
+import { Admission, requireLiveJob, type AdmissionYield } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
 import { logInternalError, PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
@@ -252,7 +252,7 @@ export function createApp({
       const actor =
         request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
-          : await admission.run('reserved', job, async () => {
+          : await admission.run('bearer', job, async () => {
               try {
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {
@@ -275,7 +275,7 @@ export function createApp({
         },
       };
 
-      const permission = () => {
+      const permission = (permit?: AdmissionYield) => {
         const currentAccess = accessForApp();
         const action = actionOfMountedRoute(mountedFor(request, route));
         const context = { pool, deadline: job.deadline };
@@ -284,8 +284,10 @@ export function createApp({
           ...(prepare
             ? {
                 prepare: (preparedActor, preparedAction, preparedResource, received) =>
-                  admission.run('normal', job, () =>
-                    prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                  admission.prepare(
+                    job,
+                    () => prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                    permit,
                   ),
               }
             : {}),
@@ -297,8 +299,8 @@ export function createApp({
         job,
         actor,
         session,
-        authorize: (resource: Resource) => {
-          const { checkedAccess, action, context } = permission();
+        authorize: (resource: Resource, permit?: AdmissionYield) => {
+          const { checkedAccess, action, context } = permission(permit);
           return accessCheck(checkedAccess, actor, action, resource, context);
         },
         authorizeCommand: (resource: Resource, denied: () => Error) => {
@@ -319,7 +321,7 @@ export function createApp({
         detail?.['x-rate-limit'] === undefined
       )
         return;
-      await admission.run('normal', job, async () => {
+      const checkRoute = async () => {
         await admitExposure({
           pool,
           access: accessForApp,
@@ -343,7 +345,12 @@ export function createApp({
           context: { pool, actor, deadline: job.deadline },
           peer: ratePeer ? ratePeer(original) : (server?.requestIP(original)?.address ?? socketPeer(original)),
         });
-      });
+      };
+      if (detail?.['x-exposure'] === 'public' && detail['x-rate-limit'] === undefined) {
+        requireLiveJob(job);
+        return checkRoute();
+      }
+      await admission.run('normal', job, checkRoute);
     })
     .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {

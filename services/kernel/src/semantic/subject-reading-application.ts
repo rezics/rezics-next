@@ -115,6 +115,7 @@ export type SubjectReadingPorts = SubjectReadingNativePort<
 type SubjectFenceTuple = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup };
 type SubjectFence = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup } & SubjectReadingFence;
 
+type YieldAdmission = <T>(wait: () => Promise<T>) => Promise<T>;
 export type SubjectReadOptions = {
   reviewIdentity?: ReviewedPersonSource;
   selectedSynopsis?: { input: SelectedSynopsisInput; admit: () => Promise<boolean> };
@@ -127,7 +128,7 @@ export type SubjectReadOptions = {
   prepareAuthorization?: () => Promise<AccessCheck>;
   prepareAuthorize?: (id: string) => Promise<AccessCheck>;
   readAs?: <T>(read: () => Promise<T>) => Promise<T>;
-  yieldAdmission?: <T>(wait: () => Promise<T>) => Promise<T>;
+  yieldAdmission?: YieldAdmission;
 };
 export type SubjectReadResult = {
   selectedSynopsis?: SelectedSynopsisResult;
@@ -147,12 +148,10 @@ export type SubjectReadingPageRequest = {
   subject: string;
   context: string;
   languages: readonly string[];
-  authorization: SubjectReadingAuthorizationPort<AccessCheck> & {
+  authorization: SubjectReadingAuthorizationPort<AccessCheck, YieldAdmission> & {
     prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
   };
-  runNative: <T>(
-    read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>,
-  ) => Promise<T>;
+  runNative: <T>(read: (yieldAdmission?: YieldAdmission) => Promise<T>) => Promise<T>;
   readAs: <T>(read: () => Promise<T>) => Promise<T>;
   seen: readonly SubjectComponent[];
   observeMissingCheckpoint?: boolean;
@@ -1563,10 +1562,11 @@ async function readSubjectPage(
 ): Promise<SubjectReadingPageResult> {
   const { runtime } = input;
   const { pool, routeKey, actor, access, deadline } = runtime;
-  const authorizeSummary = summaryAuthorization(async (id, batch) => {
-    if (routeOf(id) === null) return async () => false;
-    return input.authorization.prepareSummary(id, batch);
-  }, input.authorization.prepareSummaryBatch);
+  const authorizeSummary = (permit?: YieldAdmission) =>
+    summaryAuthorization(async (id, batch) => {
+      if (routeOf(id) === null) return async () => false;
+      return input.authorization.prepareSummary(id, batch, permit);
+    }, input.authorization.prepareSummaryBatch);
   const synopsisAnchors: SubjectComponent[] = [];
   const result = await input
     .runNative((yieldAdmission) =>
@@ -1598,13 +1598,13 @@ async function readSubjectPage(
               },
             }
           : {}),
-        authorize: authorizeSummary,
+        authorize: authorizeSummary(yieldAdmission),
         seen: input.seen,
         ...(input.observeMissingCheckpoint ? { observeMissingCheckpoint: true } : {}),
         ...(yieldAdmission ? { yieldAdmission } : {}),
         deadline,
         prepareSummaryBatch: input.authorization.prepareSummaryBatch,
-        prepareAuthorize: input.authorization.prepareDetail,
+        prepareAuthorize: (id) => input.authorization.prepareDetail(id, yieldAdmission),
         readAs: input.readAs,
       }),
     )
@@ -1678,7 +1678,7 @@ async function readSubjectPage(
           routeKey,
           deadline,
           release: active.release,
-          authorize: authorizeSummary,
+          authorize: authorizeSummary(),
         },
         Object.entries(references).map(([id, value]) => value.redirect ?? id),
         { languages: input.languages },

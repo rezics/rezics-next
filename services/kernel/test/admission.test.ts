@@ -175,3 +175,18 @@ test('an overloaded request is served as a problem document', async () => {
   blocker.open();
   await holder;
 });
+
+test('native work and health can enter through a full bearer backlog', async () => {
+  const admission = new Admission({ permits: 1, reserved: 2, queue: 1 });
+  const blocker = gate();
+  const held = Array.from({ length: 2 }, () => admission.run('bearer', later(), () => blocker.opened));
+  const untouched = admission.run('bearer', later(), () => 'verified').catch((e) => e);
+  expect(admission.running).toEqual({ normal: 1, reserved: 1 });
+  expect(admission.waiting).toBe(1);
+  const native = admission.run('normal', later(), () => 'served');
+  expect(await untouched).toMatchObject({ code: 'overloaded', headers: { 'retry-after': '1' } });
+  expect(await admission.run('reserved', later(), () => 'healthy')).toBe('healthy');
+  blocker.open();
+  expect(await native).toBe('served');
+  await Promise.all(held);
+});

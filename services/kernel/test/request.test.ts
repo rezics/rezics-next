@@ -227,3 +227,29 @@ test('without configured keys, session tokens are signed with a key of the app',
   );
   expect(await elsewhere.json()).toEqual({ seen: 0 });
 });
+
+test('public read metadata needs no normal permit and nested authorization uses the handler permit', async () => {
+  const admission = new Admission({ permits: 1, reserved: 2, queue: 0 });
+  const seen: Seen = { authenticated: [], checks: [], prepared: [] };
+  const blocker = Promise.withResolvers<void>();
+  const held = admission.run('normal', { deadline: Date.now() + 5000 }, () => blocker.promise);
+  const app = thingApp({ admission, access: recorder(seen, admission, true) }).get(
+    '/v1/nested',
+    { detail: read },
+    ({ admission, job, authorize }) =>
+      admission.run('normal', job, async (permit) => {
+        const check = await authorize(thing, permit);
+        return { allowed: await check(pool) };
+      }),
+  );
+  try {
+    expect((await app.handle(new Request('http://kernel.test/v1/quiet'))).status).toBe(200);
+    expect((await app.handle(new Request('http://kernel.test/v1/nested'))).status).toBe(503);
+  } finally {
+    blocker.resolve();
+    await held;
+  }
+  const response = await app.handle(new Request('http://kernel.test/v1/nested'));
+  expect(await response.json()).toEqual({ allowed: true });
+  expect(seen.prepared).toEqual([1]);
+});
