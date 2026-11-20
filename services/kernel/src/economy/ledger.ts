@@ -7,6 +7,9 @@ import {
   type EconomyLedger,
   type EconomyReceipt,
   type EconomyResult,
+  type HoldAllocation,
+  type HoldAllocationKey,
+  type HoldAllocationPurpose,
   type WalletEntry,
 } from './contract.ts';
 
@@ -24,10 +27,16 @@ export interface EconomyDatabase {
 type WalletKey = Parameters<EconomyLedger['readBalance']>[0];
 type Command = Parameters<EconomyLedger['release']>[0];
 type Operation = Omit<Command, 'holdId'>;
-type Kind = WalletEntry['kind'];
+type Kind = WalletEntry['kind'] | 'allocate' | 'capture_allocation' | 'release_allocation' | 'release_amount';
 type Position = Readonly<{ accountId: string; posted: string; held: string; restricted: string; revision: string }>;
 type Delta = Readonly<{ position: Position; posted: bigint; held: bigint }>;
-type Hold = Readonly<{ remaining: string; expiresAt: Date }>;
+type Hold = Readonly<{ remaining: string; allocated: string; expiresAt: Date }>;
+type HoldChange = Readonly<{ captured?: bigint; released?: bigint; allocated?: bigint }>;
+type AllocationRef = Pick<HoldAllocationKey, 'holdId' | 'purpose' | 'reference'>;
+type AllocationRow = Omit<HoldAllocation, 'allocatedAt' | 'resolvedAt'> & {
+  allocatedAt: Date;
+  resolvedAt: Date | null;
+};
 type Context = Readonly<{ client: Query; bookId: string; asset: EconomyAsset; accountId: string }>;
 type Namespace = 'wallet' | 'owner';
 type Plan = Readonly<{
@@ -176,37 +185,84 @@ async function record(
 
 async function getHold(context: Context, id: string, lock: boolean): Promise<Hold | undefined> {
   const result = await context.client.query<Hold>(
-    `SELECT remaining::text, expires_at AS "expiresAt" FROM economy.hold
+    `SELECT remaining::text, allocated::text, expires_at AS "expiresAt" FROM economy.hold
      WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id = $4${lock ? ' FOR UPDATE' : ''}`,
     [context.bookId, context.asset.id, context.accountId, id],
   );
   return result.rows[0];
 }
 
-function changeHold(
-  context: Context,
-  id: string,
-  at: Date,
-  remaining: bigint,
-  captured: bigint,
-  released: bigint,
-): Promise<unknown> {
+function unallocated(hold: Hold): bigint {
+  return BigInt(hold.remaining) - BigInt(hold.allocated);
+}
+
+function changeHold(context: Context, id: string, at: Date, change: HoldChange): Promise<unknown> {
+  const { captured = 0n, released = 0n, allocated = 0n } = change;
   return context.client.query(
     `UPDATE economy.hold
-     SET remaining = $5, captured = captured + $6::bigint, released = released + $7::bigint,
-         closed_at = CASE WHEN $5::bigint = 0 THEN $8::timestamptz ELSE NULL END
+     SET remaining = remaining - $5::bigint - $6::bigint,
+         captured = captured + $5::bigint, released = released + $6::bigint,
+         allocated = allocated + $7::bigint,
+         closed_at = CASE WHEN remaining - $5::bigint - $6::bigint = 0 THEN $8::timestamptz ELSE NULL END
      WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id = $4`,
     [
       context.bookId,
       context.asset.id,
       context.accountId,
       id,
-      remaining.toString(),
       captured.toString(),
       released.toString(),
+      allocated.toString(),
       at,
     ],
   );
+}
+
+function validAllocationPurpose(value: HoldAllocationPurpose): boolean {
+  return value === 'spot_fill' || value === 'market_trade' || value === 'withdrawal';
+}
+
+function validAllocationRef({ holdId, purpose, reference }: AllocationRef): boolean {
+  return validOperationKey(holdId) && validAllocationPurpose(purpose) && validOperationKey(reference);
+}
+
+function allocationOperands(bookId: string, key: HoldAllocationKey): string[] {
+  return [bookId, key.assetId, key.accountId, key.holdId, key.purpose, key.reference];
+}
+
+async function getAllocation(
+  client: Query,
+  bookId: string,
+  key: HoldAllocationKey,
+): Promise<AllocationRow | undefined> {
+  const result = await client.query<AllocationRow>(
+    `SELECT purpose, reference, amount::text, status, recipient_id::text AS "recipientId",
+            allocated_at AS "allocatedAt", resolved_at AS "resolvedAt"
+     FROM economy.hold_allocation
+     WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id = $4 AND purpose = $5 AND reference = $6`,
+    allocationOperands(bookId, key),
+  );
+  return result.rows[0];
+}
+
+/** Mutation callers hold the parent row before inspecting or writing any child allocation. */
+async function finishAllocation(
+  client: Query,
+  bookId: string,
+  key: HoldAllocationKey,
+  recipientId: string | null,
+  transactionId: string,
+  at: Date,
+): Promise<void> {
+  const status = recipientId === null ? 'released' : 'captured';
+  const result = await client.query(
+    `UPDATE economy.hold_allocation
+     SET status = $7, recipient_id = $8, terminal_transaction_id = $9, resolved_at = $10
+     WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id = $4 AND purpose = $5 AND reference = $6
+       AND status = 'protected'`,
+    [...allocationOperands(bookId, key), status, recipientId, transactionId, at],
+  );
+  if (result.rowCount !== 1) throw new Error('Protected Economy allocation changed while locked');
 }
 
 export function createEconomyLedger(database: EconomyDatabase, bookId: string): EconomyLedger {
@@ -275,20 +331,61 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     });
   }
 
-  function dropHold(input: Command, kind: 'release' | 'expire'): Promise<EconomyResult<EconomyReceipt>> {
+  function dropHold(
+    input: Command,
+    kind: 'release' | 'expire' | 'release_amount',
+    amount?: bigint,
+  ): Promise<EconomyResult<EconomyReceipt>> {
     const { holdId } = input;
-    return command(input, kind, holdId, [], async (context) => {
+    return command(input, kind, holdId, amount === undefined ? [] : [amount.toString()], async (context) => {
       const hold = await getHold(context, holdId, true);
       if (hold === undefined) return failure('hold_missing');
-      const released = BigInt(hold.remaining);
-      if (released === 0n) return failure('hold_closed');
+      const open = unallocated(hold);
+      if (open === 0n) return failure('hold_closed');
+      const released = amount ?? open;
+      if (released > open) return failure('insufficient_funds');
       const [owner] = await positions(context);
       const at = await getTime(context.client);
       if (kind === 'expire' && hold.expiresAt > at) return failure('invalid_operation');
       return {
         at,
         deltas: [delta(owner, 0n, -released)],
-        persistHold: () => changeHold(context, holdId, at, 0n, 0n, released),
+        persistHold: () => changeHold(context, holdId, at, { released }),
+      };
+    });
+  }
+
+  function resolveAllocation(
+    input: HoldAllocationKey & Pick<Operation, 'operationId'>,
+    recipient: string | null,
+  ): Promise<EconomyResult<EconomyReceipt>> {
+    if (!validAllocationRef(input)) return Promise.resolve(failure('invalid_operation'));
+    const { holdId, purpose, reference } = input;
+    const kind = recipient === null ? 'release_allocation' : 'capture_allocation';
+    const operands = recipient === null ? [purpose, reference] : [purpose, reference, recipient];
+    return command(input, kind, holdId, operands, async (context) => {
+      const hold = await getHold(context, holdId, true);
+      if (hold === undefined) return failure('hold_missing');
+      const key = { accountId: context.accountId, assetId: context.asset.id, holdId, purpose, reference };
+      const allocation = await getAllocation(context.client, bookId, key);
+      if (allocation === undefined) return failure('allocation_missing');
+      if (allocation.status !== 'protected') return failure('allocation_closed');
+
+      const amount = BigInt(allocation.amount);
+      const [owner, receiver] = recipient === null ? await positions(context) : await positions(context, recipient);
+      const at = await getTime(context.client);
+      const captured = receiver === undefined ? 0n : amount;
+      const released = amount - captured;
+      return {
+        at,
+        deltas:
+          receiver === undefined
+            ? [delta(owner, 0n, -amount)]
+            : [delta(owner, -amount, -amount), delta(receiver, amount)],
+        persistHold: async (transactionId) => {
+          await changeHold(context, holdId, at, { captured, released, allocated: -amount });
+          await finishAllocation(context.client, bookId, key, recipient, transactionId, at);
+        },
       };
     });
   }
@@ -364,7 +461,10 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
           `SELECT e.position::text,
                   CASE WHEN j.namespace = 'wallet' AND j.origin_id = e.account_id THEN j.operation_id
                        ELSE j.transaction_id::text END AS "operationId",
-                  j.kind, e.posted_delta::text AS "postedDelta",
+                  CASE j.kind WHEN 'capture_allocation' THEN 'capture'
+                              WHEN 'release_allocation' THEN 'release'
+                              WHEN 'release_amount' THEN 'release' ELSE j.kind END AS kind,
+                  e.posted_delta::text AS "postedDelta",
                   e.held_delta::text AS "heldDelta", j.recorded_at AS "recordedAt"
            FROM economy.entry AS e
            JOIN economy.journal AS j ON j.book_id = e.book_id AND j.asset_id = e.asset_id AND j.transaction_id = e.transaction_id
@@ -438,7 +538,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       return command(input, 'capture', holdId, [recipient, amount.toString(), final], async (context) => {
         const hold = await getHold(context, holdId, true);
         if (hold === undefined) return failure('hold_missing');
-        const held = BigInt(hold.remaining);
+        const held = unallocated(hold);
         if (held === 0n) return failure('hold_closed');
         const [owner, receiver] = await positions(context, recipient);
         const at = await getTime(context.client);
@@ -449,12 +549,74 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
         return {
           at,
           deltas: [delta(owner, -amount, -amount - released), delta(receiver, amount)],
-          persistHold: () => changeHold(context, holdId, at, outstanding - released, amount, released),
+          persistHold: () => changeHold(context, holdId, at, { captured: amount, released }),
         };
       });
     },
 
     release: (input) => dropHold(input, 'release'),
     expire: (input) => dropHold(input, 'expire'),
+
+    releaseAmount(input) {
+      const amount = positiveInteger(input.amount);
+      return amount === null ? Promise.resolve(failure('invalid_amount')) : dropHold(input, 'release_amount', amount);
+    },
+
+    allocate(input) {
+      const amount = positiveInteger(input.amount);
+      if (amount === null) return Promise.resolve(failure('invalid_amount'));
+      if (!validAllocationRef(input)) return Promise.resolve(failure('invalid_operation'));
+      const { holdId, purpose, reference } = input;
+      return command(input, 'allocate', holdId, [purpose, reference, amount.toString()], async (context) => {
+        const hold = await getHold(context, holdId, true);
+        if (hold === undefined) return failure('hold_missing');
+        const key = { accountId: context.accountId, assetId: context.asset.id, holdId, purpose, reference };
+        if ((await getAllocation(context.client, bookId, key)) !== undefined) return failure('operation_conflict');
+        const at = await getTime(context.client);
+        const open = unallocated(hold);
+        if (hold.expiresAt <= at || open === 0n) return failure('hold_closed');
+        if (amount > open) return failure('insufficient_funds');
+        return {
+          at,
+          // The wallet is already held; assigning some of that amount changes only the hold and its allocation journal.
+          deltas: [],
+          persistHold: async (transactionId) => {
+            await changeHold(context, holdId, at, { allocated: amount });
+            await context.client.query(
+              `INSERT INTO economy.hold_allocation (book_id, asset_id, account_id, hold_id, purpose, reference, amount,
+                                                    status, allocation_transaction_id, allocated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 'protected', $8, $9)`,
+              [...allocationOperands(bookId, key), amount.toString(), transactionId, at],
+            );
+          },
+        };
+      });
+    },
+
+    readAllocation(input) {
+      const accountId = walletAccount(input.accountId);
+      if (accountId === null || !validIdentifier(input.assetId) || !validAllocationRef(input))
+        return Promise.resolve(failure('invalid_operation'));
+      const key = { ...input, accountId };
+      return database.read(async (client) => {
+        const row = await getAllocation(client, bookId, key);
+        return row === undefined
+          ? failure('allocation_missing')
+          : success({
+              ...row,
+              allocatedAt: row.allocatedAt.toISOString(),
+              resolvedAt: row.resolvedAt?.toISOString() ?? null,
+            });
+      });
+    },
+
+    captureAllocation(input) {
+      const recipient = walletAccount(input.recipientId);
+      if (recipient === null || recipient === walletAccount(input.accountId))
+        return Promise.resolve(failure('invalid_operation'));
+      return resolveAllocation(input, recipient);
+    },
+
+    releaseAllocation: (input) => resolveAllocation(input, null),
   };
 }
