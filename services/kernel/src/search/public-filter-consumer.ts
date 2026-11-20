@@ -2863,6 +2863,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (raw.some((hit) => !('key' in hit))) return m.unavailable('observation_lost');
         let checked: Awaited<ReturnType<typeof ownMixedRows>>;
         try {
+          // Kind-only pages need the same current identity witness as unfiltered pages.
+          // Discovery still checks each candidate's current kind before disclosure.
           checked = await ownMixedRows(
             raw as readonly DiscoveryEngineHit[],
             m,
@@ -2870,7 +2872,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             Boolean(config.discoveryTarget) &&
               q.snapshot.kind === 'pit' &&
               'representation' in plan &&
-              plan.filterDocument === undefined &&
+              (plan.filterDocument === undefined || 'kind' in plan.filterDocument) &&
               plan.text === undefined,
           );
         } catch (error) {
