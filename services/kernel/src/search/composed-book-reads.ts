@@ -267,19 +267,19 @@ function native(source: PublicFilterSource): source is PublicFilterNativeSource 
   return 'resolvePublicFilterDefinition' in source && typeof source.resolvePublicFilterDefinition === 'function';
 }
 
-export function restoreComposedBookCut(
+export function restoreBookPageCut(
   binding: PublicFilterSourceBinding,
   queried: PublicFilterQueriedObservation,
   context: PublicFilterConsumerContext,
 ) {
   const command = catalogue.getStore();
   if (
-    !command ||
-    command.child.position >= bookReadStages().phases.length ||
-    command.child.page ||
-    queried.snapshot.kind !== 'pit'
+    queried.snapshot.kind !== 'pit' ||
+    (command && (command.child.position >= bookReadStages().phases.length || command.child.page))
   )
     return;
+  // The native owner identifies the published Book cut. Standalone pages
+  // restore it too, then verify current coverage at START before dispatch.
   return advanceNativePublicFilterPreparation(binding, { pageObservation: queried }, context);
 }
 
