@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { planPublicFilterEnrollment } from '../../src/semantic/public-filter-preparation-budget.ts';
+import { CommandUnavailableError } from '../../src/access/unavailable.ts';
 import type { Pool } from 'pg';
 import {
   adoptPublicFilterCoverageBaselinePage,
@@ -47,13 +48,19 @@ function fixture() {
 
 // Transaction-boundary double, not native coverage or funding proof. It refuses
 // overlapping checkouts and mutates inputs at the real owner/receiver boundary.
-function receiver(onConnect = () => {}, onCommit = () => {}, originals = [{ partition: 2, valid: true }]) {
+function receiver(
+  onConnect = () => {},
+  onCommit: (number: number) => void = () => {},
+  originals = [{ partition: 2, valid: true }],
+  onQuery: (sql: string) => void = () => {},
+) {
   const original = fixture();
   const calls: { sql: string; values: readonly unknown[] }[] = [];
   let held = false,
     connections = 0,
     releases = 0,
     commits = 0;
+  const releaseErrors: unknown[] = [];
   const pool = {
     async connect() {
       if (held) throw new Error('A native owner checkout is still held');
@@ -61,13 +68,17 @@ function receiver(onConnect = () => {}, onCommit = () => {}, originals = [{ part
       connections++;
       onConnect();
       return {
-        release() {
+        release(error?: Error) {
           held = false;
           releases++;
+          if (error) releaseErrors.push(error);
         },
-        async query(sql: string, values: readonly unknown[] = []) {
+        async query(input: string | { text: string; values?: readonly unknown[] }, values: readonly unknown[] = []) {
+          const sql = typeof input === 'string' ? input : input.text;
+          if (typeof input !== 'string') values = input.values ?? [];
           calls.push({ sql, values: [...values] });
-          if (sql === 'COMMIT' && ++commits === 1) onCommit();
+          onQuery(sql);
+          if (sql === 'COMMIT') onCommit(++commits);
           let rows: unknown[] = [];
           if (sql.includes('FROM jsonb_to_recordset')) rows = originals;
           else if (sql.includes('SELECT write_state')) rows = [{ write_state: 'active' }];
@@ -80,13 +91,14 @@ function receiver(onConnect = () => {}, onCommit = () => {}, originals = [{ part
       };
     },
   } as unknown as Pool;
-  return { pool, calls, counts: () => ({ connections, releases }) };
+  return { pool, calls, releaseErrors, counts: () => ({ connections, releases }) };
 }
 
 test('owner verification and receiver adoption consume the original tuple after caller mutation', async () => {
   const { binding, enrollment } = fixture();
   const original = fixture();
-  const r = receiver(undefined, () => {
+  const r = receiver(undefined, (number) => {
+    if (number !== 1) return;
     Object.assign(binding, { bootstrap: 'changed', definition: 'changed', consumer: 'changed', accounts: false });
     Object.assign(binding.registration, { partition: 4, id: 'changed' });
     Object.assign(enrollment, { partition: 9, epoch: 10, sourcePosition: 99n, receipt: 'changed' });
@@ -212,13 +224,78 @@ test('a missing original stops the page at its last verified home', async () => 
     { partition: 2, valid: true },
     { partition: 4, valid: true },
   ]);
-  await adoptPublicFilterCoverageBaselinePage(r.pool, binding, enrollments, Date.now() + 60_000);
+  const read = () => Promise.reject(new Error('A partial prefix requires an independent read'));
+  expect(
+    await adoptPublicFilterCoverageBaselinePage(r.pool, binding, enrollments, Date.now() + 60_000, read),
+  ).toBeUndefined();
   const pages = r.calls.filter(({ sql }) => sql.includes('semantic.adopt_public_filter_baseline_page'));
   expect(pages).toHaveLength(1);
   const submitted = JSON.parse(pages[0]?.values[5] as string);
   expect(submitted.map(({ partition }: { partition: number }) => partition)).toEqual([2]);
-  expect(r.counts()).toEqual({ connections: 2, releases: 2 });
+  expect(r.counts()).toEqual({ connections: 1, releases: 1 });
 });
+
+test('the cold page commits verification before registration and reads the committed frontier', async () => {
+  const { binding, enrollment } = fixture();
+  const r = receiver();
+  await adoptPublicFilterCoverageBaselinePage(r.pool, binding, [enrollment], Date.now() + 60_000, (client) =>
+    client.query('SELECT committed_frontier'),
+  );
+  expect(
+    r.calls
+      .map(({ sql }) => sql.match(/FROM jsonb_to_recordset|FOR UPDATE|adopt_public_filter_baseline_page/)?.[0] ?? sql)
+      .filter((sql) => !sql.startsWith('SET LOCAL') && !sql.includes('SELECT write_state')),
+  ).toEqual([
+    'BEGIN',
+    'FROM jsonb_to_recordset',
+    'COMMIT',
+    'BEGIN',
+    'FOR UPDATE',
+    'adopt_public_filter_baseline_page',
+    'COMMIT',
+    'SELECT committed_frontier',
+  ]);
+  expect(r.counts()).toEqual({ connections: 1, releases: 1 });
+});
+
+test.each(['contention', 'lost acknowledgement', 'deadline'])(
+  'cold page relinquishes checkout on %s',
+  async (fault) => {
+    const { binding, enrollment } = fixture();
+    const failure = new CommandUnavailableError('contention', 0);
+    const r = receiver(
+      undefined,
+      (number) => {
+        if (fault === 'lost acknowledgement' && number === 2) throw failure;
+      },
+      undefined,
+      (sql) => {
+        if (!sql.includes('FOR UPDATE')) return;
+        if (fault === 'contention') throw Object.assign(failure, { code: '55P03', severity: 'ERROR' });
+        if (fault === 'deadline') Bun.sleepSync(50);
+      },
+    );
+    const read = () => Promise.reject(new Error('Failed page cannot read on its checkout'));
+    await expect(
+      adoptPublicFilterCoverageBaselinePage(
+        r.pool,
+        binding,
+        [enrollment],
+        Date.now() + (fault === 'deadline' ? 40 : 5_000),
+        read,
+      ),
+    ).rejects.toMatchObject({ reason: fault === 'deadline' ? 'deadline' : 'contention' });
+    expect(r.counts()).toEqual({ connections: 1, releases: 1 });
+    expect(r.calls.at(-1)?.sql).toEqual(
+      fault === 'lost acknowledgement'
+        ? 'COMMIT'
+        : fault === 'contention'
+          ? 'ROLLBACK'
+          : expect.stringContaining('FOR UPDATE'),
+    );
+    expect(r.releaseErrors).toHaveLength(fault === 'contention' ? 0 : 1);
+  },
+);
 
 test('narrow and wide Source bursts stay inside the offered input budget', () => {
   // Reserve 64 owner inputs from the largest Search offer. Every default

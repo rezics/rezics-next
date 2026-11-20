@@ -3075,6 +3075,8 @@ export function createNativePublicFilterSourceBinding(
       if (!inserted) throw new BindingError('configuration_changed');
       const cut = existing ?? (await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition));
       let keyPageAdvanced = false;
+      let committed: Awaited<ReturnType<typeof loadBootstrap>> | undefined;
+      let readingCommitted = false;
       if (cut.row.state === 'capturing') {
         const baseline = {
           bootstrap: inserted.bootstrap,
@@ -3140,13 +3142,25 @@ export function createNativePublicFilterSourceBinding(
             }
             if (receipts.length !== start - cut.row.account_after + count) break;
           }
-          await adoptPublicFilterCoverageBaselinePage(db, baseline, receipts, deadline);
+          committed = await adoptPublicFilterCoverageBaselinePage(
+            db,
+            baseline,
+            receipts,
+            deadline,
+            existing?.enrollmentRegistration
+              ? async (client) => {
+                  if (failure || receipts.length !== page.homes) return;
+                  readingCommitted = true;
+                  return loadBootstrap('0:' + inserted.bootstrap, client, resolved.definition);
+                }
+              : undefined,
+          );
           if (failure) throw failure.reason;
         } catch (error) {
-          if (ports.access.classifyUnavailability(error) !== 'contention') throw error;
+          if (readingCommitted || ports.access.classifyUnavailability(error) !== 'contention') throw error;
         }
       }
-      const begun = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
+      const begun = committed ?? (await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition));
       if (begun.row.state === 'capturing')
         return {
           status: 'preparing' as const,

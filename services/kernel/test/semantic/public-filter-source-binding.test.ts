@@ -1,6 +1,8 @@
 import { runCommand } from '../../src/command/command.ts';
 import { enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes } from '../../src/access/adapters/index.ts';
+import { CommandUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
+import type { PoolClient } from 'pg';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   readPublicFilterCreationEvents,
@@ -340,7 +342,43 @@ test('native Subject enrollment rechecks the original definition and release on 
           [resume.bootstrap.slice(2)],
         )
       ).rows;
+    const beforeLoss = (await readFrontier())[0]!;
+    let lost = false;
+    const queries = new Map<PoolClient, PoolClient['query']>();
+    const acquire = (client: PoolClient) => {
+      const query = client.query;
+      queries.set(client, query);
+      let adopting = false;
+      client.query = (async (input: string | { text: string }, ...args: unknown[]) => {
+        const sql = typeof input === 'string' ? input : input.text;
+        const result = await Reflect.apply(query, client, [input, ...args]);
+        if (sql.includes('SELECT semantic.adopt_public_filter_baseline_page')) adopting = true;
+        if (adopting && sql === 'COMMIT' && !lost) {
+          lost = true;
+          throw new CommandUnavailableError('contention', 0);
+        }
+        return result;
+      }) as PoolClient['query'];
+    };
+    const release = (_error: Error | undefined, client: PoolClient) => {
+      const query = queries.get(client);
+      if (query) client.query = query;
+      queries.delete(client);
+    };
+    f.db.pool.on('acquire', acquire).on('release', release);
+    try {
+      expect(await advance()).toMatchObject({ status: 'preparing', enrollmentAdvanced: true });
+      expect(lost).toBe(true);
+    } finally {
+      f.db.pool.off('acquire', acquire).off('release', release);
+      for (const [client, query] of queries) client.query = query;
+    }
+    const recovered = (await readFrontier())[0]!;
+    expect(recovered.account_after).toBeGreaterThan(beforeLoss.account_after);
+    expect(recovered.coverage_after).toBe(recovered.account_after);
+    expect(await advance()).toMatchObject({ status: 'preparing', enrollmentAdvanced: true });
     const frontier = await readFrontier();
+    expect(frontier[0]!.coverage_after).toBeGreaterThan(recovered.coverage_after);
     const epoch = resolved.definition.source.epoch;
     await setNativePartitionEpochForFixture(f.db, 0, epoch + 1);
     expect(await advance()).toMatchObject({ status: 'unavailable', reason: 'observation_lost' });

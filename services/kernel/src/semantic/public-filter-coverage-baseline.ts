@@ -4,8 +4,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import { maxPublicFilterEnrollmentHomes } from './public-filter-preparation-budget.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { discardConnection, withBoundedCommandConnection, withConnection } from '../database/pool.ts';
 
 type Binding = Readonly<{
   bootstrap: string;
@@ -94,16 +94,26 @@ function snapshotEnrollment(input: AccountDiscoveryEnrollment): AccountDiscovery
   return receipt;
 }
 
+type BaselineTransaction = <T>(body: (client: PoolClient) => Promise<T>) => Promise<T>;
+
+async function commitBaseline<T>(
+  client: PoolClient,
+  deadline: number,
+  body: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+  const value = await body(client);
+  requireAccessDeadline(deadline);
+  await client.query('COMMIT');
+  return value;
+}
+
 async function transaction<T>(pool: Pool, deadline: number, body: (client: PoolClient) => Promise<T>): Promise<T> {
   requireAccessDeadline(deadline);
   return withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
-      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-      const value = await body(client);
-      requireAccessDeadline(deadline);
-      await client.query('COMMIT');
-      return value;
+      return await commitBaseline(client, deadline, body);
     } catch (error) {
       try {
         await client.query('ROLLBACK');
@@ -214,16 +224,15 @@ function requireReceipt(binding: Binding, receipt: AccountDiscoveryEnrollment) {
     throw new CommandUnavailableError('contention', receipt.partition);
 }
 
-/** Confirm exact committed originals in one bounded read checkout. No Source
+/** Confirm exact committed originals in a separate transaction. No Source
  * lock survives into the registration transaction.
  */
 async function verifyReceipts(
-  pool: Pool,
+  transact: BaselineTransaction,
   binding: Binding,
   receipts: readonly AccountDiscoveryEnrollment[],
-  deadline: number,
 ) {
-  const originals = await transaction(pool, deadline, (client) =>
+  const originals = await transact((client) =>
     client.query<{ partition: number; valid: boolean }>(
       `/* semantic.native-keyed:${3 * receipts.length}:${3 * receipts.length} */
        SELECT r.partition, e.receipt IS NOT NULL AS valid
@@ -286,12 +295,13 @@ async function verifyReceipts(
 /** Adopt a verified contiguous prefix with one registration lock and commit
  * both cursor advances with the original receipt chain and per-home effects.
  */
-export async function adoptPublicFilterCoverageBaselinePage(
+export async function adoptPublicFilterCoverageBaselinePage<T = void>(
   pool: Pool,
   input: Binding,
   enrollments: readonly AccountDiscoveryEnrollment[],
   deadline: number,
-): Promise<void> {
+  readCommitted?: (client: PoolClient) => Promise<T>,
+): Promise<T | undefined> {
   const binding = snapshotBinding(input);
   if (!Array.isArray(enrollments) || types.isProxy(enrollments) || enrollments.length > maxPublicFilterEnrollmentHomes)
     throw new TypeError('Baseline enrollment requires a bounded native page');
@@ -308,8 +318,34 @@ export async function adoptPublicFilterCoverageBaselinePage(
   if (receipts.length === 0) return;
   if (binding.registration.partition !== 0)
     throw new CommandUnavailableError('contention', binding.registration.partition);
-  const verified = await verifyReceipts(pool, binding, receipts, deadline);
-  await transaction(pool, deadline, async (client) => {
+  if (!readCommitted) {
+    await adoptVerifiedPrefix((body) => transaction(pool, deadline, body), binding, receipts);
+    return;
+  }
+
+  return withBoundedCommandConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const transact: BaselineTransaction = async (body) => {
+        requireAccessDeadline(deadline);
+        await client.query('BEGIN');
+        return commitBaseline(client, deadline, body);
+      };
+      const complete = await adoptVerifiedPrefix(transact, binding, receipts);
+      if (complete) return readCommitted(client);
+    },
+    { deadlineError: () => new AccessUnavailableError('deadline') },
+  );
+}
+
+async function adoptVerifiedPrefix(
+  transact: BaselineTransaction,
+  binding: Binding,
+  receipts: readonly AccountDiscoveryEnrollment[],
+) {
+  const verified = await verifyReceipts(transact, binding, receipts);
+  await transact(async (client) => {
     await lockRegistration(client, binding);
     // Keep the original input reservation, including the bounded interval
     // checks. Each home can write four rows, plus two cursor writes per page.
@@ -337,4 +373,5 @@ export async function adoptPublicFilterCoverageBaselinePage(
       ],
     );
   });
+  return verified.length === receipts.length;
 }
