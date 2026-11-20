@@ -8,7 +8,9 @@ import { readRecoveryCopySource, readRecoveryCopySourcePage } from '../src/recov
 import { publishErasureProofs } from '../src/erasure-history.ts';
 import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts';
 import { testDatabase } from '../scripts/database.ts';
-import { issuer, nativeFixture } from './support/erasure-native.ts';
+import { issuer, nativeErasureFixtures, type nativeFixture } from './support/erasure-native.ts';
+
+const startFixture = nativeErasureFixtures();
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -61,7 +63,7 @@ async function startDelivery(
 }
 
 test('recovery delivery keeps its exact copy identity through the native erasure handoff while physical receiving stays pending', async () => {
-  const f = await nativeFixture();
+  const f = await startFixture();
   try {
     const victim = await f.person('external-retained');
     const living = await f.person('external-living');
@@ -143,7 +145,7 @@ test('recovery delivery keeps its exact copy identity through the native erasure
 }, 120_000);
 
 test('a native reset callback that returns after deletion leaves its original delivery unresolved', async () => {
-  const f = await nativeFixture();
+  const f = await startFixture();
   const held = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<string>();
   let running: Promise<unknown> | undefined;

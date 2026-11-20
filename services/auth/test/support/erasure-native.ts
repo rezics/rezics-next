@@ -1,6 +1,6 @@
-import { expect } from 'bun:test';
+import { afterEach, expect } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { preloadNativeKernel } from './native-kernel.ts';
+import { beforeNativeKernelTests, nativeKernelSetupTimeout, preloadNativeKernel } from './native-kernel.ts';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
@@ -168,6 +168,44 @@ export async function attachOperatingOpening(
   }
 }
 
+async function loadNativeAccess() {
+  const previousReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
+  process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+  try {
+    // Register Reylo before evaluating the SQL-backed Access and History modules.
+    await preloadNativeKernel();
+    return {
+      ...(await import('../../../kernel/src/access/index.ts')),
+      ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
+      ...(await import('../../../kernel/src/access/auth-bindings.ts')),
+      ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
+      ...(await import('../../../kernel/src/access/lifecycle.ts')),
+      ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
+      ...(await import('../../../kernel/src/route/route.ts')),
+    };
+  } finally {
+    if (previousReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
+    else process.env.KERNEL_RECEIPT_KEYS = previousReceiptKeys;
+  }
+}
+
+/** Analyze cold Kernel SQL during file setup and join timed-out acquisitions before the next case. */
+export function nativeErasureFixtures() {
+  beforeNativeKernelTests(async () => {
+    await loadNativeAccess();
+  });
+  let pending: ReturnType<typeof nativeFixture> | undefined;
+  afterEach(async () => {
+    const fixture = await pending?.catch(() => undefined);
+    pending = undefined;
+    await fixture?.close();
+  }, nativeKernelSetupTimeout);
+  return (options?: Parameters<typeof nativeFixture>[0]) => {
+    if (pending) throw new Error('Native erasure fixture already acquired for this case');
+    return (pending = nativeFixture(options));
+  };
+}
+
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture(
@@ -188,13 +226,6 @@ export async function nativeFixture(
     phase = 'Kernel pool acquisition';
     const kernel = new Pool({ connectionString: kernelFixture.url });
     ownNativePool(kernel, resources, 'Kernel pool');
-    const previousReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
-    const receiptKeysRelease = resources.own('KERNEL_RECEIPT_KEYS restoration', () => {
-      if (previousReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
-      else process.env.KERNEL_RECEIPT_KEYS = previousReceiptKeys;
-    });
-    // Dedicated receipt material, independent of this fixture's Access reference keys.
-    process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
     configureTestReceiptKeys(kernel);
     phase = 'Auth pool acquisition';
     const openPool = async () =>
@@ -215,23 +246,11 @@ export async function nativeFixture(
     process.env.DATABASE_URL = kernelFixture.url;
     let modules;
     try {
-      // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
-      // evaluates those adapters first and fails with a missing `sql` export.
       phase = 'Native Access module loading';
-      await preloadNativeKernel();
-      modules = {
-        ...(await import('../../../kernel/src/access/index.ts')),
-        ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
-        ...(await import('../../../kernel/src/access/auth-bindings.ts')),
-        ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
-        ...(await import('../../../kernel/src/access/lifecycle.ts')),
-        ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
-        ...(await import('../../../kernel/src/route/route.ts')),
-      };
+      modules = await loadNativeAccess();
     } finally {
       await restoreDatabaseUrl.release();
     }
-    await receiptKeysRelease.release();
     phase = 'Native Auth composition';
     const actions = new Map(modules.LIFECYCLE_ACTIONS);
     actions.set('account:manage', { anonymous: false });
