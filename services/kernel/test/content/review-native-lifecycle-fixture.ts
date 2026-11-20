@@ -3,8 +3,9 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { Pool } from 'pg';
 import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
 export type ReviewLifecyclePerson = Readonly<{ accountId: string; bearer: string }>;
@@ -107,14 +108,28 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
     await checked('POST', '/v1/platform/exposure/personal_library:open', { bearer: governance.bearer }, 200);
     await bootstrapLocalShowcaseBoardCreation(system.database.pool, governance.accountId);
 
+    const links = linkProjection(system.database.pool);
     const subject = async (label: string, bearer = author.bearer): Promise<string> => {
       const result = await checked('POST', '/v1/subjects', {
         bearer,
         body: { type: 'schema:Book', labels: { en: label } },
       });
-      const id = result.value.subject?.id;
-      if (typeof id !== 'string') throw new Error('Native subject creation did not return an id');
-      return id;
+      const id: unknown = result.value.subject?.id;
+      const route = typeof id === 'string' ? routeOf(id) : null;
+      if (typeof id !== 'string' || route === null)
+        throw new Error('Native subject creation did not return a routable id');
+
+      // Subject detail requires the native link checkpoint, even for a Book without relations.
+      const partition = partitionOf(route);
+      for (let step = 0; step < 20; step++) {
+        const batch = await links.run(partition);
+        if (batch.status === 'stopped')
+          throw new Error(
+            `Native Semantic link projection stopped in partition ${partition} at ${batch.position}: ${batch.reason}`,
+          );
+        if (batch.status === 'read' && batch.envelopes === 0) return id;
+      }
+      throw new Error(`Native Semantic link projection did not drain in partition ${partition}`);
     };
     const subjectId = await subject('Native review lifecycle subject');
     const subjectRead = await call('GET', `/v1/subjects/${subjectId}`);
