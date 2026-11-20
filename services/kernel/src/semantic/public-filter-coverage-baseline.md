@@ -47,13 +47,21 @@ Observation, repair, ACK and serving use their existing authority checks.
   ordinary continuation.
   It records input keys, statements and bytes for the prepared pair.
 
+## Shared subscription design
+
+The next cold enrollment protocol opens a versioned retention hold for the native creation and privacy streams
+before sampling any home. It registers the definition's keys once and persists a gapless cover of original home
+cuts in bounded immutable pages. Cleanup will honor outstanding holds, and privacy maintenance will retain each
+pending interval until its captured subscriber set is accounted for. The receiver will independently verify
+the same native evidence before committing its own ACK. Persisted preparations retain their original protocol.
+
 ## Subject receiver ACK protocol
 
-The original Search preparation pins its ACK protocol at insertion. Production selects version 0.
+The original Search preparation pins its ACK protocol at insertion. Production defaults to version 0.
 Version 1 is reserved for a cold catalogue Subject job. Its receiver compares the original verified
 creation windows, including empty homes, against enrollment, the retained creation checkpoint, Search
-baseline and current coverage. Each funded comparison covers at most 16 homes. Parents bind the two
-adjacent child revisions. A complete root covers homes 0 through 4095 before Source closes the terminal.
+baseline and current coverage. A funded comparison waits for a complete leaf of at most 32 homes. Parents
+bind the two adjacent child revisions. A complete root covers homes 0 through 4095 before Source closes the terminal.
 
 Receiver changes update the affected subtree clocks synchronously. Loss of an original enrollment,
 baseline or creation pin changes the preparation's continuity witness. Native owner, Semantic and
