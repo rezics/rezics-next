@@ -101,6 +101,21 @@ $$;
 
 
 --
+-- Name: clear_settled_relay_intent(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.clear_settled_relay_intent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Previous writers consume the retained bulk receipt without naming the intent column.
+  NEW.relay_intent := NULL;
+  RETURN NEW;
+END
+$$;
+
+
+--
 -- Name: enqueue_identity_receiving_scope(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -3100,6 +3115,13 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 --
 
 CREATE TRIGGER identity_receiving_native_plan_immutable BEFORE DELETE OR UPDATE ON search.identity_receiving_native_plan FOR EACH ROW EXECUTE FUNCTION search.prevent_receiving_plan_mutation();
+
+
+--
+-- Name: identity_writer identity_writer_clear_settled_relay_intent; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER identity_writer_clear_settled_relay_intent BEFORE UPDATE OF writer_token ON search.identity_writer FOR EACH ROW WHEN (((old.relay_intent IS NOT NULL) AND (new.relay_intent = old.relay_intent) AND (old.relay_receipt IS NOT NULL) AND (new.relay_receipt IS NULL) AND (new.dispatch_state = 'settled'::text) AND (new.writer_token IS NULL))) EXECUTE FUNCTION search.clear_settled_relay_intent();
 
 
 --
