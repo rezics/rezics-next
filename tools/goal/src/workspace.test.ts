@@ -2,10 +2,12 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { loadSettings } from './config.ts';
+import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { workerPrompt } from './launch.ts';
 import { MergeTrain } from './merge-train.ts';
 import type { GateOutcome } from './contracts.ts';
+import type { GateRunner } from './merge.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { settle } from './settle.ts';
 import { sameProcess } from './process.ts';
@@ -90,6 +92,21 @@ function fixture(script?: string) {
     });
   }
   const queue = new SqliteLandingQueue(h.store.db, h.store);
+  const job = new WorkerJob(tasks, queue, { deliver() {} });
+  async function trainDev(runTypecheck: GateRunner, outcomes: GateOutcome[] = []) {
+    await new MergeTrain({
+      ...h.settings,
+      queue,
+      fence: h.store,
+      integration: { ...h.settings.integration, devPrelandingTypecheck: true },
+      sink: {
+        onGateOutcome: (outcome) => outcomes.push(outcome),
+        onDevLandingTranspileHandoff: (handoff) => job.onDevLandingTranspileHandoff(handoff),
+      },
+      runTypecheck,
+    }).run();
+    await job.drain();
+  }
   function enqueue(task: Task) {
     task = h.store.task(task.id);
     queue.enqueue({
@@ -114,7 +131,7 @@ function fixture(script?: string) {
       git(h.root, ['worktree', 'remove', '--force', tree]);
     }
   }
-  return { ...h, tasks, controller, dispatch, commit, finish, enqueue, queue, prompts, advanceDev };
+  return { ...h, tasks, controller, dispatch, commit, finish, enqueue, queue, prompts, advanceDev, trainDev };
 }
 
 test("tasks whose declared paths all fall inside one configured module run at the same time in that module's single shared worktree, with no reservation or hold between them, and tasks outside every module keep isolated worktrees", async () => {
@@ -196,42 +213,31 @@ test("each worker commits its own work in the shared worktree with the subject '
   }
 });
 
-test('the train lands the workspace branch on dev with the usual checks and marks integrated every task whose commits are all on dev; dev is merged into the workspace only while no worker runs in it', async () => {
+test('the train checks the composed workspace candidate and marks each task integrated on dev; dev is merged into the workspace only while no worker runs in it', async () => {
   const h = fixture();
   try {
     const first = h.dispatch([`${library}a.ts`], 'page');
     const peer = h.dispatch([`${library}b.ts`], 'controls');
     await Promise.all([h.tasks.retry(first.id), h.tasks.retry(peer.id)]);
-    const a = h.commit(first, `${library}a.ts`),
-      b = h.commit(peer, `${library}b.ts`);
+    const a = h.commit(first, `${library}a.ts`, 'export const page = true;\n'),
+      b = h.commit(peer, `${library}b.ts`, 'export const controls = true;\n');
     h.advanceDev();
     h.finish(first);
     h.enqueue(first);
     const gates: string[][] = [];
     const outcomes: GateOutcome[] = [];
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: {
-        onGateOutcome: (outcome) => {
-          outcomes.push(outcome);
-        },
-      },
-      integration: { batchSize: 4 },
-      integrationChecks: [{ paths: [`${library}**`], command: ['true'] }],
-      runGate: async (command, cwd) => {
-        expect(cwd).not.toBe(first.worktree);
-        expect(readFileSync(join(cwd, 'external.txt'), 'utf8')).toBe('external dev work');
-        expect(existsSync(join(cwd, library, 'a.ts'))).toBe(true);
-        expect(existsSync(join(cwd, library, 'b.ts'))).toBe(true);
-        gates.push([...command]);
-        return { passed: true, output: '', timedOut: false };
-      },
-    }).run();
-    expect(gates).toEqual([first.brief.acceptance.command, peer.brief.acceptance.command]);
+    await h.trainDev(async (command, cwd) => {
+      expect(cwd).not.toBe(first.worktree);
+      expect(readFileSync(join(cwd, 'external.txt'), 'utf8')).toBe('external dev work');
+      expect(existsSync(join(cwd, library, 'a.ts'))).toBe(true);
+      expect(existsSync(join(cwd, library, 'b.ts'))).toBe(true);
+      gates.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    }, outcomes);
+    expect(gates).toHaveLength(1);
+    expect(gates[0]).toContain(`TYPECHECK_CHANGED=${library}a.ts\n${library}b.ts`);
     expect(outcomes[0]?.passed).toBe(true);
-    expect(readFileSync(outcomes[0]!.logPath, 'utf8')).toContain('Integration check on');
+    expect(readFileSync(outcomes[0]!.logPath, 'utf8')).toContain('required root typecheck on');
     expect(isAncestor(h.root, a, 'dev')).toBe(true);
     expect(isAncestor(h.root, b, 'dev')).toBe(true);
     expect(h.store.task(first.id).state).toBe('integrated');
@@ -256,33 +262,22 @@ test('a peer commit made during landing stays pending until its own source commi
     const first = h.dispatch([`${library}a.ts`], 'page'),
       peer = h.dispatch([`${library}b.ts`], 'controls');
     await Promise.all([h.tasks.retry(first.id), h.tasks.retry(peer.id)]);
-    h.commit(first, `${library}a.ts`);
-    h.commit(peer, `${library}b.ts`, 'first version');
+    h.commit(first, `${library}a.ts`, 'export const page = true;\n');
+    h.commit(peer, `${library}b.ts`, 'export const controls = 1;\n');
     h.finish(first);
     h.enqueue(first);
     let later = '';
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: { onGateOutcome() {} },
-      runGate: async () => {
-        if (!later) later = h.commit(peer, `${library}b.ts`, 'second version');
-        return { passed: true, output: '', timedOut: false };
-      },
-    }).run();
+    await h.trainDev(async () => {
+      if (!later) later = h.commit(peer, `${library}b.ts`, 'export const controls = 2;\n');
+      return { passed: true, output: '', timedOut: false };
+    });
+    expect(later).toMatch(/^[a-f0-9]{40}$/);
     expect(h.store.task(first.id).state).toBe('integrated');
     expect(h.store.task(peer.id).state).toBe('running');
     expect(isAncestor(h.root, later, 'dev')).toBe(false);
     h.finish(peer);
     h.enqueue(peer);
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: { onGateOutcome() {} },
-      runGate: async () => ({ passed: true, output: '', timedOut: false }),
-    }).run();
+    await h.trainDev(async () => ({ passed: true, output: '', timedOut: false }));
     expect(h.store.task(peer.id).state).toBe('integrated');
     expect(isAncestor(h.root, later, 'dev')).toBe(true);
   } finally {
@@ -290,36 +285,30 @@ test('a peer commit made during landing stays pending until its own source commi
   }
 });
 
-test('a failing peer acceptance returns to that task and leaves the unrelated landing queued', async () => {
+test('a prelanding typecheck failure in peer source returns to that task and leaves the unrelated landing queued', async () => {
   const h = fixture();
   try {
     const first = h.dispatch([`${library}a.ts`], 'page'),
       peer = h.dispatch([`${library}b.ts`], 'controls');
     await Promise.all([h.tasks.retry(first.id), h.tasks.retry(peer.id)]);
-    h.commit(first, `${library}a.ts`);
-    h.commit(peer, `${library}b.ts`);
+    h.commit(first, `${library}a.ts`, 'export const page = true;\n');
+    h.commit(peer, `${library}b.ts`, 'export const controls: number = "invalid";\n');
     h.finish(first);
     h.finish(peer);
     h.enqueue(first);
     const before = git(h.root, ['rev-parse', 'dev']);
     const outcomes: GateOutcome[] = [];
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: {
-        onGateOutcome: (outcome) => {
-          outcomes.push(outcome);
-        },
-      },
-      runGate: async (command) => ({
-        passed: command[1] !== 'controls',
-        output: 'peer assertion failed',
+    await h.trainDev(
+      async (_command, cwd) => ({
+        passed: false,
+        output: `${join(cwd, library, 'b.ts')}(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`,
         timedOut: false,
       }),
-    }).run();
+      outcomes,
+    );
     expect(outcomes.map((outcome) => outcome.taskId)).toEqual([peer.id]);
     expect(outcomes[0]?.passed).toBe(false);
+    expect(outcomes[0]?.firstFailure?.excerpt).toContain('TS2322');
     expect(h.queue.next()?.request.taskId).toBe(first.id);
     expect(git(h.root, ['rev-parse', 'dev'])).toBe(before);
     expect(h.store.task(first.id).state).toBe('landing');
