@@ -58,9 +58,17 @@ test('fresh shards bind native topology, ignore ordinary positions and invalidat
     expect(await ready(db.pool)).toBe(initial);
     expect((await decodeSearchCursor(ring, binding(initial), token)).ok).toBe(true);
 
-    await client.query('BEGIN');
+    // A full scan looks cheap after ANALYZE, but its predicate covers every shard.
+    await client.query('ANALYZE semantic.identity_basis_shard');
+    await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await client.query("UPDATE core.partition SET write_state='moved',moved_to='next' WHERE partition_no=17");
+      expect(
+        (
+          await client.query(`SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND mode='SIReadLock'
+          AND relation='semantic.identity_basis_shard'::regclass AND locktype='relation'`)
+        ).rowCount,
+      ).toBe(0);
       await expect(readIdentityHome(client, 17)).rejects.toMatchObject({ reason: 'moved', movedTo: 'next' });
       expect(await ready(db.pool)).toBe(initial);
     } finally {

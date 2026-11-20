@@ -5188,6 +5188,7 @@ $$;
 
 CREATE FUNCTION semantic.update_identity_basis_shard() RETURNS trigger
     LANGUAGE plpgsql
+    SET enable_seqscan TO 'off'
     AS $$
 DECLARE
   movement boolean := (OLD.epoch,OLD.node,OLD.write_state,OLD.moved_to,OLD.control_epoch,OLD.generation)
