@@ -12,7 +12,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { acquireDirectoryLease } from './lease.ts';
 import { checkPinnedBunInstallation, createBunExecutableValidationCache } from './check-compatibility.ts';
@@ -52,6 +52,18 @@ function fixture() {
   };
 }
 
+function expectUnprivilegedWriteRefusal(path: string): void {
+  const name = basename(path);
+  const command = ['/bin/sh', '-c', 'test -r . && test -x . && printf changed > "$1"', 'write-probe', name];
+  // Enter the containing directory before dropping privileges so private workspace ancestors cannot cause the refusal.
+  const result = Bun.spawnSync(
+    process.getuid?.() === 0 ? ['setpriv', '--reuid=65534', '--regid=65534', '--clear-groups', ...command] : command,
+    { cwd: dirname(path), env: { ...process.env, LC_ALL: 'C' } },
+  );
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr.toString()).toContain(`${name}: Permission denied`);
+}
+
 test('worktrees with one key share a read-only store and retain local workspace links', () => {
   const h = fixture();
   try {
@@ -73,7 +85,8 @@ test('worktrees with one key share a read-only store and retain local workspace 
     expect(realpathSync(join(a, 'node_modules/@test/sample'))).toBe(resolve(a, 'packages/sample'));
     expect(realpathSync(join(b, 'node_modules/@test/sample'))).toBe(resolve(b, 'packages/sample'));
     expect(readlinkSync(join(a, 'node_modules/.bun'))).toContain('stores');
-    expect(() => writeFileSync(join(b, 'node_modules/.bun/canary'), 'changed')).toThrow();
+    expect(lstatSync(bunTarget(b)).mode & 0o777).toBe(0o555);
+    expectUnprivilegedWriteRefusal(join(bBun, 'canary'));
   } finally {
     h.close();
   }
@@ -534,10 +547,11 @@ test('a sealed store keeps package binaries executable and refuses writes', () =
     writeFileSync(join(bin, 'data.json'), '{}');
     chmodSync(join(bin, 'data.json'), 0o644);
     sealReadOnly(join(h.root, 'store'));
+    expect(lstatSync(bin).mode & 0o777).toBe(0o555);
     expect(lstatSync(join(bin, 'tool')).mode & 0o777).toBe(0o555);
     expect(lstatSync(join(bin, 'data.json')).mode & 0o777).toBe(0o444);
     expect(new TextDecoder().decode(Bun.spawnSync([join(bin, 'tool')]).stdout)).toBe('ran\n');
-    expect(() => writeFileSync(join(bin, 'data.json'), 'changed')).toThrow();
+    expectUnprivilegedWriteRefusal(join(bin, 'data.json'));
   } finally {
     h.close();
   }
@@ -715,8 +729,10 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
     const db = openDb(join(h.root, '.temp/queue.sqlite'));
     try {
       writeFileSync(join(h.root, '.gitignore'), '.temp/\n');
-      h.git('add', '.gitignore');
-      h.git('commit', '-qm', 'Ignore fixture state');
+      mkdirSync(join(h.root, 'scripts'));
+      writeFileSync(join(h.root, 'scripts/architecture.ts'), 'process.exit(0);\n');
+      h.git('add', '.gitignore', 'scripts/architecture.ts');
+      h.git('commit', '-qm', 'Set up candidate checks');
       h.git('branch', 'dev');
       h.git('-C', h.tree, 'checkout', '-b', 'fixture-worker', 'main');
       writeFileSync(join(h.tree, 'feature.ts'), 'export const feature = true;\n');
@@ -747,7 +763,7 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
         stateDirectory: join(h.root, '.temp/state'),
         worktreeRoot: join(h.root, 'trees'),
         integrationBranch: 'dev',
-        integration: { devLandingChecks: false },
+        integration: { devLandingChecks: false, devPrelandingTypecheck: true },
         queue,
         fence,
         sink: {
@@ -761,7 +777,15 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
         runTypecheck: async (command, cwd) => {
           calls++;
           checkedTree = cwd;
-          expect(command).toEqual(['env', 'TYPECHECK_CHANGED=feature.ts', 'bun', 'scripts/typecheck.ts']);
+          expect(command).toEqual([
+            'env',
+            'TYPECHECK_LOCAL=1',
+            `TYPECHECK_DEV_COMMIT=${base}`,
+            `TYPECHECK_CANDIDATE_COMMIT=${source}`,
+            'TYPECHECK_CHANGED=feature.ts',
+            'bun',
+            'scripts/typecheck.ts',
+          ]);
           expect(h.git('rev-parse', 'dev').trim()).toBe(base);
           expect(h.git('-C', cwd, 'rev-parse', 'HEAD').trim()).toBe(source);
           const sealed = join(cwd, '.temp/sealed-fixture');
