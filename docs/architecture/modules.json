@@ -412,7 +412,8 @@
       ],
       "publicEntries": [
         "services/kernel/src/economy/ledger.ts",
-        "services/kernel/src/economy/storage/funding-store.ts"
+        "services/kernel/src/economy/storage/funding-store.ts",
+        "services/kernel/src/economy/storage/market-store.ts"
       ],
       "allowedDependencies": ["kernel-economy-contract", "kernel-economy-core"],
       "capabilities": ["economy-ledger"],

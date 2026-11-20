@@ -254,6 +254,67 @@ CREATE TABLE economy.journal (
 
 
 --
+-- Name: market_listing; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_listing (
+    book_id text NOT NULL,
+    listing_id text NOT NULL,
+    item_home_id text NOT NULL,
+    item_id text NOT NULL,
+    reservation_id text NOT NULL,
+    revision bigint NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT market_listing_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT market_listing_revision_check CHECK ((revision >= 0))
+);
+
+
+--
+-- Name: market_trade; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_trade (
+    book_id text NOT NULL,
+    trade_id text NOT NULL,
+    listing_id text NOT NULL,
+    revision bigint NOT NULL,
+    prepare_until bigint NOT NULL,
+    payload jsonb NOT NULL,
+    decision_pending boolean GENERATED ALWAYS AS (((payload -> 'decision'::text) = 'null'::jsonb)) STORED NOT NULL,
+    prepared boolean GENERATED ALWAYS AS (((payload -> 'receipts'::text) ?& ARRAY['prepare_item'::text, 'prepare_funds'::text])) STORED NOT NULL,
+    CONSTRAINT market_trade_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT market_trade_prepare_until_check CHECK ((prepare_until > 0)),
+    CONSTRAINT market_trade_revision_check CHECK ((revision >= 0))
+);
+
+
+--
+-- Name: market_work; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_work (
+    book_id text NOT NULL,
+    instruction_id text NOT NULL,
+    listing_id text NOT NULL,
+    trade_id text,
+    owner_kind text NOT NULL,
+    owner_id text NOT NULL,
+    payload jsonb NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    claim_id uuid,
+    available_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    receipt jsonb,
+    CONSTRAINT market_work_check CHECK (((status = 'acknowledged'::text) = (receipt IS NOT NULL))),
+    CONSTRAINT market_work_check1 CHECK (((status <> 'acknowledged'::text) OR (claim_id IS NOT NULL))),
+    CONSTRAINT market_work_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['item'::text, 'ledger'::text]))),
+    CONSTRAINT market_work_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT market_work_receipt_check CHECK (((receipt IS NULL) OR (jsonb_typeof(receipt) = 'object'::text))),
+    CONSTRAINT market_work_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'acknowledged'::text, 'superseded'::text])))
+);
+
+
+--
 -- Name: position; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -418,6 +479,46 @@ ALTER TABLE ONLY economy.journal
 
 
 --
+-- Name: market_listing market_listing_book_id_item_home_id_item_id_reservation_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_listing
+    ADD CONSTRAINT market_listing_book_id_item_home_id_item_id_reservation_id_key UNIQUE (book_id, item_home_id, item_id, reservation_id);
+
+
+--
+-- Name: market_listing market_listing_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_listing
+    ADD CONSTRAINT market_listing_pkey PRIMARY KEY (book_id, listing_id);
+
+
+--
+-- Name: market_trade market_trade_book_id_listing_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_trade
+    ADD CONSTRAINT market_trade_book_id_listing_id_key UNIQUE (book_id, listing_id);
+
+
+--
+-- Name: market_trade market_trade_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_trade
+    ADD CONSTRAINT market_trade_pkey PRIMARY KEY (book_id, trade_id);
+
+
+--
+-- Name: market_work market_work_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_work
+    ADD CONSTRAINT market_work_pkey PRIMARY KEY (book_id, instruction_id);
+
+
+--
 -- Name: position position_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -445,6 +546,34 @@ CREATE INDEX funding_dispatch_due_idx ON economy.funding_dispatch USING btree (b
 --
 
 CREATE INDEX hold_due_idx ON economy.hold USING btree (book_id, expires_at, asset_id, account_id, hold_id) WHERE (remaining > allocated);
+
+
+--
+-- Name: market_trade_pending_decision; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_trade_pending_decision ON economy.market_trade USING btree (book_id, prepare_until, trade_id) WHERE decision_pending;
+
+
+--
+-- Name: market_trade_prepared_decision; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_trade_prepared_decision ON economy.market_trade USING btree (book_id, prepare_until, trade_id) WHERE (decision_pending AND prepared);
+
+
+--
+-- Name: market_work_by_trade; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_work_by_trade ON economy.market_work USING btree (book_id, trade_id);
+
+
+--
+-- Name: market_work_ready; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_work_ready ON economy.market_work USING btree (book_id, owner_kind, owner_id, available_at, instruction_id) WHERE (status = 'pending'::text);
 
 
 --
@@ -599,6 +728,30 @@ ALTER TABLE ONLY economy.journal
 
 ALTER TABLE ONLY economy.journal
     ADD CONSTRAINT journal_book_id_origin_id_namespace_operation_id_fkey FOREIGN KEY (book_id, origin_id, namespace, operation_id) REFERENCES economy.command_receipt(book_id, origin_id, namespace, operation_id);
+
+
+--
+-- Name: market_trade market_trade_book_id_listing_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_trade
+    ADD CONSTRAINT market_trade_book_id_listing_id_fkey FOREIGN KEY (book_id, listing_id) REFERENCES economy.market_listing(book_id, listing_id);
+
+
+--
+-- Name: market_work market_work_book_id_listing_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_work
+    ADD CONSTRAINT market_work_book_id_listing_id_fkey FOREIGN KEY (book_id, listing_id) REFERENCES economy.market_listing(book_id, listing_id);
+
+
+--
+-- Name: market_work market_work_book_id_trade_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_work
+    ADD CONSTRAINT market_work_book_id_trade_id_fkey FOREIGN KEY (book_id, trade_id) REFERENCES economy.market_trade(book_id, trade_id);
 
 
 --
