@@ -1,4 +1,4 @@
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
 import type { ContentImportedFieldGroup } from './contract/domain-ports.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { createHash } from 'node:crypto';
@@ -11,6 +11,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { SOURCE_FENCE_COMMAND_DISPATCH_CONTROLS as FENCE } from '../command/dispatch-lifetime.ts';
+import { withBoundedCommandConnection } from '../database/pool.ts';
 import { withReadTransaction } from './read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -573,23 +574,35 @@ function sourceFactory(
             eofFence.bytes * 2 + bodyBytes(SEEK_BODY + HOLD_EOF_BODY + TRANSFER_BODY + READ_BODY),
           );
           budget.reserve(SEEK_BODY, wireBytes([sourceHome, barrier.accountId, ...after]));
-          const sought = await withReadTransaction(pool, async (tx) => {
-            const seal = await tx.query(
-              `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
-              [sourceHome, barrier.accountId, barrier.version, barrier.at],
-            );
-            if (!seal.rowCount) return null;
-            const raw = (
-              await tx.query<Cursor>(
-                `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
+          const sought = await withBoundedCommandConnection(
+            pool,
+            deadline,
+            async (tx) => {
+              // PostgreSQL requires READ WRITE for the seal lock. Keep the cursor seek on the same snapshot.
+              await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ WRITE');
+              await tx.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+              const seal = await tx.query(
+                `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+                [sourceHome, barrier.accountId, barrier.version, barrier.at],
+              );
+              if (!seal.rowCount) {
+                await tx.query('COMMIT');
+                return null;
+              }
+              const raw = (
+                await tx.query<Cursor>(
+                  `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
              FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
              AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
              ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
-                [sourceHome, barrier.accountId, ...after],
-              )
-            ).rows[0];
-            return { raw };
-          });
+                  [sourceHome, barrier.accountId, ...after],
+                )
+              ).rows[0];
+              await tx.query('COMMIT');
+              return { raw };
+            },
+            { deadlineError: () => new AccessUnavailableError('deadline') },
+          );
           if (!sought) return pendingPage(budget);
           const raw = sought.raw;
           const next: Cursor = raw ?? {

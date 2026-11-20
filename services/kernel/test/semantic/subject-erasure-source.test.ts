@@ -78,7 +78,7 @@ async function local(b: HistoryBarrier) {
     await Bun.sleep(20);
   }
 }
-async function complete(b: HistoryBarrier) {
+async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
   const records: SubjectErasureSourceRecord[] = [];
   let frontier: string | null = null;
   let proof: SubjectErasureSourceProof | null = null;
@@ -100,6 +100,19 @@ async function complete(b: HistoryBarrier) {
       continue;
     }
     receipt = { ...page.receipt };
+    if (replayKeyPrefix && page.records.some((record) => record.key.startsWith(replayKeyPrefix))) {
+      // Lose the response before consumption, then resume from the same incoming frontier.
+      const replay = await createSubjectErasureSource(config()).readPage({
+        barrier: b,
+        frontier,
+        inputLimit: 100,
+        context: context(),
+      });
+      if (!('receipt' in replay)) throw new Error('Expected the retained native Source receipt');
+      expect(replay.receipt).toEqual(page.receipt);
+      expect(replay.records).toEqual(page.records);
+      receipt = { ...replay.receipt };
+    }
     const accepted = await command(b, async (tx) => ({
       value: await verifySubjectErasureSourcePage(tx, b, receipt!),
       events: events(b),
@@ -416,8 +429,8 @@ test('equal-delivery original and native origins traverse into distinct held Sou
     await f.tombstone(author);
     const b = await barrier(author.accountId);
     await local(b);
-    const result = await complete(b);
     const prefix = `${partition}:revision:${revision.key}:actor:${captured.position}:`;
+    const result = await complete(b, prefix);
     expect(
       result.records
         .filter((record) => record.key.startsWith(prefix))
