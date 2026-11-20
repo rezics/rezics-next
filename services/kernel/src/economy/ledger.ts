@@ -29,7 +29,16 @@ type WalletKey = Parameters<EconomyLedger['readBalance']>[0];
 type Command = Parameters<EconomyLedger['release']>[0];
 type Operation = Omit<Command, 'holdId'>;
 type Kind = WalletEntry['kind'] | 'allocate' | 'capture_allocation' | 'release_allocation' | 'release_amount';
-type Position = Readonly<{ accountId: string; posted: string; held: string; restricted: string; revision: string }>;
+type ControlRole = 'provider_clearing' | 'chargeback_receivable';
+type AccountRole = 'wallet' | 'issuer' | ControlRole;
+type Position = Readonly<{
+  accountId: string;
+  accountRole: AccountRole;
+  posted: string;
+  held: string;
+  restricted: string;
+  revision: string;
+}>;
 type Delta = Readonly<{ position: Position; posted: bigint; held: bigint }>;
 type Hold = Readonly<{ remaining: string; allocated: string; expiresAt: Date }>;
 type HoldChange = Readonly<{ captured?: bigint; released?: bigint; allocated?: bigint }>;
@@ -48,6 +57,23 @@ type Plan = Readonly<{
 }>;
 type BusinessFailure = Readonly<{ kind: Exclude<EconomyFailure, 'unavailable'> }>;
 type Outcome = 'ok' | BusinessFailure['kind'];
+
+type FundingProvider = Readonly<{ namespace: string; mode: 'test' | 'live' }>;
+type FundingProof = FundingProvider & Readonly<{ source: 'movement' | 'refusal'; id: string }>;
+export type NativeFundingPosting = WalletKey &
+  Readonly<{ proof: FundingProof; units: string }> &
+  (
+    | Readonly<{ kind: 'deposit' | 'withdrawal_return' }>
+    | Readonly<{ kind: 'withdrawal' | 'withdrawal_refusal'; holdId: string }>
+    | Readonly<{ kind: 'chargeback'; recoverableUnits: string }>
+  );
+
+interface NativeFundingLedger {
+  lockRecoverableFundingWallet(
+    input: WalletKey & Readonly<{ provider: FundingProvider }>,
+  ): Promise<EconomyResult<string>>;
+  postFunding(input: NativeFundingPosting): Promise<EconomyResult<EconomyReceipt>>;
+}
 
 function success<T>(value: T): EconomyResult<T> {
   return { kind: 'ok', value };
@@ -101,22 +127,30 @@ async function getTime(client: Query): Promise<Date> {
   return result.rows[0]!.at;
 }
 
-async function lockPositions(context: Context, keys: readonly string[]): Promise<Map<string, Position>> {
+async function lockPositions(
+  context: Context,
+  keys: readonly string[],
+  controls: ReadonlyMap<string, ControlRole> = new Map(),
+): Promise<Map<string, Position>> {
   const { client, bookId, asset } = context;
+  const roleOf = (id: string): AccountRole => controls.get(id) ?? (id === issuerAccount ? 'issuer' : 'wallet');
   await client.query(
-    `INSERT INTO economy.position (book_id, asset_id, account_id)
-     SELECT $1, $2, account_id FROM unnest($3::uuid[]) AS keys(account_id) ORDER BY account_id
+    `INSERT INTO economy.position (book_id, asset_id, account_id, account_role)
+     SELECT $1, $2, account_id, account_role
+       FROM unnest($3::uuid[], $4::text[]) AS keys(account_id, account_role) ORDER BY account_id
      ON CONFLICT DO NOTHING`,
-    [bookId, asset.id, keys],
+    [bookId, asset.id, keys, keys.map(roleOf)],
   );
   const result = await client.query<Position>(
-    `SELECT account_id::text AS "accountId", posted::text, held::text, restricted::text, revision::text
+    `SELECT account_id::text AS "accountId", account_role AS "accountRole", posted::text, held::text, restricted::text, revision::text
      FROM economy.position
      WHERE book_id = $1 AND asset_id = $2 AND account_id = ANY($3::uuid[])
      ORDER BY account_id FOR UPDATE`,
     [bookId, asset.id, keys],
   );
   if (result.rows.length !== keys.length) throw new Error('Economy account position is missing');
+  if (result.rows.some(({ accountId, accountRole }) => accountRole !== roleOf(accountId)))
+    throw new Error('Economy account position role does not match its posting');
   return new Map(result.rows.map((position) => [position.accountId, position]));
 }
 
@@ -149,9 +183,11 @@ function validPlan({ deltas }: Plan): boolean {
       BigInt(change.position.revision) === maxInteger
     )
       return false;
+    const restricted = BigInt(change.position.restricted);
     if (
-      change.position.accountId !== issuerAccount &&
-      (held < 0n || posted < held + BigInt(change.position.restricted))
+      change.position.accountRole === 'wallet'
+        ? held < 0n || posted < held + restricted
+        : held !== 0n || restricted !== 0n
     )
       throw new Error('Economy posting group violates position invariants');
   }
@@ -271,7 +307,67 @@ async function finishAllocation(
   if (result.rowCount !== 1) throw new Error('Protected Economy allocation changed while locked');
 }
 
-export function createEconomyLedger(database: EconomyDatabase, bookId: string): EconomyLedger {
+function validFundingProvider(value: FundingProvider): boolean {
+  return validOperationKey(value.namespace) && (value.mode === 'test' || value.mode === 'live');
+}
+
+async function fundingControl(context: Context, role: ControlRole, reference: string): Promise<string> {
+  const { client, bookId, asset } = context;
+  const key = [bookId, asset.id, role, reference];
+  await client.query(
+    `INSERT INTO economy.funding_control_account (book_id, asset_id, account_role, reference, account_id)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (book_id, asset_id, account_role, reference) DO NOTHING`,
+    [...key, randomUUID()],
+  );
+  const { rows } = await client.query<{ accountId: string }>(
+    `SELECT account_id AS "accountId" FROM economy.funding_control_account
+      WHERE book_id = $1 AND asset_id = $2 AND account_role = $3 AND reference = $4`,
+    key,
+  );
+  if (!rows[0]) throw new Error('Economy funding control is missing');
+  return rows[0].accountId;
+}
+
+async function lockFundingPositions(context: Context, provider: FundingProvider, includeReceivable: boolean) {
+  const clearing = await fundingControl(context, 'provider_clearing', `${provider.mode}/${provider.namespace}`);
+  const receivable = includeReceivable
+    ? await fundingControl(context, 'chargeback_receivable', context.accountId)
+    : null;
+  const controls = new Map<string, ControlRole>([[clearing, 'provider_clearing']]);
+  if (receivable !== null) controls.set(receivable, 'chargeback_receivable');
+  if (controls.has(context.accountId) || (receivable !== null && receivable === clearing))
+    throw new Error('Economy funding account identity overlaps');
+  const locked = await lockPositions(context, [context.accountId, ...controls.keys()], controls);
+  return {
+    owner: locked.get(context.accountId)!,
+    clearing: locked.get(clearing)!,
+    receivable: receivable === null ? null : locked.get(receivable)!,
+  };
+}
+
+async function bindFundingJournal(context: Context, proof: FundingProof, transactionId: string): Promise<void> {
+  const { rowCount } = await context.client.query(
+    `INSERT INTO economy.funding_posting (provider_namespace, provider_mode, source_kind, source_id, book_id, asset_id, transaction_id)
+     SELECT e.provider_namespace, e.provider_mode, e.source_kind, e.source_id, e.book_id, i.asset_id, $8
+       FROM economy.funding_evidence AS e
+       JOIN economy.funding_intent AS i ON i.book_id = e.book_id AND i.intent_id = e.intent_id
+      WHERE e.provider_namespace = $1 AND e.provider_mode = $2 AND e.source_kind = $3 AND e.source_id = $4
+        AND e.book_id = $5 AND i.asset_id = $6 AND i.wallet_id = $7`,
+    [
+      proof.namespace,
+      proof.mode,
+      proof.source,
+      proof.id,
+      context.bookId,
+      context.asset.id,
+      context.accountId,
+      transactionId,
+    ],
+  );
+  if (rowCount !== 1) throw new Error('Economy funding journal has no matching provider evidence');
+}
+
+export function createEconomyLedger(database: EconomyDatabase, bookId: string): EconomyLedger & NativeFundingLedger {
   if (!isEconomyBookId(bookId)) throw new TypeError('Invalid Economy book ID');
 
   function command(
@@ -525,7 +621,94 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     });
   }
 
+  function postFunding(input: NativeFundingPosting): Promise<EconomyResult<EconomyReceipt>> {
+    const { proof, kind } = input;
+    const holdId = 'holdId' in input ? input.holdId : null;
+    const recovered =
+      kind === 'chargeback' ? (input.recoverableUnits === '0' ? 0n : positiveInteger(input.recoverableUnits)) : 0n;
+    const amount = positiveInteger(input.units);
+    if (amount === null || recovered === null || recovered > amount) return Promise.resolve(failure('invalid_amount'));
+    if (
+      !validFundingProvider(proof) ||
+      !validOperationKey(proof.id) ||
+      proof.source !== (kind === 'withdrawal_refusal' ? 'refusal' : 'movement')
+    )
+      return Promise.resolve(failure('invalid_operation'));
+    const evidenceKey = JSON.stringify([proof.namespace, proof.mode, proof.source, proof.id]);
+    const operationId = `funding/evidence/${createHash('sha256').update(evidenceKey).digest('hex')}`;
+    return command(
+      { ...input, operationId },
+      kind,
+      holdId,
+      [evidenceKey, input.units, recovered.toString()],
+      async (context) => {
+        const key =
+          holdId === null
+            ? null
+            : {
+                accountId: context.accountId,
+                assetId: context.asset.id,
+                holdId,
+                purpose: 'withdrawal' as const,
+                reference: holdId,
+              };
+        if (key !== null) {
+          if (!(await getHold(context, key.holdId, true))) return failure('hold_missing');
+          const protectedAllocation = await getAllocation(context.client, bookId, key);
+          if (!protectedAllocation) return failure('allocation_missing');
+          if (protectedAllocation.status !== 'protected') return failure('allocation_closed');
+          if (BigInt(protectedAllocation.amount) !== amount) return failure('operation_conflict');
+        }
+        const at = await getTime(context.client);
+        let deltas: readonly Delta[];
+        let recipient: string | null = null;
+        if (kind === 'withdrawal_refusal') {
+          const [owner] = await positions(context);
+          deltas = [delta(owner, 0n, -amount)];
+        } else {
+          const { owner, clearing, receivable } = await lockFundingPositions(context, proof, kind === 'chargeback');
+          if (kind === 'withdrawal') {
+            recipient = clearing.accountId;
+            deltas = [delta(owner, -amount, -amount), delta(clearing, amount)];
+          } else if (kind === 'chargeback') {
+            if (available(owner) < recovered) return failure('insufficient_funds');
+            const changes = [delta(clearing, amount)];
+            if (recovered > 0n) changes.push(delta(owner, -recovered));
+            if (amount > recovered) changes.push(delta(receivable!, recovered - amount));
+            deltas = changes;
+          } else {
+            deltas = [delta(owner, amount), delta(clearing, -amount)];
+          }
+        }
+        return {
+          at,
+          deltas,
+          persistHold: async (transactionId) => {
+            if (key !== null) {
+              const captured = kind === 'withdrawal' ? amount : 0n;
+              await changeHold(context, key.holdId, at, { captured, released: amount - captured, allocated: -amount });
+              await finishAllocation(context.client, bookId, key, recipient, transactionId, at);
+            }
+            await bindFundingJournal(context, proof, transactionId);
+          },
+        };
+      },
+    );
+  }
+
   return {
+    postFunding,
+    lockRecoverableFundingWallet(input) {
+      const accountId = walletAccount(input.accountId);
+      if (accountId === null || !validIdentifier(input.assetId) || !validFundingProvider(input.provider))
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (client) => {
+        const asset = await getAsset(client, bookId, input.assetId);
+        if (!asset) return failure('asset_missing');
+        const { owner } = await lockFundingPositions({ client, bookId, asset, accountId }, input.provider, true);
+        return success(available(owner).toString());
+      });
+    },
     provisionAsset(input) {
       const { id, scale, transferable } = input;
       if (
@@ -556,6 +739,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       return database.read(async (client) => {
         const result = await client.query<EconomyAsset & Position>(
           `SELECT asset.asset_id AS id, asset.scale, asset.transferable, $3::uuid::text AS "accountId",
+                  COALESCE(position.account_role, 'wallet') AS "accountRole",
                   COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS held,
                   COALESCE(position.restricted, 0)::text AS restricted, COALESCE(position.revision, 0)::text AS revision
            FROM economy.asset AS asset
@@ -566,6 +750,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
         );
         const row = result.rows[0];
         if (row === undefined) return failure('asset_missing');
+        if (row.accountRole !== 'wallet') return failure('invalid_operation');
         const { id, scale, transferable, posted, held, restricted } = row;
         return success({
           asset: { id, scale, transferable },
@@ -603,8 +788,10 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
                   e.held_delta::text AS "heldDelta", j.recorded_at AS "recordedAt"
            FROM economy.entry AS e
            JOIN economy.journal AS j ON j.book_id = e.book_id AND j.asset_id = e.asset_id AND j.transaction_id = e.transaction_id
-           WHERE e.book_id = $1 AND e.asset_id = $2 AND e.account_id = $3
-             AND e.position <= $4::bigint
+           WHERE e.book_id = $1 AND e.asset_id = $2 AND e.account_id = $3 AND e.position <= $4::bigint
+             AND EXISTS (SELECT 1 FROM economy.position AS wallet
+                         WHERE wallet.book_id = $1 AND wallet.asset_id = $2 AND wallet.account_id = $3
+                           AND wallet.account_role = 'wallet')
            ORDER BY e.position DESC LIMIT $5`,
           [bookId, assetId, accountId, cutoff.toString(), limit + 1],
         );
