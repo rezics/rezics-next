@@ -49,6 +49,11 @@ export type CreditCreatorSnapshot = Readonly<{
   subjects?: ReadonlyMap<string, WorkHeader | null>;
   owners?: ReadonlyMap<number, Partition>;
 }>;
+export type CreditIdentityReader = (pool: Pool, originals: readonly string[]) => Promise<IdentityMapping[]>;
+export type CreditCreatorObservation = Readonly<{
+  snapshot?: CreditCreatorSnapshot;
+  readIdentities?: CreditIdentityReader;
+}>;
 
 function groups(ids: readonly string[]) {
   const result = new Map<number, { route: number; id: string }[]>();
@@ -208,6 +213,17 @@ async function identityOf(pool: Pool, originals: readonly string[]): Promise<Ide
   return mappings;
 }
 
+/** Each point batch observes all its source and control homes in one native snapshot. */
+export async function readIndexCreditIdentities(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
+  const mappings: IdentityMapping[] = [];
+  for (let offset = 0; offset < originals.length; offset += 100) {
+    const batch = originals.slice(offset, offset + 100);
+    const observed = await inSearchSnapshot(pool, (tx) => readReleasedIdentityMappingsInSnapshot(tx, batch));
+    mappings.push(...observed.mappings);
+  }
+  return mappings;
+}
+
 function mappingEpoch(mapping: IdentityMapping | undefined): string {
   if (!mapping) return 'absent';
   if (mapping.state === 'mapped') return mapping.epoch.toString();
@@ -222,7 +238,7 @@ export async function canonicalCreators(
   originals: readonly string[],
   limits: CreditSearchCeilings,
   itemQualifierIds: readonly string[] = [],
-  snapshot?: CreditCreatorSnapshot,
+  { snapshot, readIdentities = identityOf }: CreditCreatorObservation = {},
 ): Promise<CreatorResolution> {
   const unique = [...new Set(originals)];
   const roots = [...new Set([...unique, ...itemQualifierIds])];
@@ -243,7 +259,7 @@ export async function canonicalCreators(
   if (snapshot && pending.some((id) => !states.has(id))) return { state: 'unavailable' };
   const mappings = snapshot
     ? (await readReleasedIdentityMappingsInSnapshot(snapshot.tx, roots, snapshot.owners)).mappings
-    : await identityOf(pool, roots);
+    : await readIdentities(pool, roots);
   if (mappings.some((mapping) => mapping.state === 'pending')) return { state: 'preparing' };
   // Bootstrap, missing-owner and moved homes fail closed: a redirect chain never stands in for unknown identity.
   if (mappings.some((mapping) => mapping.state === 'unavailable')) return { state: 'unavailable' };

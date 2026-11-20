@@ -14,7 +14,14 @@ import {
   type CreditSearchSource,
   type CreditSearchWitness,
 } from '../search/credit-search.ts';
-import { canonicalCreators, type CreditCreatorSnapshot, type PublicCreator } from './credit-search-creators.ts';
+import {
+  canonicalCreators,
+  readIndexCreditIdentities,
+  type CreditCreatorObservation,
+  type CreditCreatorSnapshot,
+  type CreditIdentityReader,
+  type PublicCreator,
+} from './credit-search-creators.ts';
 import { withReadTransaction } from './read.ts';
 import {
   digestOf,
@@ -102,7 +109,7 @@ async function expandCredits(
   pool: Pool,
   parsed: readonly ParsedCredit[],
   limits: ReturnType<typeof installedLimits>,
-  snapshot?: CreditCreatorSnapshot,
+  observation?: CreditCreatorObservation,
 ) {
   const complete = parsed.filter((credit) => !credit.overflowQualifiers);
   const resolved = await canonicalCreators(
@@ -110,7 +117,7 @@ async function expandCredits(
     complete.map((credit) => credit.targetId),
     limits,
     complete.flatMap((credit) => credit.itemQualifierIds),
-    snapshot,
+    observation,
   );
   if (resolved.state !== 'current') return resolved;
   return {
@@ -140,14 +147,14 @@ export async function projectSelectedCreditsInSnapshot(
     const credit = parseCredit(row, release, limits.qualifiersPerCredit);
     if (credit) parsed.push(credit);
   }
-  const resolved = await expandCredits(pool, parsed, limits, snapshot);
+  const resolved = await expandCredits(pool, parsed, limits, { snapshot });
   if (resolved.state !== 'current') return { state: resolved.state };
   return creditSearchFromSnapshot(work.id, entriesOf(resolved.credits, resolved.creators, work.id));
 }
 
-/** Native CreditSearchSource. Pages admit selected outgoing credits before nested creator expansion. */
-export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): CreditSearchSource {
-  const source: CreditSearchSource = {
+function creditSearchReader(pool: Pool, routeKey: Uint8Array | undefined, readIdentities?: CreditIdentityReader) {
+  const creatorObservation = readIdentities ? { readIdentities } : undefined;
+  return {
     async page(input) {
       const workId = input.workId;
       if (typeof workId !== 'string' || routeOf(workId) === null) return { state: 'unavailable' };
@@ -181,7 +188,7 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       const next = seek.length > limits.creditsPerPage ? selectedCursorOf(pageRows[pageRows.length - 1]!) : null;
       const visible = await discloseCredits(pool, routeKey, pageRows);
       const parsed = await parsePage(pool, cut.work, visible, plan, limits);
-      const creators = await expandCredits(pool, parsed, limits);
+      const creators = await expandCredits(pool, parsed, limits, creatorObservation);
       if (creators.state === 'preparing') return { state: 'preparing' };
       if (creators.state === 'unavailable') return { state: 'unavailable' };
       const entries = entriesOf(creators.credits, creators.creators, workId);
@@ -268,15 +275,21 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       const window = seek.slice(0, limits.pages * limits.creditsPerPage);
       const visible = await discloseCredits(pool, routeKey, window);
       const parsed = await parsePage(pool, cut.work, visible, plan, limits);
-      const creators = await expandCredits(pool, parsed, limits);
+      const creators = await expandCredits(pool, parsed, limits, creatorObservation);
       if (creators.state !== 'current') return false;
       const later = await workCut(pool, workId);
       return (
         later !== 'moved' && later !== 'unavailable' && observationOf(later) === observation && publicWorkCut(later)
       );
     },
-  };
-  return source;
+  } satisfies CreditSearchSource;
+}
+
+/** Native CreditSearchSource. Pages admit selected outgoing credits before nested creator expansion. */
+export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): CreditSearchSource {
+  const reader = creditSearchReader(pool, routeKey);
+  const indexReader = creditSearchReader(pool, routeKey, readIndexCreditIdentities);
+  return { ...reader, projectForIndex: (workId) => projectCreditSearch(indexReader, workId) };
 }
 
 /** Search paging stays the owner; this maps restart onto changed for native receiving. */
