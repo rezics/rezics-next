@@ -59,6 +59,11 @@ export const { fill, button, session } = await import('../src/stories/accounts-o
 const { createRoot } = await import('react-dom/client');
 const localeRuntime = await import('../src/paraglide/runtime.js');
 export const flush = (action: () => void) => act(async () => action());
+// Dialog focus and removal can finish on the frame after React commits.
+export const flushFrame = () =>
+  act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
 const roots = new Set<ReturnType<typeof createRoot>>();
 function installBrowser() {
   localeRuntime.overwriteGetLocale(() => 'en');

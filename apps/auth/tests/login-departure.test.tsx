@@ -6,7 +6,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
-import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, flush, flushFrame, open, send } from './creation-page-fixture';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
 import { nativeSignInProof } from './sign-in-fixture';
@@ -78,10 +78,13 @@ test('Stay preserves credentials, validation and focus; help links offer Leave w
   const email = p.input('email');
   expect(p.unload()).toBe(true);
   await p.navigate();
+  await flushFrame();
+  expect(document.activeElement?.textContent).toBe('Stay');
   await p.choose('Stay');
+  await flushFrame();
   expect(email.value).toBe('invalid');
   expect(email.getAttribute('aria-invalid')).toBe('true');
-  expect(document.activeElement).toBe(email);
+  expect(document.activeElement === email, 'Stay restores focus to the email field').toBe(true);
   await flush(() => {
     fill(email, '');
     fill(p.input('password'), 'private password');

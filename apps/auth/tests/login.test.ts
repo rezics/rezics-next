@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { signInPage } from './security-page-fixture';
 import { nativeSignInProof } from './sign-in-fixture';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -41,8 +41,12 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
-    if (url.pathname === '/signin/page' && request.method === 'POST')
-      return Response.json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }), { headers });
+    if (url.pathname === '/signin/page' && request.method === 'POST') {
+      const page = signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' });
+      // The password-refusal fixture has no passkey options endpoint.
+      const advice = page && signInStatus !== 200 ? { ...page, methods: { ...page.methods, passkey: false } } : page;
+      return Response.json(advice, { headers });
+    }
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if (call.cookie.split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
         return new Response('Authorization resumed with the session', { headers });
@@ -166,6 +170,10 @@ beforeAll(async () => {
   await site();
   browser = await chromium.launch();
 }, timeout);
+
+afterEach(() => {
+  signInStatus = 200;
+});
 
 afterAll(async () => {
   await browser?.close();
@@ -344,9 +352,10 @@ test(
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
         if (status === 503) {
-          const choice = page.locator('section[aria-label="Sign in"]');
+          const choice = page.getByRole('region', { name: 'Sign in', exact: true });
           const uncertainCopy = 'Sign-in could not be confirmed.';
-          const uncertain = choice.getByRole('status').filter({ hasText: uncertainCopy });
+          const historyHeading = page.getByRole('heading', { name: 'Earlier sign-in', exact: true });
+          const uncertain = choice.getByRole('status').filter({ hasText: uncertainCopy, hasNot: historyHeading });
           await uncertain.waitFor({ state: 'visible' });
           await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
           expect(await uncertain.evaluate((element) => element === document.activeElement)).toBe(true);

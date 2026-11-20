@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { act } from 'react';
-import { creationFixture, dom } from './creation-page-fixture';
+import { creationFixture, dom, flushFrame } from './creation-page-fixture';
 creationFixture();
 const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
@@ -85,13 +85,15 @@ test('mounted history survives loss of current review, replacement, new acknowle
     const switchAccount = host.querySelector<HTMLAnchorElement>('a[href^="/login?"]')!;
     switchAccount.focus();
     await flush(() => switchAccount.click());
-    expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
+    expect(Boolean(document.querySelector('[role=alertdialog]'))).toBe(true);
+    await flushFrame();
     expect(document.activeElement?.textContent).toBe('Stay');
     await flush(() =>
       document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
     );
-    expect(document.querySelector('[role=alertdialog]')).toBeNull();
-    expect(document.activeElement).toBe(switchAccount);
+    await flushFrame();
+    expect(Boolean(document.querySelector('[role=alertdialog]'))).toBe(false);
+    expect(document.activeElement === switchAccount, 'Escape restores focus to Switch account').toBe(true);
     expect(calls).toHaveLength(2);
     expect(button('Approve').disabled).toBe(true);
     // Retire private DOM synchronously even while the POST is still in flight.
@@ -121,7 +123,7 @@ test('mounted history survives loss of current review, replacement, new acknowle
     await answer(200, { malformed: true });
     privateGone();
     expect(host.querySelector('[role=alert]')).not.toBeNull();
-    expect(document.activeElement).toBe(button('Review current permissions'));
+    expect(document.activeElement === button('Review current permissions'), 'Retry receives focus').toBe(true);
     await retry();
     await answer(409, { error: 'authentication_denied', code: 'stale_review' });
     privateGone();
@@ -137,7 +139,7 @@ test('mounted history survives loss of current review, replacement, new acknowle
     expect(host.textContent).not.toContain('former@example.test');
     expect(host.textContent).not.toContain('offline_access');
     expect(host.textContent).toContain(unknown);
-    expect(document.activeElement).toBe(host.querySelector('[aria-label="Review permissions"]'));
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Review permissions');
     await click('Approve');
     await click('Hide this explanation');
     historyVisible = false;
@@ -158,8 +160,10 @@ test('mounted history survives loss of current review, replacement, new acknowle
     exit.focus();
     await flush(() => exit.click());
     expect(document.querySelector('[role=alertdialog]')?.textContent).toContain('Leaving does not cancel');
+    await flushFrame();
     await click('Stay');
-    expect(document.activeElement).toBe(exit);
+    await flushFrame();
+    expect(document.activeElement === exit, 'Stay restores focus to the Security link').toBe(true);
     expect(host.textContent).not.toContain(unknown);
     const unload = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);

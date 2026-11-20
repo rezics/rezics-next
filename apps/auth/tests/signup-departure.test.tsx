@@ -7,7 +7,7 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, flush, flushFrame, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
 import * as registration from '../src/registration-page';
 import type { RegistrationPage } from '../src/registration-page';
@@ -150,12 +150,15 @@ test('empty and whitespace-only details do not warn; Stay preserves invalid inpu
   expect(dialog, document.body.textContent ?? '').not.toBeNull();
   expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy();
   expect(dialog!.getAttribute('aria-describedby')).toBeTruthy();
+  await flushFrame();
+  expect(document.activeElement?.textContent).toBe('Stay');
   await p.choose('Stay');
+  await flushFrame();
   expect(p.router.history.location.search).toBe(p.query);
   expect(p.input('handle').value).toBe('bad!');
   expect(p.input('password').value).toBe(' ');
   expect(p.input('handle').getAttribute('aria-describedby')).toBe(error);
-  expect(document.activeElement).toBe(p.input('handle'));
+  expect(document.activeElement === p.input('handle'), 'Stay restores focus to the handle field').toBe(true);
   await p.edit('handle', '');
   await p.edit('email', '');
   expect(p.unload()).toBe(true); // Even a whitespace password is private entered data.
