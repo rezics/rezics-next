@@ -411,6 +411,8 @@ test('native publication starts repair from the original adopted Source executio
     let activate = false;
     let boundAttempts = 0;
     let acknowledged = 0;
+    let searchPages = 0;
+    let batchedScans = false;
     let last: { status: string; reason?: string; cost?: unknown } = { status: 'registered' };
     for (let turn = 0; turn < 500 && Date.now() < deadline; turn++) {
       if (!activate) {
@@ -430,13 +432,16 @@ test('native publication starts repair from the original adopted Source executio
         root: boolean;
         ack_after: number;
         bootstrap: string;
+        repair_settlement: string | null;
       }>(
         `SELECT b.bootstrap::text,b.state,b.publication_observation AS observation,b.publication_execution AS execution,
                 EXISTS(SELECT 1 FROM semantic.public_filter_repair_step r
                   WHERE (r.partition_no,r.bootstrap,r.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
                   AND r.predecessor IS NULL) AS root,
-                COALESCE(t.ack_after,0) AS ack_after
+                COALESCE(t.ack_after,0) AS ack_after,e.repair_settlement
            FROM semantic.public_filter_bootstrap b
+           LEFT JOIN search.public_filter_execution e
+             ON (e.partition_no,e.observation,e.id)=(0,b.publication_observation,b.publication_execution)
            LEFT JOIN semantic.public_filter_repair_step t
              ON (t.partition_no,t.bootstrap,t.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
              AND t.complete AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
@@ -445,6 +450,30 @@ test('native publication starts repair from the original adopted Source executio
       );
       const original = source.rows[0];
       if (original?.state !== 'adopted') continue;
+      const pages = original.repair_settlement
+        ? decodePublicFilterNativeState<{ pages: number }>(original.repair_settlement).pages
+        : 0;
+      if (!batchedScans && pages - searchPages >= 2) {
+        const scans = await f.db.pool.query<{ state: string }>(
+          `SELECT state FROM semantic.public_filter_repair_step
+           WHERE (partition_no,bootstrap,execution)=(0,$1,$2)
+             AND verified_ordinal>$3 AND verified_ordinal<=$4 AND input_limit=128`,
+          [original.bootstrap, original.execution, searchPages, pages],
+        );
+        const fullScans = scans.rows.filter(({ state }) => {
+          const { scan, input, next } = decodePublicFilterNativeState<{
+            scan?: { kind: string; homes: number };
+            input: { partition: number };
+            next: { partition: number };
+          }>(state);
+          return scan?.kind === 'semantic' && scan.homes === 128 && next.partition === input.partition + 128;
+        });
+        if (fullScans.length >= 2) {
+          expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+          batchedScans = true;
+        }
+      }
+      searchPages = pages;
       expect(original.execution).toBe(job.job);
       expect(original.observation).toMatch(/^0:/);
       if (!original.root) {
@@ -499,6 +528,7 @@ test('native publication starts repair from the original adopted Source executio
         throw new Error('Expected independently budgeted Source turns in the same activation');
       for (const turn of [batched.cost, ...batched.additionalSourceCosts])
         expect(turn.inputKeys).toBeLessThanOrEqual(1000);
+      expect(batchedScans).toBe(true);
       const afterBatch = await f.db.pool.query<{ ack_after: number }>(
         `SELECT ack_after FROM semantic.public_filter_repair_step
          WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete
