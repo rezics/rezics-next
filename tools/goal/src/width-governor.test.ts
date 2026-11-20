@@ -85,19 +85,20 @@ function addPendingStart(db: Database, id: string, attempt: number): void {
 function addManager(
   db: Database,
   id: string,
-  status: string,
+  status = 'running',
   goalStatus = 'active',
   extra: Record<string, unknown> = {},
 ): void {
   db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(
     id,
-    JSON.stringify({ id, status, goalState: { status: goalStatus }, ...extra }),
+    JSON.stringify({ id, status, goals: [id], goalState: { status: goalStatus }, ...extra }),
   );
 }
 
 test('a low-width active Goal receives accurate, durable wakeable counts once per 15-minute bucket', async () => {
   const f = fixture();
+  addManager(f.db, 'goal-a');
   const live = new Set([1001, 1002, 1007]);
   addTask(f.db, 'codex-live', 1, 'running', 1);
   addAttempt(f.db, 'codex-live', 1, 'running', 'codex', identity(1001));
@@ -136,7 +137,7 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   const pending = f.inbox.pending('goal-a');
   expect(pending).toHaveLength(1);
   expect(pending[0]?.event).toMatchObject({ managerId: 'goal-a', kind: 'width' });
-  expect(pending[0]?.event.summary).toContain('2 confirmed live workers');
+  expect(pending[0]?.event.summary).toContain('2 confirmed live managed workers');
   expect(pending[0]?.event.summary).toContain('Codex subset 1 confirmed live');
   expect(pending[0]?.event.summary).toContain('ready 2, durable pending starts 1, held 1, stopped 1, waiting 1');
   expect(pending[0]?.event.summary).toContain('Recover, reshape, or dispatch real work');
@@ -160,6 +161,7 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
 
 test('concurrent sweeps wake controller-parked managers and keep protected managers quiet', async () => {
   const f = fixture();
+  for (const goal of ['wide-goal', 'queued-goal', 'daily-step-audit']) addManager(f.db, goal);
   const live = new Set<number>();
   for (let index = 0; index < 10; index++) {
     const id = `wide-${index}`;
@@ -215,9 +217,11 @@ test('concurrent sweeps wake controller-parked managers and keep protected manag
   expect(f.inbox.pending('operator-paused-goal')).toHaveLength(0);
   expect(f.inbox.pending('usage-limited-goal')).toHaveLength(0);
   expect(f.inbox.pending('queued-goal')).toHaveLength(0);
+  expect(f.inbox.pending('daily-step-audit')).toHaveLength(0);
   expect(f.inbox.pending('supermanager')).toHaveLength(0);
 
   const low = fixture();
+  addManager(low.db, 'low-goal');
   addTask(low.db, 'stopped-low', 1, 'stopped', 0, 'low-goal');
   const lowOptions = { processIsLive: () => false };
   const firstConcurrent = sweepWidthGovernor(low.db, low.inbox, at, lowOptions);
@@ -256,7 +260,7 @@ test('hourly lifecycle and flow report expose live system and Codex counts with 
   });
   const lines = formatLifecycleMetrics(metrics);
   expect(lines).toContain(
-    'Actual system-wide running workers: 1 confirmed live; 1 current running attempts have unknown process identity.',
+    'Actual system-wide running workers: 1 confirmed live managed attempts; 1 current running attempts have unknown process identity.',
   );
   expect(lines).toContain(
     'Actual Codex running workers: 1 confirmed live; 1 have unknown process identity; 0 have unknown CLI evidence.',
@@ -269,6 +273,7 @@ test('hourly lifecycle and flow report expose live system and Codex counts with 
 
 test('width policy overrides preserve paged counts, threshold boundaries and bucket deduplication', async () => {
   const f = fixture();
+  addManager(f.db, 'goal-a');
   addTask(f.db, 'live', 1, 'running', 1);
   addAttempt(f.db, 'live', 1, 'running', 'codex', identity(123));
   addTask(f.db, 'ready', 2, 'ready', 0);
@@ -295,6 +300,7 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
 
 test('held work waiting on a progressing predecessor stays visible without waking its manager', async () => {
   const f = fixture();
+  for (const goal of ['goal-a', 'goal-b']) addManager(f.db, goal);
   addTask(f.db, 'active-predecessor', 1, 'running', 1, 'goal-a');
   addAttempt(f.db, 'active-predecessor', 1, 'running', 'codex', null);
   addTask(f.db, 'held-successor', 2, 'held', 0, 'goal-a', 'goal-a', ['active-predecessor']);
@@ -313,6 +319,7 @@ test('held work waiting on a progressing predecessor stays visible without wakin
 
 test('width separates registered source starts, dependency and check holds, and live writers from docs and proof', async () => {
   const f = fixture();
+  addManager(f.db, 'goal-a');
   const source = { kind: 'implementation', paths: ['src/feature.ts'] };
   const live = identity(3401);
   addTask(f.db, 'source-ready', 1, 'ready', 0, 'goal-a', 'goal-a', [], source);
@@ -346,7 +353,7 @@ test('width separates registered source starts, dependency and check holds, and 
     sourceWriters: 1,
   });
   expect(f.inbox.pending('goal-a')[0]?.event.summary).toContain(
-    'Source status: registered starts 2 (1 durable pending); held 2 (1 dependencies, 1 check or custody waits); live source writers 1.',
+    'Source status: registered starts 2 (1 durable pending); held 2 (1 dependencies, 1 check or custody waits); live source writers unknown combined (1 managed, 0 code-only confirmed; registry unavailable (state directory not configured)).',
   );
 });
 

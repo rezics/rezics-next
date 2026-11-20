@@ -24,6 +24,13 @@ import { sweepWidthGovernor } from './width-governor.ts';
 
 const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
+function registerGoalOwners(db: ReturnType<typeof openDb>, owners: Record<string, string>): void {
+  db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const insert = db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)');
+  for (const [manager, goal] of Object.entries(owners))
+    insert.run(manager, JSON.stringify({ kind: 'manager', status: 'running', goals: [goal] }));
+}
+
 function git(worktree: string, args: string[]): void {
   const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
@@ -480,6 +487,14 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     });
     event('superseded-source', 'owner-contract-decisions-superseded', { throughSequence: 100 });
 
+    registerGoalOwners(db, {
+      accepted: 'accepted',
+      ordinary: 'ordinary',
+      preserved: 'preserved',
+      'stale-successor': 'stale-successor',
+      typing: 'typing',
+      unreviewed: 'unreviewed',
+    });
     const width = await sweepWidthGovernor(db, inbox, now);
     expect(width.snapshot.system).toMatchObject({
       stopped: 10,
@@ -664,6 +679,13 @@ test('completed source with a separately registered recovery check stays with it
       distinctRecoveryCheck: true,
     });
 
+    registerGoalOwners(db, {
+      'failed-source-goal': 'failed-source-goal',
+      'pending-grant': 'pending-grant',
+      'quiet-operations': 'quiet-operations',
+      'quiet-owner': 'quiet-owner',
+      'terminal-result': 'terminal-result',
+    });
     const width = await sweepWidthGovernor(db, inbox, now);
     expect(width.snapshot.system).toMatchObject({
       stopped: 5,
@@ -909,11 +931,11 @@ test('width keeps pending command coverage separate from original custody and ro
   const db = openDb(join(temp.path, 'goal.sqlite'));
   try {
     new WorkerStore(db);
-    db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
-    db.query('INSERT INTO manager_sessions(id,state) VALUES (?,?)').run(
-      'custody-manager',
-      JSON.stringify({ id: 'custody-manager', kind: 'manager', status: 'running', goal: 'control-plane' }),
-    );
+    registerGoalOwners(db, {
+      'custody-manager': 'control-plane',
+      'retained-web': 'retained-web',
+      'retained-web-stale': 'retained-web-stale',
+    });
     const at = Date.UTC(2026, 0, 3);
     const old = new Date(at - 2 * 60 * 60_000).toISOString();
     const retained = prepareTypingRecovery(

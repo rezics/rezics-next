@@ -67,13 +67,15 @@ test('reporting distinguishes Codex, other known agents, and absent or unrecogni
 test('historical report snapshots expose missing width evidence as unknown', () => {
   for (const snapshot of [undefined, null]) {
     const lines = formatWidthSnapshot(snapshot);
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('system-wide running workers: unknown');
-    expect(lines[1]).toContain('Codex running workers: unknown');
+    expect(lines).toEqual([
+      'Actual system-wide running workers: unknown; this snapshot did not record width evidence.',
+      'Actual Codex running workers: unknown; this snapshot did not record width evidence.',
+      'Actual live source writers: unknown; this snapshot did not record width evidence.',
+    ]);
   }
 });
 
-test('unknown ownership cannot suppress a low-width wake and the notice retains its Goal', async () => {
+test('unknown process identity does not suppress a low-width wake to the current Goal owner', async () => {
   const temporary = temporaryDirectory();
   const db = openDb(`${temporary.path}/width.sqlite`);
   try {
@@ -84,7 +86,7 @@ test('unknown ownership cannot suppress a low-width wake and the notice retains 
       db.query('INSERT INTO worker_tasks VALUES (?, ?, 1, ?)').run(
         id,
         index + 1,
-        JSON.stringify({ state: 'running', brief: { goal: 'sample-goal', manager: 'actual-manager' } }),
+        JSON.stringify({ state: 'running', brief: { goal: 'sample-goal', manager: 'launch-manager' } }),
       );
       db.query('INSERT INTO worker_attempts VALUES (?, 1, ?)').run(
         id,
@@ -93,9 +95,17 @@ test('unknown ownership cannot suppress a low-width wake and the notice retains 
     }
     db.query('INSERT INTO worker_tasks VALUES (?, 11, 0, ?)').run(
       'undispatched',
-      JSON.stringify({ state: 'ready', brief: { goal: 'sample-goal', manager: 'actual-manager' } }),
+      JSON.stringify({ state: 'ready', brief: { goal: 'sample-goal', manager: 'launch-manager' } }),
     );
-    const result = await sweepWidthGovernor(db, inbox, Date.UTC(2026, 9, 31, 12));
+    const at = Date.UTC(2026, 9, 31, 12);
+    const unowned = await sweepWidthGovernor(db, inbox, at);
+    expect(unowned.deliveredGoals).toEqual([]);
+    db.exec('CREATE TABLE manager_sessions(id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'actual-manager',
+      JSON.stringify({ status: 'running', goals: ['sample-goal'] }),
+    );
+    const result = await sweepWidthGovernor(db, inbox, at);
     expect(result.snapshot.system).toMatchObject({ running: 0, unknownRunning: 10, unknownCodexRunning: 10 });
     expect(result.deliveredGoals).toEqual(['sample-goal']);
     expect(inbox.pending('actual-manager')[0]?.event).toMatchObject({
@@ -103,6 +113,7 @@ test('unknown ownership cannot suppress a low-width wake and the notice retains 
       goalId: 'sample-goal',
       managerId: 'actual-manager',
     });
+    expect(inbox.pending('launch-manager')).toHaveLength(0);
     expect(inbox.pending('sample-goal')).toHaveLength(0);
   } finally {
     db.close();
@@ -116,7 +127,7 @@ test('system counts include tasks without Goal metadata and use only their curre
   try {
     new WorkerStore(db);
     db.query('INSERT INTO worker_tasks VALUES (?, 1, 2, ?)').run('worker', JSON.stringify({ state: 'running' }));
-    const process = { pid: 1234, start: 'start', boot: 'boot', group: 1234 };
+    const process = { pid: 1234, start: '123', boot: 'boot', group: 1234 };
     db.query('INSERT INTO worker_attempts VALUES (?, 1, ?)').run(
       'worker',
       JSON.stringify({ state: 'running', profile: { cli: 'codex' }, process }),
