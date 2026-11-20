@@ -1,14 +1,17 @@
-WITH next_page AS MATERIALIZED (
-  SELECT partition_no,observation,execution,ordinal,intent FROM search.public_filter_repair_page
-  WHERE (partition_no,observation,execution)=(:partition_no::integer,:observation::text,:execution::text)
-    AND has_repairs AND ordinal>:after::integer
-  ORDER BY ordinal LIMIT :width::integer
+-- Linkage has already been verified under the same evidence revision. Only
+-- effect-bearing pages and the final Source seal need foreign verification.
+WITH input AS (
+  SELECT :partition_no::integer AS home,:observation::text AS observation,:execution::text AS execution
+), next_page AS MATERIALIZED (
+  SELECT p.ordinal,p.intent FROM search.public_filter_repair_page p CROSS JOIN input i
+  WHERE (p.partition_no,p.observation,p.execution)=(i.home,i.observation,i.execution)
+    AND p.has_repairs AND p.ordinal>:after::integer
+  ORDER BY p.ordinal LIMIT 1
+), selected AS (
+  SELECT ordinal,intent FROM next_page
+  UNION ALL
+  SELECT p.ordinal,p.intent FROM search.public_filter_repair_page p CROSS JOIN input i
+  WHERE (p.partition_no,p.observation,p.execution,p.ordinal)=(i.home,i.observation,i.execution,:terminal::integer)
+    AND NOT EXISTS (SELECT 1 FROM next_page)
 )
-SELECT n.ordinal,n.intent,p.intent AS previous_intent FROM next_page n
-LEFT JOIN LATERAL (
-  SELECT intent FROM search.public_filter_repair_page
-  WHERE (partition_no,observation,execution,ordinal)=
-    (n.partition_no,n.observation,n.execution,n.ordinal-1) AND n.ordinal>0
-  OFFSET 0
-) p ON true
-ORDER BY n.ordinal;
+SELECT ordinal,intent FROM selected LIMIT 1;

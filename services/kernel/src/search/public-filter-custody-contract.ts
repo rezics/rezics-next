@@ -102,7 +102,7 @@ export type CustodyPreparationUnavailable = Readonly<{
 declare const privateProducerBrand: unique symbol;
 export type NativePublicFilterRepairSettlement = Readonly<{ id: string; [privateProducerBrand]: true }>;
 export type PublicFilterRepairSettlementResult =
-  | CustodyFailure
+  | (CustodyFailure & Readonly<{ advanced?: true }>)
   | Readonly<{
       status: 'settled';
       definition: CustodyRetainedDefinition;

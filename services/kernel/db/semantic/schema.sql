@@ -16201,6 +16201,27 @@ CREATE TRIGGER public_filter_repair_advance_immutable BEFORE DELETE OR UPDATE ON
 
 
 --
+-- Name: public_filter_projection_build public_filter_repair_projection_build_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_projection_build_revision AFTER DELETE OR UPDATE ON semantic.public_filter_projection_build FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@source');
+
+
+--
+-- Name: public_filter_projection_head public_filter_repair_projection_head_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_projection_head_revision AFTER DELETE OR UPDATE ON semantic.public_filter_projection_head FOR EACH ROW EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@source');
+
+
+--
+-- Name: public_filter_privacy_head public_filter_repair_source_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_source_revision AFTER UPDATE OF "position", owner_epoch ON semantic.public_filter_privacy_head FOR EACH ROW WHEN (((old."position" IS DISTINCT FROM new."position") OR (old.owner_epoch IS DISTINCT FROM new.owner_epoch))) EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@source');
+
+
+--
 -- Name: public_filter_repair_step public_filter_repair_step_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 

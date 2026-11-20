@@ -6671,6 +6671,13 @@ CREATE TRIGGER principal_assignment_publication_authority AFTER INSERT OR DELETE
 
 
 --
+-- Name: account_discovery_population public_filter_repair_account_revision; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_account_revision AFTER UPDATE OF revision, claim_revision ON access.account_discovery_population FOR EACH ROW WHEN (((old.revision IS DISTINCT FROM new.revision) OR (old.claim_revision IS DISTINCT FROM new.claim_revision))) EXECUTE FUNCTION search.mark_public_filter_repair_source_change('@accounts');
+
+
+--
 -- Name: account rating_controller; Type: TRIGGER; Schema: access; Owner: -
 --
 
