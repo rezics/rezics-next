@@ -6,7 +6,7 @@ import { createKernelCreditSearchSource } from '../../src/composition/runtime-de
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndexer, type SubjectApplyGuard } from '../../src/search/indexer.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { startSearchIndexing, subjectConsumer } from '../../src/search/runner.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { CREDIT_SEARCH_LIMITS } from '../../src/search/credit-search.ts';
 import type { CreditSearchFields } from '../../src/search/credit-search-document.ts';
@@ -537,6 +537,81 @@ test.each([false, true])(
     expect(settled.relay_receipt).toBeNull();
     expect(BigInt(settled.source_position!)).toBeGreaterThan(BigInt(receipt.version));
     expect(await checkpoint(t)).toBeGreaterThan(0n);
+  },
+  60_000,
+);
+
+test.each([false, true])(
+  'Subject runner drains an admitted bulk during shutdown with response lost=%s',
+  async (lost) => {
+    const t = await target();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const row = async () =>
+      (
+        await f.admin.query(
+          `SELECT writer_token,dispatch_state,source_position,relay_receipt FROM search.identity_writer
+           WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+          [t.partition, t.index, t.id],
+        )
+      ).rows[0];
+    let version: number | undefined;
+    let writes = 0;
+    const runner = await startSearchIndexing({
+      ...f.options(t.prefix, {
+        ...f.search,
+        async bulk<T>(lines: readonly unknown[], options?: Parameters<typeof f.search.bulk>[1]) {
+          const items = await f.search.bulk<{ items: { index?: { _id: string; _version: number } }[] }>(lines, options);
+          const item = items.items.find(({ index }) => index?._id === t.id)?.index;
+          if (item) {
+            writes++;
+            version = item._version;
+            entered.resolve();
+            await release.promise;
+            options?.signal?.throwIfAborted();
+            if (lost) throw new Error('Injected response loss after native bulk');
+          }
+          return items as T;
+        },
+      }),
+      concurrency: 1,
+    });
+    const timer = setTimeout(() => entered.reject(new Error('Subject relay did not reach native bulk')), 20_000);
+    try {
+      await entered.promise;
+      const dispatched = await row();
+      expect(dispatched).toMatchObject({ dispatch_state: 'dispatched', source_position: null, relay_receipt: null });
+      expect(dispatched.writer_token).toBeString();
+      const before = await checkpoint(t);
+      const closing = observe(runner.stop());
+      const queued = await runCommand(f.pool, { partition: t.partition }, async () => ({
+        value: null,
+        events: [{ type: 'com.rezics.subject.created.v1', subject: t.id, data: { id: t.id } }],
+      }));
+      expect(await checkpoint(t)).toBe(before);
+      expect(closing.state.settled).toBe(false);
+      release.resolve();
+      expect(await closing.outcome).toEqual({ ok: true });
+      expect(writes).toBe(1);
+      if (lost) {
+        expect(await row()).toEqual(dispatched);
+        expect(await checkpoint(t)).toBe(before);
+      } else {
+        expect(await row()).toEqual({
+          writer_token: null,
+          dispatch_state: 'settled',
+          source_position: String(version),
+          relay_receipt: null,
+        });
+        const after = await checkpoint(t);
+        expect(after).toBeGreaterThan(before);
+        expect(after).toBeLessThan(queued.position);
+      }
+    } finally {
+      clearTimeout(timer);
+      release.resolve();
+      await runner.stop();
+    }
   },
   60_000,
 );
