@@ -25,7 +25,7 @@ import {
   composedBookControl,
   composedBookCapture,
   composedBookIdentities,
-  composedBookObservation,
+  bookPageObservation,
   restoreComposedBookCut,
 } from './composed-book-reads.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -1635,12 +1635,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       start === null
         ? { kind: 'population' as const, queried: q, start, context }
         : { kind: 'population' as const, queried: q, start, execution: execution!, context };
-    const grouped = page?.id
-      ? composedBookObservation(config.source, page.bookPopulation, page.id, request, m.take)
+    const pageObservation = page?.id
+      ? bookPageObservation(config.source, page.bookPopulation, page.id, request, m.take)
       : undefined;
     const read = () => config.source.readPrivacyReductionHeads(request);
-    const observed = grouped
-      ? await grouped
+    const observed = pageObservation
+      ? await pageObservation
       : m.take(await (page?.id && start === null ? withPublicFilterCoverageStart(context, page.id, read) : read()));
     if (observed.status !== 'observed') throw new ConsumerFailure('source_pending');
     if (observed.coverage !== 'all_native_homes' || !observed.routingComplete)
