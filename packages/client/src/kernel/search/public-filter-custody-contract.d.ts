@@ -119,6 +119,8 @@ export type RetainedRepairPage = Readonly<{
     frontier: string | null;
     complete: boolean;
     repairs: readonly RetainedSourceRepair[];
+    /** The independently verified creation-range writer obligation. */
+    subject?: Pick<PublicSourceRepair['source'], 'subject' | 'partition' | 'epoch' | 'position'>;
     /** Independent native Account input, never a Subject projection or privacy cause. */
     account?: AccountDiscoveryRepairObservation;
 }>;

@@ -57,6 +57,7 @@ export async function verifyPublicFilterRepairSourcePage(
     complete: boolean;
     sourceStep?: string;
     account?: RetainedRepairPage['account'];
+    subject?: RetainedRepairPage['subject'];
   }>,
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
@@ -128,7 +129,13 @@ export async function verifyPublicFilterRepairSourcePage(
   }
   if (expected.account !== undefined && !isDeepStrictEqual(expected.account, account))
     throw new PublicFilterRepairSourceError('binding_mismatch');
-  if (account && (repairs.length || step.complete)) throw new PublicFilterRepairSourceError('binding_mismatch');
+  const subject = evidence?.subject;
+  if (
+    ((subject || account) && (repairs.length || step.complete)) ||
+    (subject && account) ||
+    (expected.sourceStep !== undefined && !isDeepStrictEqual(expected.subject, subject))
+  )
+    throw new PublicFilterRepairSourceError('binding_mismatch');
   return {
     sourceStep: step.step,
     predecessor: step.predecessor,
@@ -136,5 +143,6 @@ export async function verifyPublicFilterRepairSourcePage(
     complete: step.complete,
     repairs,
     ...(account ? { account } : {}),
+    ...(subject ? { subject } : {}),
   };
 }

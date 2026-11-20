@@ -905,7 +905,7 @@ export async function readPublicFilterRepairSettlement(
            )
            SELECT ordinal,has_repairs,body->'sourceStep'->>1 AS source_step,body->'predecessor'->>1 AS predecessor,
              body->'frontier'->>1 AS frontier,body->'complete'->1 AS complete,
-             (jsonb_array_length(body->'repairs'->1)>0 OR body ? 'account') AS nonempty
+             (jsonb_array_length(body->'repairs'->1)>0 OR body ? 'account' OR body ? 'subject') AS nonempty
            FROM next CROSS JOIN LATERAL (
              SELECT jsonb_object_agg(entry->>0,entry->1) AS body FROM jsonb_array_elements(
                CASE WHEN tree->>0='references' THEN tree#>'{1,1,1}' ELSE tree->1 END
@@ -933,14 +933,14 @@ export async function readPublicFilterRepairSettlement(
       await save(db, current, { ...progress, linked, linkFrontier });
     };
     const remainingBytes = () => capacity().bytes;
-    const coordinates = (page: RetainedRepairPage) => (page.account ? 1 : page.repairs.length);
+    const coordinates = (page: RetainedRepairPage) => (page.account || page.subject ? 1 : page.repairs.length);
     const validatePage = (page: RetainedRepairPage, ordinal: number, terminal: number) => {
       if (
         ordinal < 0 ||
         ordinal > terminal ||
         !page.sourceStep ||
         page.repairs.length > 256 ||
-        (page.account && (page.repairs.length || page.complete)) ||
+        ((page.account || page.subject) && (page.repairs.length || page.complete || (page.account && page.subject))) ||
         page.complete !== (ordinal === terminal) ||
         page.frontier !== (page.complete ? null : page.sourceStep)
       )
@@ -956,7 +956,7 @@ export async function readPublicFilterRepairSettlement(
       const end = Math.min(progress.item + 8, coordinates(page));
       const items = [];
       for (let item = progress.item; item < end; item++)
-        if (page.account || page.repairs[item]!.projection.status === 'complete') items.push(item);
+        if (page.account || page.subject || page.repairs[item]!.projection.status === 'complete') items.push(item);
       meter.inputKeys += items.length;
       meter.dependencyPoints += items.length;
       const effects = items.length
@@ -972,11 +972,12 @@ export async function readPublicFilterRepairSettlement(
       for (; item < end; item++) {
         const repair = page.repairs[item];
         const account = page.account;
-        const subject = account?.id ?? repair!.source.subject;
+        const subjectSource = page.subject ?? repair?.source;
+        const subject = account?.id ?? subjectSource!.subject;
         const partition_no = subjectPartition(subject);
-        const source = account ? null : encode(repair!.source);
+        const source = subjectSource ? encode(subjectSource) : null;
         const receipt = effects.find((effect) => effect.item === item);
-        const complete = !!account || repair!.projection.status === 'complete';
+        const complete = !!account || !!page.subject || repair!.projection.status === 'complete';
         if (complete && !receipt) break;
         meter.candidates++;
         meter.inputKeys++;
@@ -1008,7 +1009,7 @@ export async function readPublicFilterRepairSettlement(
             position: null,
             completion: null,
           };
-        if (!account && previous.pending_source && previous.pending_source !== source)
+        if (!account && previous.pending_source && (page.subject || previous.pending_source !== source))
           throw new Failure('binding_mismatch');
         if (!complete) {
           values.set(subject, { ...previous, pending_source: source });
@@ -1024,9 +1025,10 @@ export async function readPublicFilterRepairSettlement(
               item,
             }) ||
           writer.subject !== subject ||
-          writer.partition !== (account?.head.partition ?? repair!.source.partition) ||
-          writer.epoch !== (account?.head.epoch ?? repair!.source.epoch) ||
-          repairWriterPosition(writer) < (account?.position ?? repair!.source.position) ||
+          writer.partition !== (account?.head.partition ?? subjectSource!.partition) ||
+          writer.epoch !== (account?.head.epoch ?? subjectSource!.epoch) ||
+          repairWriterPosition(writer) < (account?.position ?? subjectSource!.position) ||
+          (page.subject && (page.subject.partition !== partition_no || isDiscoveryRepairWriterReceipt(writer))) ||
           writer.incarnation !== q.consumer.incarnation ||
           (account &&
             (!isDiscoveryRepairWriterReceipt(writer) ||

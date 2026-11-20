@@ -2,6 +2,10 @@ import { runCommand } from '../../src/command/command.ts';
 import { enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes } from '../../src/access/adapters/index.ts';
 import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import {
+  readPublicFilterCreationEvents,
+  type PublicFilterCreationWindow,
+} from '../../src/semantic/public-filter-creation-window.ts';
 import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
@@ -29,48 +33,115 @@ import {
 
 type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
 
-test('native mixed enrollment groups new homes and keeps each original pinned receipt on replay', async () => {
-  const pool = createPool(process.env.DATABASE_URL!);
-  try {
-    const input = {
-      bootstrap: crypto.randomUUID(),
-      registration: { partition: 0, id: 'mixed-enrollment-fixture' },
-      readDefinition: crypto.randomUUID(),
-      keys: ['["type"]', '["domain","accounts"]'],
-      keyLimit: 2,
-    };
-    const partitions = Array.from({ length: 16 }, (_, index) => 4066 + index);
-    const found = await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions }, readContext());
-    if (!found) throw new Error('Fresh mixed enrollment was refused');
-    expect(found.map(({ partition }) => partition)).toEqual(partitions);
-    expect(found.every(({ complete, receipt }) => complete && receipt?.length === 64)).toBe(true);
-    for (const receipt of found) {
+test.each([true, false])(
+  'native enrollment groups new homes with accounts=%s and preserves each pinned receipt',
+  async (accounts) => {
+    const pool = createPool(process.env.DATABASE_URL!);
+    try {
+      const input = {
+        bootstrap: crypto.randomUUID(),
+        registration: { partition: 0, id: 'group-enrollment-fixture' },
+        readDefinition: crypto.randomUUID(),
+        keys: ['["type"]', accounts ? '["domain","accounts"]' : '["field","name_sort"]'],
+        keyLimit: 2,
+        accounts,
+      };
+      const partitions = Array.from({ length: 16 }, (_, index) => 4066 + index);
+      const found = await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions }, readContext());
+      if (!found) throw new Error('Fresh enrollment was refused');
+      expect(found.map(({ partition }) => partition)).toEqual(partitions);
+      expect(found.every(({ complete, receipt }) => complete && receipt?.length === 64)).toBe(true);
+      for (const receipt of found) {
+        expect(
+          await enrollAccountDiscoveryHome(pool, { ...input, partition: receipt.partition }, readContext()),
+        ).toEqual(receipt);
+      }
       expect(
-        await enrollAccountDiscoveryHome(
-          pool,
-          { ...input, partition: receipt.partition, accounts: true },
-          readContext(),
-        ),
-      ).toEqual(receipt);
-    }
-    expect(
-      await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions: [4081, 4082] }, readContext()),
-    ).toBeNull();
-    const effects = await pool.query(
-      `SELECT e.partition_no AS home,coalesce(sum(1) FILTER (WHERE k.input_key IS NOT NULL),0)::integer AS keys,
-          bool_and(c.consumer IS NOT NULL AND c.position<=e.creation_position) AS pinned
+        await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions: [4081, 4082] }, readContext()),
+      ).toBeNull();
+      const effects = await pool.query(
+        `SELECT e.partition_no AS home,coalesce(sum(1) FILTER (WHERE k.input_key IS NOT NULL),0)::integer AS keys,
+          bool_and(c.consumer IS NOT NULL AND c.position<=e.creation_position) AS pinned,
+          bool_and(e.native_revision IS NOT NULL AND e.native_claim_revision IS NOT NULL) AS accounts
        FROM semantic.public_filter_home_enrollment e
        LEFT JOIN semantic.public_filter_key_enrollment k USING(partition_no,bootstrap)
        LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
        WHERE e.bootstrap=$1 GROUP BY e.partition_no ORDER BY e.partition_no`,
-      [input.bootstrap],
-    );
-    expect(effects.rows).toEqual(partitions.map((home) => ({ home, keys: 2, pinned: true })));
-    const unpinned = await pool.query(
-      'SELECT 1 FROM core.consumer_checkpoint WHERE partition_no=4082 AND consumer=$1',
-      ['public_filter_' + input.bootstrap.replaceAll('-', '')],
-    );
-    expect(unpinned.rowCount).toBe(0);
+        [input.bootstrap],
+      );
+      expect(effects.rows).toEqual(partitions.map((home) => ({ home, keys: 2, pinned: true, accounts })));
+      const unpinned = await pool.query(
+        'SELECT 1 FROM core.consumer_checkpoint WHERE partition_no=4082 AND consumer=$1',
+        ['public_filter_' + input.bootstrap.replaceAll('-', '')],
+      );
+      expect(unpinned.rowCount).toBe(0);
+    } finally {
+      await pool.end();
+    }
+  },
+);
+
+test('native baseline cursor requires every predecessor and final root in a bounded interval', async () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  const bootstrap = crypto.randomUUID();
+  const root = (character: string) => character.repeat(64);
+  try {
+    await withConnection(pool, async (client) => {
+      await client.query('BEGIN');
+      try {
+        await client.query('INSERT INTO search.public_filter_target VALUES (0,$1,$1)', [bootstrap]);
+        await client.query(
+          `INSERT INTO search.public_filter_registration (partition_no,id,physical_target,consumer,definition,state)
+           VALUES (0,$1,$1,'cursor-test','cursor-test','active')`,
+          [bootstrap],
+        );
+        await client.query(
+          `INSERT INTO search.public_filter_coverage_preparation
+             (partition_no,registration,bootstrap,definition,consumer,generation,root)
+           VALUES (0,$1,$1::text::uuid,$1::text::uuid,'cursor-test',0,$2)`,
+          [bootstrap, root('a')],
+        );
+        const insert = (home: number, predecessor: string, next: string) =>
+          client.query(
+            `INSERT INTO search.public_filter_coverage_baseline
+               (partition_no,registration,bootstrap,source_home,source_epoch,source_position,creation_position,
+                native_enqueue_revision,receipt,predecessor,root)
+             VALUES (0,$1,$1::text::uuid,$2,1,0,0,0,$3,$4,$5)`,
+            [bootstrap, home, root('f'), root(predecessor), root(next)],
+          );
+        const advance = (after: number, next: string) =>
+          client.query(
+            'UPDATE search.public_filter_coverage_preparation SET after_home=$2,root=$3 WHERE bootstrap=$1',
+            [bootstrap, after, root(next)],
+          );
+        const reject = async (after: number, next: string) => {
+          await client.query('SAVEPOINT invalid_frontier');
+          await expect(advance(after, next)).rejects.toMatchObject({ code: '23514' });
+          await client.query('ROLLBACK TO SAVEPOINT invalid_frontier');
+          await client.query('RELEASE SAVEPOINT invalid_frontier');
+        };
+        await insert(0, 'a', 'b');
+        expect((await advance(1, 'b')).rowCount).toBe(1);
+        await insert(2, 'c', 'd');
+        await reject(3, 'd'); // a missing home
+        await client.query('SAVEPOINT broken_chain');
+        await insert(1, 'e', 'c');
+        await reject(3, 'd');
+        await client.query('ROLLBACK TO SAVEPOINT broken_chain');
+        await insert(1, 'b', 'c');
+        const unpinned = await client.query(
+          `SELECT search.public_filter_baseline_interval(0,$1,$1::text::uuid,1,3,NULL,$2) AS valid`,
+          [bootstrap, root('d')],
+        );
+        expect(unpinned.rows).toEqual([{ valid: false }]);
+        await reject(3, 'e'); // a different final root
+        for (let home = 3; home <= 30; home++) await insert(home, 'd', 'd');
+        await reject(31, 'd'); // a complete chain beyond the page limit
+        expect((await advance(30, 'd')).rowCount).toBe(1);
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    });
   } finally {
     await pool.end();
   }
@@ -832,6 +903,7 @@ test('native Source replays its original creation window after the same home adv
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
+    const author = await f.create('schema:Person');
     const execution = await publicationJob(f, source, registered.consumer);
     const begun = await prepareSource(f, binding, {
       source,
@@ -945,6 +1017,13 @@ test('native Source replays its original creation window after the same home adv
       async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
     );
 
+    await f.propose(book, author);
+    let nextKey = key + 1;
+    while (partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, String(nextKey)).route) !== openHome)
+      nextKey++;
+    const second = await f.create('schema:Person', {}, String(nextKey));
+
+    let checkedRange = false;
     let frontier: string | null = page.frontier;
     let prefixPredecessor: string | null | undefined;
     let fallbackPredecessor: string | undefined;
@@ -968,9 +1047,16 @@ test('native Source replays its original creation window after the same home adv
         row &&
         decodePublicFilterNativeState<{
           windowBatch?: { from: number; examined: number; through?: string[] };
-          bridgeEvents?: { count: number };
-          input: { bridge?: { partition: number; position: bigint; through: bigint } };
-          next: { phase: string; partition: number; bridge?: { partition: number } };
+          bridgeEvents?: { count?: number; envelopes?: string };
+          input: { bridge?: PublicFilterCreationWindow };
+          next: {
+            phase: string;
+            partition: number;
+            bridge?: { partition: number };
+            subject: string | null;
+            bridgeThrough?: bigint;
+            resumeBridge?: PublicFilterCreationWindow;
+          };
         }>(row.state);
       if (window && window.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome)
         prefixPredecessor = frontier;
@@ -991,10 +1077,53 @@ test('native Source replays its original creation window after the same home adv
           frontier: fallbackPredecessor,
         });
       }
+      if (window && window.input.bridge && window.next.subject === book) {
+        const original = window.input.bridge;
+        const successor = window.next.resumeBridge!;
+        const keys = { bootstrap: request.bootstrap.slice(2), window: original, accounts: false, subjectRange: true };
+        const meter = { inputKeys: 0, rows: 0, dependencyPoints: 0 };
+        const range = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, inputLimit: 64 },
+          readContext(),
+          meter,
+        );
+        expect(window.bridgeEvents?.envelopes).toBe(range.packed);
+        expect(range.next).toEqual(successor);
+        expect(range.envelopes.filter(({ subject }) => subject === book).length).toBeGreaterThan(1);
+        expect(window.next.bridgeThrough).toBe(BigInt(range.envelopes.at(-1)!.position));
+        expect(meter.inputKeys).toBe(3 + range.envelopes.length + 1);
+        const lookahead = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, window: successor, inputLimit: 1 },
+          readContext(),
+          meter,
+        );
+        expect(lookahead.event.subject).toBe(second);
+        const capped = await readPublicFilterCreationEvents(
+          f.db.pool,
+          { ...keys, inputLimit: 1 },
+          readContext(),
+          meter,
+        );
+        expect(capped.envelopes).toEqual(range.envelopes.slice(0, 1));
+        expect(capped.next.position <= successor.position).toBe(true);
+        const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+        expect(await restarted.repairPage(nextRequest, readContext())).toMatchObject({
+          status: 'progress',
+          frontier: next.frontier,
+        });
+        expect(await restarted.readRepairStep(stepRequest, readContext())).toMatchObject({
+          status: 'verified',
+          frontier: next.frontier,
+        });
+        checkedRange = true;
+      }
       const verified = await recovered.readRepairStep(stepRequest, readContext());
       if (window && window.input.bridge?.partition === openHome && window.next.phase === 'window') {
-        expect(window.input.bridge.position).toBeLessThanOrEqual(window.input.bridge.through);
-        expect(window.bridgeEvents?.count).toBeGreaterThan(0);
+        if (window.input.bridge.position <= window.input.bridge.through)
+          expect(window.bridgeEvents?.count).toBeGreaterThan(0);
+        else expect(window.bridgeEvents).toBeUndefined();
         expect(window.next.partition).toBe(openHome + 1);
         expect(await recovered.repairPage(nextRequest, readContext())).toMatchObject({
           status: 'progress',
@@ -1019,6 +1148,7 @@ test('native Source replays its original creation window after the same home adv
     }
     if (!fallbackPredecessor) throw new Error('Missing ordinary window replay');
     expect(closedWithEvents).toBe(true);
+    expect(checkedRange).toBe(true);
     expect(frontier).toBeNull();
     const closed = await f.db.pool.query<{ verified_home: number }>(
       `SELECT verified_home FROM semantic.public_filter_repair_step

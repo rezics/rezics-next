@@ -37,12 +37,8 @@ BEGIN
   THEN
     RAISE EXCEPTION 'Original coverage preparation binding is immutable' USING ERRCODE = '23514';
   END IF;
-  IF NEW IS DISTINCT FROM OLD AND
-    (NEW.after_home <> OLD.after_home + 1 OR NOT EXISTS (
-      SELECT 1 FROM search.public_filter_coverage_baseline b
-      WHERE (b.partition_no,b.registration,b.bootstrap,b.source_home)=
-        (OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home)
-        AND b.predecessor=OLD.root AND b.root=NEW.root))
+  IF NEW IS DISTINCT FROM OLD AND NOT search.public_filter_baseline_interval(
+    OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home,NEW.after_home,OLD.root,NEW.root)
   THEN
     RAISE EXCEPTION 'Coverage preparation requires its original contiguous receipt' USING ERRCODE = '23514';
   END IF;
@@ -419,6 +415,31 @@ CREATE FUNCTION search.prevent_receiving_plan_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN RAISE EXCEPTION 'Native receiving plans are immutable'; END; $$;
+
+
+--
+-- Name: public_filter_baseline_interval(integer, text, uuid, integer, integer, text, text); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_baseline_interval(owner_partition integer, registration_id text, bootstrap_id uuid, first_home integer, after_home integer, first_root text, final_root text) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  -- The original PK admits one row per home. Cardinality proves that the
+  -- bounded interval has no holes, including at either endpoint.
+  SELECT CASE WHEN first_home BETWEEN 0 AND 4095 AND after_home BETWEEN 1 AND 4096
+    AND after_home::bigint-first_home BETWEEN 1 AND 29 THEN (
+    SELECT (count(*)=after_home-first_home
+      AND bool_and(b.predecessor IS NOT DISTINCT FROM b.expected_predecessor)
+      AND max(b.root) FILTER (WHERE b.source_home=after_home-1)=final_root) IS TRUE
+    FROM (
+      SELECT b.source_home,b.predecessor,b.root,
+        lag(b.root,1,first_root) OVER (ORDER BY b.source_home) AS expected_predecessor
+      FROM search.public_filter_coverage_baseline b
+      WHERE (b.partition_no,b.registration,b.bootstrap)=(owner_partition,registration_id,bootstrap_id)
+        AND b.source_home>=first_home AND b.source_home<after_home
+    ) b
+  ) ELSE false END
+$$;
 
 
 --

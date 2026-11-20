@@ -3185,7 +3185,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           if (Buffer.byteLength(body) > 1048576) return m.unavailable('source_pending');
           const saved = await repairPageSave.run(m.pool, {
             ...keys,
-            has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
+            has_repairs: intent.repairs.length > 0 || intent.account !== undefined || intent.subject !== undefined,
             intent: body,
           });
           page = saved ?? (await repairPageSql.run(m.pool, keys));
@@ -3211,6 +3211,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           !intent.complete &&
           !intent.repairs.length &&
           !intent.account &&
+          !intent.subject &&
           !work.repairPage;
         // An empty mixed page advances only the open observation and exact execution CAS.
         // Reopen native custody and the physical target before dispatch or terminal closure.
@@ -3275,6 +3276,27 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           if (!saved || saved.receipt !== body) return m.unavailable('source_pending');
           work.repairPage.accountDone = true;
           encoded = await save(work, encoded, false, m);
+        }
+        if (intent.subject) {
+          if (
+            !subjectPublication ||
+            work.repairPage ||
+            work.repair ||
+            work.dispatch ||
+            work.records.length ||
+            work.projectionSource
+          )
+            return m.unavailable('source_pending');
+          await applyRepairWriter(
+            intent.subject,
+            q,
+            work.execution,
+            state.pages,
+            0,
+            m,
+            context,
+            work.registration.partition,
+          );
         }
         while (work.repairPage && work.repairPage.next < work.repairPage.repairs.length) {
           const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
@@ -3404,6 +3426,53 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       listing: subjectListingSource(m.pool),
     });
   }
+  async function applyRepairWriter(
+    source: NonNullable<RetainedRepairPage['subject']>,
+    q: PublicFilterQueriedObservation,
+    execution: string,
+    page: number,
+    item: number,
+    m: Meter,
+    context: PublicFilterConsumerContext,
+    registration: number,
+  ): Promise<void> {
+    const guard = /discovery-g[1-9][0-9]*$/.test(target) ? await mixedRepairWriter(q, m) : await subjectRepairWriter(m);
+    const locator = encodeNative({
+      observation: q.snapshot.observation,
+      execution,
+      page,
+      item,
+    });
+    m.cost.inputKeys++;
+    m.cost.candidates++;
+    m.cost.accessPoints++;
+    m.cost.dependencyPoints++;
+    let receipt: PublicFilterRepairWriterReceipt;
+    try {
+      receipt = await guard.repair(source.subject, source.position, locator, context);
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) throw error;
+      throw new ConsumerFailure('source_pending');
+    }
+    if (
+      receipt.epoch !== source.epoch ||
+      receipt.incarnation !== q.consumer.incarnation ||
+      repairWriterPosition(receipt) < source.position
+    )
+      throw new ConsumerFailure('source_pending');
+    await physical(q, m, context);
+    const body = encodeNative(receipt);
+    const keys = {
+      partition_no: registration,
+      observation: q.snapshot.observation,
+      execution,
+      page,
+      item,
+    };
+    await repairEffectSave.run(m.pool, { ...keys, receipt: body });
+    const retained = await repairEffectSql.run(m.pool, keys);
+    if (!retained || retained.receipt !== body) throw new ConsumerFailure('source_pending');
+  }
   async function applyRepair(
     repair: RetainedSourceRepair,
     work: ConsumerWork,
@@ -3434,42 +3503,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return save(work, encoded, false, m);
     }
     if (!hasDispatchableRepairCoverage(work.records, coverage)) throw new ConsumerFailure('source_pending');
-    const guard = /discovery-g[1-9][0-9]*$/.test(target) ? await mixedRepairWriter(q, m) : await subjectRepairWriter(m);
-    const locator = encodeNative({
-      observation: q.snapshot.observation,
-      execution: work.execution,
+    await applyRepairWriter(
+      repair.source,
+      q,
+      work.execution!,
       page,
-      item: work.repairPage!.next,
-    });
-    m.cost.inputKeys++;
-    m.cost.candidates++;
-    m.cost.accessPoints++;
-    m.cost.dependencyPoints++;
-    let receipt: PublicFilterRepairWriterReceipt;
-    try {
-      receipt = await guard.repair(repair.source.subject, repair.source.position, locator, context);
-    } catch (error) {
-      if (error instanceof TypeError || error instanceof RangeError) throw error;
-      throw new ConsumerFailure('source_pending');
-    }
-    if (
-      receipt.epoch !== repair.source.epoch ||
-      receipt.incarnation !== q.consumer.incarnation ||
-      repairWriterPosition(receipt) < repair.source.position
-    )
-      throw new ConsumerFailure('source_pending');
-    await physical(q, m, context);
-    const body = encodeNative(receipt);
-    const keys = {
-      partition_no: work.registration.partition,
-      observation: q.snapshot.observation,
-      execution: work.execution!,
-      page,
-      item: work.repairPage!.next,
-    };
-    await repairEffectSave.run(m.pool, { ...keys, receipt: body });
-    const retained = await repairEffectSql.run(m.pool, keys);
-    if (!retained || retained.receipt !== body) throw new ConsumerFailure('source_pending');
+      work.repairPage!.next,
+      m,
+      context,
+      work.registration.partition,
+    );
     work.repair = null;
     work.dispatch = null;
     work.records = [];
