@@ -2,8 +2,10 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { fromPlainText } from '@rezics/document';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readConfig, startServer } from '../../src/server.ts';
@@ -135,6 +137,15 @@ async function runMixedHomeJourney() {
     );
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const book = (created.body.subject as { id: string }).id;
+    const series = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:BookSeries', labels: { en: 'Native mixed feed series' } },
+      key(),
+    );
+    expect(series.status, JSON.stringify(series.body)).toBe(201);
+    const seriesId = (series.body.subject as { id: string }).id;
     const followedSubject = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key());
     expect(followedSubject.status, JSON.stringify(followedSubject.body)).toBe(200);
     const nativeReaction = await driver.fixtures.send(
@@ -339,7 +350,7 @@ async function runMixedHomeJourney() {
       const followedCollection = result.feedItems.some(
         (item) => item.source === 'following' && item.key.id === collectionId,
       );
-      const discovery = result.feedItems.some((item) => item.source === 'discovery');
+      const discovery = result.feedItems.some((item) => item.source === 'discovery' && item.key.id === seriesId);
       observe('signed-in Home', {
         ...result.sources,
         continuedBook,
@@ -449,7 +460,7 @@ test(
   240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs,
 );
 
-test('Default feed route applies the selected native kind across the mixed stream and binds its examined source frontier to that selection', async () => {
+test('First-public Home serves bibliographic Discovery with Search closed and binds the mixed stream to its selected native kind', async () => {
   const endpoint = process.env.OPENSEARCH_URL;
   if (!endpoint) throw new Error('OPENSEARCH_URL must name the native test service');
   let mounted!: KernelDependencies;
@@ -458,7 +469,7 @@ test('Default feed route applies the selected native kind across the mixed strea
       mounted = deps;
       return createKernel(deps);
     },
-    { isolatedAuth: true },
+    { isolatedAuth: true, localShowcaseBoardCreation: true },
   );
   const { runtime } = driver.fixtures;
   const prefix = `feed-kind-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
@@ -467,12 +478,24 @@ test('Default feed route applies the selected native kind across the mixed strea
   let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   try {
-    await driver.fixtures.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
     const viewer = await driver.fixtures.person('kind-reader');
     const curator = await driver.fixtures.person('kind-curator');
+    expect((await installIdentityEpochBootstrap(driver.fixtures.pool)).mode).toBe('absence');
+    for (const groups of [[], ['personal_library']] as const) {
+      await driver.fixtures.openFeatures(groups);
+      const refused = await driver.fixtures.send(viewer, 'GET', '/v1/feedItems');
+      expect(refused.status).toBe(403);
+      expect(refused.body.code).toBe('platform_closed');
+      expect(refused.headers.get('cache-control')).toBe('private, no-store');
+    }
+    await driver.fixtures.openFeatures(['reading_progress']);
+    const limited = await driver.fixtures.scopeVariant(viewer, ['feed_item:list', 'follow:list', 'library_entry:list']);
+    const refused = await driver.fixtures.send(limited, 'GET', '/v1/feedItems');
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe('forbidden');
     const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
     const subjects: Record<string, string> = {};
-    for (const type of ['schema:Book', 'schema:Movie']) {
+    for (const type of [...BOOK_CATALOGUE_TYPES, 'schema:Movie']) {
       const created = await driver.request(
         'editor',
         'POST',
@@ -486,6 +509,7 @@ test('Default feed route applies the selected native kind across the mixed strea
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       const id = (created.body.subject as { id: string }).id;
       subjects[type] = id;
+      if (type !== 'schema:Book' && type !== 'schema:Movie') continue;
       const metadata = bundledRelease.types[type]!.library!;
       const active = bundledRelease.libraryProfiles![metadata.profileId]!.entryStateSet!.states.find(
         (state) => state.role === 'active',
@@ -495,51 +519,6 @@ test('Default feed route applies the selected native kind across the mixed strea
     }
     const book = subjects['schema:Book']!;
     const movie = subjects['schema:Movie']!;
-    const reviewBoard = await driver.fixtures.send(
-      curator,
-      'POST',
-      '/v1/boards',
-      {
-        conceptId: book,
-        title: 'Selected Home question review board',
-        purpose: 'reviews',
-        visibility: 'published',
-      },
-      key(),
-    );
-    expect(reviewBoard.status, JSON.stringify(reviewBoard.body)).toBe(201);
-    const reviewBoardId = (reviewBoard.body.board as { id: string }).id;
-    await driver.fixtures.grantAccount(curator, ['thread:create', 'board:read'], reviewBoardId);
-    const vote = await driver.fixtures.send(
-      curator,
-      'PUT',
-      `/v1/subjects/${book}/ratings/${STANDARD_QUESTION_ID}/vote`,
-      { units: 14 },
-      key(),
-    );
-    expect(vote.status, JSON.stringify(vote.body)).toBe(200);
-    const recordedVote = vote.body as { units: number; revision: number };
-    const selectedReview = await driver.fixtures.send(
-      curator,
-      'POST',
-      '/v1/threads',
-      {
-        kind: 'review',
-        title: 'Selected Home question review',
-        body: fromPlainText('A current review witness for Home.'),
-        licence: 'CC-BY-4.0',
-        boardId: reviewBoardId,
-        subjectIds: [book],
-        visibility: 'published',
-        voteCitation: {
-          questionId: STANDARD_QUESTION_ID,
-          units: recordedVote.units,
-          revision: recordedVote.revision,
-        },
-      },
-      key(),
-    );
-    expect(selectedReview.status, JSON.stringify(selectedReview.body)).toBe(201);
     expect((await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key())).status).toBe(200);
     const created = await driver.fixtures.send(
       curator,
@@ -581,7 +560,8 @@ test('Default feed route applies the selected native kind across the mixed strea
         },
       )
     ).getResult();
-    server = await startServer(readConfig(env));
+    let serving: DiscoveryServingObservation | undefined;
+    server = await startServer({ ...readConfig(env), observeDiscoveryServing: (value) => (serving = value) });
     const headers = { authorization: `Bearer ${viewer.bearer}`, 'accept-language': 'en' };
     async function response(query: URLSearchParams, personal = true) {
       const result = await fetch(new URL(`/v1/feedItems?${query}`, server!.url), {
@@ -608,15 +588,73 @@ test('Default feed route applies the selected native kind across the mixed strea
       if (personal) expect(result.headers.get('cache-control')).toBe('private, no-store');
       return result.body as FeedPage;
     }
-    // Establish the original mixed composition with all three native lanes before selecting.
-    const mixed = await eventually(async () => {
-      const result = await page();
-      return result.feedItems.some((item) => item.source === 'continue' && item.key.id === movie) &&
-        result.feedItems.some((item) => item.source === 'following' && item.key.id === collection) &&
-        result.feedItems.some((item) => item.source === 'discovery')
-        ? result
-        : undefined;
-    });
+    const gated = await response(new URLSearchParams({ kind: 'schema:Movie' }), false);
+    const closed = [
+      gated,
+      await driver.request('anonymous', 'POST', '/v1/subjects:search', { text: 'Native selected' }),
+      await driver.request('anonymous', 'POST', '/v1/subjects:search', {
+        representation: 'discovery-v1',
+        kindPage: { limit: 8 },
+      }),
+      await driver.request('anonymous', 'POST', '/v1/subjects:facets', { facets: [{ property: 'type' }] }),
+      await driver.request('anonymous', 'GET', '/v1/entitlements'),
+    ];
+    for (const result of closed) {
+      expect(result.status).toBe(403);
+      expect(result.body.code).toBe('platform_closed');
+    }
+    for (const kind of [undefined, ...BOOK_CATALOGUE_TYPES]) {
+      const admitted = await page(kind, 'home', 1, undefined, false);
+      expect(admitted.sources).toMatchObject({ following: 'not_requested', continue: 'not_requested' });
+      if (kind === undefined) continue;
+      const type = await driver.request(
+        'anonymous',
+        'GET',
+        `/v1/definitionTypes/${encodeURIComponent(kind)}?locale=en`,
+      );
+      expect(type.status).toBe(200);
+      expect(type.body).toMatchObject({ typeId: kind, label: expect.any(String) });
+    }
+
+    const anonymous = await eventually(
+      async () => {
+        const result = await page('schema:Book', 'home', 20, undefined, false);
+        return result.sources.discovery === 'ready' && result.feedItems.some((item) => item.key.id === book)
+          ? result
+          : undefined;
+      },
+      () => console.info('First-public Home Discovery readiness', serving),
+    );
+    expect(anonymous.feedItems.every((item) => item.source === 'discovery' && item.key.kind === 'schema:Book')).toBe(
+      true,
+    );
+    expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
+
+    for (const kind of BOOK_CATALOGUE_TYPES) {
+      const selected = await page(kind, 'home', 1, undefined, false);
+      expect(selected.feedItems.map(({ key }) => key.id)).toEqual([subjects[kind]]);
+    }
+    const publicFirst = await page(undefined, 'home', 1, undefined, false);
+    expect(publicFirst.next).toBeString();
+    const publicSecond = await page(undefined, 'home', 1, publicFirst.next!, false);
+    expect(new Set([...publicFirst.feedItems, ...publicSecond.feedItems].map(({ key }) => key.id)).size).toBe(2);
+    for (const item of [...publicFirst.feedItems, ...publicSecond.feedItems]) {
+      expect(item.source).toBe('discovery');
+      expect(BOOK_CATALOGUE_TYPES).toContain(item.key.kind as (typeof BOOK_CATALOGUE_TYPES)[number]);
+    }
+    let mixedSources: FeedPage['sources'] | undefined;
+    const mixed = await eventually(
+      async () => {
+        const result = await page();
+        mixedSources = result.sources;
+        return result.feedItems.some((item) => item.source === 'continue' && item.key.id === movie) &&
+          result.feedItems.some((item) => item.source === 'following' && item.key.id === collection) &&
+          result.feedItems.some((item) => item.source === 'discovery')
+          ? result
+          : undefined;
+      },
+      () => console.info('First-public mixed Home readiness', { sources: mixedSources, serving }),
+    );
     expect(mixed.sources).toEqual({ discovery: 'ready', following: 'ready', continue: 'ready' });
     const selected = await eventually(async () => {
       const result = await page('schema:Book');
@@ -627,29 +665,6 @@ test('Default feed route applies the selected native kind across the mixed strea
     expect(selected.feedItems.length).toBeGreaterThan(0);
     expect(selected.feedItems.every((item) => item.key.kind === 'schema:Book')).toBe(true);
     expect(selected.feedItems.find((item) => item.key.id === book)?.source).toBe('continue');
-    const anonymous = await eventually(async () => {
-      const result = await page('schema:Book', 'home', 20, undefined, false);
-      return result.sources.discovery === 'ready' && result.feedItems.some((item) => item.key.id === book)
-        ? result
-        : undefined;
-    });
-    expect(anonymous.feedItems.every((item) => item.source === 'discovery' && item.key.kind === 'schema:Book')).toBe(
-      true,
-    );
-    expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
-
-    // Book sorts before Movie. With P=1, filtering an all-kind discovery page after
-    // enumeration would return an empty page instead of this native selected hit.
-    const movieDiscovery = await eventually(async () => {
-      const result = await page('schema:Movie', 'home', 1, undefined, false);
-      return result.sources.discovery === 'ready' ? result : undefined;
-    });
-    expect(movieDiscovery.feedItems).toHaveLength(1);
-    expect(movieDiscovery.feedItems[0]).toMatchObject({
-      source: 'discovery',
-      key: { id: movie, kind: 'schema:Movie' },
-    });
-
     const actor = await driver.fixtures.authenticatedAccount(viewer);
     const tokens = mounted.tokens!;
     const position = (cursor: string, stream: string, kind?: string) =>
@@ -672,6 +687,60 @@ test('Default feed route applies the selected native kind across the mixed strea
     });
     const second = await page('schema:Book', 'home', 1, first.next!);
     expect(second.feedItems[0]).toMatchObject({ source: 'continue', key: { id: book, kind: 'schema:Book' } });
+
+    const concept = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'skos:Concept', labels: { en: 'Selected Home question board concept' } },
+      key(),
+    );
+    expect(concept.status, JSON.stringify(concept.body)).toBe(201);
+    await driver.fixtures.grantAccount(curator, ['board:create']);
+    const reviewBoard = await driver.fixtures.send(
+      curator,
+      'POST',
+      '/v1/boards',
+      {
+        conceptId: (concept.body.subject as { id: string }).id,
+        title: 'Selected Home question review board',
+        purpose: 'reviews',
+        visibility: 'published',
+      },
+      key(),
+    );
+    expect(reviewBoard.status, JSON.stringify(reviewBoard.body)).toBe(201);
+    const reviewBoardId = (reviewBoard.body.board as { id: string }).id;
+    const vote = await driver.fixtures.send(
+      curator,
+      'PUT',
+      `/v1/subjects/${book}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      { units: 14 },
+      key(),
+    );
+    expect(vote.status, JSON.stringify(vote.body)).toBe(200);
+    const recordedVote = vote.body as { units: number; revision: number };
+    const selectedReview = await driver.fixtures.send(
+      curator,
+      'POST',
+      '/v1/threads',
+      {
+        kind: 'review',
+        title: 'Selected Home question review',
+        body: fromPlainText('A current review witness for Home.'),
+        licence: 'CC-BY-4.0',
+        boardId: reviewBoardId,
+        subjectIds: [book],
+        visibility: 'published',
+        voteCitation: {
+          questionId: STANDARD_QUESTION_ID,
+          units: recordedVote.units,
+          revision: recordedVote.revision,
+        },
+      },
+      key(),
+    );
+    expect(selectedReview.status, JSON.stringify(selectedReview.body)).toBe(201);
 
     const selectedQuestionFirst = await eventually(async () => {
       const result = await page('schema:Book', 'home', 20, undefined, true, undefined, STANDARD_QUESTION_ID);
@@ -703,7 +772,7 @@ test('Default feed route applies the selected native kind across the mixed strea
     }).pageFollowingActivity(viewer.accountId, { limit: 1, cursor: examined.following as string }, Date.now() + 30_000);
     expect(nativeAfter.activities.some((activity) => activity.id === raw.activities[0]!.id)).toBe(false);
     expect((await page('collection', 'following', 1)).feedItems[0]!.key.id).toBe(collection);
-    for (const kind of [undefined, 'schema:Movie']) {
+    for (const kind of [undefined, 'schema:BookSeries']) {
       const query = new URLSearchParams({ stream: 'home', limit: '1', cursor: first.next! });
       if (kind !== undefined) query.set('kind', kind);
       const refused = await response(query);
@@ -730,11 +799,6 @@ test('Default feed route applies the selected native kind across the mixed strea
     );
     expect(repeated.status).toBe(400);
     expect(repeated.body.code).toBe('invalid_request');
-    // A syntactically valid but unregistered kind reaches the real native admission boundary.
-    const unsupported = await response(new URLSearchParams({ kind: 'unregistered-kind' }));
-    expect(unsupported.status).toBe(422);
-    expect(unsupported.body.code).toBe('unsupported_query');
-    expect(unsupported.headers.get('content-type')).toContain('application/problem+json');
     // Inject only a dependency fault at the existing ABI; the mounted default reader still
     // composes real Following/Continue instead of broadening or returning a successful empty lane.
     const degraded = createKernel({
@@ -792,6 +856,7 @@ test('Default feed route applies the selected native kind across the mixed strea
       expect(rebound.body.code).toBe('invalid_cursor');
     }
 
+    await driver.grant('editor', ['space:create', 'realm:create'], PLATFORM_RESOURCE.id);
     const spaceResult = await driver.request(
       'editor',
       'POST',
@@ -904,6 +969,15 @@ test('Default feed route applies the selected native kind across the mixed strea
     const afterWithdrawal = await anonymousSpacePage();
     expect(afterWithdrawal.feedItems.some((item) => item.key.id === withdrawn)).toBe(false);
     expect(afterWithdrawal.feedItems.every((item) => !outOfSpace.includes(item.key.id))).toBe(true);
+
+    await driver.fixtures.openFeatures(['search']);
+    // Book sorts before Movie, so the selected hit must come from the native predicate at P=1.
+    const movieDiscovery = await page('schema:Movie', 'home', 1, undefined, false);
+    expect(movieDiscovery.feedItems.map(({ key }) => key.id)).toEqual([movie]);
+    const unsupported = await response(new URLSearchParams({ kind: 'unregistered-kind' }));
+    expect(unsupported.status).toBe(422);
+    expect(unsupported.body.code).toBe('unsupported_query');
+    expect(unsupported.headers.get('content-type')).toContain('application/problem+json');
   } finally {
     try {
       await server?.stop();

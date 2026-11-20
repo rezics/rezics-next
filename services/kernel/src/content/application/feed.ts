@@ -97,7 +97,7 @@ export function createFeedApplication(
           admissions.push(ports.admission.readingProgress(account, deadline));
         }
       }
-      if (stream === 'home') admissions.push(ports.admission.discovery(actor, deadline));
+      if (stream === 'home') admissions.push(ports.admission.discovery(actor, query.kind, deadline));
       // Each owner admits its own boundary. Drain all reads and keep the same denial precedence.
       for (const admission of await Promise.allSettled(admissions))
         if (admission.status === 'rejected') throw admission.reason;

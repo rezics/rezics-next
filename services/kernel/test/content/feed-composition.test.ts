@@ -162,7 +162,9 @@ test('native ports retain one supplied producer set and forward live operands un
     await ports.admission.following(actor, 123);
     await ports.admission.personalLibrary(actor, 123);
     await ports.admission.readingProgress(actor, 123);
-    await ports.admission.discovery(actor, 123);
+    await ports.admission.discovery(actor, undefined, 123);
+    await ports.admission.discovery(actor, 'schema:Book', 123);
+    await ports.admission.discovery(actor, 'account', 123);
     expect(calls).toEqual([
       [actor, query, 123, languages],
       [actor, { ids: ['one', 'one'], languages, deadline: 123 }],

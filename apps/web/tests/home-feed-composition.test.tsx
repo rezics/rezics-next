@@ -1,5 +1,7 @@
 import { afterAll, expect, expectTypeOf, mock, test } from 'bun:test';
 import type { FeedItem as InstalledFeedItem, FeedPage as InstalledFeedPage } from '@rezics/client';
+import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
@@ -103,20 +105,56 @@ mock.module('@tanstack/react-start', async () => {
     },
   };
 });
-mock.module('@tanstack/react-start/server', () => ({
+mock.module('@tanstack/react-start/server', async () => ({
+  ...(await import('../.storybook/react-start')),
   getRequest: () => request,
   setResponseHeader: (name: string, value: string) => {
     headers[name] = value;
   },
 }));
 const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
-const { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeQuestions } =
+const { homePageQuery, readHomeKinds, readPrivateHomePage, readPublicHomePage, readHomeQuestions } =
   await import('../src/features/pages/home-queries');
 const { Home } = await import('../src/routes/-home');
 const liveFetch = globalThis.fetch;
 afterAll(() => {
   globalThis.fetch = liveFetch;
   mock.restore();
+});
+
+test('Home kind choices use exact released catalogue Types with Search closed', async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const call = new Request(input, init);
+    const url = new URL(call.url);
+    calls.push(decodeURIComponent(url.pathname));
+    expect(call.headers.has('authorization')).toBe(false);
+    if (url.pathname === '/v1/subjects:search') return Response.json({ code: 'platform_closed' }, { status: 403 });
+    const typeId = decodeURIComponent(url.pathname.split('/').at(-1)!);
+    const definition = bundledRelease.types[typeId]!;
+    expect(call.method).toBe('GET');
+    expect(url.searchParams.get('locale')).toBe('en');
+    return Response.json({ typeId, label: definition.labels.en, language: 'en', definition });
+  }) as typeof fetch;
+  try {
+    expect(await readHomeKinds({ data: { locale: 'en' } })).toMatchObject({
+      status: 'ready',
+      kinds: {
+        values: BOOK_CATALOGUE_TYPES.map((id) => ({ id, labels: { en: bundledRelease.types[id]!.labels.en } })),
+        next: null,
+      },
+    });
+    expect(await readHomeKinds({ data: { locale: 'en', cursor: 'previously-admitted' } })).toEqual({
+      status: 'restart',
+    });
+    expect(calls).toEqual([
+      '/v1/subjects:search',
+      ...BOOK_CATALOGUE_TYPES.map((id) => `/v1/definitionTypes/${id}`),
+      '/v1/subjects:search',
+    ]);
+  } finally {
+    globalThis.fetch = liveFetch;
+  }
 });
 
 test('The default home route renders a bounded mixed discovery Following and Continue stream with honest source states and private session isolation', async () => {
