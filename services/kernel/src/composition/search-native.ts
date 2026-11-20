@@ -64,7 +64,7 @@ import {
   readNativePublicFilterRepairStart,
 } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
-import { reconcileHeldSubjectPage } from '../semantic/public-filter-held-subject.ts';
+import { reconcileHeldSubjectPage, reserveHeldSubjectPreparation } from '../semantic/public-filter-held-subject.ts';
 import { planColdSubjectEnrollment } from '../semantic/public-filter-coverage-baseline.ts';
 import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
 import { relationSource } from '../semantic/search-relations.ts';
@@ -119,6 +119,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     advanceNativePublicFilterPreparation,
     planColdSubjectEnrollment,
     reconcileHeldSubjectPage,
+    reserveHeldSubjectPreparation,
     bindCollectionKindPreparationStep,
     bindOwnerFilterRead,
     createIdentityScopedObservations,

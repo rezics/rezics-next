@@ -14,7 +14,8 @@ import {
   createPublicFilterSourceBinding,
   readNativePublicFilterPublicationCompletion,
 } from '../../src/semantic/public-filter-source-binding.ts';
-import { openHeldSubjectPreparation } from '../../src/semantic/public-filter-held-subject.ts';
+import { retainNativePublicFilterMeaning } from '../../src/search/public-filter-meaning.ts';
+import { hasVerifiedReleaseDigest, readRelease } from '../../src/semantic/definition-release-read.ts';
 import { identityEpochDatabase } from './support/identity-epoch.ts';
 import { fixture, nativeProducer } from './support/public-filter-source.ts';
 
@@ -44,7 +45,10 @@ async function verifyPublication(url: string) {
     source: createRatedSubjectSource(pool, f.config.routeKey).source,
     listing: subjectListingSource(pool),
   });
+  const release = await readRelease(pool, f.meaning.digest);
+  if (!release) throw new Error('Missing original publication meaning');
   const publication = createSearchGenerationPublication({
+    subjectSubscriptionProtocol: 1,
     pool,
     search,
     source,
@@ -52,7 +56,7 @@ async function verifyPublication(url: string) {
     sourceKeys: createSubjectSourceKeyPages(pool, f.config.routeKey, f.config.access),
     readPublicationCompletion: (request, ctx) => readNativePublicFilterPublicationCompletion(binding, request, ctx),
     clock: f.config.clock,
-    meaning: f.meaning,
+    meaning: retainNativePublicFilterMeaning({ digest: f.meaning.digest, release }, hasVerifiedReleaseDigest),
     writerGuard: writer,
   });
   const context = () => ({ deadline: Date.now() + 10000 });
@@ -99,12 +103,20 @@ async function verifyPublication(url: string) {
       context(),
     );
     if (registration.status !== 'registered') throw new Error(registration.reason);
+    await pool.query('SELECT core.enable_subject_retention_v1()');
     const prepared = await publication.prepare(registration.consumer, context());
     if (prepared.status !== 'preparing') throw new Error(prepared.reason);
-    await pool.query('SELECT core.enable_subject_retention_v1()');
-    const birth = await openHeldSubjectPreparation(pool, { job: prepared.job.job, bootstrap: randomUUID() }, context());
-    await pool.query('SELECT semantic.capture_subject_access_page_v1($1,0,2)', [birth]);
     const step = () => publication.step(prepared.job, context(), { enrollSource: true });
+    const { birth } = (
+      await pool.query('SELECT birth FROM core.subject_subscription_v1 WHERE job=$1', [prepared.job.job])
+    ).rows[0];
+
+    await pool.query('SELECT semantic.capture_subject_access_page_v1($1,0,2)', [birth]);
+    expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
+    expect(
+      (await pool.query('SELECT first_home,end_home FROM search.subject_receiver_page_v1 WHERE birth=$1', [birth]))
+        .rows,
+    ).toEqual([{ first_home: 0, end_home: 2 }]);
     const frontier = async () =>
       (
         await pool.query('SELECT next_home,next_ordinal FROM semantic.subject_source_preparation_v1 WHERE birth=$1', [

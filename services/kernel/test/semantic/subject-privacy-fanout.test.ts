@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { encode, tree } from '../../src/search/public-filter-codec.ts';
 import { systemClock } from '../../src/clock.ts';
 import { maintainPublicFilterCoverageHome } from '../../src/semantic/public-filter-coverage-maintenance.ts';
 import {
@@ -62,30 +63,47 @@ test('shared Subject withdrawal outlives legacy fanout and an enqueue during rec
     async function subscribe(generation: number) {
       const job = randomUUID();
       const incarnation = randomUUID();
+      const bootstrap = randomUUID();
+      const registration = randomUUID();
       const physicalTarget = `privacy-fanout-${generation}`;
+      const consumer = { readDefinition, meaningDigest: meaning.digest, physicalTarget, incarnation };
       await db.admin.query(
         'INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation) VALUES(0,$1,$2)',
         [physicalTarget, incarnation],
       );
       await db.admin.query(
         `INSERT INTO search.generation_publication
-         (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at)
-         VALUES($1,$2,$3,'privacy-fanout-', $4,'subjects',$5,'{}',0,$6,now()::text)`,
-        [
-          job,
-          physicalTarget,
-          { readDefinition, meaningDigest: meaning.digest, physicalTarget, incarnation },
-          generation,
-          incarnation,
-          { readDefinition, source, meaning },
-        ],
+         (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol,subscription_protocol)
+         VALUES($1,$2,$3,'privacy-fanout-', $4,'subjects',$5,'{}',0,$6,now()::text,1,1)`,
+        [job, physicalTarget, consumer, generation, incarnation, { readDefinition, source, meaning }],
       );
-      return (await db.admin.query('SELECT core.open_subject_subscription_v1($1,$2) AS birth', [job, randomUUID()]))
-        .rows[0]!.birth as string;
+      const { birth } = (
+        await db.admin.query('SELECT core.open_subject_subscription_v1($1,$2) AS birth', [job, bootstrap])
+      ).rows[0]!;
+      await db.admin.query(
+        `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
+        VALUES(0,$1,$2,$3,'{}','active')`,
+        [registration, physicalTarget, encode(consumer)],
+      );
+      await db.admin.query(
+        `INSERT INTO semantic.public_filter_bootstrap(partition_no,bootstrap,read_definition,request_key,consumer,
+        snapshot_kind,native_snapshot,owner_epoch,source_position,state)
+        VALUES(0,$1,$2,$3,$4,'prepared',pg_current_snapshot(),1,0,'capturing')`,
+        [bootstrap, readDefinition, digest(job).toString('hex'), JSON.stringify(tree(consumer, 'value'))],
+      );
+      await db.admin.query('INSERT INTO semantic.subject_source_preparation_v1(birth,bootstrap) VALUES($1,$2)', [
+        birth,
+        bootstrap,
+      ]);
+      expect(
+        (await db.admin.query('SELECT search.begin_subject_receiver_v1($1,$2) AS ready', [job, encode(consumer)]))
+          .rows[0].ready,
+      ).toBe(true);
+      return { birth, bootstrap, job, registration };
     }
 
     await db.admin.query('SELECT core.enable_subject_retention_v1()');
-    const birth = await subscribe(1);
+    const { birth, bootstrap, registration, job } = await subscribe(1);
     const readPending = async () =>
       (
         await db.admin.query(
@@ -119,7 +137,7 @@ test('shared Subject withdrawal outlives legacy fanout and an enqueue during rec
         through_position: '1',
       },
     ]);
-    const { cuts } = (await db.admin.query('SELECT core.capture_subject_retention_page_v1($1,0,2) AS cuts', [birth]))
+    const { cuts } = (await db.admin.query('SELECT semantic.capture_subject_access_page_v1($1,0,2) AS cuts', [birth]))
       .rows[0]!;
     expect(cuts[home].privacy).toBe('1');
     await maintain();
@@ -134,15 +152,78 @@ test('shared Subject withdrawal outlives legacy fanout and an enqueue during rec
     await expect(db.admin.query(oldClear, [home, inputKey])).rejects.toThrow(
       'Subject privacy interval has no current disposition',
     );
-    const lateBirth = await subscribe(2);
+    const { birth: lateBirth } = await subscribe(2);
     const intake = `INSERT INTO search.subject_privacy_intake_v1
       (birth,partition_no,input_key,enqueue_revision,privacy_base) VALUES($1,$2,$3,$4,$5)`;
+    // The producer cut exists. No receiver page or independent ACK exists yet.
+    await expect(db.admin.query(intake, [birth, home, inputKey, '2', cuts[home].privacy])).rejects.toThrow();
+    const adopt = 'SELECT search.advance_subject_receiver_v1($1,32) AS homes';
+    const accept = 'SELECT semantic.accept_subject_receiver_page_v1($1) AS homes';
+    const first = await db.pool.connect();
+    try {
+      await first.query('SELECT pg_stat_force_next_flush()');
+      await first.query('BEGIN');
+      expect((await first.query(adopt, [job])).rows[0].homes).toBe(2);
+      expect((await first.query(accept, [job])).rows[0].homes).toBe(0);
+      const writes = await first.query(`SELECT sum(n_tup_ins+n_tup_upd+n_tup_del)::int AS count
+        FROM pg_stat_xact_user_tables WHERE schemaname='search'`);
+      expect(writes.rows[0].count).toBe(2);
+      await first.query('COMMIT');
+    } finally {
+      first.release(true);
+    }
+    const pages = () => db.admin.query('SELECT * FROM search.subject_receiver_page_v1 WHERE birth=$1', [birth]);
+    const saved = (await pages()).rows;
+    expect(saved).toHaveLength(1);
+    expect((await db.admin.query(adopt, [job])).rows[0].homes).toBe(2);
+    expect((await pages()).rows).toEqual(saved);
+    const stale = await db.admin.connect();
+    try {
+      await stale.query('BEGIN');
+      await stale.query('UPDATE core.subject_retention_domain SET fenced=true WHERE singleton');
+      await expect(stale.query(accept, [job])).rejects.toThrow();
+    } finally {
+      await stale.query('ROLLBACK');
+      stale.release();
+    }
+    await expect(
+      db.admin.query('INSERT INTO search.public_filter_ack_manifest(job) VALUES($1)', [job]),
+    ).rejects.toThrow();
+    expect((await db.admin.query(accept, [job])).rows[0].homes).toBe(2);
+    expect((await db.admin.query(accept, [job])).rows[0].homes).toBe(0);
+    await expect(
+      db.admin.query('SELECT * FROM semantic.public_filter_book_dirty_homes($1)', [registration]),
+    ).rejects.toThrow('A manifest ACK requires its original bootstrap');
+    expect(
+      (
+        await db.admin.query(
+          `SELECT behind,acknowledged_settlement FROM
+      semantic.public_filter_effective_homes($1,$2,$3,1)`,
+          [registration, bootstrap, home],
+        )
+      ).rows,
+    ).toEqual([{ behind: true, acknowledged_settlement: null }]);
+    expect(
+      (
+        await db.admin.query('SELECT source_home FROM search.public_filter_original_home(0,$1,$2,2)', [
+          registration,
+          bootstrap,
+        ])
+      ).rows,
+    ).toEqual([]);
     const receiver = await db.admin.connect();
     try {
       await receiver.query('BEGIN');
       await receiver.query(intake, [birth, home, inputKey, original.captured_revision, cuts[home].privacy]);
       await f.hide(books[2]!);
-      await maintain();
+      expect(
+        (
+          await db.pool.query('SELECT semantic.advance_subject_privacy_fanout_v1($1,$2,2,1) AS status', [
+            home,
+            inputKey,
+          ])
+        ).rows[0].status,
+      ).toBe('pending');
       expect(await readPending()).toEqual({ ...original, through_position: '3' });
       await receiver.query('COMMIT');
     } finally {
@@ -169,8 +250,27 @@ test('shared Subject withdrawal outlives legacy fanout and an enqueue during rec
       complete: false,
     });
     expect(await readPending()).toMatchObject({ live: true, captured_revision: '3' });
-    await db.admin.query('SELECT core.capture_subject_retention_page_v1($1,0,2)', [lateBirth]);
-    await db.admin.query(intake, [birth, home, inputKey, '3', cuts[home].privacy]);
+    await db.admin.query('SELECT semantic.capture_subject_access_page_v1($1,0,2)', [lateBirth]);
+    // The ordinary maintainer may already have delivered this exact intake.
+    await db.pool.query('SELECT search.receive_subject_privacy_v1($1,$2,3,1)', [home, inputKey]);
+    expect(
+      (
+        await db.admin.query(
+          'SELECT home,epoch,through_position,change_generation FROM search.subject_receiver_dirty_v1 WHERE birth=$1',
+          [birth],
+        )
+      ).rows,
+    ).toEqual([{ home, epoch: 1, through_position: '3', change_generation: '2' }]);
+    expect(
+      (
+        await db.admin.query(
+          `SELECT (SELECT count(*) FROM search.public_filter_coverage_home) AS legacy_homes,
+      (SELECT count(*) FROM semantic.public_filter_bootstrap_account) AS accounts,
+      (SELECT count(*) FROM search.subject_privacy_intake_v1 WHERE birth=$1) AS intakes`,
+          [birth],
+        )
+      ).rows[0],
+    ).toEqual({ legacy_homes: '0', accounts: '0', intakes: '2' });
     const disposition = await db.admin.query('SELECT semantic.advance_subject_privacy_fanout_v1($1,$2,3,2) AS status', [
       home,
       inputKey,

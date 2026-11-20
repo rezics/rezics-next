@@ -68,21 +68,23 @@ async function transaction<T>(pool: Pool, context: Context, body: (db: PoolClien
  * keeps its ordinary protocol until the remaining owners qualify admission.
  */
 export async function openHeldSubjectPreparation(pool: Pool, input: Omit<Member, 'birth'>, context: Context) {
+  return transaction(pool, context, (db) => reserveHeldSubjectPreparation(db, input));
+}
+
+export async function reserveHeldSubjectPreparation(db: PoolClient, input: Omit<Member, 'birth'>) {
   const { job, bootstrap } = input;
-  return transaction(pool, context, async (db) => {
-    const { rows } = await db.query<{ birth: string; consumer: PublicFilterConsumer }>(
-      `WITH locked AS MATERIALIZED (
+  const { rows } = await db.query<{ birth: string; consumer: PublicFilterConsumer }>(
+    `WITH locked AS MATERIALIZED (
          SELECT j.job,j.consumer FROM search.generation_publication j WHERE (j.partition_no,j.job)=(0,$1)
            AND pg_try_advisory_xact_lock(hashtextextended(j.prefix||'subjects',2))
        )
        SELECT core.open_subject_subscription_v1(job,$2)::text AS birth,consumer FROM locked`,
-      [job, bootstrap],
-    );
-    const birth = rows[0]?.birth;
-    if (!birth) return pending(0);
-    await reserveHeldSubjectBootstrap(db, { birth, bootstrap, consumer: rows[0]!.consumer });
-    return birth;
-  });
+    [job, bootstrap],
+  );
+  const birth = rows[0]?.birth;
+  if (!birth) return pending(0);
+  await reserveHeldSubjectBootstrap(db, { birth, bootstrap, consumer: rows[0]!.consumer });
+  return birth;
 }
 
 function saveWindow(w: PublicFilterCreationWindow): Window {

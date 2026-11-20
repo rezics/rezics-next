@@ -301,6 +301,16 @@ export async function maintainPublicFilterCoverageHome(
     next = frontier(enrollment);
   }
   const legacyDone = applied === enrollments.length && enrollments.length < limit;
+  if (legacyDone && captured.captured_shared_v1) {
+    await transaction(pool, context.deadline, async (client) => {
+      await client.query('SELECT search.receive_subject_privacy_v1($1,$2,$3,$4)', [
+        partition,
+        captured.input_key,
+        captured.captured_revision,
+        limit - applied,
+      ]);
+    });
+  }
   const more = await transaction(pool, context.deadline, async (client) => {
     const owner = (
       await client.query<{ epoch: number; write_state: string }>(

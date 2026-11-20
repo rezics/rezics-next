@@ -7,6 +7,7 @@ import {
   advanceNativePublicFilterPreparation,
   planColdSubjectEnrollment,
   reconcileHeldSubjectPage,
+  reserveHeldSubjectPreparation,
 } from './native-bindings.ts';
 import {
   bindSearchWriterPublicationReader,
@@ -139,6 +140,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
   meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
   subjectAckProtocol?: 1;
+  subjectSubscriptionProtocol?: 1;
   creditSearch?: CreditSearchSource;
   registry?: DiscoveryRegistry;
 }>;
@@ -255,6 +257,7 @@ function bindingKey(definition: SearchPublicFilterSourceDefinition) {
   };
 }
 type Job = {
+  subscription_protocol: number;
   job: string;
   physical_target: string;
   consumer: PublicFilterConsumer;
@@ -573,6 +576,7 @@ export function createSearchGenerationPublication(
 
   function canEnrollSubject(job: Job) {
     return (
+      job.subscription_protocol !== 1 &&
       !registry &&
       job.family === 'subjects' &&
       !job.fence &&
@@ -599,6 +603,7 @@ export function createSearchGenerationPublication(
       !nativeMeaning ||
       registry ||
       job.source_home !== 0 ||
+      job.subscription_protocol === 1 ||
       job.bootstrap ||
       (capturingOnly && !hasPublicationGuard()) ||
       !advanceNativePublicFilterPreparation ||
@@ -981,7 +986,30 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
-              if (job.held_birth != null) {
+              if (job.subscription_protocol === 1 && job.pass === '1' && job.phase === 'subject') {
+                if (!job.held_birth) throw new Pending('source_pending');
+                const pin = await client.query<{ ready: boolean }>(
+                  'SELECT search.begin_subject_receiver_v1($1,$2) AS ready',
+                  [job.job, encodePublicFilterNativeState(job.consumer)],
+                );
+                meter.inputKeys += 16;
+                meter.dependencyPoints += 16;
+                if (!pin.rows[0]?.ready) throw new Pending('source_pending');
+                const homes = Math.min(32, Math.floor((1000 - meter.inputKeys - 192) / 24));
+                const page = await client.query<{ homes: number }>(
+                  'SELECT search.advance_subject_receiver_v1($1,$2) AS homes',
+                  [job.job, homes],
+                );
+                if (page.rows[0]?.homes) {
+                  meter.inputKeys += 192 + page.rows[0].homes * 24;
+                  meter.dependencyPoints += 192 + page.rows[0].homes * 24;
+                  // Separate commits let Source recover the receiver's original after a lost reply.
+                  await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+                  meter.frontierWrites += 3;
+                  return work(job, client, null, undefined, true);
+                }
+              }
+              if (job.held_birth != null && (job.subscription_protocol !== 1 || job.next_home !== 4096)) {
                 if (
                   phase === 'activate' ||
                   job.family !== 'subjects' ||
@@ -1033,6 +1061,27 @@ export function createSearchGenerationPublication(
                 );
                 meter.frontierWrites++;
                 return work(job, client, null, undefined, true);
+              }
+              if (
+                job.subscription_protocol === 1 &&
+                job.next_home === 4096 &&
+                job.phase === 'subject' &&
+                job.pass === '1' &&
+                job.home === 0 &&
+                !job.fence &&
+                !job.pit &&
+                !job.after_id &&
+                !job.previous_uuid
+              ) {
+                const sealed = await client.query(
+                  "SELECT 1 FROM semantic.public_filter_bootstrap WHERE (partition_no,bootstrap)=(0,$1) AND coverage_sealed AND state='begun'",
+                  [job.held_bootstrap],
+                );
+                if (!sealed.rowCount) throw new Pending('source_pending');
+                // The producer reconciled the complete original inventory through finite creation ends.
+                // The engine pass and the subsequent held pass still compare the ordinary physical target.
+                job.phase = 'engine';
+                await save(client, job, meter);
               }
               const earlyEnrollment =
                 phase === 'step-enroll' && canEnrollSubject(job) && !job.bootstrap && !job.queried && !job.execution;
@@ -1289,7 +1338,13 @@ export function createSearchGenerationPublication(
       rows: [old],
     } = await client.query<Home>(
       `SELECT partition_no AS partition,epoch,position::text,account_revision::text,claim_revision::text
-      FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3`,
+      FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3 ${
+        job.subscription_protocol === 1 && job.pass === '1'
+          ? `UNION ALL
+        SELECT home,epoch,command_base::text,'0','0' FROM search.subject_original_physical_homes_v1($2,$1,$1+1)
+        WHERE NOT EXISTS (SELECT FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3)`
+          : ''
+      }`,
       [before.partition, job.job, job.pass],
     );
     const changed = old && !same(old, before);
@@ -1592,7 +1647,17 @@ export function createSearchGenerationPublication(
     const query = `WITH homes AS (
          SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
                 p.epoch AS current_epoch,p.position AS current_position,p.write_state
-           FROM search.generation_publication_home h
+           FROM ${
+             job.subscription_protocol === 1 && job.pass === '1'
+               ? `(
+             SELECT partition_no,job,pass,epoch,position,account_revision,claim_revision
+               FROM search.generation_publication_home WHERE partition_no >= $1 AND partition_no < $2 AND job=$3 AND pass=$4
+             UNION ALL SELECT home,$3,$4,epoch,command_base,0,0 FROM search.subject_original_physical_homes_v1($3,$1,$2) original
+               WHERE NOT EXISTS (SELECT FROM search.generation_publication_home changed
+                 WHERE (changed.partition_no,changed.job,changed.pass)=(original.home,$3,$4))
+           )`
+               : 'search.generation_publication_home'
+           } h
            LEFT JOIN core.partition p ON p.partition_no=h.partition_no
           WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
        ),
@@ -2179,7 +2244,7 @@ export function createSearchGenerationPublication(
         )
           throw new Pending('registration_missing');
         const ackProtocol =
-          config.subjectAckProtocol === 1 &&
+          (config.subjectAckProtocol === 1 || config.subjectSubscriptionProtocol === 1) &&
           nativeMeaning &&
           !registry &&
           target.family === 'subjects' &&
@@ -2189,42 +2254,63 @@ export function createSearchGenerationPublication(
           capture.catalogueCoverage === true
             ? 1
             : 0;
+        const shared = config.subjectSubscriptionProtocol === 1 && ackProtocol === 1;
         const id = randomUUID();
         const job = await withBoundedReadConnection(
           pool,
           context.deadline,
           async (client) => {
-            const result = await client.query<Job>(
-              `INSERT INTO search.generation_publication
-          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol)
+            if (shared) await client.query('BEGIN');
+            try {
+              const result = await client.query<Job>(
+                `INSERT INTO search.generation_publication
+          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol,subscription_protocol)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
             CASE WHEN $12::smallint=1
-              AND to_regprocedure('semantic.public_filter_ack_origin(text,uuid)') IS NOT NULL THEN 1 ELSE 0 END)
+              AND to_regprocedure('semantic.public_filter_ack_origin(text,uuid)') IS NOT NULL THEN 1 ELSE 0 END,$13)
           ON CONFLICT(partition_no,physical_target,consumer) DO NOTHING RETURNING *`,
-              [
-                id,
-                input.physicalTarget,
-                input,
-                target.prefix,
-                target.generation,
-                target.family,
-                target.incarnation,
-                kinds.map(({ kind, owner }) => `${owner}:${kind}`),
-                resolved.definition.source.partition,
-                bindingKey(resolved.definition),
-                config.clock().toISOString(),
-                ackProtocol,
-              ],
-            );
-            return (
-              result.rows[0] ??
-              (
-                await client.query<Job>(
-                  'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
-                  [input.physicalTarget, input],
-                )
-              ).rows[0]
-            );
+                [
+                  id,
+                  input.physicalTarget,
+                  input,
+                  target.prefix,
+                  target.generation,
+                  target.family,
+                  target.incarnation,
+                  kinds.map(({ kind, owner }) => `${owner}:${kind}`),
+                  resolved.definition.source.partition,
+                  bindingKey(resolved.definition),
+                  config.clock().toISOString(),
+                  ackProtocol,
+                  shared ? 1 : 0,
+                ],
+              );
+              if (shared) {
+                if (result.rowCount) {
+                  const birth = await reserveHeldSubjectPreparation(client, { job: id, bootstrap: randomUUID() });
+                  const membership = await client.query<{ key_count: number }>(
+                    'SELECT key_count FROM core.subject_subscription_v1 WHERE birth=$1',
+                    [birth],
+                  );
+                  meter.inputKeys += 96;
+                  meter.dependencyPoints += 96;
+                  meter.frontierWrites += 5 + membership.rows[0]!.key_count;
+                }
+                await client.query('COMMIT');
+              }
+              return (
+                result.rows[0] ??
+                (
+                  await client.query<Job>(
+                    'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
+                    [input.physicalTarget, input],
+                  )
+                ).rows[0]
+              );
+            } catch (error) {
+              if (shared) await client.query('ROLLBACK');
+              throw error;
+            }
           },
           publicationLifetime,
         );

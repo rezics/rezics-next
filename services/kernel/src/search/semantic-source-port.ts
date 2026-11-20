@@ -65,7 +65,10 @@ export type SearchSemanticSourcePort = Readonly<
     SemanticDefinitionDigestApi &
     SemanticPublicFilterBindingApi &
     SemanticColdEnrollmentApi &
-    Pick<typeof import('../semantic/public-filter-held-subject.ts'), 'reconcileHeldSubjectPage'> &
+    Pick<
+      typeof import('../semantic/public-filter-held-subject.ts'),
+      'reconcileHeldSubjectPage' | 'reserveHeldSubjectPreparation'
+    > &
     SemanticPublicFilterOriginApi &
     SemanticReadApi &
     SemanticIdentityStoreApi &

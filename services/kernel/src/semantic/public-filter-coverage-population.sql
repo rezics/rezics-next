@@ -42,9 +42,7 @@ binding AS MATERIALIZED (
   ) attached ON true
   JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=
     (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
-  JOIN search.public_filter_coverage_baseline last_home ON
-    (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=
-    (c.partition_no,c.registration,c.bootstrap,4095) AND last_home.root=c.root
+  JOIN LATERAL search.public_filter_original_home(c.partition_no,c.registration,c.bootstrap,4095) last_home ON last_home.root=c.root
   LEFT JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=
     (o.partition_no,o.observation,i.execution_id)
   LEFT JOIN semantic.public_filter_population_start st ON st.partition_no=o.partition_no AND st.id=i.start_id
@@ -141,10 +139,7 @@ binding AS MATERIALIZED (
 ), changed AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM population b
   CROSS JOIN LATERAL (
-    SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration)
-      AND h.last_change_generation>b.since
-    ORDER BY last_change_generation,source_home LIMIT 1
+    SELECT source_home,source_epoch FROM search.public_filter_first_change_v1(b.coverage_registration,b.since) h
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
     AND NOT EXISTS(SELECT 1 FROM behind)
 ), heads AS MATERIALIZED (
@@ -218,9 +213,7 @@ binding AS MATERIALIZED (
       SELECT h.source_home,n.owner_epoch,n.population_fenced,base.source_epoch,
         base.native_revision,base.native_claim_revision,base.source_position
       FROM home_keys h CROSS JOIN budgeted b
-      LEFT JOIN search.public_filter_coverage_baseline base ON
-        (base.partition_no,base.registration,base.bootstrap,base.source_home)=
-        (h.partition_no,h.registration,h.bootstrap,h.source_home)
+      LEFT JOIN LATERAL search.public_filter_original_home(h.partition_no,h.registration,h.bootstrap,h.source_home) base ON true
       LEFT JOIN semantic.public_filter_privacy_head n ON n.partition_no=h.source_home
     ), subject_control AS MATERIALIZED (
       SELECT k.id,k.source_home,v.route,v.position,v.owner_epoch AS subject_epoch,h.source_epoch,h.source_position,

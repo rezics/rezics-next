@@ -57,6 +57,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
   clock: KernelClock;
   creditSearch?: CreditSearchSource;
   subjectAckProtocol?: 1;
+  subjectSubscriptionProtocol?: 1;
   discoveryProducers?: DiscoveryProducerEntry;
   /** Composition-bound Access observation; omitted fixtures keep throwing through. */
   facetAccess?: FacetAccessObservationPort;
@@ -253,6 +254,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       clock: config.clock,
       meaning: { digest, release },
       binding,
+      ...(config.subjectSubscriptionProtocol === 1 ? { subjectSubscriptionProtocol: 1 } : {}),
       ...(config.subjectAckProtocol === undefined ? {} : { subjectAckProtocol: config.subjectAckProtocol }),
       writer: {
         index: consumer.physicalTarget,

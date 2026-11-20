@@ -158,6 +158,27 @@ in-flight Account update, stale compiler closure and deliberately torn outbox gr
 | Replay four creation and visibility slots | 6 | 91 | 1 |
 | Advance Source cursor after event handoff | 7 | 154 | 1 |
 
+### Shared Subject receiver pages
+
+A cold job may explicitly select subscription protocol 1 with the terminal manifest ACK protocol.
+The job and its producer membership commit together. Search pins the registration generation and derives its
+own root from the original bootstrap and consumer. It reopens the committed Core and Access cut for each page
+of at most 32 homes, preserving the Subject enqueue carry and the per-home receipt and predecessor. A fresh
+page inserts one Search page and updates one Search cursor. Source checks that page on a separate transaction
+and updates one cursor. A lost receiver reply resumes the same page. Ordinary job creation selects protocol 0.
+
+After the original inventory and creation bridge finish, the first engine traversal uses the original command
+position for untouched homes. A changed position still requires the existing writer comparison. Search compares
+each verified creation window with its own page, the original Core and Access tuple, and the current owner.
+The existing range parents, fenced repair settlement and independently committed manifest authorize Source's
+terminal ACK. The held traversal, alias readback and observation retirement use their existing fences.
+
+A post-base captured privacy interval inserts its exact intake under the receiver registration lock. A new
+high water updates the registration generation and upserts one dirty home in the same transaction. Delivery of a
+second key already covered by that high water retains its own intake. Original ACK readback preserves later dirty
+homes. Population and Book reads seek the birth/home and registration/change indexes and resolve each requested
+original from its page. The Book withdrawal exception still requires the original moderation and physical proof.
+
 ## Subject receiver ACK protocol
 
 The original Search preparation pins its ACK protocol at insertion. Production defaults to version 0.

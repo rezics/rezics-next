@@ -12,6 +12,7 @@ export let admitCollectionKindPreparationStep: SearchNativePorts['admitCollectio
 export let admitCollectionMemberQuery: SearchNativePorts['admitCollectionMemberQuery'];
 export let admitCollectionPublicationStep: SearchNativePorts['admitCollectionPublicationStep'];
 export let advanceNativePublicFilterPreparation: SearchNativePorts['advanceNativePublicFilterPreparation'];
+export let reserveHeldSubjectPreparation: SearchNativePorts['reserveHeldSubjectPreparation'];
 export let reconcileHeldSubjectPage: SearchNativePorts['reconcileHeldSubjectPage'];
 export let planColdSubjectEnrollment: SearchNativePorts['planColdSubjectEnrollment'];
 export let bindCollectionKindPreparationStep: SearchNativePorts['bindCollectionKindPreparationStep'];
@@ -83,6 +84,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   admitCollectionMemberQuery = port.admitCollectionMemberQuery;
   admitCollectionPublicationStep = port.admitCollectionPublicationStep;
   advanceNativePublicFilterPreparation = port.advanceNativePublicFilterPreparation;
+  reserveHeldSubjectPreparation = port.reserveHeldSubjectPreparation;
   reconcileHeldSubjectPage = port.reconcileHeldSubjectPage;
   planColdSubjectEnrollment = port.planColdSubjectEnrollment;
   bindCollectionKindPreparationStep = port.bindCollectionKindPreparationStep;

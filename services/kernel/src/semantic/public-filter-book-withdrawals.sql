@@ -35,8 +35,7 @@ WITH input AS (
 ), homes AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch,b.source_position,h.relevant_position
   FROM dirty h JOIN parent p ON h.baseline_bootstrap=p.bootstrap AND h.acknowledged_baseline=p.bootstrap
-  JOIN search.public_filter_coverage_baseline b ON
-    (b.partition_no,b.registration,b.bootstrap,b.source_home)=(0,p.registration,p.bootstrap,h.source_home)
+  JOIN LATERAL search.public_filter_original_home(0,p.registration,p.bootstrap,h.source_home) b ON true
   JOIN core.partition owner ON owner.partition_no=h.source_home AND owner.write_state='active'
     AND owner.epoch=h.source_epoch AND b.source_epoch=owner.epoch
   JOIN semantic.public_filter_privacy_head n ON n.partition_no=owner.partition_no

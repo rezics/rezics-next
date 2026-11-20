@@ -24,6 +24,25 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: accept_subject_receiver_page_v1(uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.accept_subject_receiver_page_v1(job_id uuid) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE accepted integer;
+BEGIN
+  UPDATE semantic.public_filter_bootstrap b SET account_after=p.end_home,coverage_after=p.end_home,
+    coverage_root=p.root,coverage_sealed=(p.end_home=4096),state=CASE WHEN p.end_home=4096 THEN 'begun' ELSE 'capturing' END
+    FROM core.subject_subscription_v1 s JOIN search.subject_receiver_page_v1 p USING(birth)
+    WHERE s.job=job_id AND (b.partition_no,b.bootstrap,b.coverage_after,b.coverage_root)=(0,s.bootstrap,p.first_home,p.predecessor)
+      AND b.subscription_protocol=1 AND b.state='capturing' AND p.adopted_by<>pg_current_xact_id()
+    RETURNING p.end_home-p.first_home INTO accepted;
+  RETURN coalesce(accepted,0);
+END $$;
+
+
+--
 -- Name: ack_identity_epoch_empty_bootstrap(integer, uuid, uuid, integer, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -4129,16 +4148,13 @@ $$;
 
 CREATE FUNCTION semantic.public_filter_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
     LANGUAGE plpgsql STABLE ROWS 9
-    SET enable_seqscan TO 'off'
     AS $$
 BEGIN
-  IF EXISTS (SELECT FROM search.public_filter_coverage_home h JOIN search.public_filter_coverage_preparation c
-      ON (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap)
-      WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,0) AND c.ack_protocol=1) THEN
+  IF EXISTS (SELECT FROM search.public_filter_coverage_preparation c
+      WHERE (c.partition_no,c.registration)=(0,registration_id) AND c.subscription_protocol=1 AND NOT c.ack_retired) THEN
     RAISE EXCEPTION 'A manifest ACK requires its original bootstrap' USING ERRCODE='40001';
   END IF;
-  RETURN QUERY SELECT h.* FROM search.public_filter_coverage_home h
-    WHERE h.partition_no=0 AND h.registration=registration_id AND h.behind ORDER BY h.source_home LIMIT 9;
+  RETURN QUERY SELECT * FROM semantic.public_filter_legacy_book_dirty_homes(registration_id);
 END $$;
 
 
@@ -4199,6 +4215,68 @@ $$;
 --
 
 CREATE FUNCTION semantic.public_filter_effective_homes(registration_id text, original uuid, point integer DEFAULT NULL::integer, home_limit integer DEFAULT 9) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE plpgsql STABLE ROWS 9
+    AS $$
+DECLARE m bigint; original_generation bigint; origin record; h search.public_filter_coverage_home; item record;
+BEGIN
+  IF home_limit IS NULL OR home_limit NOT BETWEEN 1 AND 9 OR point NOT BETWEEN 0 AND 4095 THEN
+    RAISE EXCEPTION 'Invalid effective ACK home range' USING ERRCODE='22023'; END IF;
+  SELECT s.birth,c.generation INTO m,original_generation FROM core.subject_subscription_v1 s
+    LEFT JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=(0,registration_id,original)
+    WHERE s.bootstrap=original AND search.shared_subject_job_v1(s.job);
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT * FROM semantic.public_filter_legacy_effective_homes(registration_id,original,point,home_limit);
+    RETURN;
+  END IF;
+  h.partition_no:=0; h.registration:=registration_id; h.source_home:=point; h.behind:=true;
+  SELECT * INTO origin FROM semantic.public_filter_ack_origin(registration_id,original);
+  IF NOT FOUND THEN RETURN NEXT h; RETURN; END IF;
+  FOR item IN WITH wanted AS (
+    (SELECT d.home FROM search.subject_receiver_dirty_v1 d WHERE point IS NULL AND d.birth=m ORDER BY home LIMIT home_limit)
+    UNION ALL SELECT point WHERE point IS NOT NULL
+  )
+  SELECT w.home,b.cut,d.through_position,d.change_generation FROM wanted w
+    LEFT JOIN LATERAL search.subject_receiver_cut_v1(original,w.home) b ON b.registration=registration_id
+    LEFT JOIN search.subject_receiver_dirty_v1 d ON (d.birth,d.home)=(m,w.home)
+    ORDER BY w.home
+  LOOP
+    h.source_home:=item.home; h.source_epoch:=(item.cut->>'epoch')::integer;
+    h.baseline_bootstrap:=original; h.acknowledged_baseline:=CASE WHEN item.cut IS NOT NULL THEN original END;
+    h.acknowledged_position:=(item.cut->>'privacy')::bigint;
+    h.acknowledged_native_enqueue:=(item.cut->>'enqueue')::bigint; h.native_enqueue_revision:=h.acknowledged_native_enqueue;
+    h.relevant_position:=coalesce(item.through_position,h.acknowledged_position);
+    h.acknowledged_observation:=origin.observation; h.acknowledged_execution:=origin.execution;
+    h.acknowledged_settlement:=origin.settlement; h.last_change_generation:=coalesce(item.change_generation,original_generation);
+    h.behind:=item.cut IS NULL OR item.through_position IS NOT NULL; h.baseline_delta:=h.behind;
+    RETURN NEXT h;
+  END LOOP;
+END $$;
+
+
+--
+-- Name: public_filter_legacy_book_dirty_homes(text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_legacy_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE plpgsql STABLE ROWS 9
+    SET enable_seqscan TO 'off'
+    AS $$
+BEGIN
+  IF EXISTS (SELECT FROM search.public_filter_coverage_home h JOIN search.public_filter_coverage_preparation c
+      ON (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap)
+      WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,0) AND c.ack_protocol=1) THEN
+    RAISE EXCEPTION 'A manifest ACK requires its original bootstrap' USING ERRCODE='40001';
+  END IF;
+  RETURN QUERY SELECT h.* FROM search.public_filter_coverage_home h
+    WHERE h.partition_no=0 AND h.registration=registration_id AND h.behind ORDER BY h.source_home LIMIT 9;
+END $$;
+
+
+--
+-- Name: public_filter_legacy_effective_homes(text, uuid, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_legacy_effective_homes(registration_id text, original uuid, point integer DEFAULT NULL::integer, home_limit integer DEFAULT 9) RETURNS SETOF search.public_filter_coverage_home
     LANGUAGE plpgsql STABLE ROWS 9
     SET enable_seqscan TO 'off'
     AS $$
@@ -4477,8 +4555,7 @@ JOIN LATERAL (
 ) c ON c.population_protocol=1 AND c.after_home=4096 AND c.generation=b.coverage_generation
   AND c.root=b.coverage_root AND c.definition=d.read_definition AND c.consumer=r.consumer
 JOIN LATERAL (
-  SELECT last_home.root FROM search.public_filter_coverage_baseline last_home
-  WHERE (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=(0,r.id,b.bootstrap,4095) LIMIT 1
+  SELECT last_home.root FROM search.public_filter_original_home(0,r.id,b.bootstrap,4095) last_home LIMIT 1
 ) last_home ON last_home.root=c.root
 WHERE (SELECT count(*) FROM candidates)=1
   AND (c.ack_protocol=0 OR EXISTS (
@@ -6174,8 +6251,10 @@ CREATE TABLE semantic.public_filter_bootstrap (
     publication_execution text,
     coverage_publication uuid,
     book_withdrawals jsonb,
+    subscription_protocol smallint DEFAULT 0 NOT NULL,
     CONSTRAINT public_filter_book_withdrawals_check CHECK (((book_withdrawals IS NULL) OR ((coverage_publication IS NOT NULL) AND (snapshot_kind = 'pit'::text) AND (jsonb_typeof(book_withdrawals) = 'array'::text) AND ((jsonb_array_length(book_withdrawals) >= 1) AND (jsonb_array_length(book_withdrawals) <= 8))))),
     CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_check CHECK (((subscription_protocol = 0) OR ((subscription_protocol = 1) AND (snapshot_kind = 'prepared'::text) AND (partition_no = 0)))),
     CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
     CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
     CONSTRAINT public_filter_bootstrap_coverage_after_check CHECK (((coverage_after >= 0) AND (coverage_after <= 4096))),
@@ -16860,7 +16939,7 @@ CREATE TRIGGER public_filter_ack_privacy_loss AFTER DELETE ON semantic.public_fi
 -- Name: public_filter_bootstrap public_filter_bootstrap_baseline_seal; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
+CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((old.subscription_protocol = 0)) EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
 
 
 --
@@ -17340,6 +17419,20 @@ ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject
 
 
 --
+-- Name: public_filter_bootstrap subject_source_format; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_format BEFORE INSERT ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((new.snapshot_kind = 'prepared'::text)) EXECUTE FUNCTION search.pin_subject_source_format_v1();
+
+
+--
+-- Name: public_filter_bootstrap subject_source_page_prefix; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_page_prefix BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((old.subscription_protocol = 1)) EXECUTE FUNCTION search.require_subject_receiver_prefix_v1();
+
+
+--
 -- Name: subject_source_preparation_v1 subject_source_preparation_original; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -17355,6 +17448,13 @@ ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject
 CREATE TRIGGER subject_source_preparation_truncate BEFORE TRUNCATE ON semantic.subject_source_preparation_v1 FOR EACH STATEMENT EXECUTE FUNCTION core.retain_subject_original_v1();
 
 ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject_source_preparation_truncate;
+
+
+--
+-- Name: public_filter_bootstrap subject_source_protocol; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_protocol BEFORE UPDATE OF subscription_protocol ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((new.subscription_protocol <> old.subscription_protocol)) EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
