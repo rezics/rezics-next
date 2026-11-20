@@ -303,6 +303,14 @@ export function createFeedApplication(
             ? ports.finish.preparePersonalActions(feedItems, account, languages, deadline)
             : undefined;
 
+        const discoveryIds = feedItems.filter(({ source }) => source === 'discovery').map(({ id }) => id);
+        // The selected keys are fixed here. Enrichment can withdraw a card, but it cannot select
+        // a new key. Keep Search's full FINAL behind enrichment and viewer preparation.
+        const selectedDiscovery =
+          viewerRead && retainedDiscovery && !space && discoveryIds.length
+            ? Promise.allSettled([retainedDiscovery.current(discoveryIds)] as const).then(([result]) => result)
+            : undefined;
+
         const enrichCards = async () => {
           const reactions = await ports.finish.reactions(feedItems, actor, deadline);
           feedItems = reactions.items;
@@ -338,6 +346,8 @@ export function createFeedApplication(
         const publishDiscovery = async () => {
           if (discoveryFinished || !retainedDiscovery || sources.discovery !== 'ready') return;
           try {
+            const current = await selectedDiscovery;
+            if (current?.status === 'rejected') throw current.reason;
             await retainedDiscovery.finish();
             discoveryFinished = true;
           } catch (error) {
@@ -362,7 +372,9 @@ export function createFeedApplication(
             const discovery = retainedDiscovery;
             const discoveryIds = feedItems.filter((item) => item.source === 'discovery').map(({ id }) => id);
             const loadCurrentDiscovery = async () => {
-              const candidates = await discovery.current(discoveryIds);
+              const current = await selectedDiscovery;
+              if (current?.status === 'rejected') throw current.reason;
+              const candidates = current?.value ?? (await discovery.current(discoveryIds));
               await viewerRead;
               await discovery.finish();
               discoveryFinished = true;
@@ -404,6 +416,7 @@ export function createFeedApplication(
           cards.then(async ({ advice }) => {
             if (viewerRead || (stream === 'home' && advice.hasTargets)) await reopenSelected();
           }),
+          selectedDiscovery,
         ]);
         if (enriched.status === 'rejected') throw enriched.reason;
         if (viewer.status === 'rejected') throw viewer.reason;

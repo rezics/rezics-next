@@ -121,6 +121,7 @@ test('Home prepares viewer actions during enrichment and publishes only survivor
   const following = item('following', '00000000-0000-4000-8000-000000000002');
   const calls: string[] = [];
   const selectionOpened = Promise.withResolvers<void>();
+  const releaseEnrichment = Promise.withResolvers<void>();
   const releaseViewer = Promise.withResolvers<void>();
   const discoveryFinished = Promise.withResolvers<void>();
   let followingReads = 0;
@@ -181,6 +182,7 @@ test('Home prepares viewer actions during enrichment and publishes only survivor
       },
       async subjectReactions(items) {
         calls.push('subject reactions');
+        await releaseEnrichment.promise;
         return { items };
       },
     },
@@ -196,21 +198,22 @@ test('Home prepares viewer actions during enrichment and publishes only survivor
     ['en'],
   );
   await selectionOpened.promise;
-  // Drain runnable work with the viewer read held open. Neither private lanes nor
-  // the retained FINAL may reauthorize until that read has completed.
+  // Selected Search hydration overlaps enrichment. Private lanes and Search FINAL
+  // still wait for enrichment and viewer preparation.
   await new Promise<void>((resolve) => setImmediate(resolve));
   const beforeRelease = [...calls];
   const followingBeforeRelease = followingReads;
+  releaseEnrichment.resolve();
   releaseViewer.resolve();
   const page = await reading;
-  expect(beforeRelease).toEqual(['search', 'context', 'viewer', 'subject reactions', 'current']);
+  expect(beforeRelease).toEqual(['search', 'context', 'viewer', 'current', 'subject reactions']);
   expect(followingBeforeRelease).toBe(1);
   expect(calls).toEqual([
     'search',
     'context',
     'viewer',
-    'subject reactions',
     'current',
+    'subject reactions',
     'viewer ready',
     'final',
     'publish',
