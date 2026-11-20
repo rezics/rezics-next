@@ -37,6 +37,13 @@ import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { testRouteKey, TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { createRealAccess } from './real-access.ts';
 
+const checkpointSql = readCheckpoint['~standard'].query.text;
+const permissionTimeSql = readPermissionTime['~standard'].query.text;
+const pendingSql = readPending['~standard'].query.text;
+const visibilitySql = readVisibility['~standard'].query.text;
+const identitySql = readSubjectIdentity['~standard'].query.text;
+const subjectSql = readSubject['~standard'].query.text;
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
@@ -168,7 +175,7 @@ async function call(
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 async function expireIssuedProof(observer: SqlObserver, waitStarted: string) {
-  const issued = observer.records.filter(({ statement }) => statement === readPermissionTime.sql).at(-1);
+  const issued = observer.records.filter(({ statement }) => statement === permissionTimeSql).at(-1);
   // HTTP list routes already wait before preparing evidence. Native list callers and
   // subject reads issue real evidence before this barrier, whose lifetime must expire.
   const expires = Date.parse(issued?.executedAt ?? waitStarted) + 1100;
@@ -212,7 +219,7 @@ for (const persona of ['owner', 'reader', 'moderator'] as const) {
       try {
         const result = await held(
           observer,
-          readCheckpoint.sql,
+          checkpointSql,
           () => call(`${holder.id}${suffix}`, persona, holder.component),
           () => catchUp(part),
         );
@@ -220,8 +227,8 @@ for (const persona of ['owner', 'reader', 'moderator'] as const) {
         const rows = suffix ? result.body.relations : (result.body.subject.statements[property] ?? []);
         expect(rows).toHaveLength(persona === 'reader' ? 0 : 1);
         const reads = observer.records;
-        const wait = reads.findIndex(({ statement }) => statement === readCheckpoint.sql);
-        expect(reads.slice(wait + 1).some(({ statement }) => statement === readPermissionTime.sql)).toBe(true);
+        const wait = reads.findIndex(({ statement }) => statement === checkpointSql);
+        expect(reads.slice(wait + 1).some(({ statement }) => statement === permissionTimeSql)).toBe(true);
       } finally {
         await observer.close();
       }
@@ -240,7 +247,7 @@ for (const kind of ['links', 'relations'] as const) {
     try {
       const result = await held(
         observer,
-        readCheckpoint.sql,
+        checkpointSql,
         () =>
           withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, async () => {
             const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
@@ -278,24 +285,24 @@ for (const kind of ['links', 'relations'] as const) {
       if ('links' in result) expect(result.links).toHaveLength(1);
       else expect(result.relations).toHaveLength(1);
       expect(result.freshness.caught_up).toBe(true);
-      const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
-      const visibility = observer.records.findIndex(({ statement }) => statement === readVisibility.sql);
+      const wait = observer.records.findIndex(({ statement }) => statement === checkpointSql);
+      const visibility = observer.records.findIndex(({ statement }) => statement === visibilitySql);
       expect(visibility).toBeGreaterThan(wait);
       const snapshot = observer.records
         .slice(0, visibility)
         .findLastIndex(({ statement }) => statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       expect(snapshot).toBeGreaterThan(wait);
-      expect(
-        observer.records.slice(0, wait).filter(({ statement }) => statement === readPermissionTime.sql),
-      ).toHaveLength(2);
+      expect(observer.records.slice(0, wait).filter(({ statement }) => statement === permissionTimeSql)).toHaveLength(
+        2,
+      );
       // Preparation occurs outside RR. The two authoritative permission times
       // inside the final snapshot are evaluations, not additional preparations.
       expect(
-        observer.records.slice(wait + 1, snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
+        observer.records.slice(wait + 1, snapshot).filter(({ statement }) => statement === permissionTimeSql),
       ).toHaveLength(2);
-      expect(
-        observer.records.slice(snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
-      ).toHaveLength(2);
+      expect(observer.records.slice(snapshot).filter(({ statement }) => statement === permissionTimeSql)).toHaveLength(
+        2,
+      );
     } finally {
       await observer.close();
     }
@@ -341,7 +348,7 @@ test('pending inbound merge member retry prepares fresh primary and audience evi
   try {
     const result = await held(
       observer,
-      readPending.sql,
+      pendingSql,
       () => call(`${target.id}/links?property=${encodeURIComponent(property)}`, 'moderator', target.component),
       async () => {
         await moveMergePage(pool, merged, survivor);
@@ -353,7 +360,7 @@ test('pending inbound merge member retry prepares fresh primary and audience evi
     expect(result.body.links.every((link: { subject: string }) => link.subject === survivor)).toBe(true);
     expect(result.body.links[0].subject).toBe(survivor);
     expect(result.body.freshness.caught_up).toBe(true);
-    expect(observer.records.filter(({ statement }) => statement === readPending.sql).length).toBeGreaterThan(1);
+    expect(observer.records.filter(({ statement }) => statement === pendingSql).length).toBeGreaterThan(1);
   } finally {
     await observer.close();
   }
@@ -366,7 +373,7 @@ test('forced public audience survives a long native wait with the same authentic
   try {
     const result = await held(
       observer,
-      readCheckpoint.sql,
+      checkpointSql,
       () => withPublicStatementReader(() => call(holder.id, 'moderator', holder.component)),
       () => catchUp(part),
     );
@@ -411,7 +418,7 @@ test('an inbound pending-member wait that stays behind cannot return an earlier 
   try {
     const result = await held(
       observer,
-      readPending.sql,
+      pendingSql,
       () => call(`${target.id}/links?property=${encodeURIComponent(property)}`, 'reader', target.component),
       async () => {
         await real.revoke(target, 'reader', 'subject:read');
@@ -427,10 +434,10 @@ test('an inbound pending-member wait that stays behind cannot return an earlier 
     expect(result.status, JSON.stringify(result.body)).toBe(404);
     expect(result.body).not.toHaveProperty('links');
     expect(result.body).not.toHaveProperty('redirect');
-    const waits = observer.records.filter(({ statement }) => statement === readPending.sql);
+    const waits = observer.records.filter(({ statement }) => statement === pendingSql);
     expect(waits.length).toBeGreaterThan(1);
-    const lastWait = observer.records.findLastIndex(({ statement }) => statement === readPending.sql);
-    expect(observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql)).toBe(true);
+    const lastWait = observer.records.findLastIndex(({ statement }) => statement === pendingSql);
+    expect(observer.records.slice(lastWait + 1).some(({ statement }) => statement === visibilitySql)).toBe(true);
   } finally {
     await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
     await observer.close();
@@ -460,7 +467,7 @@ test('a final native source read held beyond the original HTTP deadline returns 
     },
   });
   const observer = observeSql(pool);
-  const barrier = observer.hold({ statement: readVisibility.sql }, 'after');
+  const barrier = observer.hold({ statement: visibilitySql }, 'after');
   const response = call(
     `${subject.id}/links?property=${encodeURIComponent(property)}`,
     'reader',
@@ -511,7 +518,7 @@ for (const kind of ['links', 'relations'] as const) {
       try {
         const result = await held(
           observer,
-          readCheckpoint.sql,
+          checkpointSql,
           () => call(`${subject.id}/${kind}?property=${encodeURIComponent(property)}`, 'reader', holder.component),
           async () => {
             if (change === 'revoke') {
@@ -588,7 +595,7 @@ test('a native relations retry cannot reuse a formerly allowed moderator audienc
   try {
     const result = await held(
       observer,
-      readCheckpoint.sql,
+      checkpointSql,
       () =>
         withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, async () => {
           const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
@@ -650,8 +657,8 @@ test('FULL display records every backend and the fixed preflight and late prepar
     );
     expect(measured.value.entries[0]!.subject).toMatchObject({ id: subject.id });
     expect(measured.capture.statementBackends).toHaveLength(measured.capture.statements.length);
-    expect(measured.capture.statements.filter((statement) => statement === readSubjectIdentity.sql)).toHaveLength(1);
-    expect(measured.capture.statements.filter((statement) => statement === readSubject.sql)).toHaveLength(1);
+    expect(measured.capture.statements.filter((statement) => statement === identitySql)).toHaveLength(1);
+    expect(measured.capture.statements.filter((statement) => statement === subjectSql)).toHaveLength(1);
     // Preserve the complete capture, including control/catalog statements and
     // all backend plans, so the additional point is independently auditable.
     console.log(
@@ -659,10 +666,10 @@ test('FULL display records every backend and the fixed preflight and late prepar
       JSON.stringify({
         callsite: 'library/views.ts ViewReader.subject -> semantic/subject.ts readSubject',
         files: {
-          identity: { file: 'semantic/read-subject-identity.sql', sql: readSubjectIdentity.sql },
-          final: { file: 'semantic/read-subject.sql', sql: readSubject.sql },
-          preparationAndEvaluation: { file: 'access/permission-time.sql', sql: readPermissionTime.sql },
-          checkpoint: { file: 'semantic/read-link-checkpoint.sql', sql: readCheckpoint.sql },
+          identity: { file: 'semantic/read-subject-identity.sql', sql: identitySql },
+          final: { file: 'semantic/read-subject.sql', sql: subjectSql },
+          preparationAndEvaluation: { file: 'access/permission-time.sql', sql: permissionTimeSql },
+          checkpoint: { file: 'semantic/read-link-checkpoint.sql', sql: checkpointSql },
         },
         capture: measured.capture,
       }),
