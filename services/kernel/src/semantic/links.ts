@@ -1386,10 +1386,23 @@ export async function listSubjectLinks(
     includeLabels || options.type || options.authorizeSummary
       ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
       : undefined;
+  const currentStatements = [...statements.values()];
+  const originalTargets = options.qualifier
+    ? []
+    : currentStatements.flatMap((statement) => {
+        const target = localRelationTarget(statement);
+        return target && target !== options.subject ? [target] : [];
+      });
+  // Resolve the latest statement targets before optional summary IDs spend the related-read budget.
   const relatedIds = [
-    ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
+    ...new Set([
+      ...originalTargets,
+      ...(summaryRelease
+        ? [...page.links.map((link) => link.subject), ...currentStatements.flatMap(statementItems)]
+        : []),
+    ]),
   ].slice(0, 256);
-  const survivors = summaryRelease ? await relatedSurvivors(pool, relatedIds) : new Map<string, string>();
+  const survivors = await relatedSurvivors(pool, relatedIds);
   const summaryIds = [...new Set(relatedIds.map((id) => survivors.get(id) ?? id))];
   const summaries = summaryRelease
     ? await readSubjectSummaries(
@@ -1418,7 +1431,8 @@ export async function listSubjectLinks(
     if (!current) return [];
     if (
       current.value.type !== 'value' ||
-      (options.qualifier ? typeof current.value.content !== 'string' : current.value.content !== options.subject) ||
+      typeof current.value.content !== 'string' ||
+      (!options.qualifier && (survivors.get(current.value.content) ?? current.value.content) !== options.subject) ||
       (options.qualifier
         ? !current.qualifiers.some(
             (snak) =>

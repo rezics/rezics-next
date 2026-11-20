@@ -99,6 +99,8 @@ export type IdentityJob = Readonly<{
 export type IdentityAdmissionInput = Readonly<{
   intent: IdentityIntent;
   receipt: IdentityReceipt;
+  /** Live Subject preflight for ordinary HTTP merges, after checking the authorized receipt. */
+  validateNewMerge?: () => Promise<void>;
   /** Ordinary merge only; AccountAgent admission never supplies this. */
   reviewedPerson?: Readonly<{
     expected: ReviewedPersonExpectation;

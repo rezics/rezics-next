@@ -281,6 +281,7 @@ export function createIdentityAdmissionOperations(
         return (await bindingOps.lookupIdentityBinding(pool, authority, input))!;
       }
     }
+    await input.validateNewMerge?.();
     const first = await capture(pool, input),
       second = await capture(pool, input);
     if (fingerprint(first) !== fingerprint(second)) throw unavailable();
