@@ -2,6 +2,7 @@ import { Render } from '@puckeditor/core/rsc';
 import {
   createElement,
   Fragment,
+  isValidElement,
   useMemo,
   useState,
   type ComponentProps,
@@ -78,8 +79,21 @@ function prune(content: unknown, renderers: ReadonlyMap<string, PageRenderer>): 
 }
 
 /** Puck's slot render wraps content in a drop zone. Keep only the rendered nodes. */
-function SlotContent({ children }: { children?: ReactNode }) {
+export function SlotContent({ children }: { children?: ReactNode }) {
   return children ?? null;
+}
+
+/** Inspect Puck's drop zone without relying on function names preserved by the build. */
+export function puckSlotHasContent(value: ReactNode): boolean | undefined {
+  if (!isValidElement<{ as?: unknown }>(value)) return;
+  if (typeof value.type !== 'function' || value.props.as !== SlotContent) return;
+  const renderSlot = value.type as (props: { as?: unknown }) => ReactNode;
+  const rendered = renderSlot(value.props);
+  return (
+    isValidElement<{ content?: unknown }>(rendered) &&
+    Array.isArray(rendered.props.content) &&
+    rendered.props.content.length > 0
+  );
 }
 
 function renderComponent({ component, slots }: PageRenderer) {
