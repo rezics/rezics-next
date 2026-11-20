@@ -493,6 +493,19 @@ test('native publication starts repair from the original adopted Source executio
         [original.bootstrap, original.execution],
       );
       expect(frontier.rows).toEqual([{ ack_after: acknowledged }]);
+      const batched = await runtime.publication.activate(job, context(), { batchSource: true });
+      expect(batched).toMatchObject({ status: 'preparing', next: 'activate', sourceAdvanced: true });
+      if (batched.status !== 'preparing' || !batched.additionalSourceCosts?.length)
+        throw new Error('Expected independently budgeted Source turns in the same activation');
+      for (const turn of [batched.cost, ...batched.additionalSourceCosts])
+        expect(turn.inputKeys).toBeLessThanOrEqual(1000);
+      const afterBatch = await f.db.pool.query<{ ack_after: number }>(
+        `SELECT ack_after FROM semantic.public_filter_repair_step
+         WHERE (partition_no,bootstrap,execution)=(0,$1,$2) AND complete
+           AND verified_root IS NOT NULL AND verified_next IS NULL`,
+        [original.bootstrap, original.execution],
+      );
+      expect(afterBatch.rows[0]!.ack_after - acknowledged).toBeGreaterThan(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT);
       console.info(
         'Native original Source acknowledgement prefix',
         JSON.stringify({

@@ -713,6 +713,8 @@ export async function readPublicFilterRepairSettlement(
     // Resolve wide immutable release authority without holding Search's retained checkout.
     const initial = await read(pool, input, context, meter);
     admit();
+    const subjectPublication =
+      publicationRepair.getStore()?.job === input.execution && !('representation' in initial.definition.capture);
     const q = input.queried;
     const home = partition(q.snapshot.observation);
     const keys = {
@@ -1289,14 +1291,17 @@ export async function readPublicFilterRepairSettlement(
         previous?.done &&
         previous.basis === basis &&
         priorFence !== null &&
-        allocation !== undefined &&
+        (subjectPublication || allocation !== undefined) &&
         priorFence.allocation === allocation &&
         priorFence.incarnation === physical.incarnation &&
         priorFence.writeAlias === physical.writeAlias &&
         priorFence.sourceEpoch === retained.definition.source.epoch;
       const refresh = retainedRefresh ? priorFence.refresh : await refreshed();
       validateRefreshResponse(200, refresh);
-      if (engineVersion !== (await checkpoint()) || !isDeepStrictEqual(await physicalFor(db), physical))
+      if (
+        !(subjectPublication && retainedRefresh) &&
+        (engineVersion !== (await checkpoint()) || !isDeepStrictEqual(await physicalFor(db), physical))
+      )
         throw new Failure('binding_mismatch');
       const final = await read(raw, input, context, meter, initial.definition);
       if (!isDeepStrictEqual(final.execution, retained.execution) || !isDeepStrictEqual(final.covered, state.covered))
@@ -1349,6 +1354,12 @@ export async function readPublicFilterRepairSettlement(
           return { kind: 'advanced' as const };
         }
         const terminal = state.pages - 1;
+        // The exact terminal page is already verified under this retained Source
+        // authority revision. Reopen live writer and engine evidence directly.
+        if (subjectPublication && progress.after === terminal) {
+          const result = await reopen(db, raw, current);
+          return result ? { kind: 'settled' as const, result } : { kind: 'advanced' as const };
+        }
         const row = await repairPages.run(db, {
           ...keys,
           after: progress.after,
@@ -1360,6 +1371,7 @@ export async function readPublicFilterRepairSettlement(
         if (row.ordinal <= progress.after && row.ordinal !== terminal) throw new Failure('binding_mismatch');
         return { kind: 'source' as const, row, page, current };
       });
+      if (stage.kind === 'settled') return stage.result;
       if (stage.kind === 'source') {
         await verifySource(stage.current.state, stage.page);
         const result = await local(async (db, raw) => {
