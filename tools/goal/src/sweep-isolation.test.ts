@@ -10,8 +10,8 @@ test('one task whose recovery fails does not stop the sweep: its peer starts and
   const inbox: ManagerEvent[] = [];
   try {
     h.settings.startGraceMs = 1;
-    const broken = h.tasks.dispatch(h.briefFile);
-    const healthy = h.tasks.dispatch(h.briefFile);
+    const broken = h.tasks.dispatch(h.writeBrief('Ready task with an unreadable lease owner.'));
+    const healthy = h.tasks.dispatch(h.writeBrief('Independent ready task with a valid worktree.'));
     // An unreadable lease owner makes this task's own recovery throw before its peer is reached.
     mkdirSync(join(h.settings.stateDirectory, 'leases', broken.id), { recursive: true });
     writeFileSync(join(h.settings.stateDirectory, 'leases', broken.id, 'owner.json'), '{"pid":"not a process"}');
@@ -27,6 +27,6 @@ test('one task whose recovery fails does not stop the sweep: its peer starts and
     expect(reports).toHaveLength(1);
     expect(reports[0]!.summary).toContain('Unrecognised lease owner');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });

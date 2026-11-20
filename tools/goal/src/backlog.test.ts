@@ -675,13 +675,15 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(reason).toContain('spec-conflict: two requirements disagree');
   expect(existsSync(join(f.state, 'backlog', 'control-plane'))).toBe(false);
   const events = f.inbox.pending('web');
-  const receiverNotice = events.find(({ event: delivered }) => delivered.summary.includes('evidence receiver'));
+  const receiverNotice = events.find(({ event: delivered }) => delivered.taskId === 'typing');
+  expect(receiverNotice?.event.kind).toBe('instruction');
   expect(receiverNotice?.event.summary).toContain('Task owner web or the configured operations manager');
-  expect(receiverNotice?.event.summary).toContain('authenticated owner authorization to receive compiler evidence');
+  expect(receiverNotice?.event.summary).toContain('from an authenticated manager session to reconcile the exact compiler evidence');
   expect(receiverNotice?.event.summary).toContain('typing-recover typing --expected-attempt 1');
   const unknownOwnerNotice = f.inbox
     .pending('supermanager')
-    .find(({ event: delivered }) => delivered.summary.includes('typing-owner-unknown'));
+    .find(({ event: delivered }) => delivered.taskId === 'typing-owner-unknown');
+  expect(unknownOwnerNotice?.event.kind).toBe('instruction');
   expect(unknownOwnerNotice?.event.summary).toContain('Task owner is unknown');
   expect(unknownOwnerNotice?.event.summary).toContain('identify the receiver');
   expect(unknownOwnerNotice?.event.summary).toContain('typing-recover typing-owner-unknown --expected-attempt 1');
