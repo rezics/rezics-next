@@ -4,17 +4,55 @@ import { readNativeAccessTime } from '../native-time.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
 import type { AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
-import { decideExposure, exposureAuthorityActions } from '@rezics/access';
+import { withBoundedReadConnection } from '../../database/pool.ts';
+import { decideExposure } from '@rezics/access';
 import { authorizePlatformGate } from '../read-bindings.ts';
-import type { Access, Actor } from '../../request/access.ts';
+import type { Access, AccessClient, AccessContext, Actor } from '../../request/access.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
-import { GLOBAL_CONTEXT, readExposure } from './catalogue.ts';
+import {
+  GLOBAL_CONTEXT,
+  gateAuthorityActions,
+  readExplicitExposureGrant,
+  readExposure,
+  requiresExplicitExposureGrant,
+} from './catalogue.ts';
 import { parseExposure } from './declaration.ts';
+
+/** Use the same native per-account gate proof for request and operation discovery. */
+export async function authorizeExposureGroup(input: {
+  access: Access;
+  actor: Actor;
+  group: string;
+  clientAction: string;
+  context: AccessContext;
+  at: string;
+  client?: AccessClient;
+}): Promise<boolean> {
+  const { access, actor, group, clientAction, context, at, client } = input;
+  if (actor.kind !== 'account' || !actor.scopes.includes(clientAction)) return false;
+  if (requiresExplicitExposureGrant(group)) {
+    const read = (connection: AccessClient) => readExplicitExposureGrant(connection, group, actor.accountId, at);
+    const explicitlyAdmitted = client
+      ? await read(client)
+      : await withBoundedReadConnection(context.pool, context.deadline, read);
+    if (!explicitlyAdmitted) return false;
+  }
+  return authorizePlatformGate(
+    access,
+    actor,
+    gateAuthorityActions(group),
+    clientAction,
+    GLOBAL_CONTEXT,
+    context,
+    at,
+    client,
+  );
+}
 
 /** Group-level rule shared by route admission and in-process entries: an open
  * group admits everyone, a closed one only an account holding `gate:<group>` or
- * `gate:any` on the Global Context. `clientAction` is the scope operand borrowed
- * for the check. */
+ * `gate:any` on the Global Context. Private groups require their exact grant.
+ * `clientAction` is the scope operand borrowed for the check. */
 export async function admitGroup(input: {
   pool: Pool;
   /** Resolved only when a closed gate needs an account decision. */
@@ -35,20 +73,19 @@ export async function admitGroup(input: {
     const clientScope = input.actor.kind === 'account' && input.actor.scopes.includes(input.clientAction);
     const gateAuthority =
       !state.open && input.actor.kind === 'account' && clientScope
-        ? await authorizePlatformGate(
-            input.access(),
-            input.actor,
-            exposureAuthorityActions(input.group),
-            input.clientAction,
-            GLOBAL_CONTEXT,
-            {
+        ? await authorizeExposureGroup({
+            access: input.access(),
+            actor: input.actor,
+            group: input.group,
+            clientAction: input.clientAction,
+            context: {
               pool: input.pool,
               deadline: input.deadline,
               ...(input.work ? { work: input.work } : {}),
               ...(time ? { time } : {}),
             },
-            state.at,
-          )
+            at: state.at,
+          })
         : false;
     if (
       !decideExposure({

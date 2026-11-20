@@ -4,15 +4,14 @@ import { remaining } from '../deadline.ts';
 import {
   compileExposureCatalogue,
   decideExposure,
-  exposureAuthorityActions,
   type ExposureCatalogue,
   type ExposureOperation,
 } from '@rezics/access';
-import { authorizePlatformGate } from '../read-bindings.ts';
 import { withBoundedReadConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import type { Access, Actor } from '../../request/access.ts';
-import { GLOBAL_CONTEXT } from './catalogue.ts';
+import { requiresExplicitExposureGrant } from './catalogue.ts';
+import { authorizeExposureGroup } from './admission.ts';
 import { parseExposure } from './declaration.ts';
 import openGroups from './open-groups.sql';
 
@@ -89,13 +88,14 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
   const open = new Set<string>();
   const held = new Set<string>();
   requireAccessDeadline(input.deadline);
-  if (catalogue.groups.length > 0) {
+  const openableGroups = catalogue.groups.filter((group) => !requiresExplicitExposureGrant(group));
+  if (openableGroups.length > 0) {
     remaining(input.deadline);
     await withBoundedReadConnection(
       input.pool,
       input.deadline,
       async (bounded) => {
-        for (const row of await openGroups.run(bounded, { groups: [...catalogue.groups], at: instant })) {
+        for (const row of await openGroups.run(bounded, { groups: openableGroups, at: instant })) {
           if (typeof row.group !== 'string') throw new Error('Open group read failed');
           open.add(row.group);
         }
@@ -110,28 +110,19 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
         isUncertainSettledQueryError: () => true,
       },
     );
-    for (const [group, action] of scopedActions) {
-      if (open.has(group)) continue;
-      const gateAuthority = await authorizePlatformGate(
-        input.access,
-        input.viewer,
-        exposureAuthorityActions(group),
-        action,
-        GLOBAL_CONTEXT,
-        { pool: input.pool, deadline: input.deadline },
-        instant,
-      );
-      if (
-        decideExposure({
-          exposure: { kind: 'gate', group },
-          open: false,
-          actor: 'account',
-          clientScope: true,
-          gateAuthority,
-        }).allowed
-      ) {
-        held.add(group);
-      }
+  }
+  for (const [group, action] of scopedActions) {
+    if (open.has(group)) continue;
+    const gateAuthority = await authorizeExposureGroup({
+      access: input.access,
+      actor: input.viewer,
+      group,
+      clientAction: action,
+      context: { pool: input.pool, deadline: input.deadline },
+      at: instant,
+    });
+    if (gateAuthority) {
+      held.add(group);
     }
   }
   return operations.filter((operation) => {

@@ -13,14 +13,15 @@ import {
 import { readPartition } from '../../partition/partition.ts';
 import { withBoundedReadConnection } from '../../database/pool.ts';
 import { remaining } from '../deadline.ts';
-import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
-import { partitionOf } from '../../route/route.ts';
-import { isExposureGroup } from '@rezics/access';
+import type { AccessClient, AccountActor, AccessContext, Resource } from '../../request/access.ts';
+import { partitionOf, routeOf } from '../../route/route.ts';
+import { exposureAuthorityActions, isExposureGroup } from '@rezics/access';
 import openingClose from './opening-close.sql';
 import openingOpen from './opening-open.sql';
 import openingRead from './opening-read.sql';
 import openingPartitionRead from './opening-partition-read.sql';
 import openingMovedTargetRead from './opening-moved-target-read.sql';
+import explicitAccountGrant from './explicit-account-grant.sql';
 
 export const GLOBAL_CONTEXT: Resource = Object.freeze({
   route: 0,
@@ -28,6 +29,32 @@ export const GLOBAL_CONTEXT: Resource = Object.freeze({
 });
 
 export { isExposureGroup };
+
+/** Economy remains a private beta for accounts with its exact platform grant. */
+export function requiresExplicitExposureGrant(group: string): boolean {
+  return group === 'economy';
+}
+
+export function gateAuthorityActions(group: string): readonly string[] {
+  const actions = exposureAuthorityActions(group);
+  return requiresExplicitExposureGrant(group) ? [actions[0]] : actions;
+}
+
+export async function readExplicitExposureGrant(
+  client: AccessClient,
+  group: string,
+  accountId: string,
+  at?: string,
+): Promise<boolean> {
+  if (!requiresExplicitExposureGrant(group) || routeOf(accountId) === null) return false;
+  const row = await explicitAccountGrant.run(client, {
+    resource_id: GLOBAL_CONTEXT.id,
+    account_id: accountId,
+    action: `gate:${group}`,
+    at: at ?? null,
+  });
+  return row?.granted === true;
+}
 
 export type ExposureState = { open: boolean; at: string };
 
@@ -101,7 +128,10 @@ export async function readExposure(
           if (!Number.isFinite(readAt.getTime()) || (nativeTime && row.at !== instant))
             throw new Error('Exposure catalogue time was invalid');
           if (nativeTime) authoritativeTimeValue(nativeTime);
-          return { open: row.open, at: nativeTime || work ? row.at : readAt.toISOString() };
+          return {
+            open: !requiresExplicitExposureGrant(group) && row.open,
+            at: nativeTime || work ? row.at : readAt.toISOString(),
+          };
         } catch (error) {
           // A cleanup deadline must not replace the causal read failure.
           failure = { error };

@@ -10,7 +10,7 @@ import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { PLATFORM_RESOURCE } from '../bootstrap-governance.ts';
-import { createExposureCommands } from './catalogue.ts';
+import { createExposureCommands, requiresExplicitExposureGrant } from './catalogue.ts';
 import { openApiRoutes } from './openapi-route.ts';
 import { admittedGroupsRoutes } from './admitted-groups-route.ts';
 import { exposureManagementRoutes } from './management-route.ts';
@@ -106,6 +106,7 @@ export function exposureRoutes(
       options('open'),
       async ({ params, headers, actor, admission, job, session, authorizeCommand }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (requiresExplicitExposureGrant(params.group)) throw new ProblemError('forbidden');
         const authorization = await authorizeCommand(PLATFORM_RESOURCE, () => new ProblemError('forbidden'));
         const input = {
           group: params.group,

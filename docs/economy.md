@@ -14,6 +14,9 @@ API responses, private receipts and mutations use the same decision. Recheck aut
 owner workflows authenticate their source and complete only named, previously admitted obligations. Use test assets and
 deterministic provider adapters for development. The deployed system starts closed and real-money execution requires a
 separately authorized instrument, provider and operating policy.
+`KERNEL_ECONOMY_BOOK_ID` selects the installed book for an explicitly configured Kernel deployment. An absent value
+leaves the wallet adapter unbound. Choosing a book grants no account access. Provision assets and balances through
+trusted owner operations in the configured test environment.
 
 ## Book and wallet
 

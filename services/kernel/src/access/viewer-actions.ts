@@ -5,8 +5,9 @@ import { Compile } from 'typebox/compile';
 import type { Static, TSchema } from 'typebox';
 import { deadlineClient } from './deadline.ts';
 import { withViewerActionsReadSnapshot } from './viewer-actions-read-connection.ts';
-import { authorizePlatformGate, viewerActionReadTime } from './read-bindings.ts';
-import { GLOBAL_CONTEXT } from './gates/catalogue.ts';
+import { viewerActionReadTime } from './read-bindings.ts';
+import { requiresExplicitExposureGrant } from './gates/catalogue.ts';
+import { authorizeExposureGroup } from './gates/admission.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { parseExposure, type Exposure } from './gates/declaration.ts';
 import openGroups from './gates/open-groups.sql';
@@ -231,7 +232,8 @@ export async function readViewerActions(
     const groups = new Set<string>();
     for (const type of selected.keys())
       for (const binding of bindings.get(type) ?? [])
-        if (binding.exposure.kind === 'gate') groups.add(binding.exposure.group);
+        if (binding.exposure.kind === 'gate' && !requiresExplicitExposureGrant(binding.exposure.group))
+          groups.add(binding.exposure.group);
     const openings = await openGroups.run(deadlineClient(deps.pool, deadline), { groups: [...groups], at });
     const open = new Set(openings.map((row) => row.group));
     const owners = new Map<string, ViewerActionResource>();
@@ -255,16 +257,15 @@ export async function readViewerActions(
               gates.set(
                 key,
                 open.has(group) ||
-                  (await authorizePlatformGate(
-                    deps.access,
+                  (await authorizeExposureGroup({
+                    access: deps.access,
                     actor,
-                    [`gate:${group}`, 'gate:any'],
-                    action,
-                    GLOBAL_CONTEXT,
+                    group,
+                    clientAction: action,
                     context,
                     at,
                     client,
-                  )),
+                  })),
               );
           }
         }

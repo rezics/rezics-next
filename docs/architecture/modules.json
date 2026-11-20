@@ -375,6 +375,38 @@
       "capabilities": ["access-use-cases"]
     },
     {
+      "id": "kernel-economy-contract",
+      "kind": "contract",
+      "owner": "economy",
+      "paths": ["services/kernel/src/economy/contract.ts"],
+      "publicEntries": ["services/kernel/src/economy/contract.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["economy-contract"]
+    },
+    {
+      "id": "kernel-economy-core",
+      "kind": "core",
+      "owner": "economy",
+      "paths": ["services/kernel/src/economy/exchange/**", "services/kernel/src/economy/settlement/**"],
+      "publicEntries": ["services/kernel/src/economy/exchange/order-book.ts"],
+      "allowedDependencies": ["kernel-economy-contract"],
+      "capabilities": ["economy-matching"]
+    },
+    {
+      "id": "kernel-economy-adapter",
+      "kind": "adapter",
+      "owner": "economy",
+      "paths": [
+        "services/kernel/src/economy/ledger.ts",
+        "services/kernel/src/economy/storage/**",
+        "services/kernel/db/economy/**"
+      ],
+      "publicEntries": ["services/kernel/src/economy/ledger.ts"],
+      "allowedDependencies": ["kernel-economy-contract"],
+      "capabilities": ["economy-ledger"],
+      "postgresPaths": ["services/kernel/src/economy/ledger.ts", "services/kernel/src/economy/storage/**"]
+    },
+    {
       "id": "kernel-commerce",
       "kind": "adapter",
       "owner": "commerce",
@@ -984,6 +1016,7 @@
         "services/kernel/src/history/command-evidence.ts",
         "services/kernel/src/work/**",
         "services/kernel/src/http/**",
+        "services/kernel/src/economy/routes.ts",
         "services/kernel/src/events/**",
         "services/kernel/src/tokens/**",
         "services/kernel/src/partition/**",
@@ -1076,6 +1109,7 @@
         "kernel-access",
         "kernel-access-contract",
         "kernel-commerce",
+        "kernel-economy-contract",
         "kernel-community",
         "kernel-content",
         "kernel-history-application",
@@ -1124,6 +1158,8 @@
         "kernel-access-contract",
         "kernel-access-core",
         "kernel-commerce",
+        "kernel-economy-adapter",
+        "kernel-economy-contract",
         "kernel-community",
         "kernel-content",
         "kernel-content-application",

@@ -1,4 +1,5 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
+export { readExplicitExposureGrant } from './gates/catalogue.ts';
 export type {
   Access,
   AccessCheck,

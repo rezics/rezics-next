@@ -74,6 +74,8 @@ import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
+import { economyRoutes } from '../economy/routes.ts';
+import type { EconomyWalletPort } from '../economy/contract.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { continueRoutes } from '../library/continue-routes.ts';
 import { feedRoutes } from '../content/feed-routes.ts';
@@ -194,6 +196,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   /** Real wall time for request deadlines; defaults to the system clock at composition. */
   deadlineNow?: () => number;
   commerce?: CommerceDependencies;
+  economy?: EconomyWalletPort;
   moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime &
     Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
@@ -635,6 +638,10 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
     ...(dependencies.content?.readConsent === undefined ? {} : { readConsent: dependencies.content.readConsent }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
+  });
+  economyRoutes(app as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    ...(dependencies.economy === undefined ? {} : { economy: dependencies.economy }),
   });
   let progress: ReturnType<typeof progressRoutes>;
   progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
@@ -1187,6 +1194,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof searchRoutes> &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &
+  ReturnType<typeof economyRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof readingInsightsRoutes> &
   ReturnType<typeof yearlyCompletionGoalRoutes> &
