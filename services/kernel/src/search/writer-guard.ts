@@ -65,6 +65,7 @@ import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
 import { OpenSearchError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
+import { proveSubjectRelayDispatch, subjectRelayIntent } from './subject-relay-recovery.ts';
 import {
   writeIndexActions,
   validateRefreshResponse,
@@ -1157,7 +1158,7 @@ export function createSearchWriterGuard(options: {
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
-  /** Live relay replay can replace undispatched enrollments and settle retained bulk responses. */
+  /** Live relay replay can replace undispatched enrollments and reconcile dispatched writes. */
   recoverRelayEnrollment?: true;
 }): SearchWriterNativeCustody & SearchWriterPublicationGuard {
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(options.consumer)) throw new TypeError('Invalid Search consumer');
@@ -2408,7 +2409,78 @@ export function createSearchWriterGuard(options: {
         if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
           throw unavailable('Search physical index changed after dispatch');
       };
+      const prepareActions = async (actionIds: readonly string[], floor: bigint) => {
+        const { snapshot } = await indexObservation(partition, actionIds);
+        const subjects = validateIndexObservation(snapshot, partition, actionIds, floor);
+        const visible = actionIds.filter((id) => {
+          const subject = subjects.get(id);
+          return subject?.visibility === 'visible' && subject.redirect === null;
+        });
+        const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
+        const actions = await prepareBoundedSortKeys(
+          options.search,
+          options.index,
+          documentActions(snapshot, actionIds, counts),
+        );
+        return { actions, position: snapshot.position };
+      };
+      type RelayDispatch = {
+        original_id: string;
+        owner_epoch: number;
+        writer_token: string;
+        writer_transaction_id: string;
+        writer_position: string;
+        relay_intent: string | null;
+        source_position: string | null;
+      };
+      const proveReceiptlessDispatches = async () => {
+        const dispatched = await withReadTransaction(options.pool, async (tx) => {
+          const owner = await readPartition(tx, partition);
+          if (!owner || owner.writeState !== 'active') return [];
+          const { rows } = await tx.query<RelayDispatch>(
+            `SELECT original_id::text,owner_epoch,writer_token::text,writer_transaction_id::text,
+                    writer_position::text,relay_intent,source_position::text
+             FROM search.identity_writer
+             WHERE partition_no=$1 AND physical_target=$2 AND incarnation=$3 AND owner_epoch=$4
+               AND original_id=ANY($5::uuid[]) AND dispatch_state='dispatched' AND writer_token IS NOT NULL
+               AND relay_receipt IS NULL AND (relay_intent IS NOT NULL OR repair_locator IS NULL)
+             ORDER BY original_id`,
+            [partition, options.index, incarnation, owner.epoch, ids],
+          );
+          return rows;
+        });
+        const legacy = dispatched.filter((row) => row.relay_intent === null);
+        const expected = new Map<string, string>();
+        if (legacy.length) {
+          // Older rows have no intent. Their enrollment point is the only recoverable version:
+          // a completed predecessor's version is below it, and a later Source cut cannot supply it.
+          const floor = legacy.reduce((max, row) => {
+            const position = BigInt(row.writer_position);
+            return position > max ? position : max;
+          }, 0n);
+          const { actions } = await prepareActions(
+            legacy.map((row) => row.original_id),
+            floor,
+          );
+          for (const [offset, action] of actions.entries()) {
+            const row = legacy[offset]!;
+            const version = BigInt(row.writer_position);
+            if (action.op !== 'index' || version <= BigInt(row.source_position ?? '0')) throw pending;
+            expected.set(action.id, subjectRelayIntent({ ...action, version }));
+          }
+        }
+        for (const row of dispatched) {
+          if (row.relay_intent === null) continue;
+          if (!/^[1-9]\d{0,15}:[a-f0-9]{64}$/.test(row.relay_intent)) throw pending;
+          expected.set(row.original_id, row.relay_intent);
+        }
+        if (expected.size) await proveSubjectRelayDispatch(options.search, options.index, expected);
+        return new Map(dispatched.map((row) => [row.original_id, { row, intent: expected.get(row.original_id)! }]));
+      };
       const settleRelay = async (ownToken: string | null) => {
+        const proven = ownToken
+          ? new Map<string, { row: RelayDispatch; intent: string }>()
+          : await proveReceiptlessDispatches();
         // First prove the original allocation is still addressed by the retained write alias.
         await checkAllocation();
         const result = await runCommand(options.pool, commandOptions, async (tx, context) => {
@@ -2425,32 +2497,41 @@ export function createSearchWriterGuard(options: {
             if (ownToken) throw unavailable('Search relay lost its native writer gate');
             return noEffect(false);
           }
-          const { rows } = await tx.query<{
-            original_id: string;
-            writer_token: string;
-            writer_transaction_id: string;
-            writer_position: string;
-            relay_receipt: string;
-          }>(
-            `SELECT original_id::text,writer_token::text,writer_transaction_id::text,writer_position::text,relay_receipt
+          const { rows } = await tx.query<RelayDispatch & { relay_receipt: string | null }>(
+            `SELECT original_id::text,owner_epoch,writer_token::text,writer_transaction_id::text,
+                    writer_position::text,relay_intent,source_position::text,relay_receipt
              FROM search.identity_writer
              WHERE partition_no=$1 AND physical_target=$2 AND incarnation=$3 AND owner_epoch=$4
-               AND original_id=ANY($5::uuid[]) AND dispatch_state='dispatched' AND relay_receipt IS NOT NULL
+               AND original_id=ANY($5::uuid[]) AND dispatch_state='dispatched' AND writer_token IS NOT NULL
                AND ($6::uuid IS NULL OR writer_token=$6)
+               AND (relay_receipt IS NOT NULL OR original_id=ANY($7::uuid[]))
              ORDER BY original_id FOR UPDATE`,
-            [partition, options.index, incarnation, completion.epoch, ids, ownToken],
+            [partition, options.index, incarnation, completion.epoch, ids, ownToken, [...proven.keys()]],
           );
           if (ownToken && rows.length !== ids.length) throw unavailable('Search relay lost its original bulk receipt');
           if (!rows.length) return noEffect(false);
           const attempts = new Map<string, { txId: string; position: string; version: string; ids: string[] }>();
-          for (const row of rows) {
-            const { op, version, bulk } = JSON.parse(row.relay_receipt);
-            if ((op !== 'index' && op !== 'delete') || typeof version !== 'string' || !/^[1-9]\d{0,15}$/.test(version))
-              throw unavailable('Search relay receipt has an invalid action');
+          for (const { relay_receipt: retained, ...row } of rows) {
+            let version: string;
+            if (retained !== null) {
+              const { op, version: received, bulk } = JSON.parse(retained);
+              if (
+                (op !== 'index' && op !== 'delete') ||
+                typeof received !== 'string' ||
+                !/^[1-9]\d{0,15}$/.test(received)
+              )
+                throw unavailable('Search relay receipt has an invalid action');
+              version = received;
+              validateIndexWriteReceipt(bulk, options.index, [{ op, id: row.original_id, version: BigInt(version) }]);
+            } else {
+              const proof = proven.get(row.original_id);
+              if (!proof || !isDeepStrictEqual(row, proof.row))
+                throw unavailable('Search relay dispatch changed after visibility proof');
+              version = proof.intent.split(':', 1)[0]!;
+            }
             const source = BigInt(version);
             if (source < BigInt(row.writer_position) || source >= completion.position)
-              throw unavailable('Search relay receipt has an invalid Source version');
-            validateIndexWriteReceipt(bulk, options.index, [{ op, id: row.original_id, version: source }]);
+              throw unavailable('Search relay dispatch has an invalid Source version');
             const previous = attempts.get(row.writer_token);
             if (previous) {
               if (
@@ -2494,7 +2575,7 @@ export function createSearchWriterGuard(options: {
         if (!relay || (error !== pending && error !== publicationFenced && error !== generationClosed)) throw error;
         const recovered = await settleRelay(null);
         if (!recovered || error !== pending) throw error;
-        // The original response settles only its own version. Run ordinary Source apply for this replay's batch.
+        // Settlement covers the original version. Apply the current batch through the ordinary Source path.
         return enrollWriter();
       });
       const receipt = enrollment.value;
@@ -2541,35 +2622,27 @@ export function createSearchWriterGuard(options: {
         });
       };
       try {
-        const { snapshot } = await indexObservation(partition, ids);
         const floor = receipt.position > obligation ? receipt.position : obligation;
-        const subjects = validateIndexObservation(snapshot, partition, ids, floor);
-        const visible = ids.filter((id) => {
-          const subject = subjects.get(id);
-          return subject?.visibility === 'visible' && subject.redirect === null;
-        });
-        const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
-        const actions = await prepareBoundedSortKeys(
-          options.search,
-          options.index,
-          documentActions(snapshot, ids, counts),
-        );
-        const current = await readSearchWriterPhysicalTarget(options.search, options.index);
-        if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
-          throw unavailable('Search physical index changed before dispatch');
+        const { actions, position } = await prepareActions(ids, floor);
+        const intents = relay ? actions.map(subjectRelayIntent) : null;
+        await checkAllocation();
         // Native CAS makes pre-dispatch recovery revoke a delayed continuation before external I/O.
         await runCommand(options.pool, commandOptions, async (tx, context) => {
           const dispatch = await native(tx, context.transactionId);
           if (dispatch.epoch !== receipt.epoch) throw unavailable('Search writer home changed before dispatch');
           await gate(tx, dispatch, incarnation, writeAlias);
-          const result = await tx.query(dispatchSql.sql, [
-            partition,
-            options.index,
-            incarnation,
-            receipt.epoch,
-            token,
-            ids,
-          ]);
+          const parameters = [partition, options.index, incarnation, receipt.epoch, token, ids];
+          const result = intents
+            ? await tx.query(
+                `UPDATE search.identity_writer AS w SET dispatch_state='dispatched',relay_intent=input.intent
+                 FROM unnest($6::uuid[],$7::text[]) AS input(id,intent)
+                 WHERE w.partition_no=$1 AND w.physical_target=$2 AND w.incarnation=$3 AND w.owner_epoch=$4
+                   AND w.writer_token=$5 AND w.original_id=input.id AND w.dispatch_state='enrolled'
+                   AND w.writer_transaction_id=$8 AND w.writer_position=$9
+                 RETURNING w.original_id`,
+                [...parameters, intents, receipt.transactionId, String(receipt.position)],
+              )
+            : await tx.query(dispatchSql.sql, parameters);
           if (result.rowCount !== ids.length) {
             revoked = true;
             throw unavailable('Search writer was revoked before dispatch');
@@ -2626,7 +2699,7 @@ export function createSearchWriterGuard(options: {
           return;
         }
         await checkAllocation();
-        sourcePosition = snapshot.position;
+        sourcePosition = position;
         if (renewal) renewedEffect = { action: actions[0]!, bulk };
       } catch (error) {
         // No engine mutation was invoked on this branch. A failed release still retains native custody.
