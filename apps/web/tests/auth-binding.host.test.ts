@@ -1,10 +1,8 @@
 import { readSessionToken } from './session-token';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAuthService, type AccessAccount, type AuthService } from '../../../services/auth/src/index.ts';
@@ -41,7 +39,6 @@ let devServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let keys: ReturnType<typeof createLocalJWKSet>;
 let webState: string | undefined;
 let privateDirectory: string | undefined;
-let configDirectory: string | undefined;
 
 beforeAll(async () => {
   fixture = testDatabase();
@@ -91,18 +88,11 @@ beforeAll(async () => {
     },
   });
   await mkdir(join(app, '.temp'), { recursive: true });
-  configDirectory = await mkdtemp(join(app, '.temp/web-auth-binding-vite-'));
-  privateDirectory = await mkdtemp(join(tmpdir(), 'web-auth-binding-'));
+  privateDirectory = await mkdtemp(join(app, '.temp/web-auth-binding-'));
   webState = join(privateDirectory, 'state');
   await mkdir(webState);
   const viteCache = join(privateDirectory, 'vite-cache');
   await mkdir(viteCache);
-  const viteConfig = join(configDirectory, 'vite.config.ts');
-  await writeFile(
-    viteConfig,
-    `import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};\n` +
-      `export default { ...config, cacheDir: ${JSON.stringify(viteCache)} };\n`,
-  );
   await service.internal.registerClient({ clientId: 'login', firstParty: true, scopes: ['media:read'] });
   for (const accountId of people) {
     const account: AccessAccount = { accountId, kind: 'actor', state: 'pending', authnEpoch: 1, automated: false };
@@ -158,8 +148,6 @@ beforeAll(async () => {
       'bun',
       'run',
       'dev',
-      '--config',
-      viteConfig,
       '--host',
       '127.0.0.1',
       '--port',
@@ -168,6 +156,7 @@ beforeAll(async () => {
     ],
     env: {
       PUBLIC_ORIGIN: 'https://rezics.com',
+      WEB_VITE_CACHE_DIR: viteCache,
       WEB_TEST_STATE_DIR: webState,
       KERNEL_ORIGIN: kernel.url.origin,
       AUTH_ISSUER: issuer,
@@ -195,7 +184,6 @@ afterAll(async () => {
   await pool?.end();
   fixture?.close();
   if (privateDirectory) await rm(privateDirectory, { recursive: true, force: true });
-  if (configDirectory) await rm(configDirectory, { recursive: true, force: true });
 });
 
 function cookie(response: Response, name: string) {
