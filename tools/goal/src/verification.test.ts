@@ -2109,10 +2109,12 @@ test('historical reader validates the complete captured closure before importing
   try {
     // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
     const producerRoot = resolve(import.meta.dir, '../../..');
-    git(directory.path, ['clone', '--shared', '--no-checkout', producerRoot, '.']);
-    const producerHead = git(producerRoot, ['rev-parse', 'HEAD']);
-    git(directory.path, ['fetch', '--no-tags', producerRoot, producerHead]);
-    git(directory.path, ['fetch', '--no-tags', producerRoot, PROOF_PRODUCER_COMMIT]);
+    const producerObjects = git(producerRoot, ['rev-parse', '--path-format=absolute', '--git-path', 'objects']);
+    git(directory.path, ['init', '--quiet']);
+    writeFileSync(join(directory.path, '.git/objects/info/alternates'), `${producerObjects}\n`);
+    expect(git(directory.path, ['cat-file', '-t', PROOF_PRODUCER_COMMIT])).toBe('commit');
+    // The fixture needs the exact producer commit as its ancestry boundary, with no older history traversal.
+    writeFileSync(join(directory.path, '.git/shallow'), `${PROOF_PRODUCER_COMMIT}\n`);
     git(directory.path, ['config', 'user.name', 'Fixture']);
     git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
     mkdirSync(join(directory.path, 'scripts'));

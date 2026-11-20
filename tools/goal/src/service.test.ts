@@ -17,8 +17,8 @@ import {
   type ServiceCommand,
 } from './service.ts';
 import { runMaintenance } from './maintenance.ts';
-import { temporaryDirectory } from './test-support.ts';
-import type { Runtime } from './config.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
+import { createRuntime, type Runtime } from './config.ts';
 
 function recorder() {
   const calls: string[][] = [];
@@ -196,57 +196,56 @@ test('maintenance keeps detecting incidents when the output alarm fails without 
 });
 
 test('maintenance reaps recorded groups in deleted worktrees and spares workers in retained worktrees', async () => {
-  const dir = temporaryDirectory();
-  const retained = join(dir.path, 'retained');
+  const h = harness();
+  const retained = join(h.root, 'retained');
   mkdirSync(retained);
   const children = [0, 1].map(() =>
     spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' }),
   );
   const exited = children.map((child) => new Promise<void>((resolve) => child.once('exit', () => resolve())));
   try {
-    const identities = children.map((child) => processIdentity(child.pid!)!);
-    const runtime = {
-      stateDirectory: dir.path,
-      settings: {
-        stateDirectory: dir.path,
-        worktreeRoot: join(dir.path, 'trees'),
-        mainCheckout: dir.path,
-      },
-      store: {
-        bootstrapMaintenanceProcesses: () => ({ examined: 0, complete: true }),
-        reapMaintenanceCandidates: () => [
-          {
-            ticket: 1,
-            kind: 'reap',
-            taskId: 'gone',
-            attempt: 1,
-            worktree: join(dir.path, 'deleted'),
-            process: identities[0],
-          },
-          {
-            ticket: 2,
-            kind: 'reap',
-            taskId: 'kept',
-            attempt: 1,
-            worktree: retained,
-            process: identities[1],
-          },
-        ],
-        completeMaintenanceCandidates: () => {},
-        bootstrapMaintenanceTasks: () => ({ examined: 0, complete: true }),
-        worktreeMaintenanceCandidates: () => [],
-        maintenanceTasksBootstrapped: () => false,
-        worktreePruneProgress: () => ({ generation: 0, completed: 0 }),
-      },
-    } as unknown as Runtime;
+    const identities = children.map((child) => {
+      const identity = processIdentity(child.pid!);
+      if (!identity) throw new Error('Fixture child has no process identity');
+      return identity;
+    });
+    const runtime = createRuntime({ tasks: h.tasks });
+    const insertTask = runtime.db.query(
+      'INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 1, ?)',
+    );
+    const insertAttempt = runtime.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)');
+    for (const [index, worktree] of [join(h.root, 'deleted'), retained].entries()) {
+      const taskId = `maintenance-child-${index}`;
+      insertTask.run(
+        taskId,
+        index + 1,
+        JSON.stringify({
+          id: taskId,
+          state: 'running',
+          currentAttempt: 1,
+          worktree,
+          brief: { after: [] },
+        }),
+      );
+      insertAttempt.run(
+        taskId,
+        JSON.stringify({
+          taskId,
+          attempt: 1,
+          state: 'running',
+          process: identities[index],
+        }),
+      );
+    }
     expect(await runMaintenance('reap', runtime)).toBe(0);
-    await exited[0];
     expect(sameProcess(identities[0]!)).toBe(false);
+    await exited[0];
     expect(sameProcess(identities[1]!)).toBe(true);
+    expect(h.store.reapMaintenanceCandidates().map((candidate) => candidate.worktree)).toEqual([retained]);
   } finally {
     for (const child of children) if (child.exitCode == null && child.signalCode == null) child.kill('SIGKILL');
     await Promise.all(exited);
-    dir.close();
+    h.dispose();
   }
 });
 

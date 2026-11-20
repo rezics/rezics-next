@@ -26,6 +26,8 @@ function cliRuntimeFixture() {
   const managerDecision = () => {
     const db = openDb(databasePath);
     try {
+      if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_turn_decisions'").get())
+        return null;
       return db.query('SELECT manager FROM manager_turn_decisions WHERE manager = ?').get('fixture-manager');
     } finally {
       db.close();
@@ -114,7 +116,7 @@ test('run() passes detached train mode to its runtime factory without changing t
     expect(status).toBe(0);
     expect(received).toEqual({ trainMode: 'detached' });
     expect(process.env.GOAL_TRAIN_MODE).toBeUndefined();
-    expect(fixture.managerDecision()).toBeTruthy();
+    expect(fixture.managerDecision()).toBeNull();
   } finally {
     if (before === undefined) delete process.env.GOAL_TRAIN_MODE;
     else process.env.GOAL_TRAIN_MODE = before;
