@@ -6,7 +6,7 @@ import { newId } from '../../src/route/route.ts';
 import { Admission } from '../../src/http/admission.ts';
 import { readPage } from '../../src/presentation/reads.ts';
 import { readBookIdentities, type BookIdentityRead } from '../../src/search/composed-book-identities.ts';
-import { composedBookObservation, runBookCatalogueRead } from '../../src/search/composed-book-reads.ts';
+import { bookPageObservation, runBookCatalogueRead } from '../../src/search/composed-book-reads.ts';
 import { createNativePublicFilterSource } from '../../src/semantic/public-filter-source.ts';
 import {
   publicFilterCoverageStart,
@@ -18,6 +18,7 @@ import {
   readPublicFilterPopulation,
 } from '../../src/semantic/public-filter-coverage-population.ts';
 import type {
+  PrivacyReductionObservation,
   PrivacyReductionObservationRequest,
   PrivacyReductionStart,
 } from '../../src/semantic/public-filter-source-contract.ts';
@@ -729,6 +730,10 @@ test('nine Book lists yield admission through one START, bounded execution and a
       return runBookCatalogueRead(admission, context, async () => {
         held.add(id);
         try {
+          const charged: PrivacyReductionObservation[] = [];
+          const charge = (observation: PrivacyReductionObservation) => {
+            charged.push(observation);
+          };
           const member = {
             ...startRequest(deadline),
             queried: {
@@ -736,11 +741,11 @@ test('nine Book lists yield admission through one START, bounded execution and a
               snapshot: { ...queried.snapshot, observation: '0:' + id },
             },
           };
-          const start = await composedBookObservation(source, 'publication', id, member, (status) => status);
+          const start = await bookPageObservation(source, 'publication', id, member, charge);
           assert(start?.status === 'observed' && start.start.observation === 'population:' + id);
           await new Promise<void>((resolve) => setImmediate(resolve));
           peak = Math.max(peak, admission.running.normal);
-          const final = await composedBookObservation(
+          const final = await bookPageObservation(
             source,
             'publication',
             id,
@@ -749,9 +754,10 @@ test('nine Book lists yield admission through one START, bounded execution and a
               start: start.start,
               execution: 'tail-' + id,
             },
-            (status) => status,
+            charge,
           );
           assert(final?.status === 'unavailable' && final.cost.dependencyPoints === 504);
+          assert.deepEqual(charged, [start, final]);
           return Response.json({ code: 'index_not_ready' }, { status: 503 });
         } finally {
           held.delete(id);
