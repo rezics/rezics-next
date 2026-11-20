@@ -99,6 +99,7 @@ export type SearchGenerationPublication = Readonly<{
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
         sourceAdvanced?: boolean;
+        additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
       }
     | PublicFilterConsumerUnavailable
   >;
@@ -147,6 +148,7 @@ const cost = (): Meter => ({
   frontierWrites: 0,
 });
 const PAGE = 50;
+const SUBJECT_ENROLLMENT_PAGES = 32;
 const SUBJECT_VALIDATION_HOMES = 256;
 const SUBJECT_VALIDATION_REPLAY = 'subject-validation-replay';
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -716,6 +718,7 @@ export function createSearchGenerationPublication(
       current: string | null,
       capture?: ReturnType<typeof populationDefinition>,
       enrollmentAdvanced?: boolean,
+      additionalEnrollmentCosts?: readonly SearchPublicFilterCost[],
     ) => Promise<T>,
   ): Promise<T> {
     const ref = structuredClone(input);
@@ -826,7 +829,21 @@ export function createSearchGenerationPublication(
                 physical?.activeSubjectGeneration === null &&
                 (await continueSubjectEnrollment(job, client, context, meter, true))
               ) {
-                return work(job, client, current, capture, true);
+                // The publication lock already excludes this alias's other native jobs.
+                // Each Source page rechecks custody, and its receipt chain and cursors
+                // commit together. Reconciling or publishing still requires a new turn.
+                const additionalEnrollmentCosts: SearchPublicFilterCost[] = [];
+                let duration = 0;
+                while (additionalEnrollmentCosts.length + 1 < SUBJECT_ENROLLMENT_PAGES) {
+                  const started = Date.now();
+                  if (started + 2 * duration >= context.deadline) break;
+                  const pageMeter = cost();
+                  const advanced = await continueSubjectEnrollment(job, client, context, pageMeter, true);
+                  additionalEnrollmentCosts.push(pageMeter);
+                  if (!advanced) break;
+                  duration = Math.max(duration, Date.now() - started);
+                }
+                return work(job, client, current, capture, true, additionalEnrollmentCosts);
               }
               return await work(job, client, current, capture);
             } finally {
@@ -1680,57 +1697,70 @@ export function createSearchGenerationPublication(
     step(input, context, options) {
       const phase = options?.enrollSource === true ? 'step-enroll' : 'step';
       return run(context, (meter) =>
-        locked(input, context, meter, phase, async (job, client, _current, capture, enrolled) => {
-          if (enrolled) return { status: 'progress' as const, job: reference(job), sourceAdvanced: true, cost: meter };
-          const mayEnroll = phase === 'step-enroll' && canEnrollSubject(job);
-          let waiting: Pending | undefined;
-          let sourceAdvanced = false;
-          try {
+        locked(
+          input,
+          context,
+          meter,
+          phase,
+          async (job, client, _current, capture, enrolled, additionalEnrollmentCosts) => {
+            if (enrolled)
+              return {
+                status: 'progress' as const,
+                job: reference(job),
+                sourceAdvanced: true,
+                cost: meter,
+                ...(additionalEnrollmentCosts?.length ? { additionalEnrollmentCosts } : {}),
+              };
+            const mayEnroll = phase === 'step-enroll' && canEnrollSubject(job);
+            let waiting: Pending | undefined;
+            let sourceAdvanced = false;
             try {
-              await advance(job, client, context, meter);
+              try {
+                await advance(job, client, context, meter);
+              } catch (error) {
+                if (!mayEnroll || !(error instanceof Pending) || error.reason !== 'source_pending') throw error;
+                waiting = error;
+              }
+              // A writer or replay can stall reconciliation while original Source
+              // enrollment can still commit. Only that progress bypasses backoff.
+              if (
+                mayEnroll &&
+                meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
+              ) {
+                sourceAdvanced =
+                  (await continueSubjectEnrollment(job, client, context, meter)) ??
+                  (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced;
+              }
+              if (waiting && !sourceAdvanced) throw waiting;
+              if (waiting) await save(client, job, meter);
             } catch (error) {
-              if (!mayEnroll || !(error instanceof Pending) || error.reason !== 'source_pending') throw error;
-              waiting = error;
+              if (
+                error instanceof Pending &&
+                error.reason === 'source_pending' &&
+                job.fence &&
+                job.phase !== 'intent' &&
+                job.phase !== 'active'
+              )
+                await restart(job, client, context, meter);
+              else if (error instanceof Pending && error.reason === 'source_pending') await save(client, job, meter);
+              throw error;
             }
-            // A writer or replay can stall reconciliation while original Source
-            // enrollment can still commit. Only that progress bypasses backoff.
-            if (
-              mayEnroll &&
-              meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
-            ) {
-              sourceAdvanced =
-                (await continueSubjectEnrollment(job, client, context, meter)) ??
-                (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced;
-            }
-            if (waiting && !sourceAdvanced) throw waiting;
-            if (waiting) await save(client, job, meter);
-          } catch (error) {
-            if (
-              error instanceof Pending &&
-              error.reason === 'source_pending' &&
-              job.fence &&
-              job.phase !== 'intent' &&
-              job.phase !== 'active'
-            )
-              await restart(job, client, context, meter);
-            else if (error instanceof Pending && error.reason === 'source_pending') await save(client, job, meter);
-            throw error;
-          }
-          // Fencing and intent do no step work; the existing scheduler must resume activate.
-          return {
-            status:
-              !waiting &&
-              (job.phase === 'reconciled' ||
-                job.phase === 'fencing' ||
-                job.phase === 'intent' ||
-                job.phase === 'active')
-                ? ('reconciled' as const)
-                : ('progress' as const),
-            job: reference(job),
-            cost: meter,
-            ...(sourceAdvanced ? { sourceAdvanced } : {}),
-          };
-        }),
+            // Fencing and intent do no step work; the existing scheduler must resume activate.
+            return {
+              status:
+                !waiting &&
+                (job.phase === 'reconciled' ||
+                  job.phase === 'fencing' ||
+                  job.phase === 'intent' ||
+                  job.phase === 'active')
+                  ? ('reconciled' as const)
+                  : ('progress' as const),
+              job: reference(job),
+              cost: meter,
+              ...(sourceAdvanced ? { sourceAdvanced } : {}),
+            };
+          },
+        ),
       );
     },
     activate(input, context) {
