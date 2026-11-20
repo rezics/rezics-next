@@ -148,6 +148,8 @@ async function acknowledgePublicFilterRepairBaseline(
     homes.some((home, index) => home.home !== homes[0]!.home + index)
   )
     throw new TypeError('Receiver ACK requires a bounded contiguous home range');
+  const firstHome = homes[0]!.home;
+  const afterHome = firstHome + homes.length;
   return withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
@@ -197,6 +199,7 @@ async function acknowledgePublicFilterRepairBaseline(
         throw new CommandUnavailableError('fenced', baseline.registrationPartition);
       // Lock and confirm the whole original receiver prefix before changing it.
       // Later obligations remain behind their actual native revision and position.
+      // Give the cold planner index bounds even before it has registration statistics.
       const acknowledged = await client.query(
         `/* semantic.native-keyed:${3 * homes.length}:${10 * homes.length}:${homes.length} */
          WITH eligible AS MATERIALIZED (
@@ -207,7 +210,9 @@ async function acknowledgePublicFilterRepairBaseline(
              ON (h.partition_no,h.registration,h.source_home)=($1,$2,x.home)
            JOIN search.public_filter_coverage_baseline b
              ON (b.partition_no,b.registration,b.bootstrap,b.source_home)=($1,$2,$4::uuid,x.home)
-           WHERE h.source_epoch=x.epoch AND h.baseline_bootstrap=$4
+           WHERE h.source_home >= $8 AND h.source_home < $9
+             AND b.source_home >= $8 AND b.source_home < $9
+             AND h.source_epoch=x.epoch AND h.baseline_bootstrap=$4
              AND b.receipt=x.receipt AND b.source_epoch=x.epoch
              AND b.source_position=x.source_position AND b.native_enqueue_revision=x.enqueue
              AND b.native_revision IS NOT DISTINCT FROM x.revision
@@ -225,6 +230,7 @@ async function acknowledgePublicFilterRepairBaseline(
              OR h.native_claim_revision IS DISTINCT FROM x.claim_revision)
          FROM eligible x
          WHERE (h.partition_no,h.registration,h.source_home)=($1,$2,x.home)
+           AND h.source_home >= $8 AND h.source_home < $9
            AND (SELECT count(*) FROM eligible)=jsonb_array_length($3::jsonb)
          RETURNING h.source_home`,
         [
@@ -235,6 +241,8 @@ async function acknowledgePublicFilterRepairBaseline(
           baseline.observation,
           baseline.execution,
           baseline.settlement,
+          firstHome,
+          afterHome,
         ],
       );
       if (acknowledged.rowCount !== homes.length)
@@ -3215,8 +3223,8 @@ export function createNativePublicFilterSourceBinding(
       if (!publicationCost || seal.after !== 4096) await verify();
       const authority = async (range: readonly PublicFilterCreationWindow[]) => {
         if (!range.length) return [];
-        // Drive owner reads from the retained windows. The bounded lateral lookup
-        // keeps the partition authority keyed to each enrolled home.
+        // Drive each authority lookup from its retained window, including on a
+        // cold database where joins can otherwise scan a whole relation.
         // Reserve each of the six native relation points even when a check fails.
         const { rows } = await db.query<
           PublicFilterRepairHome & {
@@ -3228,36 +3236,34 @@ export function createNativePublicFilterSourceBinding(
           }
         >(
           `/* semantic.native-keyed:${6 * range.length}:${9 * range.length} */
-             WITH enrolled AS MATERIALIZED (
-               SELECT e.*,x.epoch AS window_epoch,x.through
-               FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
-               JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
-               WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
+             SELECT live.*
+             FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
+             CROSS JOIN LATERAL (
+               SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
+                 e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
+                 e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
+                 h.position::text AS current_position,
+                 a.revision::text AS current_revision,a.claim_revision::text AS current_claim,
+                 e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
+                 c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
+                 b.state,b.coverage_sealed,b.coverage_after
+               FROM semantic.public_filter_home_enrollment e
+               JOIN core.partition p ON p.partition_no=e.partition_no
+               JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
+               JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
+               JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+               JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
+               WHERE (e.partition_no,e.bootstrap)=(x.home,$2)
+                 AND e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
                  AND e.creation_consumer=$3 AND e.read_definition=$4
-             )
-             SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
-               e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
-               e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
-               h.position::text AS current_position,
-               a.revision::text AS current_revision,a.claim_revision::text AS current_claim,
-               e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
-               c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
-               b.state,b.coverage_sealed,b.coverage_after
-             FROM enrolled e
-             JOIN LATERAL (
-               SELECT epoch,write_state,position FROM core.partition
-               WHERE partition_no=e.partition_no OFFSET 0
-             ) p ON TRUE
-             JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
-             JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
-             JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
-             JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
-             WHERE p.position>=e.through
-               AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=e.window_epoch
-               AND h.owner_epoch=p.epoch AND h.position>=e.source_position
-               AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
-               AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
-             ORDER BY e.partition_no`,
+                 AND p.position>=x.through
+                 AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=x.epoch
+                 AND h.owner_epoch=p.epoch AND h.position>=e.source_position
+                 AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
+                 AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
+               OFFSET 0
+             ) live
+             ORDER BY live.home`,
           [
             JSON.stringify(
               range.map(({ partition, epoch, receipt, base, through }) => ({
