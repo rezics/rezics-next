@@ -123,11 +123,13 @@ test('normal stop ends exactly its owned detached check process tree with honest
 test('unstarted held retry --brief preserves task identity, attempt 0, work, dependencies, and releases once', async () => {
   const h = harness();
   try {
-    const oldDependency = h.tasks.dispatch(h.briefFile);
-    const newDependency = h.tasks.dispatch(h.briefFile);
+    const oldDependency = h.tasks.dispatch(h.writeBrief('Complete the original predecessor.'));
+    const newDependency = h.tasks.dispatch(h.writeBrief('Complete the amended predecessor.'));
+    expect(oldDependency.id).not.toBe(newDependency.id);
     const heldBrief = join(h.settings.stateDirectory, 'held-original.md');
     writeFileSync(heldBrief, markdown.replace('waiting: []', `waiting: []\nafter: [${oldDependency.id}]`));
     const task = h.tasks.dispatch(heldBrief);
+    expect(task).toMatchObject({ state: 'held', currentAttempt: 0, brief: { after: [oldDependency.id] } });
     const work = join(task.worktree, 'operator-work.txt');
     writeFileSync(work, 'keep this work\n');
 
@@ -157,6 +159,7 @@ test('unstarted held retry --brief preserves task identity, attempt 0, work, dep
     });
     await job.recoverOrphans();
     expect(h.store.task(task.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+    expect(h.store.events(task.id).filter((event) => event.kind === 'held-task-released')).toEqual([]);
     h.store.updateTask({ taskId: newDependency.id, attempt: 0 }, (current) => {
       current.state = 'merged';
     });
