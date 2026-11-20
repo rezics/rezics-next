@@ -202,7 +202,21 @@ test('a Fedora host installs missing packages with dnf', () => {
 
   expect(result.status, result.stderr).toBe(0);
   const events = fixture.events();
-  const packages = ['git', 'rsync', 'unzip', 'xz', 'curl', 'ca-certificates', 'util-linux', 'bash', 'python3'];
+  const packages = [
+    'git',
+    'rsync',
+    'unzip',
+    'xz',
+    'curl',
+    'ca-certificates',
+    'util-linux',
+    'bash',
+    'gcc',
+    'glibc-devel',
+    'sqlite',
+    'sqlite-devel',
+    'python3',
+  ];
   expect(events.filter((event) => event.command === 'rpm').map((event) => event.args)).toEqual(
     packages.map((name) => ['-q', name]),
   );
@@ -248,7 +262,21 @@ test('a Debian host still installs missing packages with apt', () => {
 
   expect(result.status, result.stderr).toBe(0);
   const events = fixture.events();
-  const packages = ['git', 'rsync', 'unzip', 'xz-utils', 'curl', 'ca-certificates', 'util-linux', 'bash', 'python3'];
+  const packages = [
+    'git',
+    'rsync',
+    'unzip',
+    'xz-utils',
+    'curl',
+    'ca-certificates',
+    'util-linux',
+    'bash',
+    'gcc',
+    'libc6-dev',
+    'sqlite3',
+    'libsqlite3-dev',
+    'python3',
+  ];
   expect(events.filter((event) => event.command === 'dpkg').map((event) => event.args)).toEqual(
     packages.map((name) => ['-s', name]),
   );
