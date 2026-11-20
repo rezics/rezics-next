@@ -201,14 +201,11 @@ async function runFakeSmoke(
   startupPolicy: ControlPolicy,
 ): Promise<void> {
   const policy = startupPolicy.launchSmoke;
-  const { git, checked, message, stepFailure } = smokeTools(policy);
+  const { git, checked, stepFailure } = smokeTools(policy);
   const { path: directory, remove } = createSmokeDirectory(root, 'launch-smoke-test-');
   let checkId = '';
   const session = 'launch-smoke-fake-session';
   let resultPath = '';
-  let clone = '';
-  let devTree = '';
-  let devWorktreeAdded = false;
   const passed: string[] = [];
   const baseEnv = {
     ...process.env,
@@ -220,51 +217,38 @@ async function runFakeSmoke(
   try {
     try {
       // Control-plane candidates do not carry the check runner. Exercise the version on dev, as the real smoke does.
-      const sourceRoot = mainCheckout(root);
       // The fake-agent path uses package defaults and must not depend on operator-local account notes or pool data.
       const localFile = join(directory, 'local.json');
       writeFileSync(localFile, `${JSON.stringify({ version: 1, pools: [] })}\n`);
       const sourceSettings = loadSettings({ cwd: root, localFile });
       git(directory, 'init', '--quiet');
-      clone = join(directory, 'repository');
-      const cloned = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: policy.commandTimeoutMs,
-        maxBuffer: policy.outputBytes,
-      });
-      if (cloned.status !== 0)
-        throw new Error(cloned.stderr?.trim() || cloned.error?.message || `git clone exited ${cloned.status}`);
-      const devRef = `refs/heads/${sourceSettings.integrationBranch}`;
-      const remoteDev = `refs/remotes/origin/${sourceSettings.integrationBranch}`;
-      try {
-        git(clone, 'rev-parse', '--verify', `${remoteDev}^{commit}`);
-      } catch {
-        git(clone, 'fetch', '--quiet', sourceRoot, `${devRef}:${remoteDev}`);
-      }
-      devTree = join(directory, 'dev');
-      git(clone, 'worktree', 'add', '--detach', devTree, remoteDev);
-      devWorktreeAdded = true;
-      const workerCheckScript = requireWorkerCheck(join(devTree, 'scripts/worker-check.ts'));
+      const { checkScriptFixture } = await import('../test-support/check-script-fixture.ts');
+      checkScriptFixture(`refs/heads/${sourceSettings.integrationBranch}`).install(directory);
+      const workerCheckScript = requireWorkerCheck(join(directory, 'scripts/worker-check.ts'));
 
       // The fake agent protocol still receives a real worker-check UUID and result record.
+      // Use an explicit bounded unit test so the check can run locally on any test host.
+      const checkFile = './smoke.test.ts';
+      writeFileSync(
+        join(directory, checkFile),
+        `import { expect, test } from 'bun:test';
+test('launch smoke check', () => expect(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0)).toBe(0));
+`,
+      );
+      const checkEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...suppliedEnv,
+        REZICS_CHECK_MEMORY: 'off',
+        REZICS_CHECK_SCOPE: 'off',
+      };
+      // The child must survive the wrapper's exit to write its detached result.
+      delete checkEnv.BUN_FEATURE_FLAG_NO_ORPHANS;
       const started = checked(
         process.execPath,
-        [
-          workerCheckScript,
-          '--local',
-          '--',
-          process.execPath,
-          '-e',
-          'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))',
-        ],
+        [workerCheckScript, '--local', '--', process.execPath, 'test', checkFile],
         directory,
         policy.commandTimeoutMs,
-        {
-          ...process.env,
-          ...suppliedEnv,
-          REZICS_CHECK_MEMORY: 'off',
-        },
+        checkEnv,
       );
       checkId = /check: id ([0-9a-f-]{36})/.exec(started)?.[1] ?? '';
       if (!CHECK_ID.test(checkId)) throw new Error('worker-check did not return a real check id');
@@ -327,13 +311,6 @@ async function runFakeSmoke(
     }
   } finally {
     if (resultPath) await waitForCheck(resultPath, Date.now() + policy.checkWaitMs, policy).catch(() => {});
-    if (clone && devTree && devWorktreeAdded) {
-      try {
-        checked('git', ['worktree', 'remove', '--force', devTree], clone, policy.worktreeCleanupTimeoutMs);
-      } catch {
-        /* The disposable clone is removed below. */
-      }
-    }
     remove();
   }
 }
