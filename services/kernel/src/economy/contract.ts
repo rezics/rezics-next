@@ -20,7 +20,18 @@ export type WalletBalance = Readonly<{
 export type WalletEntry = Readonly<{
   position: string;
   operationId: string;
-  kind: 'issue' | 'transfer' | 'reserve' | 'capture' | 'release' | 'expire';
+  kind:
+    | 'issue'
+    | 'transfer'
+    | 'reserve'
+    | 'capture'
+    | 'release'
+    | 'expire'
+    | 'deposit'
+    | 'withdrawal'
+    | 'withdrawal_return'
+    | 'chargeback'
+    | 'withdrawal_refusal';
   postedDelta: string;
   heldDelta: string;
   recordedAt: string;

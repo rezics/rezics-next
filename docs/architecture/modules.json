@@ -413,6 +413,7 @@
       "publicEntries": [
         "services/kernel/src/economy/ledger.ts",
         "services/kernel/src/economy/storage/funding-store.ts",
+        "services/kernel/src/economy/storage/funding-ledger.ts",
         "services/kernel/src/economy/storage/market-store.ts",
         "services/kernel/src/economy/storage/item-custody.ts",
         "services/kernel/src/economy/storage/spot-store.ts"

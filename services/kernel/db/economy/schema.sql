@@ -132,6 +132,22 @@ CREATE TABLE economy.entry (
 
 
 --
+-- Name: funding_control_account; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_control_account (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    account_role text NOT NULL,
+    reference text NOT NULL,
+    account_id uuid NOT NULL,
+    CONSTRAINT funding_control_account_account_id_check CHECK ((account_id <> '00000000-0000-0000-0000-000000000000'::uuid)),
+    CONSTRAINT funding_control_account_account_role_check CHECK ((account_role = ANY (ARRAY['provider_clearing'::text, 'chargeback_receivable'::text]))),
+    CONSTRAINT funding_control_account_reference_check CHECK (((char_length(reference) >= 1) AND (char_length(reference) <= 263)))
+);
+
+
+--
 -- Name: funding_dispatch; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -217,6 +233,21 @@ CREATE TABLE economy.funding_intent (
 
 
 --
+-- Name: funding_posting; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.funding_posting (
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    source_kind text NOT NULL,
+    source_id text NOT NULL,
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    transaction_id uuid NOT NULL
+);
+
+
+--
 -- Name: hold; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -288,8 +319,8 @@ CREATE TABLE economy.journal (
     hold_id text,
     recorded_at timestamp with time zone NOT NULL,
     CONSTRAINT journal_check CHECK (((kind = 'transfer'::text) = (namespace = 'wallet'::text))),
-    CONSTRAINT journal_hold_kind_check CHECK (((kind <> ALL (ARRAY['issue'::text, 'transfer'::text])) = (hold_id IS NOT NULL))),
-    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text])))
+    CONSTRAINT journal_hold_kind_check CHECK (((kind = ANY (ARRAY['reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'withdrawal'::text, 'withdrawal_refusal'::text])) = (hold_id IS NOT NULL))),
+    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'deposit'::text, 'withdrawal'::text, 'withdrawal_return'::text, 'chargeback'::text, 'withdrawal_refusal'::text])))
 );
 
 
@@ -452,8 +483,11 @@ CREATE TABLE economy."position" (
     held bigint DEFAULT 0 NOT NULL,
     restricted bigint DEFAULT 0 NOT NULL,
     revision bigint DEFAULT 0 NOT NULL,
+    account_role text DEFAULT 'wallet'::text NOT NULL,
+    CONSTRAINT position_account_role_check CHECK ((account_role = ANY (ARRAY['wallet'::text, 'issuer'::text, 'provider_clearing'::text, 'chargeback_receivable'::text]))),
+    CONSTRAINT position_balance_by_role_check CHECK ((((account_role = 'wallet'::text) AND ((posted)::numeric >= ((held)::numeric + (restricted)::numeric))) OR ((account_role <> 'wallet'::text) AND (held = 0) AND (restricted = 0)))),
     CONSTRAINT position_check CHECK (((held >= 0) AND (restricted >= 0))),
-    CONSTRAINT position_check1 CHECK ((((account_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (held = 0) AND (restricted = 0)) OR ((posted >= 0) AND (((held)::numeric + (restricted)::numeric) <= (posted)::numeric)))),
+    CONSTRAINT position_issuer_role_check CHECK (((account_role = 'issuer'::text) = (account_id = '00000000-0000-0000-0000-000000000000'::uuid))),
     CONSTRAINT position_revision_check CHECK ((revision >= 0))
 );
 
@@ -621,6 +655,22 @@ ALTER TABLE ONLY economy.entry
 
 
 --
+-- Name: funding_control_account funding_control_account_book_id_asset_id_account_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_control_account
+    ADD CONSTRAINT funding_control_account_book_id_asset_id_account_id_key UNIQUE (book_id, asset_id, account_id);
+
+
+--
+-- Name: funding_control_account funding_control_account_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_control_account
+    ADD CONSTRAINT funding_control_account_pkey PRIMARY KEY (book_id, asset_id, account_role, reference);
+
+
+--
 -- Name: funding_dispatch funding_dispatch_attempt_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -666,6 +716,22 @@ ALTER TABLE ONLY economy.funding_intent
 
 ALTER TABLE ONLY economy.funding_intent
     ADD CONSTRAINT funding_intent_pkey PRIMARY KEY (book_id, intent_id);
+
+
+--
+-- Name: funding_posting funding_posting_book_id_asset_id_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_posting
+    ADD CONSTRAINT funding_posting_book_id_asset_id_transaction_id_key UNIQUE (book_id, asset_id, transaction_id);
+
+
+--
+-- Name: funding_posting funding_posting_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_posting
+    ADD CONSTRAINT funding_posting_pkey PRIMARY KEY (provider_namespace, provider_mode, source_kind, source_id);
 
 
 --
@@ -959,6 +1025,13 @@ CREATE TRIGGER entry_immutable BEFORE DELETE OR UPDATE ON economy.entry FOR EACH
 
 
 --
+-- Name: funding_control_account funding_control_account_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER funding_control_account_immutable BEFORE DELETE OR UPDATE ON economy.funding_control_account FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
 -- Name: funding_evidence funding_evidence_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -970,6 +1043,13 @@ CREATE TRIGGER funding_evidence_immutable BEFORE DELETE OR UPDATE ON economy.fun
 --
 
 CREATE TRIGGER funding_intent_pending_deposit AFTER INSERT OR UPDATE OF phase ON economy.funding_intent FOR EACH ROW EXECUTE FUNCTION economy.project_pending_deposit();
+
+
+--
+-- Name: funding_posting funding_posting_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER funding_posting_immutable BEFORE DELETE OR UPDATE ON economy.funding_posting FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -1045,6 +1125,14 @@ ALTER TABLE ONLY economy.entry
 
 
 --
+-- Name: funding_control_account funding_control_account_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_control_account
+    ADD CONSTRAINT funding_control_account_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
 -- Name: funding_dispatch funding_dispatch_active_claim_fk; Type: FK CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1082,6 +1170,22 @@ ALTER TABLE ONLY economy.funding_evidence
 
 ALTER TABLE ONLY economy.funding_intent
     ADD CONSTRAINT funding_intent_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: funding_posting funding_posting_book_id_asset_id_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_posting
+    ADD CONSTRAINT funding_posting_book_id_asset_id_transaction_id_fkey FOREIGN KEY (book_id, asset_id, transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: funding_posting funding_posting_provider_namespace_provider_mode_source_ki_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.funding_posting
+    ADD CONSTRAINT funding_posting_provider_namespace_provider_mode_source_ki_fkey FOREIGN KEY (provider_namespace, provider_mode, source_kind, source_id) REFERENCES economy.funding_evidence(provider_namespace, provider_mode, source_kind, source_id);
 
 
 --
