@@ -3,6 +3,7 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
+import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
 import {
   bindSearchWriterPublicationReader,
   nativeSourceForHeldPublication,
@@ -50,7 +51,7 @@ import {
   assertNativeGenerationActionsVisible,
   GenerationReconciliationMismatch,
 } from './generations.ts';
-import { readGenerationPublicationCustody } from './public-filter-custody.ts';
+import { encodePublicFilterNativeState, readGenerationPublicationCustody } from './public-filter-custody.ts';
 import {
   classifyGenerationCoverage,
   decodeGenerationPublicationQueried,
@@ -536,6 +537,59 @@ export function createSearchGenerationPublication(
     };
   }
 
+  async function continueSubjectEnrollment(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    if (
+      !nativeMeaning ||
+      registry ||
+      job.source_home !== 0 ||
+      job.bootstrap ||
+      !advanceNativePublicFilterPreparation ||
+      meter.inputKeys + 2 >= PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
+    )
+      return null;
+    guardAvailable();
+    meter.inputKeys += 2;
+    meter.dependencyPoints += 2;
+    const { rows } = await client.query<{ id: string; bootstrap: string }>(
+      `SELECT r.id,r.consumer_bootstrap AS bootstrap FROM search.public_filter_registration r
+       JOIN search.public_filter_target t USING(partition_no,physical_target)
+       WHERE r.partition_no=0 AND r.physical_target=$1 AND md5(r.consumer)=md5($2) AND r.consumer=$2
+         AND r.state='active' AND t.incarnation=$3 AND r.consumer_work IS NOT NULL
+         AND r.consumer_bootstrap IS NOT NULL LIMIT 2`,
+      [job.physical_target, encodePublicFilterNativeState(job.consumer), job.native_incarnation],
+    );
+    if (rows.length !== 1) return null;
+    const { id, bootstrap } = rows[0]!;
+    const result = await advanceNativePublicFilterPreparation(
+      binding,
+      {
+        bootstrap,
+        inputLimit: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE - meter.inputKeys,
+        subjectEnrollment: {
+          consumer: job.consumer,
+          source: job.binding.source,
+          registration: { partition: 0, id },
+        },
+      },
+      context,
+    );
+    if (!result) return null;
+    add(meter, result.cost);
+    if (
+      (result.status === 'begun' && !result.enrollmentAdvanced) ||
+      ('reason' in result && (result.reason === 'binding_mismatch' || result.reason === 'observation_lost'))
+    )
+      return null;
+    if (result.status !== 'preparing' && result.status !== 'begun')
+      throw new Pending('reason' in result && result.reason === 'deadline' ? 'deadline' : 'source_pending');
+    return result.enrollmentAdvanced === true;
+  }
+
   function jobPin(job: Job): GenerationPublicationPin | null {
     if (!job.bootstrap || !job.queried || !job.execution) return null;
     return {
@@ -633,6 +687,7 @@ export function createSearchGenerationPublication(
       client: PoolClient,
       current: string | null,
       capture?: ReturnType<typeof populationDefinition>,
+      enrollmentAdvanced?: boolean,
     ) => Promise<T>,
   ): Promise<T> {
     const ref = structuredClone(input);
@@ -699,6 +754,18 @@ export function createSearchGenerationPublication(
                   ? await aliasTarget(job, context, meter)
                   : null;
               if (job.phase !== 'active' && newerSubjectAlias(job, current)) throw new Pending('source_pending');
+              if (
+                physical?.incarnation === job.native_incarnation &&
+                job.phase === 'reconciled' &&
+                current === null &&
+                !job.fence &&
+                !job.fenced_pass &&
+                !job.observation &&
+                !job.bootstrap
+              ) {
+                const enrollmentAdvanced = await continueSubjectEnrollment(job, client, context, meter);
+                if (enrollmentAdvanced !== null) return work(job, client, current, undefined, enrollmentAdvanced);
+              }
               let capture: ReturnType<typeof populationDefinition> | undefined;
               if (job.phase === 'active') {
                 // Settled publication may still need idempotent fence release after a lost response.
@@ -1579,8 +1646,11 @@ export function createSearchGenerationPublication(
             if (
               mayEnroll &&
               meter.inputKeys < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE
-            )
-              sourceAdvanced = (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced;
+            ) {
+              sourceAdvanced =
+                (await continueSubjectEnrollment(job, client, context, meter)) ??
+                (await completeSource(job, client, context, meter, capture, true)).sourceAdvanced;
+            }
             if (waiting && !sourceAdvanced) throw waiting;
             if (waiting) await save(client, job, meter);
           } catch (error) {
@@ -1614,7 +1684,7 @@ export function createSearchGenerationPublication(
     },
     activate(input, context) {
       return run(context, (meter) =>
-        locked(input, context, meter, 'activate', async (job, client, current, capture) => {
+        locked(input, context, meter, 'activate', async (job, client, current, capture, enrollmentAdvanced) => {
           const preparing = (next: 'activate' | 'step', advanced = false, sourceAdvanced = false) => ({
             status: 'preparing' as const,
             job: reference(job),
@@ -1623,6 +1693,7 @@ export function createSearchGenerationPublication(
             ...(sourceAdvanced ? { sourceAdvanced } : {}),
             cost: meter,
           });
+          if (enrollmentAdvanced !== undefined) return preparing('activate', enrollmentAdvanced, enrollmentAdvanced);
           const superseded = newerSubjectAlias(job, current);
           if (job.phase === 'active') {
             if (current !== job.physical_target && !superseded) throw new Pending('source_pending');

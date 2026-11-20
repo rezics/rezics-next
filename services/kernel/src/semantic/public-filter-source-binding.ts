@@ -617,9 +617,18 @@ export async function readNativePublicFilterPublicationCompletion(
 type NativePreparationInput =
   | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
       Readonly<{ inputLimit?: number; usePublishedCoverage?: true; definition?: PublicFilterSourceDefinition }>)
-  | Readonly<{ bootstrap: string; inputLimit?: number }>;
+  | Readonly<{
+      bootstrap: string;
+      inputLimit?: number;
+      subjectEnrollment?: Readonly<{
+        consumer: PublicFilterConsumer;
+        source: PublicFilterSourceDefinition['source'];
+        registration: { partition: number; id: string };
+      }>;
+    }>;
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
+      enrollmentAdvanced?: true;
       freshBook?: Readonly<{
         unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
@@ -2601,7 +2610,9 @@ export function createNativePublicFilterSourceBinding(
   async function beginRetained(
     request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
     context: PublicFilterConsumerContext,
-    existing?: Awaited<ReturnType<typeof loadBootstrap>>,
+    existing?: Awaited<ReturnType<typeof loadBootstrap>> & {
+      enrollmentRegistration?: { partition: number; id: string };
+    },
     inputLimit = preparationInputLimit,
     usePublishedCoverage = false,
     definition?: PublicFilterSourceDefinition,
@@ -2649,6 +2660,11 @@ export function createNativePublicFilterSourceBinding(
         ));
       addCost(cost, registration.cost);
       if (!('definition' in registration)) return { ...registration, cost };
+      if (
+        existing?.enrollmentRegistration &&
+        !isDeepStrictEqual(existing.enrollmentRegistration, registration.registration)
+      )
+        throw new BindingError('binding_mismatch');
       requireSameDefinition(resolved.definition, registration.definition);
       if (
         consumer.readDefinition !== resolved.definition.readDefinition ||
@@ -4428,6 +4444,18 @@ export function createNativePublicFilterSourceBinding(
     const retained = await run(context, async (cost, db) => {
       const cut = await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
+      const expected = input.subjectEnrollment;
+      if (
+        expected &&
+        (cut.row.coverage_publication !== null ||
+          cut.bootstrap.snapshot !== 'prepared' ||
+          !('catalogueCoverage' in cut.definition.capture) ||
+          cut.definition.capture.catalogueCoverage !== true ||
+          'representation' in cut.definition.capture ||
+          !isDeepStrictEqual(cut.definition.source, expected.source) ||
+          encode(cut.bootstrap.consumer) !== encode(expected.consumer))
+      )
+        throw new BindingError('binding_mismatch');
       return { status: 'retained' as const, cut, cost };
     });
     if (retained.status !== 'retained') return retained;
@@ -4456,12 +4484,16 @@ export function createNativePublicFilterSourceBinding(
         snapshot: retained.cut.bootstrap.snapshot,
       },
       context,
-      retained.cut,
+      input.subjectEnrollment
+        ? { ...retained.cut, enrollmentRegistration: input.subjectEnrollment.registration }
+        : retained.cut,
       (input.inputLimit ?? preparationInputLimit) - retained.cost.inputKeys,
     );
     addCost(retained.cost, result.cost);
     if ('bootstrap' in result && result.bootstrap.id !== input.bootstrap)
       return fail('observation_lost', retained.cost);
+    if (input.subjectEnrollment && result.status === 'begun')
+      return { ...result, enrollmentAdvanced: true, cost: retained.cost };
     return { ...result, cost: retained.cost };
   });
   nativePublicationCompletions.set(bootstrapBinding, async (request, context, spent) => {

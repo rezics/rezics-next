@@ -58,3 +58,9 @@ eight-input group probe. The 872-input maximum Search offer and five shared inpu
 A default Search preparation delivery can claim exact ready revisions inline while Source advances and time remains
 in the delivery's deadline. Every revision keeps a separate Search meter. The due scan discovers a ready revision
 after interruption, and the ordinary enqueue path owns the final revision of each burst.
+
+Cold Subject publication can continue the registration's original prepared bootstrap directly after reconciliation.
+Search checks the physical incarnation and alias under its publication lock. Source reloads the exact definition,
+checks the job's Source basis and revalidates the live registration before enrolling the next bounded page.
+The completed page only advances enrollment. Opening the observation and publishing the generation still require
+the normal custody, repair and writer-fence checks.
