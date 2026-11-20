@@ -381,14 +381,26 @@ test('equal-delivery original and native origins traverse into distinct held Sou
           { transaction_id: revision.transaction_id, position: revision.position },
           { transaction_id: native, position },
         ];
-        for (const origin of nativeFirst ? [...origins].reverse() : origins)
-          await tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
-            partition,
-            author.accountId,
-            revision.key,
-            origin.transaction_id,
-            origin.position,
-          ]);
+        const locatorUpdates = async () =>
+          (
+            await tx.query<{ count: string }>(
+              "SELECT pg_stat_get_xact_tuples_updated('semantic.erasure_locator'::regclass)::text AS count",
+            )
+          ).rows[0]!.count;
+        for (const origin of nativeFirst ? [...origins].reverse() : origins) {
+          const report = () =>
+            tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
+              partition,
+              author.accountId,
+              revision.key,
+              origin.transaction_id,
+              origin.position,
+            ]);
+          await report();
+          const before = await locatorUpdates();
+          await report();
+          expect(await locatorUpdates()).toBe(before);
+        }
         return { value: origins, events: searchIdentityWriterChanged() };
       },
     );

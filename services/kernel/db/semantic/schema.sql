@@ -4322,7 +4322,9 @@ BEGIN
  VALUES(p_home,p_account,p_role,p_store,p_key,p_tx,p_position,delivery,coalesce(is_global,false))
  ON CONFLICT(partition_no,account_id,role,store,record_key) DO UPDATE
  SET source_transaction_id=EXCLUDED.source_transaction_id,source_position=EXCLUDED.source_position,delivery_position=EXCLUDED.delivery_position,
- state=CASE WHEN semantic.erasure_locator.delivery_position IS DISTINCT FROM EXCLUDED.delivery_position THEN 'pending' ELSE semantic.erasure_locator.state END;
+ state=CASE WHEN semantic.erasure_locator.delivery_position IS DISTINCT FROM EXCLUDED.delivery_position THEN 'pending' ELSE semantic.erasure_locator.state END
+ WHERE (erasure_locator.source_transaction_id,erasure_locator.source_position,erasure_locator.delivery_position)
+    IS DISTINCT FROM (EXCLUDED.source_transaction_id,EXCLUDED.source_position,EXCLUDED.delivery_position);
  -- A new native local obligation invalidates a previously empty local page. Late resolution uses the account-home inbox.
  UPDATE semantic.erasure_home SET state='local' WHERE partition_no=p_home AND account_id=p_account AND state='complete' AND EXISTS (SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.state='pending');
 END; $$;
