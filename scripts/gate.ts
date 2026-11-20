@@ -973,7 +973,7 @@ export async function runLocalGate(
       outcomes.push(outcome);
       if (key && outcome.passed && outcome.failingFiles.length === 0 && outcome.loadSensitiveTests.length === 0) {
         optionalReuse(() => {
-          if (reusable?.key(workspace, command) === key) reusable.record(key, workspace, result.durationMs);
+          if (reusable?.key(workspace, command, 'after') === key) reusable.record(key, workspace, result.durationMs);
         });
       }
       reportWorkspaceProgress(outcome, result);

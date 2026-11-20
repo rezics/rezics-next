@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -702,6 +703,87 @@ test('an interrupted Gate preserves an independently bound pass until a transiti
     expect(checks()).toEqual(['a-passed', 'b-runner', 'a-passed']);
   } finally {
     output.mockRestore();
+  }
+});
+
+test('Auth Pages reuses a bound pass across Search edits and invalidates it for actual peer inputs', () => {
+  const { env, dir } = scenario();
+  const checkout = candidateCheckout(dir);
+  const peers = [
+    'services/auth/src/recovery-page.ts',
+    'services/kernel/src/access/handle-policy.ts',
+    'services/kernel/src/access/contract/handle.ts',
+    'apps/web/tests/native/native-auth-security-fixture.ts',
+    'packages/definitions/release/rezics.json',
+    'apps/auth/messages/en.json',
+    'apps/auth/tests/start-documents-fixture/login.txt',
+  ];
+  const coldSearch = 'services/kernel/src/search/access-capabilities.ts';
+  for (const path of [
+    'apps/auth/package.json',
+    'apps/auth/tests/recovery.test.ts',
+    'apps/auth/src/router.tsx',
+    coldSearch,
+    ...peers,
+  ]) {
+    const destination = join(checkout, path);
+    mkdirSync(resolve(destination, '..'), { recursive: true });
+    copyFileSync(join(repository, path), destination);
+  }
+  const manifestPath = join(checkout, 'apps/auth/package.json');
+  const manifestText = readFileSync(manifestPath, 'utf8');
+  const manifest = JSON.parse(manifestText);
+  const workspace = { name: manifest.name, directory: 'apps/auth', checkScript: manifest.scripts.check };
+  const command = ['bun', 'run', 'check'];
+  const source = { run: 'auth-pages', revision: 'a'.repeat(40), sourceSha256: 'b'.repeat(64) };
+  const receipts = join(dir, 'receipts', source.run);
+  mkdirSync(receipts, { recursive: true });
+  writeFileSync(
+    join(receipts, 'prepared-inputs.json'),
+    JSON.stringify({ ...source, schema: 1, host: 'b', manifestSha256: 'c'.repeat(64), fileCount: 1, totalBytes: 1 }),
+  );
+  const browsers = join(dir, 'browsers');
+  const browser = join(browsers, 'chromium_headless_shell-fixture/chrome-headless-shell-linux64/chrome-headless-shell');
+  mkdirSync(resolve(browser, '..'), { recursive: true });
+  writeFileSync(browser, 'fixture browser');
+  const environment = { ...env, REMOTE_CHECK_HOST: 'b', PLAYWRIGHT_BROWSERS_PATH: browsers };
+  const results = GateWorkspaceResults.open(checkout, dir, environment, source)!;
+  const edit = (path: string) => {
+    const filename = join(checkout, path);
+    const original = readFileSync(filename, 'utf8');
+    writeFileSync(filename, original + '\n');
+    return () => writeFileSync(filename, original);
+  };
+  try {
+    const key = results.key(workspace, command)!;
+    expect(key).toMatch(/^[a-f0-9]{64}$/);
+    const generated = join(checkout, 'apps/auth/src/routeTree.gen.ts');
+    mkdirSync(resolve(generated, '..'), { recursive: true });
+    writeFileSync(generated, 'export {};');
+    expect(results.key(workspace, command, 'after')).toBe(key);
+    expect(results.key(workspace, command)).toBeUndefined();
+    rmSync(generated);
+    results.record(key, workspace, 10);
+
+    edit(coldSearch);
+    expect(results.key(workspace, command)).toBe(key);
+    expect(results.lookup(key, workspace)).toMatchObject({ run: source.run });
+    for (const path of peers) {
+      const restore = edit(path);
+      const changed = results.key(workspace, command)!;
+      expect(changed, path).not.toBe(key);
+      expect(results.lookup(changed, workspace), path).toBeUndefined();
+      restore();
+    }
+    manifest.scripts['generate:routes'] += ' && bun run unknown';
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    expect(results.key(workspace, command)).toBeUndefined();
+    writeFileSync(manifestPath, manifestText);
+    expect(results.key(workspace, command)).toBe(key);
+    writeFileSync(join(checkout, 'apps/auth/.env.test'), 'REZICS_SIGN_IN_WALK=1\n');
+    expect(results.key(workspace, command)).toBeUndefined();
+  } finally {
+    results.close();
   }
 });
 
