@@ -607,12 +607,17 @@ export async function removeFinishedWorktree(
       if (options.signal?.aborted || Date.now() >= gitDeadlineMs) break;
       store.advanceWorktreeMaintenance(candidate);
       const task = candidate.task;
+      // A later state change enqueues a new ticket. Leave active tasks' leases to lifecycle recovery.
+      if (!finished.has(task.state) && task.state !== 'stopped') {
+        completed.push(candidate);
+        continue;
+      }
       let taskLease: DirectoryLease;
       try {
         taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id), settings.policy?.leases);
       } catch (error) {
-        if (error instanceof LeaseHeldError) continue;
-        throw error;
+        if (!(error instanceof LeaseHeldError)) hooks.failed?.(task, error, task.worktree);
+        continue;
       }
       try {
         const current = store.task(task.id);
