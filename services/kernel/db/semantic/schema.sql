@@ -116,7 +116,7 @@ DECLARE
   home record;
   current_epoch integer;
   change_generation bigint;
-  next_root text;
+  page_roots text[];
   frontier integer;
   page_root text;
 BEGIN
@@ -133,26 +133,41 @@ BEGIN
 
   frontier := preparation.after_home;
   page_root := preparation.root;
+  page_roots := ARRAY[page_root];
   FOR home IN
-    SELECT * FROM jsonb_to_recordset(receipts) AS r(partition integer, epoch integer,
-      source_position bigint, creation_position bigint, enqueue_revision bigint,
-      revision bigint, claim_revision bigint, receipt text)
+    SELECT * FROM jsonb_to_recordset(receipts) AS r(partition integer, receipt text)
     ORDER BY r.partition
   LOOP
     IF frontier IS DISTINCT FROM home.partition OR frontier >= 4096 THEN
       RAISE EXCEPTION 'Coverage adoption lost its contiguous frontier' USING ERRCODE='40001';
     END IF;
-    -- Reproduce the retained SHA-256 of the compact JSON tuple. The previous
-    -- root and the receipt consist only of hexadecimal characters.
-    next_root := encode(sha256(convert_to(format('["%s",%s,"%s"]',
+    -- Reproduce the retained SHA-256 of the compact JSON tuple. Each root
+    -- becomes the predecessor for the next home.
+    page_root := encode(sha256(convert_to(format('["%s",%s,"%s"]',
       page_root,home.partition,home.receipt),'UTF8')),'hex');
-    INSERT INTO search.public_filter_coverage_baseline
-      (partition_no,registration,bootstrap,source_home,source_epoch,source_position,creation_position,
-       native_enqueue_revision,native_revision,native_claim_revision,receipt,predecessor,root)
-    VALUES (0,registration_id,bootstrap_id,home.partition,home.epoch,home.source_position,home.creation_position,
-      home.enqueue_revision,CASE WHEN include_accounts THEN home.revision END,
-      CASE WHEN include_accounts THEN home.claim_revision END,home.receipt,page_root,next_root);
+    page_roots := array_append(page_roots,page_root);
+    frontier := frontier+1;
+  END LOOP;
 
+  -- Receiver homes require their baseline immediately. The reverse foreign
+  -- key to the receiver home is deferred, so the baseline page can go first.
+  INSERT INTO search.public_filter_coverage_baseline
+    (partition_no,registration,bootstrap,source_home,source_epoch,source_position,creation_position,
+     native_enqueue_revision,native_revision,native_claim_revision,receipt,predecessor,root)
+  SELECT 0,registration_id,bootstrap_id,r.partition,r.epoch,r.source_position,r.creation_position,
+    r.enqueue_revision,CASE WHEN include_accounts THEN r.revision END,
+    CASE WHEN include_accounts THEN r.claim_revision END,r.receipt,
+    page_roots[r.partition-preparation.after_home+1],page_roots[r.partition-preparation.after_home+2]
+  FROM jsonb_to_recordset(receipts) AS r(partition integer, epoch integer,
+    source_position bigint, creation_position bigint, enqueue_revision bigint,
+    revision bigint, claim_revision bigint, receipt text)
+  ORDER BY r.partition;
+
+  FOR home IN
+    SELECT * FROM jsonb_to_recordset(receipts) AS r(partition integer, epoch integer,
+      source_position bigint, enqueue_revision bigint, revision bigint, claim_revision bigint)
+    ORDER BY r.partition
+  LOOP
     SELECT h.source_epoch INTO current_epoch FROM search.public_filter_coverage_home h
     WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,home.partition) FOR UPDATE;
     IF NOT FOUND THEN
@@ -181,10 +196,11 @@ BEGIN
 
     -- Preserve the registration -> preparation -> first receiver home ->
     -- Source bootstrap lock order. Core home 0 is already share locked.
-    IF frontier=preparation.after_home THEN
+    IF home.partition=preparation.after_home THEN
       PERFORM 1 FROM semantic.public_filter_bootstrap b JOIN core.partition p USING (partition_no)
       WHERE (b.partition_no,b.bootstrap)=(0,bootstrap_id) AND b.state='capturing'
-        AND b.account_after=frontier AND b.coverage_after=frontier AND b.coverage_root=page_root
+        AND b.account_after=preparation.after_home AND b.coverage_after=preparation.after_home
+        AND b.coverage_root=preparation.root
         AND b.coverage_generation=preparation.generation AND b.read_definition=definition_id
         AND p.epoch=b.owner_epoch AND p.write_state='active'
       FOR UPDATE OF b;
@@ -192,12 +208,13 @@ BEGIN
         RAISE EXCEPTION 'Coverage adoption lost its Source frontier' USING ERRCODE='40001';
       END IF;
     END IF;
-    INSERT INTO semantic.public_filter_bootstrap_account
-      (partition_no,bootstrap,account_partition,owner_epoch,revision,claim_revision)
-    VALUES (0,bootstrap_id,home.partition,home.epoch,home.revision,home.claim_revision);
-    frontier := frontier+1;
-    page_root := next_root;
   END LOOP;
+
+  INSERT INTO semantic.public_filter_bootstrap_account
+    (partition_no,bootstrap,account_partition,owner_epoch,revision,claim_revision)
+  SELECT 0,bootstrap_id,r.partition,r.epoch,r.revision,r.claim_revision
+  FROM jsonb_to_recordset(receipts) AS r(partition integer, epoch integer, revision bigint, claim_revision bigint)
+  ORDER BY r.partition;
 
   UPDATE search.public_filter_coverage_preparation SET after_home=frontier,root=page_root
   WHERE (partition_no,registration,bootstrap)=(0,registration_id,bootstrap_id)
