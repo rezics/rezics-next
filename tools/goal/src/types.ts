@@ -389,6 +389,8 @@ export type RetryIntent = AttemptRef & {
   /** When this intent entered the queue. Older records may lack the timestamp. */
   queuedAt?: string;
   options: {
+    /** Replacement brief retained when an admitted retry must resume after interruption. */
+    brief?: string;
     evidence?: string;
     escalation?: string;
     fixRound?: number;
@@ -530,6 +532,8 @@ export type Attempt = AttemptRef & {
   checks?: string[];
   /** Durable operator disposition, distinct from confirmed process-group termination. */
   terminationIntent?: TerminationIntent;
+  /** State before retry revokes the writer while retaining the original process and check identities. */
+  retryDrain?: Attempt['state'];
   previousBriefHash?: string;
   newBriefHash?: string;
   supersededFinalized?: boolean;

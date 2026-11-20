@@ -410,6 +410,12 @@ export type WorkerEvent = {
   at: string;
   body: string;
 };
+
+/** Older operators can settle a stop without clearing the retry metadata. */
+export function retryDrainState(attempt?: Attempt): Attempt['state'] | undefined {
+  return attempt?.state === 'superseded' ? attempt.retryDrain : undefined;
+}
+
 export class WorkerStore implements AttemptFence {
   readonly checkResults: CheckResults;
   private readVersion = -1;
@@ -2176,10 +2182,15 @@ export class WorkerStore implements AttemptFence {
   }
   /** Keep the check and every associated write under BEGIN IMMEDIATE. */
   write<T>(ref: AttemptRef, action: () => T): T {
+    return this.writeTransaction(() => {
+      this.assertCurrent(ref);
+      return action();
+    });
+  }
+  private writeTransaction<T>(action: () => T): T {
     try {
       return this.db
         .transaction(() => {
-          this.assertCurrent(ref);
           const result = action();
           if (result instanceof Promise) throw new Error('store transactions must be synchronous');
           return result;
@@ -2348,6 +2359,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const task = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        const attemptState = retryDrainState(attempt) ?? attempt?.state;
         this.assertRetryAllowed(ref, options.reshapeHeld === true);
         const reshapingHeld = options.reshapeHeld === true && task.state === 'held';
         if (task.currentAttempt !== ref.attempt)
@@ -2359,18 +2371,18 @@ export class WorkerStore implements AttemptFence {
         const abandonPending =
           options.abandonPending === true &&
           !reshapingHeld &&
-          (attempt?.state === 'pending' || attempt?.state === 'waiting');
+          (attemptState === 'pending' || attemptState === 'waiting');
         const abandonHeldTerminal =
           options.abandonPending === true &&
           !reshapingHeld &&
           task.state === 'held' &&
-          ['superseded', 'cancelled'].includes(attempt?.state ?? '');
+          ['superseded', 'cancelled'].includes(attemptState ?? '');
         const abandonAttempt = abandonPending || abandonHeldTerminal;
         const holdableTaskState =
           ['ready', 'stopped', 'held'].includes(task.state) ||
-          (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
+          (['running', 'landing'].includes(task.state) && attemptState === 'exited');
         if (
-          (attempt && !reshapingHeld && !['stopped', 'exited'].includes(attempt.state) && !abandonAttempt) ||
+          (attemptState && !reshapingHeld && !['stopped', 'exited'].includes(attemptState) && !abandonAttempt) ||
           !holdableTaskState
         )
           throw new Error(
@@ -2704,29 +2716,67 @@ export class WorkerStore implements AttemptFence {
     )
       throw new StaleAttemptError(ref, task.currentAttempt);
   }
-  /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
+  private assertRetryTaskState(task: Task, pageDataRepair: boolean): void {
+    if (
+      (!pageDataRepair && ['integrated', 'merged'].includes(task.state)) ||
+      ['verified', 'cancelled'].includes(task.state)
+    )
+      throw new Error(`cannot retry ${task.state} task`);
+  }
+  /** Revoke the writer and retain the start intent before any signal, under the same lock as worker writes. */
+  beginRetryDrain(ref: AttemptRef, options?: RetryIntent['options'], pageDataRepair = false): void {
+    this.writeTransaction(() => {
+      this.assertRetryAllowed(ref);
+      const task = this.task(ref.taskId);
+      this.assertRetryTaskState(task, pageDataRepair);
+      if (!ref.attempt) return;
+      const attempt = this.attempt(ref);
+      if (!retryDrainState(attempt)) {
+        if (attempt.state !== 'stopped') this.assertCurrent(ref);
+        attempt.retryDrain = attempt.state;
+        // Older worktrees already refuse writes from a superseded attempt at the same generation.
+        attempt.state = 'superseded';
+        this.saveAttempt(attempt);
+      }
+      // Released dependencies and page-data repair already have their own durable start paths.
+      if (!options) return;
+      this.saveRetryIntent(ref, options);
+      if (this.retryIntent(ref)?.status === 'pending')
+        this.updateRetryIntent(ref, (intent) => {
+          intent.options = { ...intent.options, ...options };
+        });
+    });
+  }
+  /** The controller may record preparation failures without reopening the previous worker's write authority. */
+  recordRetrySetupFailure(ref: AttemptRef, body: unknown): void {
+    this.writeTransaction(() => {
+      this.assertRetryAllowed(ref);
+      this.db
+        .query("INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,'retry-setup-failed',?,?)")
+        .run(ref.taskId, ref.attempt, new Date().toISOString(), JSON.stringify(body));
+    });
+  }
+  /** Publish the replacement and supersede the predecessor in one transaction. Only a retry may consume its drain. */
   nextAttempt(
     ref: AttemptRef,
     make: (n: number) => Attempt,
     configDirectory?: string,
     admitProof = false,
-    pageDataRepair = false,
+    retry?: { pageDataRepair: boolean },
   ): Attempt {
-    return this.write(ref, () => {
+    return this.writeTransaction(() => {
       this.assertRetryAllowed(ref);
       const task = this.task(ref.taskId);
-      if (
-        (!pageDataRepair && task.state === 'integrated') ||
-        (!pageDataRepair && task.state === 'merged') ||
-        task.state === 'verified' ||
-        task.state === 'cancelled'
-      )
-        throw new Error(`cannot retry ${task.state} task`);
+      this.assertRetryTaskState(task, retry?.pageDataRepair ?? false);
+      const old = ref.attempt ? this.attempt(ref) : undefined;
+      if (retry && old) {
+        if (!retryDrainState(old)) throw new StaleAttemptError(ref, task.currentAttempt);
+      } else this.assertCurrent(ref);
       if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id))
         throw new ProofCapacityQueuedError(this.policy.proof.concurrency);
-      if (ref.attempt) {
-        const old = this.attempt(ref);
+      if (old) {
         old.state = 'superseded';
+        delete old.retryDrain;
         this.saveAttempt(old);
         const record =
           this.record(ref) ??
@@ -2970,7 +3020,8 @@ export class WorkerStore implements AttemptFence {
         const attempt = this.attempt(ref);
         const at = new Date().toISOString();
         let intent = attempt.terminationIntent;
-        const waitingWithoutWorker = attempt.state === 'waiting' && attempt.process == null;
+        const waitingWithoutWorker =
+          (retryDrainState(attempt) ?? attempt.state) === 'waiting' && attempt.process == null;
         if (!intent) {
           const auxiliaryProcesses = [...(attempt.auxiliaryProcesses ?? [])];
           const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
@@ -3067,6 +3118,7 @@ export class WorkerStore implements AttemptFence {
         }
         task.state = state;
         attempt.state = state;
+        delete attempt.retryDrain;
         intent.settledAt ??= new Date().toISOString();
         this.saveTask(task);
         this.saveAttempt(attempt);

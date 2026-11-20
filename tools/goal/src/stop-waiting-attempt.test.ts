@@ -107,7 +107,7 @@ function retainUnknown(
 }
 
 test.each(['stop', 'cancel'] as const)(
-  '%s of a waiting attempt terminates recorded runners, abandons those checks, and settles',
+  '%s supersedes a pending retry drain of a waiting attempt and settles its recorded runners',
   async (operation) => {
     const h = harness();
     const id = randomUUID();
@@ -124,6 +124,7 @@ test.each(['stop', 'cancel'] as const)(
         physicalRunId,
         argv: [process.execPath],
       });
+      h.store.beginRetryDrain(ref, {});
       expect(h.store.beginTermination(ref, operation)).toMatchObject({
         operation,
         state: 'requested',
@@ -144,6 +145,9 @@ test.each(['stop', 'cancel'] as const)(
         state: terminal,
         terminationIntent: { operation, state: 'complete', processIdentity: 'waiting' },
       });
+      expect(h.store.attempt(ref).retryDrain).toBeUndefined();
+      expect(h.store.retryIntent(ref)).toMatchObject({ status: 'abandoned', abandonedBy: operation });
+      expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt);
     } finally {
       if (runner) await terminateProcessGroup(runner, 50).catch(() => {});
       await h.disposeAsync();

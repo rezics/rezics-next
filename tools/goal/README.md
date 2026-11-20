@@ -3327,6 +3327,10 @@ choice is kept on the task through capacity waits, dependency holds and restarts
 it, so later retries resume again. If a retry is already pending, `--fresh-session` is merged into that intent while
 preserving its place and existing options. It combines with `--brief` but not with the proof options.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
+When the host begins a retry, it marks the previous attempt as superseded before signaling its recorded process
+groups. This revokes write authority for workers in older worktrees too. The host keeps the same attempt number and
+process identities until it verifies group exit. The start intent stays pending through a controller interruption
+so the recovering host can drain those same groups before preparing or launching a replacement.
 Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
 `--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to
 start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;

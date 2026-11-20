@@ -52,7 +52,7 @@ import {
 } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import type { WorkerStore } from './store.ts';
+import { retryDrainState, type WorkerStore } from './store.ts';
 import type { Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import { parseFrozenFiles } from './frozen.ts';
 import {
@@ -1443,6 +1443,9 @@ export class WorkerTasks {
     const task = this.store.task(taskId);
     if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
       throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
+    const ref = { taskId, attempt: task.currentAttempt };
+    if (ref.attempt && retryDrainState(this.store.attempt(ref)))
+      throw new Error('a retry is already draining this attempt');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
@@ -1472,7 +1475,6 @@ export class WorkerTasks {
         throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
-    const ref = { taskId, attempt: task.currentAttempt };
     const pendingIntent = this.store.retryIntent(ref);
     const freshSessionOnly =
       options.freshSession === true &&
@@ -1686,15 +1688,23 @@ export class WorkerTasks {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, task.brief.criticalPath ? 'critical\n' : 'normal\n');
   }
-  private async settleRetryProcesses(taskId: string, throughAttempt: number): Promise<void> {
+  private async prepareRetryWorktree(task: Task, options?: RetryOptions, kind = task.brief.kind): Promise<void> {
+    const { expectedAttempt: _expectedAttempt, pageDataRepairKey, ...startOptions } = options ?? {};
+    this.store.beginRetryDrain(
+      { taskId: task.id, attempt: task.currentAttempt },
+      options && !pageDataRepairKey ? startOptions : undefined,
+      Boolean(pageDataRepairKey),
+    );
     // A retry owns the worktree only after every earlier worker group has settled.
     for (const previous of this.store
-      .attempts(taskId)
-      .filter((attempt) => attempt.attempt <= throughAttempt && !attempt.supersededFinalized)) {
+      .attempts(task.id)
+      .filter((attempt) => attempt.attempt <= task.currentAttempt && !attempt.supersededFinalized)) {
       await terminateProcessGroup(previous.process, this.settings.terminationGraceMs, this.settings.policy?.process);
       for (const process of previous.auxiliaryProcesses)
         await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
     }
+    ensureWorktree(this.settings, task);
+    if (!task.workspace && kind !== 'verification') this.prepareRetryLeftovers(task, task.currentAttempt);
   }
   private prepareRetryLeftovers(task: Task, attempt: number): void {
     try {
@@ -1702,11 +1712,14 @@ export class WorkerTasks {
     } catch (error) {
       const step = 'checking worktree leftovers';
       const diagnostic = error instanceof GitCommandError ? error.toJSON() : { message: String(error) };
-      this.store.event({ taskId: task.id, attempt: task.currentAttempt }, 'retry-setup-failed', {
-        step,
-        diagnostic,
-        error: String(error),
-      });
+      this.store.recordRetrySetupFailure(
+        { taskId: task.id, attempt: task.currentAttempt },
+        {
+          step,
+          diagnostic,
+          error: String(error),
+        },
+      );
       const inbox = new SqliteManagerInbox(
         this.store.db,
         this.settings.integration.inboxDirectory,
@@ -1775,9 +1788,7 @@ export class WorkerTasks {
       if (!worker) throw new Error('released task was unexpectedly held again');
       return worker;
     }
-    ensureWorktree(this.settings, task);
-    await this.settleRetryProcesses(taskId, task.currentAttempt);
-    this.prepareRetryLeftovers(task, task.currentAttempt);
+    await this.prepareRetryWorktree(task);
     const integration = taskBaseHead(this.settings, task.brief);
     const commits = Number(
       git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge),
@@ -1855,13 +1866,11 @@ export class WorkerTasks {
       const next = { ...task, brief: reshaped?.brief ?? task.brief, taskClass: reshaped?.taskClass ?? task.taskClass };
       // Any retry waits for unmet dependencies: a stopped or ready task retried while its dependency was still landing
       // started against code it needs (commerce a65, 2026-10-29). A running attempt is replaced, not held.
-      const running =
-        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
+      const attempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : undefined;
+      const running = (retryDrainState(attempt) ?? attempt?.state) === 'running';
       const hold = !running && !this.dependenciesMet({ brief: next.brief });
       // Replacing a running worker adds none, so it never waits behind the worker it replaces.
-      const replaces =
-        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
-      return { hold: hold || replaces, first: startsFirst(next) };
+      return { hold: hold || running, first: startsFirst(next) };
     } catch {
       // The retry itself reports the error under the task's lease.
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
@@ -1918,6 +1927,7 @@ export class WorkerTasks {
   ): Promise<RunningWorker | null> {
     if (!leased) {
       const current = this.store.task(taskId);
+      options = { ...options, expectedAttempt: options.expectedAttempt ?? current.currentAttempt };
       const nextBrief = options.brief === undefined ? current.brief : this.validateBrief(options.brief, taskId).brief;
       this.assertSourceDependencyReshape(current, nextBrief, undefined);
       this.assertLocalAcceptanceCustody(current, nextBrief);
@@ -1953,7 +1963,14 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
-      if (options.brief === undefined) {
+      const ref = { taskId, attempt: task.currentAttempt };
+      const prior = ref.attempt ? this.store.attempt(ref) : undefined;
+      const retryDrain = retryDrainState(prior);
+      if (retryDrain) {
+        const intent = this.store.retryIntent(ref);
+        if (intent?.status === 'pending') options = { ...intent.options, expectedAttempt: ref.attempt };
+      }
+      if (!retryDrain && options.brief === undefined) {
         const proposal = consumeApplicableBriefProposal(this.store, task);
         if (proposal) {
           const briefPath = join(
@@ -1966,7 +1983,7 @@ export class WorkerTasks {
           options = { ...options, brief: briefPath };
         }
       }
-      this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
+      this.store.assertRetryAllowed(ref);
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       const pageDataRepair = Boolean(options.pageDataRepairKey);
       if (pageDataRepair && !/^[a-f0-9]{64}$/.test(options.pageDataRepairKey!))
@@ -2003,11 +2020,12 @@ export class WorkerTasks {
         this.assertProofStart({ ...task, brief: nextBrief });
         await this.refreshProofAdmission({ ...task, brief: nextBrief });
         if (!this.store.proofCapacityAvailable(nextBrief.goal, task.id)) {
-          this.store.saveRetryIntent({ taskId, attempt: task.currentAttempt }, {});
-          this.store.event({ taskId, attempt: task.currentAttempt }, 'proof-capacity-queued', {
-            goal: nextBrief.goal,
-            reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
-          });
+          this.store.saveRetryIntent(ref, {});
+          if (!retryDrain)
+            this.store.event(ref, 'proof-capacity-queued', {
+              goal: nextBrief.goal,
+              reason: this.store.proofCapacityReason(nextBrief.goal, task.id),
+            });
           throw new ProofCapacityQueuedError();
         }
       }
@@ -2032,9 +2050,8 @@ export class WorkerTasks {
         );
       }
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
-      const currentRunning =
-        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
-      if (task.state === 'held' && currentRunning) return null;
+      const currentRunning = (retryDrain ?? prior?.state) === 'running';
+      if (task.state === 'held' && prior?.state === 'running') return null;
       if ((reshaped || task.state === 'held' || !currentRunning) && !this.dependenciesMet({ brief: nextBrief })) {
         if (!heldAmendment) {
           const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
@@ -2066,12 +2083,9 @@ export class WorkerTasks {
         delete startOptions.brief;
         return task.brief.after.length ? this.retryHeld(taskId) : this.retryTask(taskId, startOptions);
       }
-      ensureWorktree(this.settings, task);
-      const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
-      if (!leftoversPrepared) {
-        await this.settleRetryProcesses(taskId, task.currentAttempt);
-        if (!task.workspace && nextBrief.kind !== 'verification') this.prepareRetryLeftovers(task, old?.attempt ?? 0);
-      }
+      if (!leftoversPrepared && !pageDataRepair)
+        await this.prepareRetryWorktree(task, leased ? undefined : options, nextBrief.kind);
+      const old = ref.attempt ? this.store.attempt(ref) : null;
       const pools = this.poolPolicies.read();
       // A chained task's first attempt continues the landed session it was offered: route, pool and resume follow it.
       const predecessor = old ?? (task.chain ? this.store.attempt(task.chain.from) : null);
@@ -2187,7 +2201,11 @@ export class WorkerTasks {
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
-      const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
+      const continuingCheckWait =
+        old &&
+        (retryDrainState(old) ?? old.state) === 'stopped' &&
+        Boolean(old.checks?.length) &&
+        !this.store.record(old);
       // The flag lives on the task, so it survives capacity waits, dependency holds and restarts until used.
       const resumeFrom =
         !old && task.chain
@@ -2208,10 +2226,13 @@ export class WorkerTasks {
         resumeFrom.model === profile.model
           ? oldSession
           : undefined;
-      if (pageDataRepair && (!resumeSession || !old || old.pool !== pool.name))
-        throw new PageDataSessionUnavailableError(
-          'page-data repair cannot resume the retained session on its original provider pool',
-        );
+      if (pageDataRepair) {
+        if (!resumeSession || !old || old.pool !== pool.name)
+          throw new PageDataSessionUnavailableError(
+            'page-data repair cannot resume the retained session on its original provider pool',
+          );
+        await this.prepareRetryWorktree(task, options, nextBrief.kind);
+      }
       const make = (n: number): Attempt => ({
         taskId,
         attempt: n,
@@ -2243,16 +2264,9 @@ export class WorkerTasks {
         blocker: null,
         approaches: old?.approaches ?? [],
       });
-      const next =
-        task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
-          ? this.store.retryStopped(taskId, make, oldConfigDirectory, nextBrief.kind === 'verification')
-          : this.store.nextAttempt(
-              { taskId, attempt: task.currentAttempt },
-              make,
-              oldConfigDirectory,
-              nextBrief.kind === 'verification',
-              pageDataRepair,
-            );
+      const next = this.store.nextAttempt(ref, make, oldConfigDirectory, nextBrief.kind === 'verification', {
+        pageDataRepair,
+      });
       if (options.pageDataRepairKey)
         this.store.event(next, 'page-data-repair', { repairKey: options.pageDataRepairKey });
       this.writeTaskPriority(this.store.task(taskId));
@@ -2657,7 +2671,7 @@ export class WorkerTasks {
     if (!intent) return;
     const attempt = this.store.attempt(ref);
     if (
-      attempt.state === 'waiting' &&
+      (retryDrainState(attempt) ?? attempt.state) === 'waiting' &&
       attempt.process == null &&
       intent.processIdentity === 'unknown' &&
       !intent.settledAt
