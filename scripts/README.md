@@ -826,10 +826,11 @@ remain separate questions for the existing compiler/health chain; this cohort su
    failure is `RemoteTransportError` for the host and `control probe` stage. No run ever `-O exit`s a master.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
-   Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in
-   an ignored, unique directory under root `.temp` and include its manifest and pack in the same upload. Pass
-   `bun` as a separate argument to select the snapshot. A shell setup command can take the executable as a
-   positional argument and invoke it after setup. The snapshot boundary is `merge-base(HEAD, dev)`, or `HEAD`
+   Omit Git metadata, `node_modules` and `.temp` at every depth, including force-staged scratch files. For Bun-backed
+   commands, stage a native Git snapshot in an ignored, unique directory under root `.temp` and include its manifest
+   and pack in the same upload. Pass `bun` as a separate argument to select the snapshot. For a scratch probe, pass
+   its contents explicitly and create the file under `.temp` on the check host before invoking that executable.
+   The snapshot boundary is `merge-base(HEAD, dev)`, or `HEAD`
    without a usable `dev` merge base (affected-test selection then runs
    unscoped). The snapshot retains the checkout's real `HEAD`, staged index tree and commit paths from
    `HEAD` and `dev` to their merge base. It does not transfer `.git`, the mutable index, configuration, remotes,
