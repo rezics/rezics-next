@@ -52,34 +52,42 @@ const release = {
 };
 const properties = ['wdt:P155', 'wdt:P144', 'rezics:sameSetting', 'rezics:newTerm', 'rezics:missing'];
 
-const cover = (n: number) => ({
+const summary = (n: number, label = `Holder ${n}`) => ({
   id: row(n),
   type: 'schema:Book',
   types: ['schema:Book'],
-  label: { value: `Holder ${n}`, language: 'en' },
+  label: { value: label, language: 'en' },
   creativeWork: true,
-  cover: {
-    media: row(n + 500),
-    width: 800,
-    height: 1200,
-    placeholder: { thumbhash: '3PcNNYSFeXh/b3eQa1p4iHaQeYD3/3gAAA==', color: '#6b4a33' },
-    variants: [{ format: 'webp' as const, width: 240 }],
-    focalPoint: null,
-    credit: { rightsHolder: 'Someone', via: { name: 'Open Library', url: 'https://openlibrary.org/' } },
-  },
+  cover:
+    n % 2
+      ? {
+          media: row(n + 500),
+          width: 800,
+          height: 1200,
+          placeholder: { thumbhash: '3PcNNYSFeXh/b3eQa1p4iHaQeYD3/3gAAA==', color: '#6b4a33' },
+          variants: [{ format: 'webp' as const, width: 240 }],
+          focalPoint: null,
+          credit: {
+            rightsHolder: 'Someone',
+            via: { name: 'Open Library', url: 'https://openlibrary.org/' },
+            license: 'CC0-1.0',
+            obligations: [],
+          },
+        }
+      : null,
 });
-const holder = (n: number, property: string, label = `Holder ${n}`, extra: Record<string, unknown> = {}) => ({
+const holder = (n: number, property: string, label = `Holder ${n}`) => ({
   subject: row(n),
   property,
   statement: row(n + 1000),
   label,
   type: 'schema:Book',
-  summary: n % 2 ? cover(n) : null,
-  ...extra,
+  summary: summary(n, label),
 });
-const links = (items: unknown[], count = items.length, exact = true) => ({
+const freshness = { consistency: 'eventual', target_seconds: 10, caught_up: true };
+const links = (items: ReturnType<typeof holder>[], count = items.length, exact = true, next: string | null = null) => ({
   status: 200,
-  body: { links: items, count: { value: count, exact }, next: null },
+  body: { links: items, count: { value: count, exact }, freshness, next },
 });
 
 const messages: PageMessages = {
@@ -131,6 +139,7 @@ const text = (html: string) =>
     .replace(/\s+/g, ' ');
 const counts = (html: string) =>
   [...html.matchAll(/<span\b[^>]*data-slot="count"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => text(match[1]!).trim());
+const statements = (html: string) => [...html.matchAll(/data-statement="([^"]+)"/g)].map((match) => match[1]);
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 // A group's heading, counts and cards. Each card is drawn once for the phone row and once for the grid.
@@ -152,13 +161,23 @@ const definitions = (locale: string) => relationDefinitions(release as never, pr
 
 test("relations show from the reader's side with the property's inverse label, symmetric ones under the same label on both sides", () => {
   const en = definitions('en');
-  expect(en['wdt:P155']).toEqual({ label: 'Sequel', group: 'order', symmetric: false });
+  expect(en['wdt:P155']).toEqual({ label: 'Sequel', forwardLabel: 'follows', group: 'order', symmetric: false });
   expect(en['wdt:P144']).toMatchObject({ label: 'Adaptations', group: 'derivation' });
   expect(definitions('zh-Hans')['wdt:P155']?.label).toBe('续作');
   // A symmetric fact reads the same from both sides, so its one label serves the inverse read too.
-  expect(en['rezics:sameSetting']).toEqual({ label: 'Same setting', group: 'world', symmetric: true });
+  expect(en['rezics:sameSetting']).toEqual({
+    label: 'Same setting',
+    forwardLabel: 'Same setting',
+    group: 'world',
+    symmetric: true,
+  });
   // A property with no relation definition yet falls back to its label and the other group.
-  expect(en['rezics:newTerm']).toEqual({ label: 'Linked to', group: 'other', symmetric: false });
+  expect(en['rezics:newTerm']).toEqual({
+    label: 'Linked to',
+    forwardLabel: 'Linked to',
+    group: 'other',
+    symmetric: false,
+  });
   expect(en['rezics:missing']).toBeUndefined();
 
   const page = pageOf(relationDocument, (read) =>
@@ -191,19 +210,17 @@ test("relations show from the reader's side with the property's inverse label, s
   expect(bare).not.toMatch(/wdt:|rezics:/);
 });
 
-test('relations are grouped by relation group, each group with its count, cover, title, label and date, and series order shown as order', () => {
+test('relations are grouped with counts, covers, titles and labels, and series order shown as order', () => {
   const page = pageOf(relationDocument, (read) => {
     if (read.kind !== 'links') return { status: 200, body: subjectBody };
     if (read.property === 'wdt:P155')
-      return links([
-        holder(1, read.property, 'Second Voyage', { date: '2012-05' }),
-        holder(2, read.property, 'Third Voyage', { date: '2015' }),
-      ]);
+      return links([holder(1, read.property, 'Second Voyage'), holder(2, read.property, 'Third Voyage')]);
     if (read.property === 'wdt:P144')
       return links(
         Array.from({ length: 12 }, (_, i) => holder(10 + i, read.property, `Adaptation ${i + 1}`)),
         30,
         false,
+        'adaptations-next',
       );
     return links([holder(40, read.property, 'Another Planet')]);
   });
@@ -215,11 +232,9 @@ test('relations are grouped by relation group, each group with its count, cover,
   expect(counts(order)).toEqual(['2']);
   expect(text(order)).toContain('Second Voyage');
   expect(text(order)).toContain('Sequel');
-  expect(text(order)).toContain('Sequel · 2012');
-  expect(order).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>·<\/span>/);
-  expect(text(order)).toContain('2015');
+  expect(text(order)).toContain('Third Voyage');
   expect(order).toContain('/media/');
-  expect(order.indexOf('Second Voyage')).toBeLessThan(order.indexOf('Third Voyage'));
+  expect(statements(order)).toEqual([row(1001), row(1002), row(1001), row(1002)]);
 
   const derivation = groupBlock(html, 'derivation');
   expect(derivation.match(/<article\b/g)).toHaveLength(24);
@@ -240,7 +255,7 @@ test('a selected paged relation group renders after its earlier siblings are hid
     read.kind !== 'links'
       ? { status: 200, body: subjectBody }
       : read.property === 'wdt:P144'
-        ? { status: 200, body: { links: [holder(81, read.property)], next: cursor } }
+        ? { status: 200, body: { links: [holder(81, read.property)], freshness, next: cursor } }
         : { status: 204, body: {} },
   );
   page.streams = {
@@ -262,7 +277,7 @@ test('a selected paged relation group renders after its earlier siblings are hid
   expect(html).not.toContain('id="sequels"');
 });
 
-test('SubjectList and TypeList show an exact or at-least count and a See all link to a paged view', () => {
+test('SubjectList shows supplied counts and both list types link to their full views', () => {
   const document = {
     root: { props: {} },
     content: [
@@ -277,20 +292,24 @@ test('SubjectList and TypeList show an exact or at-least count and a See all lin
       return links(
         Array.from({ length: 12 }, (_, i) => holder(i + 1, read.property)),
         30,
+        true,
+        'editions-next',
       );
     if (read.kind === 'links' && read.property === 'schema:author')
       return links(
         Array.from({ length: 12 }, (_, i) => holder(i + 1, read.property)),
         40,
         false,
+        'works-next',
       );
     if (read.kind === 'links') return links([holder(70, read.property), holder(71, read.property)]);
     if (read.kind === 'search')
       return {
         status: 200,
         body: {
-          subjects: [{ id: row(80), type: 'schema:Book', labels: { en: 'A Book' }, summary: cover(81) }],
-          total: { value: 120, relation: 'lower_bound' },
+          subjects: [{ id: row(81), type: 'schema:Book', labels: { en: 'A Book' }, summary: summary(81, 'A Book') }],
+          as_of: '2026-01-01T00:00:00.000Z',
+          next: 'books-next',
         },
       };
     return { status: 200, body: subjectBody };
@@ -302,23 +321,24 @@ test('SubjectList and TypeList show an exact or at-least count and a See all lin
   );
   expect(lists).toHaveLength(3);
   expect(counts(lists[0]!)).toEqual(['30']);
-  expect(lists[0]).toContain(
-    `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3AexampleOfWork"`,
-  );
+  expect(lists[0]).toContain(`href="/en/subjects/${subjectId}/${slug('Unlabelled')}/editions"`);
   expect(counts(lists[1]!)).toEqual(['40+']);
-  expect(lists[1]).toContain(
-    `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3Aauthor"`,
-  );
+  expect(lists[1]).toContain(`href="/en/subjects/${subjectId}/${slug('Unlabelled')}/works"`);
   // A list that fits shows its count and no link to a view that would repeat it.
   expect(counts(lists[2]!)).toEqual(['2']);
   expect(lists[2]).not.toContain('data-slot="see-all"');
 
   const types = section(html, 'type-list');
-  expect(counts(types)).toEqual(['120+']);
-  expect(types).toContain('href="/en/search?type=schema%3ABook"');
+  expect(text(types)).toContain('A Book');
+  expect(counts(types)).toEqual([]);
+  const listHref = `/en/search/list?list=books&amp;page=${encodeURIComponent(
+    JSON.stringify({ subject: subjectId, view: 'overview' }),
+  )}`;
+  expect(types).toContain(`href="${listHref}"`);
+  expect(types).toContain(`href="${listHref}&amp;cursor=books-next"`);
 });
 
-test('inverse lists are ordered by their declared key (series position, credit order, date) before name', () => {
+test('inverse list previews preserve the native series position and date order before name', () => {
   const document = {
     root: { props: {} },
     content: [
@@ -342,16 +362,12 @@ test('inverse lists are ordered by their declared key (series position, credit o
           holder(3, read.property, 'Aardvark Volume'),
         ])
       : read.kind === 'links'
-        ? links([
-            holder(4, read.property, 'Zulu Sequel', { date: '2010' }),
-            holder(5, read.property, 'Alpha Sequel', { date: '2014' }),
-          ])
+        ? links([holder(4, read.property, 'Zulu Sequel'), holder(5, read.property, 'Alpha Sequel')])
         : { status: 200, body: subjectBody },
   );
   const html = render(page, 'en', { relations: definitions('en') });
-  const parts = text(section(html, 'subject-list'));
-  expect(parts.indexOf('Zebra Volume')).toBeLessThan(parts.indexOf('Mango Volume'));
-  expect(parts.indexOf('Mango Volume')).toBeLessThan(parts.indexOf('Aardvark Volume'));
-  const sequels = text(groupBlock(html, 'order'));
-  expect(sequels.indexOf('Zulu Sequel')).toBeLessThan(sequels.indexOf('Alpha Sequel'));
+  const parts = [row(1001), row(1002), row(1003)];
+  expect(statements(section(html, 'subject-list'))).toEqual([...parts, ...parts]);
+  const sequels = [row(1004), row(1005)];
+  expect(statements(groupBlock(html, 'order'))).toEqual([...sequels, ...sequels]);
 });
