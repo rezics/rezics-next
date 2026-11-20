@@ -1025,10 +1025,7 @@ function SignupForm({
           </Field>
         </section>
         {phase.kind === 'dispatched' ? (
-          <section
-            aria-label={m.auth_signup_heading()}
-            className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
-          >
+          <div className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
             <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span
                 aria-hidden="true"
@@ -1041,12 +1038,9 @@ function SignupForm({
             <p role="status" aria-busy="true">
               {m.auth_signup_creating()}
             </p>
-          </section>
+          </div>
         ) : phase.kind === 'draft' ? (
-          <section
-            aria-label={m.auth_signup_heading()}
-            className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
-          >
+          <div className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
             <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span
                 aria-hidden="true"
@@ -1061,7 +1055,7 @@ function SignupForm({
                 {m.auth_signup_heading()}
               </Button>
             </AuthActions>
-          </section>
+          </div>
         ) : null}
       </form>
       {phase.kind === 'draft' || phase.kind === 'handle-unavailable' ? (
