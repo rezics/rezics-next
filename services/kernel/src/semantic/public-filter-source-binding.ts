@@ -3706,6 +3706,7 @@ export function createNativePublicFilterSourceBinding(
           row.predecessor !== input.predecessor
         )
           throw new BindingError('owner_unavailable');
+        const step = row.step;
         const record = decode<RepairRecord>(row.state);
         const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
         // Resolve the actual native predecessor, not an asserted matching cursor.
@@ -3743,7 +3744,7 @@ export function createNativePublicFilterSourceBinding(
         ) {
           throw new BindingError('binding_mismatch');
         }
-        if (!uuid.test(row.step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
+        if (!uuid.test(step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
         const subjectPublication = originalSubject && record.account === undefined;
         if (
           input.scanOnly &&
@@ -3858,7 +3859,7 @@ export function createNativePublicFilterSourceBinding(
           await currentRepairHome(input.bootstrap, input.execution, record.input, page.source, db);
           // Every locator shares this verified page and its currentness checks.
           repairs = page.repairLocators.map((locator) =>
-            producedRepair(input.bootstrap, input.execution, row.step, page, locator),
+            producedRepair(input.bootstrap, input.execution, step, page, locator),
           );
           expected =
             page.status === 'complete'
@@ -4079,7 +4080,7 @@ export function createNativePublicFilterSourceBinding(
             ? record.windowBatch.from
             : undefined);
         const page = {
-          step: row.step,
+          step,
           predecessor: row.predecessor,
           state: row.state,
           complete: row.complete,
@@ -4112,14 +4113,14 @@ export function createNativePublicFilterSourceBinding(
         }
         const result = {
           status: 'verified' as const,
-          step: row.step,
+          step,
           predecessor: row.predecessor,
-          frontier: row.complete ? null : row.step,
+          frontier: row.complete ? null : step,
           complete: row.complete,
           receipts: receiptDigests.map((locatorDigest) => ({
             bootstrap: input.bootstrap,
             execution: input.execution,
-            step: row.step,
+            step,
             locatorDigest,
           })),
           cost,
