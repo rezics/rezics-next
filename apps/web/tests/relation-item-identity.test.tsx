@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 
@@ -80,6 +81,32 @@ test('native summaries bind to the row target; absence keeps its existing meanin
       value,
     )?.items,
   ).toEqual([]);
+});
+
+test('the Relations preview shows a year only when the native row supplies a date', async () => {
+  const { OutgoingRelations, OverviewContext, RelationGroups } = await import('../src/features/pages/overview');
+  const props = { id: 'adaptations', property: 'schema:author', title: 'Adaptations', limit: 12 };
+  for (const [kind, row, Preview] of [
+    ['links', holder, RelationGroups],
+    ['relations', relation, OutgoingRelations],
+  ] as const) {
+    const render = (row: unknown) =>
+      renderToStaticMarkup(
+        <OverviewContext.Provider
+          value={{
+            ...value,
+            relationNodes: [{ id: props.id, props }],
+            relations: { [props.property]: { group: 'derivation', label: 'Adaptations', symmetric: false } },
+            sections: new Map([[props.id, page(kind, [row])]]),
+          }}
+        >
+          <Preview {...props} />
+        </OverviewContext.Provider>,
+      );
+    expect(render({ ...row, date: '1987-03' })).toContain('1987');
+    expect(render(row)).toContain('Native target');
+    expect(render(row)).not.toContain('1987');
+  }
 });
 
 test('successful malformed initial and returned pages show failure without partial rows or foreign links', async () => {

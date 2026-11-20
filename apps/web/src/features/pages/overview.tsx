@@ -345,6 +345,7 @@ export function statementItems(
           id: row.target,
           label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
           ...(typeof row.type === 'string' ? { type: row.type } : {}),
+          ...(typeof row.date === 'string' ? { date: row.date } : {}),
           statement: typeof statement.id === 'string' ? statement.id : undefined,
           ...(isRecord(row.summary) ? { summary: row.summary as unknown as SubjectSummary } : {}),
           notes: [],
@@ -522,7 +523,7 @@ function LinkSection(
       </Preview>
     );
   }
-  const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
+  const listed = { ...found, items: datedItems(found.items, value.locale) };
   const workCast = forward && view === 'credits' && props.property === WORK_VOICE_PROPERTY;
   const castWindowReady =
     workCast &&

@@ -21,6 +21,7 @@ import { slotView } from './slots.ts';
 import { contextSnapshot, readContextDefaults, type ContextRecord } from './context.ts';
 import {
   readSubjectSummaries,
+  type DisplaySummary,
   type RelatedSubjectSummary,
   type SubjectSummary,
   type SummaryDependencies,
@@ -979,6 +980,30 @@ async function relatedSurvivors(pool: Pool, ids: readonly string[]): Promise<Map
   return survivors;
 }
 
+function relationDateEligible(release: Release, property: string | null, context: string): boolean {
+  const group = property === null ? undefined : release.properties[property]?.relation?.group;
+  return (
+    context === GLOBAL_CONTEXT &&
+    (group === 'order' ||
+      group === 'derivation' ||
+      group === 'world' ||
+      group === 'membership' ||
+      group === 'association')
+  );
+}
+
+/** Keep the selected date on the relation row, outside all related/qualifier summaries. */
+function takeRelationDates(summaries: Map<string, DisplaySummary | null>): Map<string, string> {
+  const dates = new Map<string, string>();
+  for (const [id, summary] of summaries) {
+    if (!summary?.date) continue;
+    const { date, ...display } = summary;
+    summaries.set(id, display);
+    dates.set(id, date);
+  }
+  return dates;
+}
+
 /** A merged original keeps its id and carries the survivor's authorized summary, naming that survivor. */
 function relatedEntries(
   ids: readonly string[],
@@ -1055,6 +1080,7 @@ export type SubjectLink = {
   related?: Record<string, RelatedSubjectSummary>;
   type?: string;
   label?: string;
+  date?: string;
   summary?: SubjectSummary | null;
 };
 export type SubjectLinksPage = {
@@ -1376,9 +1402,15 @@ export async function listSubjectLinks(
           authorize: options.authorizeSummary ?? (async () => false),
         },
         summaryIds,
-        { languages },
+        {
+          languages,
+          ...(options.authorizeSummary && relationDateEligible(summaryRelease, options.property, context)
+            ? { publicationDateFor: new Set(page.links.map(({ subject }) => survivors.get(subject) ?? subject)) }
+            : {}),
+        },
       )
     : new Map<string, SubjectSummary | null>();
+  const dates = takeRelationDates(summaries);
   for (const [id, survivor] of survivors) summaries.set(id, summaries.get(survivor) ?? null);
   requireAccessDeadline(deadline);
   const links = page.links.flatMap((link): SubjectLink[] => {
@@ -1398,7 +1430,9 @@ export async function listSubjectLinks(
           !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
-    const summary = summaries.get(survivors.get(link.subject) ?? link.subject) ?? null;
+    const displayId = survivors.get(link.subject) ?? link.subject;
+    const summary = summaries.get(displayId) ?? null;
+    const date = dates.get(displayId);
     if (options.authorizeSummary && !summary) return [];
     const type = summary?.type ?? link.type;
     if (options.type && !matches(type ?? '')) return [];
@@ -1438,6 +1472,7 @@ export async function listSubjectLinks(
         ...(creditSlot ? { creditSlot } : {}),
         ...(type ? { type } : {}),
         label: summary?.label?.value ?? '',
+        ...(date === undefined ? {} : { date }),
         summary,
       },
     ];
@@ -1471,6 +1506,7 @@ export type SubjectRelation = {
   related?: Record<string, RelatedSubjectSummary>;
   type?: string;
   label?: string;
+  date?: string;
   summary?: SubjectSummary | null;
 };
 export type SubjectRelationsPage = {
@@ -1743,8 +1779,18 @@ export async function listSubjectRelations(
       authorize: options.authorizeSummary ?? (async () => false),
     },
     summaryIds,
-    { languages },
+    {
+      languages,
+      ...(options.authorizeSummary && relationDateEligible(options.release, options.property, context)
+        ? {
+            publicationDateFor: new Set(
+              currentRelations.flatMap(({ target }) => (target ? [survivors.get(target) ?? target] : [])),
+            ),
+          }
+        : {}),
+    },
   );
+  const dates = takeRelationDates(summaries);
   for (const [id, survivor] of survivors) summaries.set(id, summaries.get(survivor) ?? null);
   requireAccessDeadline(deadline);
   const relations: SubjectRelation[] = [];
@@ -1768,12 +1814,14 @@ export async function listSubjectRelations(
     }
     const summary = summaries.get(entry.target) ?? null;
     if (options.authorizeSummary && !summary) continue;
+    const date = dates.get(survivors.get(entry.target) ?? entry.target);
     const type = summary?.type ?? entry.type;
     if (options.type && !matchesTarget(options.release, type ?? '', [options.type])) continue;
     relations.push({
       ...entry,
       ...(type ? { type } : {}),
       label: summary?.label?.value ?? '',
+      ...(date === undefined ? {} : { date }),
       summary,
     });
   }

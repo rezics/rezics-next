@@ -3,6 +3,8 @@ import type { SubjectSummary, SubjectSummaryObservation } from './contract/index
 import type {
   SummaryDependencies,
   SummaryObservationOptions,
+  SummaryReadOptions,
+  DisplaySummary,
   SummaryReaderDependencies,
 } from './subject-reading-application.ts';
 
@@ -15,15 +17,15 @@ export type {
   SummaryCoverState,
   SubjectSummaryObservation,
 } from './contract/index.ts';
-export type { SummaryDependencies, SummaryReaderDependencies };
+export type { DisplaySummary, SummaryDependencies, SummaryReaderDependencies };
 export { summaryAuthorization } from './subject-reading-application.ts';
 
 /** Compatibility facade; native Subject pages call the same operation through their injected application. */
 export function readSubjectSummaries(
   deps: SummaryDependencies | SummaryReaderDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[] } = {},
-): Promise<Map<string, SubjectSummary | null>> {
+  options: SummaryReadOptions = {},
+): Promise<Map<string, DisplaySummary | null>> {
   return nativeSubjectReadingApplication().readSubjectSummaries(deps, ids, options);
 }
 

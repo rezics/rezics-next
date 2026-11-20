@@ -1,4 +1,4 @@
--- Only the requested image, representative-edition and original-language slots are probed; editions are never enumerated.
+-- Probe only the requested display slots. Editions are never enumerated.
 WITH input AS NOT MATERIALIZED (
   SELECT :context_id::uuid AS context_id
 )
@@ -6,7 +6,7 @@ SELECT s.subject_id::text AS id, s.type,
        COALESCE(labels.body, '{}'::jsonb) AS labels, original.language AS original,
        COALESCE(choices.body, '[]'::jsonb) AS choices
 FROM jsonb_to_recordset(:subjects::jsonb) AS requested(
-  route integer, partition_no integer, id uuid, image uuid, original uuid, representatives jsonb
+  route integer, partition_no integer, id uuid, image uuid, original uuid, publication_date uuid, representatives jsonb
 )
 CROSS JOIN input
 JOIN LATERAL (
@@ -90,10 +90,13 @@ LEFT JOIN LATERAL (
   ) AS latest WHERE operation = 'assert'
 ) AS labels ON true
 LEFT JOIN LATERAL (
-  SELECT jsonb_agg(jsonb_build_object('property', slots.property, 'statement', live.body)
+  SELECT jsonb_agg(jsonb_build_object('property', slots.property, 'statement', live.body, 'id', live.id)
                    ORDER BY slots.property, live.ordinal, live.id) AS body
   FROM (
     SELECT 'schema:image'::text AS property, requested.image AS slot, 0 AS ordinal
+    UNION ALL
+    SELECT 'schema:datePublished', requested.publication_date, 0
+    WHERE requested.publication_date IS NOT NULL AND s.type = ANY(:publication_date_types::text[])
     UNION ALL
     SELECT 'rezics:representativeEdition', representatives.slot_id, representatives.ordinal
     FROM jsonb_to_recordset(requested.representatives) AS representatives(slot_id uuid, ordinal integer)
