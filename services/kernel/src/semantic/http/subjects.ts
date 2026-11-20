@@ -1,3 +1,4 @@
+import { requireLiveJob } from '../../http/admission.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { parseSelectedSynopsis } from '../selected-synopsis.ts';
 import {
@@ -1344,6 +1345,7 @@ function subjectRoutes(
           set.headers.location = `/v1/subjects/${result.to}${new URL(request.url).search}`;
           return { redirect: { from: result.from, to: result.to } };
         }
+        requireLiveJob(job);
         for (const anchor of result.anchors) session.record(anchor);
         set.headers.etag = `"${result.revision}"`;
         set.headers['cache-control'] = result.private ? 'private, no-store' : 'no-cache';

@@ -48,12 +48,13 @@ import {
   type ReviewedPersonEndpoint,
   type ReviewedPersonSource,
 } from './reviewed-person-identity.ts';
-import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
+import { privateLinks, refreshStatementReaderAuthorization, statementAudience } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readSourceRecords } from './source-records.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import readSubjectIdentity from './read-subject-identity.sql';
 import readSubjectStatement from './read-subject.sql';
+import readPropertySources from './read-subject-property-sources.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import readSourceMembers from './source-records-members.sql';
@@ -1130,8 +1131,26 @@ async function readSubjectNative(
           const relationCounts: Record<string, number> = {};
           if (allowed) {
             const properties = release.types[rows[0]!.type]!.properties;
+            const relations = new Set(properties.filter((property) => isRelationProperty(release, property)));
+            const scalars = properties.filter((property) => !relations.has(property));
+            const sources = await readPropertySources.run(client, {
+              route,
+              subject_id: subjectId,
+              context_id: context,
+              scalar_properties: scalars,
+              slots: scalars.map((property) => slotId(subjectId, property)),
+              relation_properties: [...relations],
+              ...(relations.size
+                ? await statementAudience(client)
+                : { viewer_account: NIL_UUID, viewer_moderator: false }),
+            });
+            const propertiesToResolve = new Set(sources.map((row) => row.property));
+            // A Context default can report a suppressed scalar even when the slot has no history.
+            if (context !== GLOBAL_SUBJECT_CONTEXT)
+              for (const property of scalars) if (defaults[property] === 'suppress') propertiesToResolve.add(property);
             for (const property of properties) {
-              if (!isRelationProperty(release, property)) {
+              if (!propertiesToResolve.has(property)) continue;
+              if (!relations.has(property)) {
                 const view = await slotView(client, subjectId, property, context, defaults);
                 statementFacts.push(...view.facts);
                 if (view.resolution) resolution[property] = view.resolution;
@@ -1626,22 +1645,26 @@ async function readSubjectPage(
   const relatedList = [...subjectIds];
   if (relatedList.length > 256) throw new TypeError('A related read accepts at most 256 ids');
   const readableIds = relatedList.filter((id) => routeOf(id) !== null);
-  const decideRelated = readableIds.length ? await input.authorization.prepareSummaryBatch() : undefined;
-  const references = await input.runNative(() =>
-    withReadTransaction(
-      pool,
-      async (client) => {
-        const decisions = decideRelated ? await decideRelated(client, readableIds) : new Map<string, boolean>();
-        return application.readRelated(
-          client,
-          readableIds.filter((id) => decisions.get(id) === true),
-        );
-      },
-      deadline,
-    ),
-  );
+  let references: Awaited<ReturnType<typeof application.readRelated>> = {};
+  if (readableIds.length) {
+    const decideRelated = await input.authorization.prepareSummaryBatch();
+    references = await input.runNative(() =>
+      withReadTransaction(
+        pool,
+        async (client) => {
+          const decisions = await decideRelated(client, readableIds);
+          return application.readRelated(
+            client,
+            readableIds.filter((id) => decisions.get(id) === true),
+          );
+        },
+        deadline,
+      ),
+    );
+  }
 
-  const active = await ports.readActiveRelease(pool);
+  const referenceIds = Object.entries(references).map(([id, value]) => value.redirect ?? id);
+  const active = input.includeViewerActions || referenceIds.length ? await ports.readActiveRelease(pool) : null;
   let currentViewerActions: SubjectReadingPageAnswer['viewerActions'];
   if (input.includeViewerActions) {
     if (!active || !Object.hasOwn(active.release.types, result.subject.type) || !input.viewerActionBindings) {
@@ -1680,7 +1703,7 @@ async function readSubjectPage(
           release: active.release,
           authorize: authorizeSummary(),
         },
-        Object.entries(references).map(([id, value]) => value.redirect ?? id),
+        referenceIds,
         { languages: input.languages },
       )
     : new Map<string, SubjectSummary | null>();
