@@ -61,6 +61,7 @@ export async function verifyPublicFilterRepairSourcePage(
   }>,
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
+  nextScan?: (allowance: Readonly<{ inputKeys: number; bytes: number }>) => void,
 ): Promise<RetainedRepairPage> {
   if (typeof binding.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
     throw new PublicFilterRepairSourceError('owner_unavailable');
@@ -136,6 +137,7 @@ export async function verifyPublicFilterRepairSourcePage(
     (expected.sourceStep !== undefined && !isDeepStrictEqual(expected.subject, subject))
   )
     throw new PublicFilterRepairSourceError('binding_mismatch');
+  if (evidence?.nextScan) nextScan?.(evidence.nextScan);
   return {
     sourceStep: step.step,
     predecessor: step.predecessor,

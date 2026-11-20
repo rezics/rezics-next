@@ -435,6 +435,8 @@ export type NativeSourceRepairStepRead = Readonly<{
   queried: PublicFilterQueriedObservation;
   execution: string;
   predecessor: string | null;
+  /** A continuation funded for a Subject home scan only. */
+  scanOnly?: true;
 }>;
 export type NativeSourceRepairStepVerification =
   | Readonly<{
@@ -537,6 +539,7 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        scanOnly?: true;
       }>,
       context: PublicFilterConsumerContext,
     ): Promise<PublicSourceRepairPage>;
@@ -690,6 +693,7 @@ type NativeRepairEvidence = Readonly<{
   repairs: readonly PublicSourceRepair[];
   account: AccountDiscoveryRepairObservation | null;
   subject?: SubjectRepairWriterObligation;
+  nextScan?: Readonly<{ inputKeys: number; bytes: number }>;
 }>;
 // A verified response may carry bodies already checked by that invocation.
 // A copied response or another binding cannot recover this evidence.
@@ -1949,10 +1953,24 @@ export function createNativePublicFilterSourceBinding(
       state.claimInputs === true
     );
   }
+  function subjectHomeScan(state: RepairState): boolean {
+    return (
+      state.owner !== 'accounts' &&
+      state.phase === 'scan' &&
+      state.partition < 4096 &&
+      state.subject === null &&
+      state.projection === null &&
+      state.version === null &&
+      state.bridge === undefined &&
+      state.resumeBridge === undefined &&
+      state.bridgeThrough === undefined &&
+      state.resumeAccountScan === undefined
+    );
+  }
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
     joined: Joined & { cut: Awaited<ReturnType<typeof loadBootstrap>> },
-    request: { execution: string; frontier: string | null; inputLimit: number; homeLimit?: number },
+    request: { execution: string; frontier: string | null; inputLimit: number; homeLimit?: number; scanOnly?: true },
     db: Pool,
     cost: BindingCost,
     context: PublicFilterConsumerContext,
@@ -1976,6 +1994,8 @@ export function createNativePublicFilterSourceBinding(
         : null;
     }
     let previous = request.frontier === null ? null : await readVerifiedFrontier(request.frontier);
+    if (request.scanOnly && (!previous || previous.complete || request.homeLimit !== repairHomeBatchLimit))
+      throw new BindingError('owner_unavailable');
     if (request.frontier !== null && !previous) {
       const tip = await readPublicFilterRepairVerificationTip(db, chain);
       if (tip?.complete) throw new BindingError('binding_mismatch');
@@ -2003,6 +2023,17 @@ export function createNativePublicFilterSourceBinding(
       ? unpackRepairLocatorDigests(old.repair_locator_digests, old.input_limit!)
       : null;
     const replay = old ? decode<RepairRecord>(old.state) : null;
+    if (request.scanOnly) {
+      const predecessor = decode<RepairRecord>(previous!.state);
+      if (
+        !boundSubjectPublication(joined.cut, { execution: request.execution, queried: joined.queried }) ||
+        predecessor.scan?.kind !== 'semantic' ||
+        !subjectHomeScan(predecessor.next) ||
+        (replay &&
+          (replay.scan?.kind !== 'semantic' || encode(replay.input) !== encode(predecessor.next) || old!.complete))
+      )
+        throw new BindingError('owner_unavailable');
+    }
     const step = old?.step ?? randomUUID();
     let state: RepairState;
     if (replay) state = replay.input;
@@ -3659,6 +3690,18 @@ export function createNativePublicFilterSourceBinding(
         }
         if (!uuid.test(row.step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
         const subjectPublication = boundSubjectPublication(cut, input) && record.account === undefined;
+        if (
+          input.scanOnly &&
+          (!subjectPublication ||
+            input.predecessor === null ||
+            row.complete ||
+            !subjectHomeScan(record.input) ||
+            record.scan?.kind !== 'semantic' ||
+            row.input_limit > repairHomeBatchLimit ||
+            record.output !== null ||
+            receiptDigests.length !== 0)
+        )
+          throw new BindingError('owner_unavailable');
         let repairs: PublicSourceRepair[] = [];
         let expected: RepairState | undefined;
         let expectedScan: RepairRecord['scan'];
@@ -4021,7 +4064,24 @@ export function createNativePublicFilterSourceBinding(
         if (repairs.length === receiptDigests.length)
           publicFilterRepairEvidence.set(result, {
             binding: bootstrapBinding,
-            evidence: { repairs, account: record.account ?? null, ...(subject ? { subject } : {}) },
+            evidence: {
+              repairs,
+              account: record.account ?? null,
+              ...(subject ? { subject } : {}),
+              ...(!scope && subjectPublication && record.scan?.kind === 'semantic' && subjectHomeScan(record.next)
+                ? {
+                    nextScan: {
+                      // Two full home reads, two exact custody joins, and keyed
+                      // predecessor, intent, proof, checkpoint and release work.
+                      inputKeys: 2 * repairHomeBatchLimit + 2 * joined.cost.inputKeys + 128,
+                      // The same immutable join bodies can be read twice. Also
+                      // cover the live bootstrap probes and two bounded scan
+                      // results, state records, SQL and Search control traffic.
+                      bytes: 4 * joined.cost.bytes + 128 * 1024,
+                    },
+                  }
+                : {}),
+            },
           });
         return result;
       });

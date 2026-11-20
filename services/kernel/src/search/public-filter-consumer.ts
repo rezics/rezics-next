@@ -83,6 +83,7 @@ const PUBLIC_FILTER_REPAIR_INPUT_LIMIT = 64;
 const PUBLIC_FILTER_REPAIR_INPUT_RESERVE = 768;
 const PUBLIC_FILTER_REPAIR_HOME_LIMIT = 128;
 const SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN = 4;
+const PUBLIC_FILTER_PREPARATION_BYTE_LIMIT = 4 * 1024 * 1024;
 export const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
 export const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
 
@@ -906,7 +907,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (
         cost.inputKeys > inputLimit ||
         cost.accessPoints + cost.dependencyPoints > 16 + 8 * Math.max(inputs, 1) ||
-        cost.bytes > 4 * 1024 * 1024 ||
+        cost.bytes > PUBLIC_FILTER_PREPARATION_BYTE_LIMIT ||
         cost.rows > 64 + 16 * Math.max(inputs, 1)
       )
         throw new ConsumerFailure('source_pending');
@@ -3159,15 +3160,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const repairCoverage = { capture: retained.definition.capture, subjectPublication, mixedPreparation };
       const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
       let advanced = 0;
+      let nextScan: Readonly<{ inputKeys: number; bytes: number }> | undefined;
+      const offerScan = (allowance: NonNullable<typeof nextScan>) => {
+        nextScan = allowance;
+      };
       while (!state.closed) {
-        // Reserve the next producer and verifier together under this turn's meter.
-        // Each saved page is independently replayable from the same observation.
-        if (
+        const remainingInputs = m.inputLimit - m.cost.inputKeys;
+        const scanOnly =
           advanced > 0 &&
-          (advanced >= SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN ||
-            m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
+          subjectPublication &&
+          remainingInputs < PUBLIC_FILTER_REPAIR_INPUT_RESERVE &&
+          nextScan !== undefined &&
+          remainingInputs >= nextScan.inputKeys &&
+          // The checkpoint sends both the old and new encoded work.
+          m.cost.bytes + nextScan.bytes + 4 * Buffer.byteLength(encodeState(encoded)) <=
+            PUBLIC_FILTER_PREPARATION_BYTE_LIMIT;
+        if (
+          advanced >= SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN ||
+          (advanced > 0 && remainingInputs < PUBLIC_FILTER_REPAIR_INPUT_RESERVE && !scanOnly)
         )
           return progress();
+        nextScan = undefined;
+        const request = {
+          bootstrap: state.bootstrap,
+          queried: q,
+          execution: work.execution,
+          predecessor: state.frontier,
+          ...(scanOnly && { scanOnly: true as const }),
+        };
         const keys = {
           partition_no: work.registration.partition,
           observation: q.snapshot.observation,
@@ -3182,7 +3202,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         };
         if (!page) {
           m.check();
-          if (m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
+          if (!scanOnly && m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
             return m.unavailable('source_pending');
           const sourcePage = m.take(
             await binding.repairPage(
@@ -3192,23 +3212,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 execution: work.execution,
                 frontier: state.frontier,
                 inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
+                ...(scanOnly && { scanOnly: true as const }),
                 ...((subjectPublication || mixedPreparation) && { homeLimit: PUBLIC_FILTER_REPAIR_HOME_LIMIT }),
               },
               context,
             ),
           );
           if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete')
-            return m.unavailable('source_pending');
+            return scanOnly ? progress() : m.unavailable('source_pending');
           // An actual owner successor resolves both nonempty items and the empty final step.
           // Source callbacks/brands/frontier equality do not certify its original retained window.
           const intent = await verifyPublicFilterRepairSourcePage(
             binding,
-            {
-              bootstrap: state.bootstrap,
-              queried: q,
-              execution: work.execution,
-              predecessor: state.frontier,
-            },
+            request,
             {
               repairs: sourcePage.repairs,
               frontier: sourcePage.frontier,
@@ -3216,6 +3232,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             },
             context,
             charge,
+            offerScan,
           );
           const body = encodeRepairIntent(intent);
           if (Buffer.byteLength(body) > 1048576) return m.unavailable('source_pending');
@@ -3232,15 +3249,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           verifiedIntent ??
           (await verifyPublicFilterRepairSourcePage(
             binding,
-            {
-              bootstrap: state.bootstrap,
-              queried: q,
-              execution: work.execution,
-              predecessor: state.frontier,
-            },
+            request,
             decodeNative<RetainedRepairPage>(page.intent),
             context,
             charge,
+            offerScan,
           ));
         const emptyPreparationProgress =
           (subjectPublication || config.discoveryPreparation === 'repair') &&
