@@ -273,7 +273,7 @@ export async function publishProfile(
   try {
     const published = await client.presentation.profiles.post(
       { profile },
-      { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
+      { headers: { authorization, 'idempotency-key': JSON.stringify(keys.publish) } as { 'idempotency-key': string } },
     );
     // Eden represents a lost connection as an error without an HTTP response.
     if (published.error && !published.response) return unknown();
@@ -281,12 +281,12 @@ export async function publishProfile(
       return { ...curationFailure(published.status, published.error?.value, published.headers), phase };
     if (!admittedPublishDigest(published.data, digest)) return unknown();
     phase = 'activate';
-    const activated = await client.presentation
-      .profiles({ digest })
-      .$activate.post(
-        { expected_head: expectedHead },
-        { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
-      );
+    const activated = await client.presentation.profiles({ digest }).$activate.post(
+      { expected_head: expectedHead },
+      {
+        headers: { authorization, 'idempotency-key': JSON.stringify(keys.activate) } as { 'idempotency-key': string },
+      },
+    );
     if (activated.error && !activated.response) return unknown();
     if (activated.status >= 400)
       return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
@@ -306,7 +306,7 @@ export async function publishProfileOnly(
   try {
     const result = await client.presentation.profiles.post(
       { profile },
-      { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
+      { headers: { authorization, 'idempotency-key': JSON.stringify(keys.publish) } as { 'idempotency-key': string } },
     );
     if (result.error && !result.response)
       return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
@@ -331,7 +331,7 @@ export async function activatePublishedProfile(
       .profiles({ digest })
       .$activate.post(
         { expected_head: expectedHead },
-        { headers: { authorization, 'idempotency-key': key } as { 'idempotency-key': string } },
+        { headers: { authorization, 'idempotency-key': JSON.stringify(key) } as { 'idempotency-key': string } },
       );
     if (result.error && !result.response) return unknown();
     if (result.status >= 400)

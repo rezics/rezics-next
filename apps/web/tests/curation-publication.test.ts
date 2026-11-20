@@ -129,11 +129,11 @@ test('the actual immutable profile publish-and-activate flow resolves unknown ou
     for (const request of native.seen) {
       expect(request.authorization).toBe('Bearer current-session');
       if (request.path === '/v1/presentation/profiles') {
-        expect(request.key).toBe(original.keys.publish);
+        expect(request.key).toBe(JSON.stringify(original.keys.publish));
         expect(request.body).toEqual({ profile: original.profile });
       } else {
         expect(request.path).toBe(`/v1/presentation/profiles/${profileDigest(original.profile)}:activate`);
-        expect(request.key).toBe(original.keys.activate);
+        expect(request.key).toBe(JSON.stringify(original.keys.activate));
         expect(request.body).toEqual({ expected_head: 7 });
       }
     }
@@ -155,8 +155,8 @@ test('the actual immutable profile publish-and-activate flow resolves unknown ou
     expect(reviewed.profile).toEqual(choice === 'keep' ? draft : changed(profile()));
     expect(publication.getSnapshot().intent).toBeNull();
     await publication.start(reviewed.profile, reviewed.head);
-    expect(native.seen.at(-2)?.key).not.toBe(pending.keys.publish);
-    expect(native.seen.at(-1)?.key).not.toBe(pending.keys.activate);
+    expect(native.seen.at(-2)?.key).not.toBe(JSON.stringify(pending.keys.publish));
+    expect(native.seen.at(-1)?.key).not.toBe(JSON.stringify(pending.keys.activate));
     expect(native.seen.at(-1)?.body).toEqual({ expected_head: 9 });
   }
 });
@@ -171,7 +171,7 @@ test('revocation after an ambiguous activation is checked on replay before any r
   expect(publication.getSnapshot().result).toEqual({ ok: false, reason: 'forbidden', phase: 'publish' });
   expect(publication.getSnapshot().intent).toBe(original);
   expect(native.seen.at(-1)?.path).toBe('/v1/presentation/profiles');
-  expect(native.seen.at(-1)?.key).toBe(original?.keys.publish);
+  expect(native.seen.at(-1)?.key).toBe(JSON.stringify(original?.keys.publish));
   native.restore();
   expect((await publication.retry())?.result.head).toBe(8);
   expect(native.receipts.size).toBe(2);

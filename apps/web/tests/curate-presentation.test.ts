@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
-import { profileTemplates, publishProfile, withTemplate } from '../src/features/pages/curate.ts';
+import {
+  activatePublishedProfile,
+  profileTemplates,
+  publishProfile,
+  publishProfileOnly,
+  withTemplate,
+} from '../src/features/pages/curate.ts';
 
 const doc = (id: string) =>
   ({ root: { props: {} }, content: [{ type: 'Text', props: { id, text: { en: id } } }] }) as CompositionDocument;
@@ -75,28 +81,41 @@ test('editing a template replaces or inserts it in order and never mutates the p
   expect(profile).toEqual(before);
 });
 
-test('publishing sends the profile, then activates it at the head the curator loaded', async () => {
+test('combined and separate publication send the same structured keys and expected head', async () => {
   const edited = withTemplate(profile, { scope: 'type', key: 'schema:Movie' }, doc('movie'));
   const digest = profileDigest(edited);
-  const { seen, client } = kernel([answer(201, { digest }), answer(200, { digest, head: 8 })]);
-  const result = await publishProfile(client, { profile: edited, expectedHead: 7, authorization: 'Bearer t', keys });
+  const { seen, client } = kernel([
+    answer(201, { digest }),
+    answer(200, { digest, head: 8 }),
+    answer(200, { digest }),
+    answer(200, { digest, head: 8 }),
+  ]);
+  const input = { profile: edited, expectedHead: 7, authorization: 'Bearer t', keys };
+  const result = await publishProfile(client, input);
   expect(result).toEqual({ ok: true, digest, head: 8 });
   expect(seen).toEqual([
     {
       method: 'POST',
       path: '/v1/presentation/profiles',
       authorization: 'Bearer t',
-      key: keys.publish,
+      key: `"${keys.publish}"`,
       body: { profile: edited },
     },
     {
       method: 'POST',
       path: `/v1/presentation/profiles/${digest}:activate`,
       authorization: 'Bearer t',
-      key: keys.activate,
+      key: `"${keys.activate}"`,
       body: { expected_head: 7 },
     },
   ]);
+  expect(await publishProfileOnly(client, input)).toEqual({ ok: true, digest });
+  expect(seen.slice(2)).toEqual(seen.slice(0, 1));
+  const { authorization, expectedHead } = input;
+  expect(await activatePublishedProfile(client, { digest, expectedHead, authorization, key: keys.activate })).toEqual(
+    result,
+  );
+  expect(seen.slice(2)).toEqual(seen.slice(0, 2));
 });
 
 test('a stale head, an invalid profile and a refusal come back as reasons', async () => {
