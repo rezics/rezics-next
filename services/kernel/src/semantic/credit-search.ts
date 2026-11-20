@@ -16,10 +16,8 @@ import {
 } from '../search/credit-search.ts';
 import {
   canonicalCreators,
-  readIndexCreditIdentities,
   type CreditCreatorObservation,
   type CreditCreatorSnapshot,
-  type CreditIdentityReader,
   type PublicCreator,
 } from './credit-search-creators.ts';
 import { withReadTransaction } from './read.ts';
@@ -152,8 +150,11 @@ export async function projectSelectedCreditsInSnapshot(
   return creditSearchFromSnapshot(work.id, entriesOf(resolved.credits, resolved.creators, work.id));
 }
 
-function creditSearchReader(pool: Pool, routeKey: Uint8Array | undefined, readIdentities?: CreditIdentityReader) {
-  const creatorObservation = readIdentities ? { readIdentities } : undefined;
+function creditSearchReader(
+  pool: Pool,
+  routeKey: Uint8Array | undefined,
+  creatorObservation?: CreditCreatorObservation,
+) {
   return {
     async page(input) {
       const workId = input.workId;
@@ -288,7 +289,7 @@ function creditSearchReader(pool: Pool, routeKey: Uint8Array | undefined, readId
 /** Native CreditSearchSource. Pages admit selected outgoing credits before nested creator expansion. */
 export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): CreditSearchSource {
   const reader = creditSearchReader(pool, routeKey);
-  const indexReader = creditSearchReader(pool, routeKey, readIndexCreditIdentities);
+  const indexReader = creditSearchReader(pool, routeKey, { indexReplay: true });
   return { ...reader, projectForIndex: (workId) => projectCreditSearch(indexReader, workId) };
 }
 
