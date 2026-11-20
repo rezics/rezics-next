@@ -410,8 +410,11 @@
         "services/kernel/src/economy/storage/**",
         "services/kernel/db/economy/**"
       ],
-      "publicEntries": ["services/kernel/src/economy/ledger.ts"],
-      "allowedDependencies": ["kernel-economy-contract"],
+      "publicEntries": [
+        "services/kernel/src/economy/ledger.ts",
+        "services/kernel/src/economy/storage/funding-store.ts"
+      ],
+      "allowedDependencies": ["kernel-economy-contract", "kernel-economy-core"],
       "capabilities": ["economy-ledger"],
       "postgresPaths": ["services/kernel/src/economy/ledger.ts", "services/kernel/src/economy/storage/**"]
     },
