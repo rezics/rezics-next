@@ -542,7 +542,7 @@ test('native publication starts repair from the original adopted Source executio
         const overlap = Math.min(firstHomes.length, retryHomes.length);
         expect(overlap).toBeGreaterThan(0);
         expect(retryHomes.slice(0, overlap)).toEqual(firstHomes.slice(0, overlap));
-        expect(original.ack_after).toBe(retry!.prefix[8]);
+        expect(retry!.prefix[8]).toBe(original.ack_after);
         expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: false });
         expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
         continue;
