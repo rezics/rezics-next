@@ -434,6 +434,23 @@ async function checkBrowserTarget(
   assert.equal(new URL(page.url()).pathname, sourcePath, `${target.id} returns to ${sourceId}`);
 }
 
+/** Details exposes the current name statements, including spellings outside the selected title. */
+async function checkBrowserNames(page: any, names: readonly string[]) {
+  if (names.length === 0) return;
+  const overview = new URL(page.url());
+  const details = page.locator('main a[href]').filter({ hasText: /^Details$/u });
+  const href = (
+    (await details.evaluateAll((links: HTMLAnchorElement[]) => links.map((link) => link.href))) as string[]
+  ).find((link) => new URL(link).pathname === `${overview.pathname}/details`);
+  assert.ok(href, 'missing public Details link');
+  const response = await page.goto(href);
+  assert.equal(response?.status(), 200, 'Details navigation');
+  const rendered: string[] = await page.locator('main [lang="und"]:visible').allTextContents();
+  for (const name of names) assert.ok(rendered.includes(name), `missing und name ${name}`);
+  await page.goBack();
+  assert.equal(new URL(page.url()).pathname, overview.pathname, 'Details returns to the overview');
+}
+
 async function checkTarget(work: JourneyWork, subjectIds: ReadonlyMap<string, string>, api: string) {
   const read = await current(api, work.row.subjectId);
   assert.equal(read.subject.id, work.row.subjectId, `${work.sourceKey} remains independently current`);
@@ -668,8 +685,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
             await page.locator('main').waitFor();
             text = await page.locator('main').innerText();
             url = page.url();
-            for (const label of undNames(currentReads.get(work.sourceKey)!))
-              assert.ok(text.includes(label), `missing und name ${label}`);
+            await checkBrowserNames(page, undNames(currentReads.get(work.sourceKey)!));
             assert.ok((await page.locator('main a[href*="bgm.tv"]').count()) > 0, 'missing Bangumi citation');
             for (const target of targets) await checkBrowserTarget(page, web, work.row.subjectId, target, name);
             if (work.sourceKey === '26') assert.ok(text.includes('文学少女'), 'missing exact Book Girl title');
