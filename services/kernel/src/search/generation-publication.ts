@@ -69,6 +69,8 @@ import {
   subjectIndexName,
   subjectGenerations,
   readSubjectSortFormat,
+  readSubjectActivationTime,
+  setSubjectPublicationRefresh,
   SUBJECT_SORT_FORMAT,
 } from './indices.ts';
 import { discoveryGenerations } from './generations.ts';
@@ -1133,6 +1135,16 @@ export function createSearchGenerationPublication(
     if (job.phase === 'active') return;
     if (job.fenced_pass) await held(job, context, meter);
     if (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent') return;
+    if (
+      job.family === 'subjects' &&
+      job.phase === 'subject' &&
+      job.pass === '1' &&
+      job.home === 0 &&
+      job.after_id === null &&
+      (await aliasTarget(job, context, meter)) === null &&
+      (await readSubjectActivationTime(search, job.prefix, Number(job.generation))) === null
+    )
+      await publicationRefresh(job, context, meter, true);
     if (job.phase === 'subject' || job.phase === 'account') {
       // A retained PIT marks an engine page interrupted by a changed Subject home.
       const resumesSubjectEngine = job.family === 'subjects' && job.pit !== null;
@@ -1492,6 +1504,13 @@ export function createSearchGenerationPublication(
   function alias(job: Job) {
     return (job.family === 'subjects' ? subjectAlias : discoveryAlias)(job.prefix);
   }
+  function publicationRefresh(job: Job, context: PublicFilterConsumerContext, meter: Meter, preparing: boolean) {
+    const transport: OpenSearch = {
+      ...search,
+      request: (method, path, body) => engine(context, meter, method, path, body),
+    };
+    return setSubjectPublicationRefresh(transport, job.physical_target, job.native_incarnation, preparing);
+  }
   async function aliasTarget(job: Job, context: PublicFilterConsumerContext, meter: Meter): Promise<string | null> {
     let response: { status: number; body: unknown };
     try {
@@ -1777,6 +1796,7 @@ export function createSearchGenerationPublication(
               if (!job.observation) job.observation = queried.snapshot.observation;
               const previous = await aliasTarget(job, context, meter);
               if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
+              if (job.family === 'subjects') await publicationRefresh(job, context, meter, false);
               job.previous_target = previous;
               job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
               job.activated_at = config.clock().toISOString();
@@ -1790,6 +1810,7 @@ export function createSearchGenerationPublication(
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
             if (before !== job.physical_target || job.family === 'subjects') await adoptHeld(job, context, meter);
             if (job.family === 'subjects') {
+              await publicationRefresh(job, context, meter, false);
               const activationSearch: OpenSearch = {
                 ...search,
                 request: (method, path, body) => engine(context, meter, method, path, body),

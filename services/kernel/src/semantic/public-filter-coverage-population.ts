@@ -27,6 +27,31 @@ import type {
 import { readBookRole } from './public-filter-book-role.ts';
 
 const statement = readFileSync(new URL('./public-filter-coverage-population.sql', import.meta.url), 'utf8');
+// A sealed publication owns its coverage. The bootstrap constraint excludes a
+// serving attachment when publication_job is set, and prepared cuts have no
+// PIT withdrawals or own window. Keep the common binding and current probes.
+const publicationStatement =
+  statement
+    .split('/* semantic.own-window */')[0]!
+    .replace(
+      /\/\* semantic\.attached-coverage \*\/[\s\S]*?\/\* semantic\.end-attached-coverage \*\//,
+      `SELECT NULL::uuid AS job,NULL::uuid AS bootstrap,NULL::text AS registration,
+        NULL::uuid AS definition,NULL::text AS consumer,NULL::bigint AS generation,
+        NULL::bigint AS covered_generation,NULL::text AS coverage_root,NULL::text[] AS coverage_keys
+      WHERE false`,
+    )
+    .replace(
+      /\/\* semantic\.book-withdrawals \*\/[\s\S]*?\/\* semantic\.end-book-withdrawals \*\//,
+      'AND scope.book_withdrawals IS NULL',
+    ) +
+  `\nSELECT b.*,EXISTS(SELECT 1 FROM pending) AS pending,EXISTS(SELECT 1 FROM fenced) AS fenced,
+    coalesce((SELECT jsonb_agg(to_jsonb(h)) FROM heads h),'[]'::jsonb) AS heads,
+    NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
+      AND NOT EXISTS(SELECT 1 FROM heads) AS admitted,
+    0 AS own_homes,0 AS own_subjects,0 AS own_births,
+    NULL::text AS inserted_start,NULL::text AS started_page,NULL::text AS finished_page,
+    '[]'::jsonb AS page_children
+  FROM binding b WHERE EXISTS (SELECT 1 FROM population)`;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function nativePopulationStartId(locator: string): string {
   if (!locator.startsWith('population:') || !uuid.test(locator.slice(11)))
@@ -478,7 +503,12 @@ async function readPopulations(
       requireDeadline();
       return observations;
     }
-    const sql = statement.replace('semantic.privacy-role', final ? 'semantic.privacy-final' : 'semantic.privacy-start');
+    // The publication seal binds one prepared execution with no page or window.
+    // validBindings still decodes it and demands the exact start and empty own rows.
+    const sql = (publication ? publicationStatement : statement).replace(
+      'semantic.privacy-role',
+      final ? 'semantic.privacy-final' : 'semantic.privacy-start',
+    );
     const values = [
       JSON.stringify(members),
       Date.now(),
