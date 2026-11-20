@@ -3,6 +3,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
+import { puckSlotHasContent, SlotContent } from './render';
 
 /** `{ type, slots }` for every platform component, shared by layout and data renderers. */
 export const pageDefinitions = platformRegistry.components.map((component) => ({
@@ -78,22 +79,6 @@ function content(value: unknown): ReactNode {
   return null;
 }
 
-/** Puck passes slot content through a callback; inspect its child list to omit empty wrappers. */
-function puckSlotHasContent(value: ReactNode): boolean | undefined {
-  if (
-    !isValidElement<{ as?: unknown }>(value) ||
-    typeof value.type !== 'function' ||
-    typeof value.props.as !== 'function' ||
-    value.props.as.name !== 'SlotContent'
-  )
-    return;
-  const renderSlot = value.type as (props: { as?: unknown }) => ReactNode;
-  const rendered = renderSlot(value.props);
-  return isValidElement<{ content?: unknown }>(rendered) && Array.isArray(rendered.props.content)
-    ? rendered.props.content.length > 0
-    : false;
-}
-
 function hasContent(value: ReactNode): boolean {
   if (value == null || typeof value === 'boolean') return false;
   if (typeof value === 'string') return value.length > 0;
@@ -103,9 +88,7 @@ function hasContent(value: ReactNode): boolean {
   if (puckSlotContent !== undefined) return puckSlotContent;
   if (isValidElement<{ children?: ReactNode }>(value)) {
     if ((value.type as unknown) === Symbol.for('react.fragment')) return hasContent(value.props.children);
-    if (typeof value.type === 'function' && value.type.name === 'SlotContent') {
-      return hasContent(value.props.children);
-    }
+    if (value.type === SlotContent) return hasContent(value.props.children);
   }
   return true;
 }
