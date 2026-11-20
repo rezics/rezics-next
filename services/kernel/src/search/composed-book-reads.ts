@@ -342,10 +342,10 @@ async function beginCuts(waiting: Capture[], check: () => void) {
   return resume;
 }
 
-/** Yield the worker only after the plan (or sealed tail) owns its native reference.
- * The original Search invocation, meter, cursor and cleanup stay with the child.
+/** Use the bounded Source verifier once the page owns its native reference.
+ * Composed reads yield their permit while the role is shared across children.
  */
-export function composedBookObservation(
+export function bookPageObservation(
   source: PublicFilterSource,
   population: string | undefined,
   page: string,
@@ -353,7 +353,16 @@ export function composedBookObservation(
   charge: (observation: PrivacyReductionObservation) => void,
 ): Promise<PrivacyReductionObservation> | undefined {
   const command = catalogue.getStore();
-  if (!command || !population || !native(source)) return;
+  if (!population || !native(source)) return;
+  if (!command) {
+    // Only the sealed standalone page uses the bounded role.
+    if (request.start === null) return;
+    return source.readPrivacyReductionHeads({ kind: 'page', members: [request] }).then(([observation]) => {
+      if (!observation) throw new TypeError('Incomplete Book population response');
+      charge(observation);
+      return observation;
+    });
+  }
   const { starts, finals } = bookReadStages();
   const stage = request.start === null ? starts : finals;
   if ((command.child.page !== undefined && command.child.page !== page) || !enter(command.child, stage)) return;
