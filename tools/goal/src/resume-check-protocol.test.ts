@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { codexAdapter } from './agents/codex.ts';
 import { withAgentAdapter } from './agents.ts';
@@ -10,6 +11,8 @@ import { harness, markdown } from './test-support.ts';
 import { git } from './tasks.ts';
 
 const checkId = '6a938d41-a3c8-4fc3-bf49-7d1b207fa85e';
+const checkLog = `.temp/goal/checks/worker-check-${checkId}.log`;
+const fullCheckLog = `.temp/check-logs/${checkId}.log`;
 const oldPrompt =
   'Saved session instructions from an older launch: use bun scripts/worker-check.ts --wait <id> until it exits.';
 const waitingResult = JSON.stringify({
@@ -80,20 +83,43 @@ console.log('check: id ${checkId}');
   git(h.root, ['commit', '-m', 'Add worker-check fixture']);
 }
 
-async function waitForFile(path: string): Promise<void> {
-  for (let n = 0; n < 500; n++) {
-    if (existsSync(path)) return;
-    await Bun.sleep(10);
-  }
-  throw new Error(`timed out waiting for ${path}`);
+function writeTerminalCheck(worktree: string, id: string, exitCode: number, summary: string, log: string): void {
+  const results = join(worktree, '.temp/goal/checks/results');
+  mkdirSync(results, { recursive: true });
+  writeFileSync(join(worktree, checkLog), log);
+  writeFileSync(
+    join(results, `${checkId}.json`),
+    JSON.stringify({
+      id,
+      cwd: worktree,
+      status: 'finished',
+      runnerPid: process.pid,
+      runnerHost: hostname(),
+      argv: ['true'],
+      exitCode,
+      summary,
+      log: checkLog,
+    }),
+  );
 }
 
-function expectCurrentCheckProtocol(prompt: string): void {
-  expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
+function readContinuation(worktree: string) {
+  return JSON.parse(readFileSync(join(worktree, '.temp/goal/continued-argv.json'), 'utf8')) as {
+    argv: string[];
+    savedPrompt: string;
+    resumed: boolean;
+    calls: number;
+  };
+}
+
+function expectCurrentCheckProtocol(prompt: string, runner = 'bun scripts/worker-check.ts'): void {
+  expect(prompt).toContain(`\`${runner} -- <command...>\``);
   expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+  expect(prompt).toContain('using that bare UUID');
+  expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
   expect(prompt).toContain('do not return waiting again for those ids');
   expect(prompt).toContain('success uses `"checks":[]`');
-  expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself; the landing runs them.');
+  expect(prompt).toContain('Defer ordinary acceptance/native/browser/root/growth suites.');
   const pollingInstructions = prompt
     .split(/(?<=[.!?])\s+/)
     .filter(
@@ -122,30 +148,17 @@ test('a wake resumes the saved old session with current protocol and exact termi
     expect(waiting.state).toBe('waiting');
     expect(waiting.checks).toEqual([checkId]);
     expect(waiting.session).toBe('legacy-session');
-    expect(JSON.parse(readFileSync(join(task.worktree, '.temp/goal/initial-argv.json'), 'utf8')).at(-1)).toContain(
-      'using that bare UUID',
+    expectCurrentCheckProtocol(
+      JSON.parse(readFileSync(join(task.worktree, '.temp/goal/initial-argv.json'), 'utf8')).at(-1),
     );
     expect(readFileSync(join(task.worktree, '.temp/goal/saved-session-prompt.txt'), 'utf8')).toContain('--wait');
 
-    const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
-    mkdirSync(resultDirectory, { recursive: true });
-    writeFileSync(
-      join(resultDirectory, `${checkId}.json`),
-      JSON.stringify({ exitStatus: 0, failureSummary: 'passed', logPath: `.temp/goal/checks/${checkId}.log` }),
-    );
+    writeTerminalCheck(task.worktree, checkId, 0, 'passed', 'Owned check passed\n');
 
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    const recovery = job.recoverOrphans();
-    const continuedPath = join(task.worktree, '.temp/goal/continued-argv.json');
-    await waitForFile(continuedPath);
-    await recovery;
+    await job.recoverOrphans();
 
-    const continued = JSON.parse(readFileSync(continuedPath, 'utf8')) as {
-      argv: string[];
-      savedPrompt: string;
-      resumed: boolean;
-      calls: number;
-    };
+    const continued = readContinuation(task.worktree);
     expect(continued.resumed).toBe(true);
     expect(continued.calls).toBe(2);
     expect(continued.savedPrompt).toContain('bun scripts/worker-check.ts --wait <id>');
@@ -154,19 +167,15 @@ test('a wake resumes the saved old session with current protocol and exact termi
     expect(continued.argv).not.toContain('--wait');
     const prompt = continued.argv.at(-1)!;
     expectCurrentCheckProtocol(prompt);
-    expect(prompt).toContain(
-      'check ' + checkId + ': exit status 0; passed; log path .temp/goal/checks/' + checkId + '.log',
-    );
-    expect(prompt).toContain('using that bare UUID');
-    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
-    expect(prompt).toContain('do not return waiting again for those ids');
+    expect(prompt).toContain(`check ${checkId}: exit status 0; passed; log path ${checkLog}; full log ${fullCheckLog}`);
+    expect(readFileSync(join(task.worktree, fullCheckLog), 'utf8')).toBe('Owned check passed\n');
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(worker.attempt).session).toBe('legacy-session');
     expect(readFileSync(join(task.worktree, '.temp/goal/cli-calls.txt'), 'utf8')).toBe('2');
     expect(readFileSync(join(task.worktree, '.temp/goal/check-start-count'), 'utf8')).toBe('1');
     expect(readFileSync(join(task.worktree, 'resumed.txt'), 'utf8')).toBe('continued');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
@@ -179,13 +188,9 @@ test('a normal retry sends the current check protocol through the same-session r
     expect(h.store.attempt(worker.attempt).session).toBe('legacy-session');
 
     const retry = await h.tasks.retry(task.id);
-    await waitForFile(join(task.worktree, '.temp/goal/continued-argv.json'));
-    const continued = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/continued-argv.json'), 'utf8')) as {
-      argv: string[];
-      savedPrompt: string;
-      resumed: boolean;
-      calls: number;
-    };
+    await retry.exited;
+    await settle(h.tasks, retry, { enqueue() {} });
+    const continued = readContinuation(task.worktree);
     expect(continued.resumed).toBe(true);
     expect(continued.calls).toBe(2);
     expect(continued.savedPrompt).toContain('--wait <id>');
@@ -193,44 +198,25 @@ test('a normal retry sends the current check protocol through the same-session r
     expect(continued.argv).toContain('legacy-session');
     expect(continued.argv).not.toContain('--wait');
     expectCurrentCheckProtocol(continued.argv.at(-1)!);
-    expect(continued.argv.at(-1)).toContain('using that bare UUID');
-    expect(continued.argv.at(-1)).toContain('Never wait for it yourself: no `--wait`');
     expect(h.store.attempt(retry.attempt).attempt).toBe(2);
-    await retry.exited;
-    await settle(h.tasks, retry, { enqueue() {} });
     expect(h.store.attempt(retry.attempt).session).toBe('legacy-session');
     expect(readFileSync(join(task.worktree, '.temp/goal/cli-calls.txt'), 'utf8')).toBe('2');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
-test('a nonresumable adapter starts a fresh turn with the check protocol and supplied results', async () => {
+test('a fresh turn gets the current protocol and refuses log evidence from a mismatched terminal check', async () => {
   const h = harness(protocolCli(waitingResult));
   try {
     addCheckRunner(h);
     const { task, worker } = await startAttempt(h);
-    const resultDirectory = join(task.worktree, '.temp/goal/checks/results');
-    mkdirSync(resultDirectory, { recursive: true });
-    writeFileSync(
-      join(resultDirectory, `${checkId}.json`),
-      JSON.stringify({
-        exitStatus: 7,
-        failureSummary: 'assertion failed',
-        logPath: `.temp/goal/checks/${checkId}.log`,
-      }),
-    );
-    const continuedPath = join(task.worktree, '.temp/goal/continued-argv.json');
+    const foreignId = 'f7935afa-1250-4cf4-a108-fbc7a85b5cd5';
+    const foreignLog = 'Foreign check log must stay out of the wake prompt';
+    writeTerminalCheck(task.worktree, foreignId, 7, 'assertion failed', foreignLog);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    const recovery = withAgentAdapter({ ...codexAdapter, canResume: false }, () => job.recoverOrphans());
-    await waitForFile(continuedPath);
-    await recovery;
-    const continued = JSON.parse(readFileSync(continuedPath, 'utf8')) as {
-      argv: string[];
-      savedPrompt: string;
-      resumed: boolean;
-      calls: number;
-    };
+    await withAgentAdapter({ ...codexAdapter, canResume: false }, () => job.recoverOrphans());
+    const continued = readContinuation(task.worktree);
     expect(continued.resumed).toBe(false);
     expect(continued.calls).toBe(2);
     expect(continued.argv).not.toContain('resume');
@@ -238,25 +224,31 @@ test('a nonresumable adapter starts a fresh turn with the check protocol and sup
     expect(continued.savedPrompt).toContain('--wait <id>');
     const prompt = continued.argv.at(-1)!;
     expectCurrentCheckProtocol(prompt);
-    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain(`check ${checkId}: exit status 7; assertion failed`);
-    expect(prompt).toContain('using that bare UUID');
-    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
+    expect(prompt).toContain(
+      `check ${checkId}: exit status 7; assertion failed; log path ${checkLog}; full log unavailable (terminal record identity does not match the owned check UUID)`,
+    );
+    expect(prompt).toContain(
+      `excerpt unknown (terminal record identity does not match the owned check UUID); original path ${checkLog}`,
+    );
+    expect(prompt).not.toContain(foreignLog);
+    expect(existsSync(join(task.worktree, fullCheckLog))).toBe(false);
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(worker.attempt).session).toBe('fresh-session');
     expect(readFileSync(join(task.worktree, '.temp/goal/check-start-count'), 'utf8')).toBe('1');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
 test('a base without worker-check keeps the documented foreground fallback', () => {
   const h = harness();
   try {
+    writeFileSync(h.briefFile, markdown.replace('  tests: [acceptance]', '  tests: [acceptance]\n  requires: [root]'));
     const task = h.tasks.dispatch(h.briefFile);
     const prompt = workerPrompt(h.store.task(task.id), undefined, undefined, [], h.settings.mainCheckout);
     expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
-    expect(prompt).toContain('Run the acceptance command in the foreground from the worktree root and let it finish');
+    expect(prompt).toContain("`'bun' 'test'` in the foreground from the worktree root, without a wrapper");
+    expect(prompt).toContain('it gives no check id and no waiting result');
     expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).not.toContain('"status":"waiting"');
   } finally {
@@ -280,9 +272,7 @@ test('a contract-named existing runner outside the worktree enables detached che
       [],
       h.settings.mainCheckout,
     );
-    expect(prompt).toContain(`as \`bun ${JSON.stringify(runner)} -- <command...>\``);
-    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
-    expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    expectCurrentCheckProtocol(prompt, `bun ${JSON.stringify(runner)}`);
     expect(prompt).not.toContain('This base has no scripts/worker-check.ts; do not add one.');
   } finally {
     h.dispose();
@@ -348,6 +338,6 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
       cause: 'not-rerun',
     });
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
