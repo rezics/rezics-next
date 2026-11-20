@@ -242,6 +242,7 @@ export const localClientIds = {
   importer: 'rezics-dev-importer',
   showcase: 'rezics-dev-showcase',
   semanticWalk: 'rezics-dev-semantic-walk',
+  firstPublicWebGrantor: 'rezics-dev-first-public-web-grantor',
 } as const;
 /** Exact native scopes for the first-public catalogue and static Zone walk. Grants remain ordinary Access. */
 export function semanticWalkClientRegistration() {
@@ -303,6 +304,16 @@ function developmentShowcaseWalk(): boolean {
 }
 
 export const firstPublicWebOwnerActions = ['board:create', 'space:create', 'realm:create', 'zone:create'] as const;
+const firstPublicWebExposureScopes = ['exposure:open', 'exposure:close'] as const;
+
+export function firstPublicWebGrantorRegistration() {
+  return {
+    clientId: localClientIds.firstPublicWebGrantor,
+    firstParty: true,
+    mode: 'create-or-match' as const,
+    scopes: ['access:grant', ...firstPublicWebOwnerActions, ...firstPublicWebExposureScopes],
+  };
+}
 
 function personaScopes() {
   const importer = firstPublicWebWalk()
@@ -569,9 +580,9 @@ export async function resetWalkSeedJournals(repository: string, databaseUrl: str
   return archived;
 }
 
-export async function kernelEnvironment(): Promise<Record<string, string>> {
+export async function kernelEnvironment(checkout = root): Promise<Record<string, string>> {
   const environment = Object.fromEntries(
-    (await readFile(resolve(root, 'services/kernel/.env'), 'utf8'))
+    (await readFile(resolve(checkout, 'services/kernel/.env'), 'utf8'))
       .split('\n')
       .filter((line) => /^[A-Z_]+=/.test(line))
       .map((line) => {
@@ -612,8 +623,7 @@ export function localDatabase(url: string): URL {
   return new URL(developmentDatabaseUrl(url));
 }
 
-async function authDatabaseUrl() {
-  const kernel = await kernelEnvironment();
+function authDatabaseUrl(kernel: Record<string, string>) {
   const url = localDatabase(kernel.DATABASE_URL!);
   url.pathname = '/rezics_auth';
   return url.href;
@@ -638,7 +648,7 @@ async function setup() {
       await pool.end();
     }
   });
-  await phase('setup-auth-migrations', async () => migrate(await authDatabaseUrl()));
+  await phase('setup-auth-migrations', () => migrate(authDatabaseUrl(env)));
   const keys = await phase('setup-keys', developmentKeys);
   const contentBindings = developmentContentBindings(env);
   Object.assign(env, contentBindings, developmentKernelBindings());
@@ -683,7 +693,9 @@ export async function assemble(options?: {
   authDatabaseUrl: string;
   keys: DevelopmentKeys;
   recoveryDelivery?: import('../src/index.ts').AuthServiceOptions['recoveryDelivery'];
+  registrationOnly?: true;
 }) {
+  const registrationOnly = options?.registrationOnly;
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   const env = options?.env ?? (await kernelEnvironment());
   let workEnvironment!: NodeJS.ProcessEnv;
@@ -710,7 +722,9 @@ export async function assemble(options?: {
     );
   });
   const config = readConfig(env);
-  const authUrl = options?.authDatabaseUrl ?? (await authDatabaseUrl());
+  if (registrationOnly && config.commerce)
+    throw new Error('The first-public fixture requires Commerce to be unconfigured');
+  const authUrl = options?.authDatabaseUrl ?? authDatabaseUrl(env);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: authUrl });
   let stopAuth: (() => Promise<void>) | undefined;
@@ -825,6 +839,7 @@ export async function assemble(options?: {
     await phase(
       'auth-registration',
       (async () => {
+        if (registrationOnly) return;
         await service.internal.registerWebsiteClient({
           publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
           redirectUris: [`${origins.web}/auth/callback`],
@@ -844,9 +859,12 @@ export async function assemble(options?: {
         if (developmentShowcaseWalk() || firstPublicWebWalk()) {
           await service.internal.registerClient(semanticWalkClientRegistration());
         }
+        if (firstPublicWebWalk()) {
+          await service.internal.registerClient(firstPublicWebGrantorRegistration());
+        }
       })(),
     );
-    await phase('auth-worker', host.start());
+    if (!registrationOnly) await phase('auth-worker', host.start());
     const startWork = () => {
       if (stopping) return Promise.reject(new Error('Native Auth/Work host is stopped'));
       return (startingWork ??= (async () => {
@@ -1086,6 +1104,72 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       .join('\n') + '\n',
   );
   return person;
+}
+
+/** Prepare the Web fixture over a retained catalogue without launching another Auth or Work host. */
+export async function prepareFirstPublicWebGrantor(checkout: string) {
+  if (!importCatalogueWalk() || firstPublicWebWalk() || ordinaryAuthWalk())
+    throw new Error('Grantor preparation requires the retained catalogue walk');
+  const directory = resolve(checkout, '.temp/local-stack');
+  const seed = parseEnv(await readFile(resolve(directory, 'seed.env'), 'utf8'));
+  const account = seed.REZICS_DEV_PERSONA_ACCOUNT;
+  const accountKeyPath = seed.REZICS_DEV_PERSONA_ACCOUNT_KEY;
+  if (
+    !account ||
+    !accountKeyPath ||
+    (seed.AUTH_ORIGIN !== origins.native && seed.AUTH_ORIGIN !== origins.issuer) ||
+    seed.KERNEL_ORIGIN !== origins.kernel
+  )
+    throw new Error('Grantor preparation requires the retained seed and its native origins');
+  const env = await kernelEnvironment(checkout);
+  const keys = JSON.parse(await readFile(resolve(directory, 'keys.json'), 'utf8')) as DevelopmentKeys;
+  const composition = await assemble({ env, authDatabaseUrl: authDatabaseUrl(env), keys, registrationOnly: true });
+  try {
+    const { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
+      await import('../../kernel/src/access/bootstrap-governance.ts');
+    const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
+    const { createExposureCommands, readExposure } = await import('../../kernel/src/access/gates/catalogue.ts');
+    const { host, access, kernelPool } = composition;
+    const registration = firstPublicWebGrantorRegistration();
+    await host.service.internal.registerClient(registration);
+    const token = await createAccountTokenProvider({
+      accountKeyPath,
+      account,
+      client: registration.clientId,
+      authOrigin: origins.native,
+      issuerOrigin: origins.issuer,
+      scopes: ['access:grant', ...firstPublicWebExposureScopes],
+    });
+    const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
+    const actor = await access.authenticate(await token(), context);
+    if (actor.kind !== 'account' || actor.accountId !== account || actor.clientId !== registration.clientId)
+      throw new Error('Native Auth did not establish the retained development grantor');
+    // Governance supplies the other owner actions. Board creation has its own local bootstrap.
+    await bootstrapLocalShowcaseBoardCreation(kernelPool, account);
+    const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
+    for (const [group, operation] of [
+      ['personal_library', 'close'],
+      ['collections', 'open'],
+    ] as const) {
+      if ((await readExposure(kernelPool, group, new Date(), context.deadline)).open === (operation === 'open'))
+        continue;
+      const authorization = await accessCommandAuthorization(
+        access,
+        actor,
+        `exposure:${operation}`,
+        PLATFORM_RESOURCE,
+        context,
+        () => new Error(`Native exposure ${operation} denied for ${group}`),
+      );
+      await exposure[operation](
+        { ...context, actor },
+        { group, authorization, key: `first-public-web:${group}:${operation}` },
+      );
+    }
+    return composition.website.WEBSITE_SCOPES;
+  } finally {
+    await composition.stop();
+  }
 }
 
 function printPersona(keys: DevelopmentKeys, accountId: string) {

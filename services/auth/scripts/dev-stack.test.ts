@@ -19,9 +19,27 @@ import {
   root,
   reconcilePageDataDefinitions,
   pageDataDefinitionsEnvironment,
+  firstPublicWebGrantorRegistration,
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('Web fixture grants use a dedicated create-or-match client with only fixture scopes', () => {
+  expect(firstPublicWebGrantorRegistration()).toEqual({
+    clientId: 'rezics-dev-first-public-web-grantor',
+    firstParty: true,
+    mode: 'create-or-match',
+    scopes: [
+      'access:grant',
+      'board:create',
+      'space:create',
+      'realm:create',
+      'zone:create',
+      'exposure:open',
+      'exposure:close',
+    ],
+  });
+});
 
 test('Worker readiness survives split writes and a coalesced trailing log chunk', () => {
   const receive = outputMarker('Worker ready');
