@@ -1442,7 +1442,7 @@ export function createSearchGenerationPublication(
         refreshed: boolean;
       }
     >(query, parameters);
-    if (beforeRewind)
+    if (beforeRewind || (job.family === 'subjects' && job.fenced_pass))
       meter[validationBytes] +=
         Buffer.byteLength(query) +
         Buffer.byteLength(encodePublicFilterNativeState(parameters)) +
@@ -1464,7 +1464,6 @@ export function createSearchGenerationPublication(
       if (matches) continue;
       if (
         job.family === 'subjects' &&
-        !job.fenced_pass &&
         current_epoch === row.epoch &&
         current_position !== null &&
         BigInt(current_position) > BigInt(row.position) &&
@@ -1480,6 +1479,9 @@ export function createSearchGenerationPublication(
           job.home = row.partition;
           return true;
         }
+        // During the held pass, advance has already verified this job's Source and drained writer fence.
+        // Retain completed PIT coverage only after proving the entire changed home against settled copies.
+        check(context);
         meter[validationBytes] += SUBJECT_VALIDATION_RECHECK_SQL_BYTES;
         if (await refreshChangedSubjectHome(job, row, current_position, client, context, meter)) continue;
       }
@@ -1836,10 +1838,16 @@ export function createSearchGenerationPublication(
     } else {
       let validationHomes = PAGE;
       if (job.family === 'subjects') {
-        // The held pass already paid for current Source completion and writer custody.
-        // Spend its remaining allowance on the same exact comparison before repeating those checks.
-        const remaining = job.fenced_pass ? PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys : 0;
-        validationHomes = Math.max(SUBJECT_VALIDATION_HOMES, remaining);
+        validationHomes = SUBJECT_VALIDATION_HOMES;
+        if (job.fenced_pass) {
+          // Leave room to prove at least the first changed home, even when it heads the next turn.
+          validationHomes =
+            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT -
+            meter.inputKeys -
+            SUBJECT_VALIDATION_RECHECK_INPUTS -
+            SUBJECT_VALIDATION_TRAILING_INPUTS;
+          if (validationHomes <= 0) throw new Pending('dependency_unavailable');
+        }
       }
       if (batchValidation) {
         await validateSealedSubject(job, client, context, meter);
