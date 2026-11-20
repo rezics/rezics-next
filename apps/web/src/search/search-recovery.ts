@@ -226,10 +226,18 @@ function usefulPage(length: number, next: string | null, cursor: string | undefi
   return next === null || (length > 0 && next.length > 0 && next.length <= 4864 && next !== cursor);
 }
 
-/** A current facet authority/restart refusal invalidates the whole displayed query; outages stay scoped. */
-export function facetSearchInvalidation(state: FacetState | undefined): SearchRecoveryState | undefined {
+/** Anonymous Search and its advanced facets have separate platform gates. */
+export function facetSearchInvalidation(
+  state: FacetState | undefined,
+  mode: 'public-anonymous' | 'personal' = 'personal',
+): SearchRecoveryState | undefined {
   if (!state || state.status === 'ready' || ![401, 403, 409].includes(state.httpStatus ?? 0)) return;
-  return searchRecoveryFromResponse({ status: state.httpStatus!, error: state.problem ?? { code: state.code } });
+  const recovery = searchRecoveryFromResponse({
+    status: state.httpStatus!,
+    error: state.problem ?? { code: state.code },
+  });
+  if (mode === 'public-anonymous' && recovery.status === 'closed') return;
+  return recovery;
 }
 
 /** Never keep protected rows, kind labels or facet pages behind a recovery message or a pending read. */

@@ -147,7 +147,8 @@ async function readSearch(
   const { signal, reader } = context;
   const queryState = requestParams(data);
   const realmCatalogue = queryState.resourceScope?.kind === 'realm';
-  if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
+  const requiresCurrentReader = searchRequiresCurrentReader(queryState);
+  if (requiresCurrentReader && (!reader || data.reader !== reader.owner))
     return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
 
   let release: Release | undefined;
@@ -283,7 +284,8 @@ async function readSearch(
     ? undefined
     : ['session', 'closed', 'denied'].includes(outcome.recovery.status)
       ? outcome.recovery
-      : (facetSearchInvalidation(facetResult) ?? outcome.recovery);
+      : (facetSearchInvalidation(facetResult, requiresCurrentReader ? 'personal' : 'public-anonymous') ??
+        outcome.recovery);
   const problem = recovery && 'problem' in recovery ? recovery.problem : undefined;
   const typeChoices = discovery?.status === 'ready' ? discovery.page.kinds.values : [];
   const hitTypes: Record<string, Record<string, string>> = {};
@@ -317,7 +319,7 @@ async function readSearch(
               ...(data.resourceScope ? { scope: data.resourceScope } : {}),
               ...(data.ratingPopulation ? { ratingPopulation: data.ratingPopulation } : {}),
               sort: data.sort ?? 'relevance',
-              mode: searchRequiresCurrentReader(data) ? 'personal' : 'public-anonymous',
+              mode: requiresCurrentReader ? 'personal' : 'public-anonymous',
             }),
             properties: roster,
             ...(facetResult ? { initial: facetResult } : {}),

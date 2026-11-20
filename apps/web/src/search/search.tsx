@@ -542,9 +542,9 @@ export function SearchPage({
     }));
   };
   const conceptFilter = data?.conditionMetadata ? conditionConceptSuggestionFilter(data.conditionMetadata) : undefined;
-  const conceptRequiresReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
+  const requiresCurrentReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
   const conceptLookup = {
-    enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !conceptRequiresReader,
+    enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !requiresCurrentReader,
     ...(conceptFilter ? { filter: conceptFilter } : {}),
     ...(data?.conditionMetadata?.digest ? { releaseDigest: data.conditionMetadata.digest } : {}),
     lifetimeKey: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState]),
@@ -553,7 +553,7 @@ export function SearchPage({
       ? { blocked: 'metadata' as const }
       : committedState.resourceScope
         ? { blocked: 'scope' as const }
-        : conceptRequiresReader
+        : requiresCurrentReader
           ? { blocked: 'private' as const }
           : {}),
   };
@@ -1231,12 +1231,10 @@ export function SearchPage({
                     facetValues: selectedFacets,
                     locale,
                     kindCursor,
-                    ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+                    ...(requiresCurrentReader && session ? { reader: session } : {}),
                   },
                   signal,
-                  ...(searchRequiresCurrentReader(data.queryState!)
-                    ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
-                    : {}),
+                  ...(requiresCurrentReader ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } } : {}),
                 });
                 return response;
               }}
@@ -1324,7 +1322,7 @@ export function SearchPage({
                 data: {
                   query,
                   locale,
-                  ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+                  ...(requiresCurrentReader && session ? { reader: session } : {}),
                   conditions: {
                     ...(type ? { type } : {}),
                     facetValues: withoutResourceLanguageSelection({
@@ -1344,11 +1342,9 @@ export function SearchPage({
                   facets,
                 },
                 signal,
-                ...(searchRequiresCurrentReader(data.queryState!)
-                  ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
-                  : {}),
+                ...(requiresCurrentReader ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } } : {}),
               });
-              const state = facetSearchInvalidation(response);
+              const state = facetSearchInvalidation(response, requiresCurrentReader ? 'personal' : 'public-anonymous');
               if (!signal.aborted && sourceData && currentData.current === sourceData && state)
                 setInvalidation({ owner: sourceData, state });
               return response;

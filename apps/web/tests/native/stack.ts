@@ -34,6 +34,8 @@ import {
 } from './lifecycle.ts';
 import type { WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
+import type { DefaultDiscoverySearch } from '../../../../services/kernel/src/search/default-discovery.ts';
+import { systemClock } from '../../../../services/kernel/src/clock.ts';
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 import type { NativeArchivePreview, NativeArchiveStatus } from '../../src/library/archive-entry-recovery/native.ts';
 import { libraryEntryStateWrite } from '../../src/library/shelf-params.ts';
@@ -129,6 +131,8 @@ export type NativeWebStackOptions = {
   observePersonalAccess?: boolean;
   /** Give the isolated showcase governor the native Global Board-creation grant. */
   localShowcaseBoardCreation?: boolean;
+  /** Bind the native mixed Discovery reader to this stack's Search worker. */
+  mixedDiscovery?: boolean;
   /** Admit the original Semantic editor's native actions and synchronize its Account Agent. */
   semanticFirstPublicEditor?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
@@ -837,6 +841,7 @@ async function startStack(): Promise<
   let closePageWorkflows: (() => Promise<void>) | undefined;
   let commerceWorkClient: Promise<WorkClient> | undefined;
   let search: OpenSearch | undefined;
+  let discovery: DefaultDiscoverySearch | undefined;
   const searchPrefix = `native-web-${randomBytes(12).toString('hex')}-`;
   const originalDatabaseUrl = process.env.DATABASE_URL;
   const originalReyloConfig = process.env.REYLO_CONFIG;
@@ -908,6 +913,7 @@ async function startStack(): Promise<
         }),
         attempt(() => durableWorker?.stop()),
       ]);
+      await attempt(() => discovery?.close());
       await attempt(() => consentServer?.close());
       consentServer = undefined;
       if (commerceWorkClient)
@@ -1201,6 +1207,16 @@ async function startStack(): Promise<
     const { createSearchService } = await import('../../../../services/kernel/src/search/service.ts');
     const { subjectSource } = await import('../../../../services/kernel/src/semantic/search-source.ts');
     if (searchConfig) search = createOpenSearch(searchConfig.url);
+    const mixedDiscovery = process.env.NATIVE_WEB_MIXED_DISCOVERY === '1';
+    if (mixedDiscovery && !search) throw new Error('Native mixed Discovery requires OPENSEARCH_URL');
+    const discoveryModules = mixedDiscovery
+      ? await Promise.all([
+          import('../../../../services/kernel/src/search/default-discovery.ts'),
+          import('../../../../services/kernel/src/composition/discovery.ts'),
+          import('../../../../services/kernel/src/composition/search-access.ts'),
+        ])
+      : undefined;
+    const discoveryTarget = search && searchConfig && { search, prefix: searchConfig.prefix };
     const accessRequest = new AsyncLocalStorage<NativeKernelRequest>();
     const observeAccess = (base: Access): Access => {
       if (process.env.NATIVE_WEB_OBSERVE_PERSONAL_ACCESS !== '1') return base;
@@ -1301,7 +1317,34 @@ async function startStack(): Promise<
           onAccessReady(access, viewerActions) {
             observedDependencies.onAccessReady?.(access, viewerActions);
             composeLibraryDomain({ ...library, access });
+            if (discoveryModules && discoveryTarget) {
+              const [{ createDefaultDiscoverySearch }, { createDiscoveryProducerEntry }, { composeSearchAccess }] =
+                discoveryModules;
+              const native = {
+                pool: dependencies.pool,
+                routeKey: dependencies.routeKey,
+                access,
+                clock: dependencies.clock ?? systemClock,
+                deadlineNow: dependencies.deadlineNow ?? Date.now,
+              };
+              discovery = createDefaultDiscoverySearch(
+                {
+                  ...native,
+                  ...discoveryTarget,
+                  keys: dependencies.tokens!,
+                  spaceEntryActions: viewerActions,
+                  facetAccess: composeSearchAccess(),
+                },
+                createDiscoveryProducerEntry({ ...native, tokens: dependencies.tokens! }),
+              );
+            }
           },
+          ...(discoveryModules && {
+            discovery: (...args) => {
+              if (!discovery) throw new Error('Native mixed Discovery has not composed Access');
+              return discovery.search(...args);
+            },
+          }),
           ...(commerce
             ? {
                 commerce: {
@@ -2014,6 +2057,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_SEMANTIC_FIRST_PUBLIC_EDITOR: options.semanticFirstPublicEditor ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
     NATIVE_WEB_OBSERVE_PERSONAL_ACCESS: options.observePersonalAccess ? '1' : '0',
+    NATIVE_WEB_MIXED_DISCOVERY: options.mixedDiscovery ? '1' : '0',
     ...(options.commerce
       ? {
           STRIPE_SECRET_KEY: 'sk_test_native_purchases',
