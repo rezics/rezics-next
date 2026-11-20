@@ -62,10 +62,25 @@ while validating the physical keyed receipt. A deleted name cannot be auto-creat
 a replacement creation has a different allocation alias. UUID/alias are checked before and after mutation, and
 an owner/incarnation mismatch cannot overwrite retained enrollment or copy custody.
 
-A guarded 409 rejects. Refresh alone is not native current-winner/source proof. Any lost transport/shard/UUID or
-local-settlement response after dispatch retains enrollment. No timeout, lease, GET of current hits or successful
-function return drains it. Quiescent uncertain dispatched work still requires the actual receiving recovery/handoff
-producer; this delivery does not claim that missing reconciliation. Native confirmed settlement retains the copy
+A guarded 409 rejects. The live relay retains compact original bulk items and their exact action versions under
+the dispatch token before checking the allocation again and settling. A relay replay may consume those committed
+items under the same owner, physical UUID and write alias, and then apply its full current Source obligation
+before advancing its checkpoint. Settlement clears the temporary items and retains the last visible native
+receipt and Source position. No Subject body is stored in the temporary receipt.
+An existing proof can drain under a closed gate. A replay batch that needs new Source writes still requires admission
+before those writes can advance its checkpoint.
+
+If OpenSearch's original response never reached durable receipt storage, the token still holds the writer.
+Older dispatched rows start in that state after migration. A current hit, absence, refresh, conflict or elapsed
+time supplies neither the original successful response nor proof that delayed mutations have drained. A later
+delete can lose its engine version tombstone, which makes superseding an unproved dispatch unsafe. Reconciliation
+requires the original action identity and its verified successful bulk item or a native handoff proving that the
+original allocation can no longer receive the dispatch. The Subject writer has no producer for that historical
+evidence. The [index erasure protocol](../../../../docs/search-index-erasure-plan.md#physical-replacement-and-capacity)
+specifies the replacement and retirement path when the original response is unavailable. Old UUID, token,
+checkpoint and last-visible state stay intact until authorized native reconciliation.
+
+Native confirmed settlement retains the copy
 locator and visible native receipt; a later pre-dispatch cancellation preserves them. Copy minimization/reopening
 requires actual receiving custody and is deliberately unavailable here. Retained keys and closes are charged
 operational copies, not free history, identity membership or an alternate authority.
