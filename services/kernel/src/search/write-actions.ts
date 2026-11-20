@@ -126,22 +126,33 @@ function validateBulkResponse(
 }
 
 /** Revalidate a retained actual native item response, including its physical key and external version. */
-export function validateIndexWriteReceipt(response: unknown, target: string, actions: readonly IndexAction[]): void {
+export function validateIndexWriteReceipt(
+  response: unknown,
+  target: string,
+  actions: readonly Pick<IndexAction, 'op' | 'id' | 'version'>[],
+): void {
   if (validateBulkResponse(response, target, actions)) throw new IndexWriteError([response]);
 }
 
 /** Retain the original evidence fields used by the validator, including the actual shard totals. */
 export function retainIndexWriteItem(response: unknown, target: string, action: IndexAction) {
-  validateIndexWriteReceipt(response, target, [action]);
-  const { errors, items } = response as { errors: boolean; items: [Record<typeof action.op, BulkItem>] };
-  const { _index, _id, _version, _seq_no, _primary_term, _shards, status, result, forced_refresh } =
-    items[0][action.op];
+  return retainIndexWriteItems(response, target, [action])[0]!;
+}
+
+export function retainIndexWriteItems(response: unknown, target: string, actions: readonly IndexAction[]) {
+  validateIndexWriteReceipt(response, target, actions);
+  const { items } = response as { items: Record<IndexAction['op'], BulkItem>[] };
+  return actions.map((action, i) => compactIndexWriteItem(items[i]![action.op], action.op));
+}
+
+function compactIndexWriteItem(item: BulkItem, op: IndexAction['op']) {
+  const { _index, _id, _version, _seq_no, _primary_term, _shards, status, result, forced_refresh } = item;
   const { total, successful, failed, failures } = _shards as BulkItem;
   return {
-    errors,
+    errors: false,
     items: [
       {
-        [action.op]: {
+        [op]: {
           _index,
           _id,
           _version,

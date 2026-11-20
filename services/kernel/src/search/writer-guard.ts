@@ -65,7 +65,12 @@ import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
 import { OpenSearchError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
-import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
+import {
+  writeIndexActions,
+  validateRefreshResponse,
+  validateIndexWriteReceipt,
+  retainIndexWriteItems,
+} from './write-actions.ts';
 import {
   readDiscoveryWriterPhysicalTarget,
   validateDiscoveryRepairWinner,
@@ -1152,7 +1157,7 @@ export function createSearchWriterGuard(options: {
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
-  /** The live outbox relay can replace an interrupted pre-dispatch enrollment on replay. */
+  /** Live relay replay can replace undispatched enrollments and settle retained bulk responses. */
   recoverRelayEnrollment?: true;
 }): SearchWriterNativeCustody & SearchWriterPublicationGuard {
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(options.consumer)) throw new TypeError('Invalid Search consumer');
@@ -1318,10 +1323,10 @@ export function createSearchWriterGuard(options: {
       };
     }
   }
-  async function publicationAdmission(tx: CommandTransaction) {
+  async function publicationAdmission(tx: CommandTransaction, fenceError?: IdentityEpochStoreError) {
     await lockWriterPublicationAdmission(tx, options.index);
     const result = await tx.query(readPublicationFence, [options.index]);
-    if (result.rowCount) throw unavailable('Search generation is fenced for native publication');
+    if (result.rowCount) throw fenceError ?? unavailable('Search generation is fenced for native publication');
   }
   async function publicationJob(
     tx: CommandTransaction,
@@ -2352,47 +2357,145 @@ export function createSearchWriterGuard(options: {
       const { incarnation, writeAlias } = await readSearchWriterPhysicalTarget(options.search, options.index);
       const token = crypto.randomUUID();
       const commandOptions = { partition, ...(renewal && { deadline: renewal.context.deadline }) };
-      const enrollment = await runCommand(options.pool, commandOptions, async (tx, context) => {
-        const receipt = await native(tx, context.transactionId);
-        await publicationAdmission(tx);
-        const target = await gate(tx, receipt, incarnation, writeAlias, !renewal);
-        if (target.closed_token) throw unavailable('Search generation is closed to writer enrollment');
-        if (renewal) {
-          const { receipt: original, writer } = renewal.input;
-          const current = await repairWriter.run(tx, {
-            partition_no: partition,
-            physical_target: options.index,
-            original_id: original.subject,
-          });
-          if (
-            !isDeepStrictEqual(current, writer) ||
-            BigInt(writer.settled_position!) >= receipt.position ||
-            original.consumer !== options.consumer ||
-            original.incarnation !== incarnation ||
-            original.writeAlias !== writeAlias
-          )
-            throw unavailable('Superseding Search writer changed before repair enrollment');
-        }
-        await tx.query(
-          `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
+      const relay = options.recoverRelayEnrollment === true && !renewal;
+      const pending = unavailable('Search writer is enrolled, structurally closed, or awaiting owner custody');
+      const publicationFenced = unavailable('Search generation is fenced for native publication');
+      const generationClosed = unavailable('Search generation is closed to writer enrollment');
+      const enrollWriter = () =>
+        runCommand(options.pool, commandOptions, async (tx, context) => {
+          const receipt = await native(tx, context.transactionId);
+          await publicationAdmission(tx, publicationFenced);
+          const target = await gate(tx, receipt, incarnation, writeAlias, !renewal);
+          if (target.closed_token) throw generationClosed;
+          if (renewal) {
+            const { receipt: original, writer } = renewal.input;
+            const current = await repairWriter.run(tx, {
+              partition_no: partition,
+              physical_target: options.index,
+              original_id: original.subject,
+            });
+            if (
+              !isDeepStrictEqual(current, writer) ||
+              BigInt(writer.settled_position!) >= receipt.position ||
+              original.consumer !== options.consumer ||
+              original.incarnation !== incarnation ||
+              original.writeAlias !== writeAlias
+            )
+              throw unavailable('Superseding Search writer changed before repair enrollment');
+          }
+          await tx.query(
+            `UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
           WHERE partition_no=$1 AND physical_target=$2`,
-          [partition, options.index],
-        );
-        const result = await tx.query(enroll.sql, [
-          partition,
-          options.index,
-          incarnation,
-          receipt.epoch,
-          token,
-          receipt.transactionId,
-          receipt.position.toString(),
-          ids,
-          // Dispatch and replacement use the same native row. The old token can no longer dispatch.
-          options.recoverRelayEnrollment === true && !renewal,
-        ]);
-        if (result.rowCount !== ids.length)
-          throw unavailable('Search writer is enrolled, structurally closed, or awaiting owner custody');
-        return { value: receipt, events: changed() };
+            [partition, options.index],
+          );
+          const result = await tx.query(enroll.sql, [
+            partition,
+            options.index,
+            incarnation,
+            receipt.epoch,
+            token,
+            receipt.transactionId,
+            receipt.position.toString(),
+            ids,
+            // Dispatch and replacement use the same native row. The old token can no longer dispatch.
+            relay,
+          ]);
+          if (result.rowCount !== ids.length) throw pending;
+          return { value: receipt, events: changed() };
+        });
+      const checkAllocation = async () => {
+        const current = await readSearchWriterPhysicalTarget(options.search, options.index);
+        if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
+          throw unavailable('Search physical index changed after dispatch');
+      };
+      const settleRelay = async (ownToken: string | null) => {
+        // First prove the original allocation is still addressed by the retained write alias.
+        await checkAllocation();
+        const result = await runCommand(options.pool, commandOptions, async (tx, context) => {
+          const completion = await native(tx, context.transactionId);
+          const target = await tx.query(gateSql.sql, [
+            partition,
+            options.index,
+            options.consumer,
+            incarnation,
+            completion.epoch,
+            writeAlias,
+          ]);
+          if (target.rowCount !== 1) {
+            if (ownToken) throw unavailable('Search relay lost its native writer gate');
+            return noEffect(false);
+          }
+          const { rows } = await tx.query<{
+            original_id: string;
+            writer_token: string;
+            writer_transaction_id: string;
+            writer_position: string;
+            relay_receipt: string;
+          }>(
+            `SELECT original_id::text,writer_token::text,writer_transaction_id::text,writer_position::text,relay_receipt
+             FROM search.identity_writer
+             WHERE partition_no=$1 AND physical_target=$2 AND incarnation=$3 AND owner_epoch=$4
+               AND original_id=ANY($5::uuid[]) AND dispatch_state='dispatched' AND relay_receipt IS NOT NULL
+               AND ($6::uuid IS NULL OR writer_token=$6)
+             ORDER BY original_id FOR UPDATE`,
+            [partition, options.index, incarnation, completion.epoch, ids, ownToken],
+          );
+          if (ownToken && rows.length !== ids.length) throw unavailable('Search relay lost its original bulk receipt');
+          if (!rows.length) return noEffect(false);
+          const attempts = new Map<string, { txId: string; position: string; version: string; ids: string[] }>();
+          for (const row of rows) {
+            const { op, version, bulk } = JSON.parse(row.relay_receipt);
+            if ((op !== 'index' && op !== 'delete') || typeof version !== 'string' || !/^[1-9]\d{0,15}$/.test(version))
+              throw unavailable('Search relay receipt has an invalid action');
+            const source = BigInt(version);
+            if (source < BigInt(row.writer_position) || source >= completion.position)
+              throw unavailable('Search relay receipt has an invalid Source version');
+            validateIndexWriteReceipt(bulk, options.index, [{ op, id: row.original_id, version: source }]);
+            const previous = attempts.get(row.writer_token);
+            if (previous) {
+              if (
+                previous.txId !== row.writer_transaction_id ||
+                previous.position !== row.writer_position ||
+                previous.version !== version
+              )
+                throw unavailable('Search relay receipt conflicts with its original batch');
+              previous.ids.push(row.original_id);
+            } else {
+              attempts.set(row.writer_token, {
+                txId: row.writer_transaction_id,
+                position: row.writer_position,
+                version,
+                ids: [row.original_id],
+              });
+            }
+          }
+          for (const [writer, attempt] of attempts) {
+            const settled = await tx.query(settle.sql, [
+              partition,
+              options.index,
+              incarnation,
+              completion.epoch,
+              writer,
+              attempt.txId,
+              attempt.position,
+              attempt.ids,
+              completion.transactionId,
+              String(completion.position),
+              attempt.version,
+            ]);
+            if (settled.rowCount !== attempt.ids.length)
+              throw unavailable('Search relay dispatch changed before settlement');
+          }
+          return { value: true, events: changed() };
+        });
+        return result.value;
+      };
+      const enrollment = await enrollWriter().catch(async (error) => {
+        if (!relay || (error !== pending && error !== publicationFenced && error !== generationClosed)) throw error;
+        const recovered = await settleRelay(null);
+        if (!recovered || error !== pending) throw error;
+        // The original response settles only its own version. Run ordinary Source apply for this replay's batch.
+        return enrollWriter();
       });
       const receipt = enrollment.value;
       let dispatched = false;
@@ -2476,20 +2579,53 @@ export function createSearchWriterGuard(options: {
         // Set BEFORE calling the transport: a thrown/lost response says nothing about native application.
         dispatched = true;
         let bulk: unknown;
-        const transport: OpenSearch = renewal
-          ? {
-              ...options.search,
-              async bulk(lines, opts) {
-                const response = await options.search.bulk(lines, opts);
-                bulk = response;
-                return response as never;
-              },
-            }
-          : options.search;
+        const transport: OpenSearch =
+          renewal || relay
+            ? {
+                ...options.search,
+                async bulk(lines, opts) {
+                  const response = await options.search.bulk(lines, opts);
+                  bulk = response;
+                  return response as never;
+                },
+              }
+            : options.search;
         await writeIndexActions(transport, options.index, actions, { rejectConflicts: true, writeAlias });
-        const observed = await readSearchWriterPhysicalTarget(options.search, options.index);
-        if (observed.incarnation !== incarnation || observed.writeAlias !== writeAlias)
-          throw unavailable('Search physical index changed after dispatch');
+        if (relay) {
+          const items = retainIndexWriteItems(bulk, options.index, actions);
+          const retained = actions.map((action, i) =>
+            JSON.stringify({ op: action.op, version: String(action.version), bulk: items[i] }),
+          );
+          await runCommand(options.pool, commandOptions, async (tx, context) => {
+            const hold = await native(tx, context.transactionId);
+            if (hold.epoch !== receipt.epoch) throw unavailable('Search writer owner changed before bulk retention');
+            await gate(tx, hold, incarnation, writeAlias, false);
+            const saved = await tx.query(
+              `UPDATE search.identity_writer AS w SET relay_receipt=input.receipt
+               FROM unnest($8::uuid[],$9::text[]) AS input(id,receipt)
+               WHERE w.partition_no=$1 AND w.physical_target=$2 AND w.incarnation=$3 AND w.owner_epoch=$4
+                 AND w.writer_token=$5 AND w.writer_transaction_id=$6 AND w.writer_position=$7
+                 AND w.original_id=input.id AND w.dispatch_state='dispatched' AND w.relay_receipt IS NULL
+               RETURNING w.original_id`,
+              [
+                partition,
+                options.index,
+                incarnation,
+                receipt.epoch,
+                token,
+                receipt.transactionId,
+                String(receipt.position),
+                actions.map(({ id }) => id),
+                retained,
+              ],
+            );
+            if (saved.rowCount !== actions.length) throw unavailable('Search writer lost its original bulk dispatch');
+            return { value: null, events: changed() };
+          });
+          await settleRelay(token);
+          return;
+        }
+        await checkAllocation();
         sourcePosition = snapshot.position;
         if (renewal) renewedEffect = { action: actions[0]!, bulk };
       } catch (error) {

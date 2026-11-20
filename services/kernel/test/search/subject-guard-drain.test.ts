@@ -373,3 +373,170 @@ test('live Subject replay batches foreign creator identities and reaches later c
     await replay?.outcome;
   }
 }, 30_000);
+
+test('dispatched Subject relay retains the same custody before transport and after a lost successful response', async () => {
+  const t = await target();
+  const relay = (search = f.search) => {
+    const options = { ...f.options(t.prefix, search), ...t };
+    return createSubjectIndexer({
+      ...options,
+      writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
+    });
+  };
+  await relay().run(t.partition);
+  const previous = await checkpoint(t);
+  await runCommand(f.pool, { partition: t.partition }, async () => ({
+    value: null,
+    events: [{ type: 'com.rezics.subject.created.v1', subject: t.id, data: { id: t.id } }],
+  }));
+  const row = async () =>
+    (
+      await f.admin.query(
+        `SELECT writer_token, writer_position, writer_transaction_id, dispatch_state, source_position, visible_position,
+              repair_action, repair_receipt, relay_receipt
+       FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+        [t.partition, t.index, t.id],
+      )
+    ).rows[0]!;
+  const lastVisible = await row();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const lost = new Error('Injected response loss after real refresh-visible bulk');
+  let returnedVersion: number | undefined;
+  const running = observe(
+    relay({
+      ...f.search,
+      async bulk<T>(lines: readonly unknown[], options?: Parameters<typeof f.search.bulk>[1]): Promise<T> {
+        entered.resolve();
+        await release.promise;
+        const result = await f.search.bulk<{ errors: boolean; items: Array<{ index: { _version: number } }> }>(
+          lines,
+          options,
+        );
+        expect(result.errors).toBe(false);
+        returnedVersion = result.items[0]!.index._version;
+        throw lost;
+      },
+    }).run(t.partition),
+  );
+  let dispatched: Awaited<ReturnType<typeof row>>;
+  try {
+    await Promise.race([
+      entered.promise,
+      running.outcome.then((outcome) => {
+        throw new Error('Relay failed before native dispatch', { cause: outcome });
+      }),
+    ]);
+    dispatched = await row();
+    expect(dispatched.dispatch_state).toBe('dispatched');
+    expect(dispatched.writer_token).toBeString();
+    expect(dispatched.visible_position).toBe(lastVisible.visible_position);
+    expect(dispatched.repair_action).toBeNull();
+    expect(dispatched.repair_receipt).toBeNull();
+    expect(dispatched.relay_receipt).toBeNull();
+    await expect(relay().run(t.partition)).rejects.toThrow('Search writer is enrolled');
+    expect(await row()).toEqual(dispatched);
+  } finally {
+    release.resolve();
+    await running.outcome;
+  }
+  expect(await running.outcome).toEqual({ ok: false, error: lost });
+  if (returnedVersion === undefined) throw new Error('OpenSearch did not return the applied version');
+  expect(returnedVersion).toBeGreaterThan(Number(dispatched.source_position));
+  const { body } = await f.search.request<{ hits: { hits: Array<{ _version: number }> } }>(
+    'POST',
+    `/${t.index}/_search`,
+    {
+      version: true,
+      query: { ids: { values: [t.id] } },
+    },
+  );
+  expect(body.hits.hits.map((hit) => hit._version)).toEqual([returnedVersion]);
+  await expect(relay().run(t.partition)).rejects.toThrow('Search writer is enrolled');
+  expect(await row()).toEqual(dispatched);
+  expect(await checkpoint(t)).toBe(previous);
+}, 60_000);
+
+test.each([false, true])(
+  'Subject relay settles the retained original receipt with home closed=%s',
+  async (closed) => {
+    const t = await target();
+    const relay = (search = f.search) => {
+      const options = { ...f.options(t.prefix, search), ...t };
+      return createSubjectIndexer({
+        ...options,
+        writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
+      });
+    };
+    const row = async () =>
+      (
+        await f.admin.query<{
+          writer_token: string | null;
+          source_position: string | null;
+          relay_receipt: string | null;
+        }>(
+          `SELECT writer_token,source_position,relay_receipt FROM search.identity_writer
+       WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+          [t.partition, t.index, t.id],
+        )
+      ).rows[0]!;
+    const lost = new Error('Injected allocation lookup loss after a validated bulk response');
+    let wrote = false;
+    await expect(
+      relay({
+        ...f.search,
+        async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
+          const result = await f.search.bulk<T>(...args);
+          wrote = true;
+          return result;
+        },
+        async request<T>(...args: Parameters<typeof f.search.request>) {
+          if (wrote && args[0] === 'GET' && args[1] === `/${t.index}`) throw lost;
+          return f.search.request<T>(...args);
+        },
+      }).run(t.partition),
+    ).rejects.toBe(lost);
+    const retained = await row();
+    const receipt = JSON.parse(retained.relay_receipt!);
+    expect(receipt.bulk.items[0].index).toMatchObject({
+      _id: t.id,
+      _index: t.index,
+      _version: Number(receipt.version),
+    });
+    expect(retained.source_position).toBeNull();
+    expect(await checkpoint(t)).toBe(0n);
+    if (closed) {
+      const writer = createSearchWriterGuard({
+        ...f.options(t.prefix, f.search),
+        ...t,
+        recoverRelayEnrollment: true,
+      });
+      const barrier = await writer.closeGeneration(t.partition);
+      expect(barrier.ordinary).toBe('draining');
+      await expect(relay().run(t.partition)).rejects.toThrow('Search generation is closed to writer enrollment');
+      expect((await writer.adoptGenerationPublicationBarrier(barrier.locator)).ordinary).toBe('drained');
+      expect(await row()).toEqual({ writer_token: null, source_position: receipt.version, relay_receipt: null });
+      expect(await checkpoint(t)).toBe(0n);
+      return;
+    }
+    let replayed = false;
+    await relay({
+      ...f.search,
+      async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
+        const next = await row();
+        expect(next.writer_token).not.toBe(retained.writer_token);
+        expect(next.source_position).toBe(receipt.version);
+        expect(next.relay_receipt).toBeNull();
+        replayed = true;
+        return f.search.bulk<T>(...args);
+      },
+    }).run(t.partition);
+    expect(replayed).toBe(true);
+    const settled = await row();
+    expect(settled.writer_token).toBeNull();
+    expect(settled.relay_receipt).toBeNull();
+    expect(BigInt(settled.source_position!)).toBeGreaterThan(BigInt(receipt.version));
+    expect(await checkpoint(t)).toBeGreaterThan(0n);
+  },
+  60_000,
+);
