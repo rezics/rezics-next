@@ -4,31 +4,42 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { linkProjection, listSubjectLinks } from '../../src/semantic/links.ts';
+import { moderateStatement } from '../../src/semantic/moderation.ts';
 import { createSubject, writeFacts } from '../../src/semantic/subject.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { createRealAccess } from './real-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 4 });
 const readerId = newId(32000);
-const access = await createRealAccess(admin, { reader: readerId }, ['subject:read']);
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: readerId,
-  clientId: 'relation-page-summaries-test',
-  scopes: ['subject:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const actions = ['subject:read', 'subject:create', 'moderation:hide'];
+const access = await createRealAccess(admin, { reader: readerId }, actions);
+const fixtureAccess = access.access({
+  actions: new Map(actions.map((action) => [action, { anonymous: action === 'subject:read' }])),
+});
+const globalResource = { route: 0, id: GLOBAL_CONTEXT };
+let actor: AccountActor;
+const authorize = (action: string) =>
+  accessCommandAuthorization(
+    fixtureAccess,
+    actor,
+    action,
+    globalResource,
+    { pool: db.pool, deadline: deadlineFor(30_000) },
+    () => new Error(`Fixture denied ${action}`),
+  );
 const kernel = createKernel({
   pool,
+  receiptKeys: testReceiptKeys(),
   access: access.access,
   writeRate: access.writeRate,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(96)]]) },
@@ -58,11 +69,13 @@ const provenance = {
     },
   ],
 };
-const value = (property: string, content: string) => ({
+const value = (property: string, content: unknown) => ({
   property: { id: property },
   value: { type: 'value', content },
   rank: 'preferred',
 });
+const date = (time: string, precision: number) =>
+  value('schema:datePublished', { time, precision, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' });
 
 let db: GrowthDatabase;
 let coverId: string;
@@ -92,7 +105,7 @@ async function create(
       statements,
     },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: await authorize('subject:create'),
   });
   return result.subject;
 }
@@ -182,12 +195,25 @@ function expectedSummary(id: string, type: string, label: string) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  const authenticated = await fixtureAccess.authenticate(access.bearer('reader'), {
+    pool: db.pool,
+    deadline: deadlineFor(30_000),
+  });
+  if (authenticated.kind !== 'account') throw new Error('Fixture requires an authenticated reader');
+  actor = authenticated;
+  await access.grant(globalResource, 'reader', 'subject:create');
+  await access.grant(globalResource, 'reader', 'moderation:hide');
   await bootstrapRelease(db.pool, bundledRelease);
   coverId = await createCover(32128);
-  book = await create('schema:Book', 32144, 'Work');
-  unreadableBook = await create('schema:Book', 32160, 'Unreadable work');
+  book = await create('schema:Book', 32144, 'Work', {
+    'schema:datePublished': [date('+1996-00-00T00:00:00Z', 9)],
+  });
+  unreadableBook = await create('schema:Book', 32160, 'Unreadable work', {
+    'schema:datePublished': [date('+1981-04-01T00:00:00Z', 11)],
+  });
   instance = await create('bf:Instance', 32160, 'Edition', {
     'schema:exampleOfWork': [value('schema:exampleOfWork', book.id)],
+    'schema:datePublished': [date('+2001-08-00T00:00:00Z', 10)],
   });
   unreadableInstance = await create('bf:Instance', 32176, 'Unreadable edition', {
     'schema:exampleOfWork': [value('schema:exampleOfWork', book.id)],
@@ -236,13 +262,14 @@ test('inverse and forward relation pages return the shared display summary and o
   const inverse = await request(`/v1/subjects/${book.id}/links?property=schema%3AexampleOfWork`);
   expect(inverse.response.status).toBe(200);
   expect(inverse.body).not.toHaveProperty('count');
-  expect(inverse.body.links).toEqual([
+  expect(inverse.body.links).toMatchObject([
     {
       subject: instance.id,
       property: 'schema:exampleOfWork',
       statement: instance.statements['schema:exampleOfWork']![0]!.id,
       type: 'bf:Instance',
       label: '日本語 Edition',
+      date: '2001-08',
       summary: expectedSummary(instance.id, 'bf:Instance', 'Edition'),
     },
   ]);
@@ -255,6 +282,7 @@ test('inverse and forward relation pages return the shared display summary and o
     target: book.id,
     type: 'schema:Book',
     label: '日本語 Work',
+    date: '1996',
     summary: expectedSummary(book.id, 'schema:Book', 'Work'),
   });
 
@@ -266,6 +294,22 @@ test('inverse and forward relation pages return the shared display summary and o
   const authorizedIds = new Set(access.readChecks.map((check) => check.resource.id));
   expect(authorizedIds).toContain(instance.id);
   expect(authorizedIds).toContain(book.id);
+
+  await moderateStatement(pool, {
+    actor,
+    subject: book.id,
+    candidate: book.statements['schema:datePublished']![0]!.id,
+    action: 'hide',
+    body: { reason: 'Hide the publication date' },
+    idempotencyKey: randomUUID(),
+    digest: createHash('sha256').update('hide date').digest(),
+    authorization: await authorize('moderation:hide'),
+    deadline: deadlineFor(30_000),
+  });
+  const concealed = await request(`/v1/subjects/${instance.id}/relations?property=schema%3AexampleOfWork`);
+  expect(concealed.response.status).toBe(200);
+  expect(concealed.body.relations[0]).toMatchObject({ target: book.id, label: '日本語 Work' });
+  expect(concealed.body.relations[0]).not.toHaveProperty('date');
 });
 
 test("a relation page's summaries are bounded by partitions touched", async () => {

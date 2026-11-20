@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { readSummaryWitness, summaryPositionRegion } from './summary-currentness.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
+import { readNativeCalendarDate } from '@rezics/filter';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef, ContentImportedFieldGroup } from './contract/domain-ports.ts';
@@ -16,7 +17,7 @@ import type {
   SubjectReadingFence,
 } from './contract/index.ts';
 import type { ContextRecord } from './context.ts';
-import { fencedIds, fenceKey, type CandidateSource } from './fences.ts';
+import { fencedIds, fenceKey, withoutFencedEntries, type CandidateSource } from './fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -139,8 +140,8 @@ export type SubjectReadResult = {
 export type SubjectSummaryReader = (
   deps: SummaryDependencies | SummaryReaderDependencies,
   ids: readonly string[],
-  options?: { languages?: readonly string[] },
-) => Promise<Map<string, SubjectSummary | null>>;
+  options?: SummaryReadOptions,
+) => Promise<Map<string, DisplaySummary | null>>;
 export type SubjectReadingPageRequest = {
   runtime: SubjectReadingRuntime;
   subject: string;
@@ -209,6 +210,11 @@ export type SubjectSummary = {
   label: { value: string; language: string } | null;
   creativeWork: boolean;
   cover: CoverSummary | null;
+};
+export type DisplaySummary = SubjectSummary & { date?: string };
+export type SummaryReadOptions = {
+  languages?: readonly string[];
+  publicationDateFor?: ReadonlySet<string>;
 };
 /** A merged original keeps its id; its summary is the survivor's and `redirect` names that survivor. */
 export type RelatedSubjectSummary = SubjectSummary & { redirect?: string };
@@ -312,7 +318,7 @@ type Row = {
   type: string;
   labels: Record<string, string>;
   original: string | null;
-  choices: { property: string; statement: StoredStatement }[];
+  choices: { property: string; statement: StoredStatement; id: string }[];
 };
 
 function content(statement: StoredStatement | undefined): string | null {
@@ -325,14 +331,29 @@ function image(row: Row): string | null {
   return content(images.find((statement) => statement.rank === 'preferred') ?? images[0]!);
 }
 
+const PUBLICATION_DATE = 'schema:datePublished';
+
+function publicationDate(statement: StoredStatement): string | undefined {
+  if (statement.qualifiers?.length || statement.value.type !== 'value') return;
+  const value = statement.value.content as { timezone?: number; before?: number; after?: number } | null;
+  if (!value || [value.timezone, value.before, value.after].some((part) => part !== undefined && part !== 0)) return;
+  const date = readNativeCalendarDate(value);
+  if (!date || date.year <= 0) return;
+  return [
+    String(date.year).padStart(4, '0'),
+    ...(date.month === undefined ? [] : [String(date.month).padStart(2, '0')]),
+    ...(date.day === undefined ? [] : [String(date.day).padStart(2, '0')]),
+  ].join('-');
+}
+
 /** One bounded, shared display projection. Unknown and undisclosed ids remain explicit null entries. */
 async function readSubjectSummaries(
   ports: SubjectReadingPorts,
   deps: SummaryDependencies | SummaryReaderDependencies,
   ids: readonly string[],
-  { languages = [] }: { languages?: readonly string[] } = {},
-): Promise<Map<string, SubjectSummary | null>> {
-  return readSummaryBatch(ports, deps, ids, languages);
+  { languages = [], publicationDateFor }: SummaryReadOptions = {},
+): Promise<Map<string, DisplaySummary | null>> {
+  return readSummaryBatch(ports, deps, ids, languages, undefined, undefined, false, publicationDateFor);
 }
 
 /** Read the ordinary projection and retain its actual source homes for a
@@ -486,7 +507,8 @@ async function readSummaryBatch(
   observe?: ObserveSummaries,
   labelLanguages?: readonly string[],
   displayFallback = false,
-): Promise<Map<string, SubjectSummary | null>> {
+  publicationDateFor?: ReadonlySet<string>,
+): Promise<Map<string, DisplaySummary | null>> {
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
     throw new TypeError('Subject summaries require the server route key');
   if (deps.deadline !== undefined) requireAccessDeadline(deps.deadline);
@@ -550,6 +572,7 @@ async function readSummaryBatch(
             observe,
             labelLanguages,
             displayFallback,
+            publicationDateFor,
           );
         },
         deadline,
@@ -590,10 +613,24 @@ async function projectSummaries(
   observe?: ObserveSummaries,
   labelLanguages?: readonly string[],
   displayFallback = false,
-): Promise<Map<string, SubjectSummary | null>> {
+  publicationDateFor?: ReadonlySet<string>,
+): Promise<Map<string, DisplaySummary | null>> {
   const deps = storage;
-  const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
+  const results = new Map<string, DisplaySummary | null>(ids.map((id) => [id, null]));
   const partitions = new Set<number>(releaseHome ? [0] : []);
+  const dateProperty = deps.release.properties[PUBLICATION_DATE];
+  const dateTypes =
+    publicationDateFor?.size &&
+    dateProperty?.datatype === 'time' &&
+    !dateProperty.multivalued &&
+    !dateProperty.disclosure
+      ? Object.entries(deps.release.types).flatMap(([id, type]) =>
+          type.properties.includes(PUBLICATION_DATE) &&
+          (id === 'schema:CreativeWork' || type.bases.includes('schema:CreativeWork'))
+            ? [id]
+            : [],
+        )
+      : [];
   async function read(batch: readonly string[]): Promise<Map<string, Row>> {
     const subjects = [];
     for (const id of new Set(batch)) {
@@ -618,11 +655,13 @@ async function projectSummaries(
         ...key,
         image: slotId(key.id, 'schema:image'),
         original: slotId(key.id, 'schema:inLanguage'),
+        publication_date: dateTypes.length && publicationDateFor?.has(key.id) ? slotId(key.id, PUBLICATION_DATE) : null,
         representatives: slots.get(key.id) ?? [],
       })),
       bounded_labels: labelLanguages !== undefined,
       label_languages: [...(labelLanguages ?? [])],
       display_fallback: displayFallback,
+      publication_date_types: dateTypes,
     })) as Row[];
     const byId = new Map(found.map((row) => [row.id, row]));
     for (const { id } of subjects) {
@@ -672,6 +711,25 @@ async function projectSummaries(
     await partitionReadClients(deps.client, [...partitions]);
     throw new SummaryPlanChanged(representatives);
   }
+  const dated = [...subjects.values()].flatMap((row) => {
+    const choices = row.choices.filter(({ property }) => property === PUBLICATION_DATE);
+    if (choices.length !== 1) return [];
+    const { id, statement } = choices[0]!;
+    const date = publicationDate(statement);
+    return date
+      ? [
+          {
+            route: routeOf(row.id)!,
+            subject_id: row.id,
+            candidate_id: id,
+            slot_id: slotId(row.id, PUBLICATION_DATE),
+            date,
+          },
+        ]
+      : [];
+  });
+  for (const entry of await withoutFencedEntries(deps.client, deps.routeKey, dated))
+    results.get(entry.subject_id)!.date = entry.date;
   const editions = await read([...new Set(representatives.values())].filter((id) => !subjects.has(id)));
   for (const [id, edition] of representatives) {
     const row = subjects.get(edition) ?? editions.get(edition);
