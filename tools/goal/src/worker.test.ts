@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { StaleAttemptError } from './contracts.ts';
 import type { LandingRequest, ManagerEvent } from './contracts.ts';
+import { openDb } from './db.ts';
 import { WorkerJob } from './job.ts';
 import { settle } from './settle.ts';
-import { sameProcess } from './process.ts';
-import { git } from './tasks.ts';
+import { groupMembers, sameProcess } from './process.ts';
+import { WorkerStore } from './store.ts';
+import { git, WorkerTasks } from './tasks.ts';
 import { harness } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
@@ -110,7 +112,7 @@ import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { WorkerStore } from ${JSON.stringify(storeModule)};
 import { openDb } from ${JSON.stringify(dbModule)};
-import { sameProcess } from ${JSON.stringify(processModule)};
+import { groupMembers } from ${JSON.stringify(processModule)};
 const store = new WorkerStore(openDb(__GOAL_TEST_DATABASE_PATH__));
 const ref = {taskId:process.env.GOAL_TASK_ID, attempt:Number(process.env.GOAL_ATTEMPT)};
 const state = dirname(__GOAL_TEST_DATABASE_PATH__);
@@ -118,10 +120,12 @@ if(ref.attempt === 1) {
   // Keep a descendant in the same group as well as the identified leader.
   spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {stdio:'ignore'});
   store.event(ref,'heartbeat',{});
-  spawnSync(process.execPath, [${JSON.stringify(cli)}, 'event',ref.taskId,'1','cli-heartbeat']);
+  const heartbeat=spawnSync(process.execPath, [${JSON.stringify(cli)}, 'event',ref.taskId,'1','cli-heartbeat'],{encoding:'utf8'});
   const interval=setInterval(()=>{ try {store.event(ref,'heartbeat',{});} catch {} },20);
   process.on('SIGTERM',()=>{
     clearInterval(interval);
+    const currentAttempt=store.task(ref.taskId).currentAttempt;
+    const attemptState=store.attempt(ref).state;
     const rejected=[];
     for(const [name,write] of [
       ['event',()=>store.event(ref,'obsolete',{})],
@@ -132,13 +136,13 @@ if(ref.attempt === 1) {
       ['fence',()=>store.assertCurrent(ref)]
     ]) {try {write();}catch(e){if(e.name==='StaleAttemptError')rejected.push(name);}}
     const command=spawnSync(process.execPath,[${JSON.stringify(cli)},'event',ref.taskId,'1','obsolete'],{encoding:'utf8'});
-    writeFileSync(join(state,'refusals'),JSON.stringify({rejected,code:command.status,error:command.stderr}));
+    writeFileSync(join(state,'refusals'),JSON.stringify({currentAttempt,attemptState,rejected,code:command.status,error:command.stderr}));
     setTimeout(()=>process.exit(0),100);
   });
-  writeFileSync(join(state,'ready'), 'ready');
+  writeFileSync(join(state,'ready'), JSON.stringify({code:heartbeat.status,error:heartbeat.stderr}));
 } else {
   const previous=store.attempt({taskId:ref.taskId,attempt:1});
-  writeFileSync(join(state,'replacement'),String(previous.process && sameProcess(previous.process)));
+  writeFileSync(join(state,'replacement'),JSON.stringify(groupMembers(previous.process.group)));
   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
   console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
   store.db.close();
@@ -151,6 +155,9 @@ if(ref.attempt === 1) {
     const ready = waitForFile(join(h.settings.stateDirectory, 'ready'));
     const first = await h.tasks.retry(task.id);
     await ready;
+    const heartbeat = JSON.parse(readFileSync(join(h.settings.stateDirectory, 'ready'), 'utf8'));
+    expect(heartbeat).toEqual({ code: 0, error: '' });
+    expect(h.store.events(task.id).some((event) => event.kind === 'cli-heartbeat')).toBe(true);
     const identity = h.store.attempt(first.attempt).process!;
     expect(sameProcess(identity)).toBe(true);
     const second = await h.tasks.retry(task.id, { expectedAttempt: first.attempt.attempt });
@@ -162,14 +169,71 @@ if(ref.attempt === 1) {
     expect(refusals.rejected).toEqual(['event', 'attempt', 'task', 'record', 'landing', 'fence']);
     expect(refusals.code).toBe(1);
     expect(refusals.error).toContain('StaleAttemptError');
+    expect(refusals.currentAttempt).toBe(1);
+    expect(refusals.attemptState).toBe('superseded');
     expect(sameProcess(identity)).toBe(false);
-    expect(readFileSync(join(h.settings.stateDirectory, 'replacement'), 'utf8')).toBe('false');
+    expect(readFileSync(join(h.settings.stateDirectory, 'replacement'), 'utf8')).toBe('[]');
     expect(h.store.attempt(first.attempt).state).toBe('superseded');
     expect(h.store.events(task.id).filter((e) => e.kind === 'obsolete')).toEqual([]);
     expect(landings.map((r) => r.attempt)).toEqual([2]);
     expect(() => h.store.assertCurrent(first.attempt)).toThrow(StaleAttemptError);
     expect(h.store.records().map((r) => r.attempt)).toEqual([1, 2]);
   } finally {
+    await h.disposeAsync();
+  }
+}, 15000);
+test('a persisted retry fence lets a restarted host drain the old group and admit one replacement', async () => {
+  const h = harness(`#!/usr/bin/env bun
+if (process.env.GOAL_ATTEMPT === '1') await Bun.sleep(30_000);
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+`);
+  const database = join(h.settings.stateDirectory, 'goal.sqlite');
+  const reopened = new WorkerStore(openDb(database));
+  const landings: LandingRequest[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const first = await h.tasks.retry(task.id);
+    const ref = { taskId: task.id, attempt: first.attempt.attempt };
+    const identity = first.attempt.process!;
+    h.tasks.queueRetry(task.id, { expectedAttempt: ref.attempt });
+
+    const crashed = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        `
+import { openDb } from './db.ts';
+import { acquireDirectoryLease } from './lease.ts';
+import { WorkerStore } from './store.ts';
+acquireDirectoryLease(${JSON.stringify(join(h.settings.stateDirectory, 'leases', task.id))});
+new WorkerStore(openDb(${JSON.stringify(database)})).beginRetryDrain(${JSON.stringify(ref)}, {});
+process.kill(process.pid, 'SIGKILL');
+`,
+      ],
+      { cwd: import.meta.dir, encoding: 'utf8' },
+    );
+    expect(crashed.stderr).toBe('');
+    expect(crashed.signal).toBe('SIGKILL');
+    expect(reopened.task(task.id).currentAttempt).toBe(ref.attempt);
+    expect(sameProcess(identity)).toBe(true);
+    expect(reopened.attempt(ref)).toMatchObject({ state: 'superseded', retryDrain: 'running', process: identity });
+    expect(() => reopened.event(ref, 'obsolete', {})).toThrow(StaleAttemptError);
+    expect(() => reopened.nextAttempt(ref, () => first.attempt)).toThrow(StaleAttemptError);
+    expect(() => h.tasks.queueRetry(task.id, { expectedAttempt: ref.attempt })).toThrow('already draining');
+
+    const start = (tasks: WorkerTasks) =>
+      new WorkerJob(tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} }).runHostTask(
+        'retry',
+        task.id,
+      );
+    await Promise.all([start(new WorkerTasks(h.settings, reopened)), start(h.tasks)]);
+    expect(reopened.retryIntent(ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
+    expect(reopened.attempts(task.id).map((attempt) => attempt.attempt)).toEqual([1, 2]);
+    expect(groupMembers(identity.group)).toEqual([]);
+    expect(landings.map((request) => request.attempt)).toEqual([2]);
+    await expect(h.tasks.retry(task.id, { expectedAttempt: ref.attempt })).rejects.toBeInstanceOf(StaleAttemptError);
+  } finally {
+    reopened.db.close();
     await h.disposeAsync();
   }
 }, 15000);

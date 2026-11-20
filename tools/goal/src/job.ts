@@ -102,6 +102,7 @@ import {
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
+import { retryDrainState } from './store.ts';
 import { pageDataRepairEvidence, type PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import { applyRenderedPrompt, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
@@ -365,8 +366,9 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held' || task.state === 'cancelled') return;
-      if (ref.attempt > 0) {
-        const completed = store.attempt(ref);
+      const completed = ref.attempt > 0 ? store.attempt(ref) : undefined;
+      const retryDrain = retryDrainState(completed);
+      if (completed && !retryDrain) {
         if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
           this.onAttemptExit(ref);
           return;
@@ -421,7 +423,7 @@ export class WorkerJob implements GateOutcomeSink {
         const setupFailed = store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-setup-failed');
         if (!incidentProbe || setupFailed) return;
       }
-      if (intent.options.awaitCheckHosts) {
+      if (!retryDrain && intent.options.awaitCheckHosts) {
         const hosts = checkHostsBlockingRetry(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
           if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
@@ -438,7 +440,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
         return;
       }
-      if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
+      if (!retryDrain && intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
         try {
           const evidencePath =
             intent.options.evidence ?? evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
