@@ -84,6 +84,7 @@ async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
   let proof: SubjectErasureSourceProof | null = null;
   let receipt: SubjectErasurePageReceipt | undefined;
   let pages = 0;
+  let lastReceiptAt = Date.now();
   const end = Date.now() + 600_000;
   for (;;) {
     if (Date.now() >= end) throw new Error('Native sealed Source disposition did not complete');
@@ -96,6 +97,10 @@ async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
     });
     expect(page.cost.inputKeys).toBeLessThanOrEqual(100);
     if (!('receipt' in page)) {
+      if (Date.now() - lastReceiptAt > 30_000)
+        throw new Error(
+          `Native Source frontier stalled after ${pages} receipts at ${frontier}: ${JSON.stringify(page)}`,
+        );
       await Bun.sleep(10);
       continue;
     }
@@ -120,6 +125,7 @@ async function complete(b: HistoryBarrier, replayKeyPrefix?: string) {
     expect(accepted.value).toBe(true);
     records.push(...page.records);
     pages++;
+    lastReceiptAt = Date.now();
     if (page.status === 'complete') break;
     expect(Buffer.byteLength(page.frontier)).toBeLessThanOrEqual(2048);
     frontier = page.frontier;
