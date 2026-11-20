@@ -23,6 +23,7 @@ import {
   subjectFrameQuery,
   subjectLabelUndoFromSearch,
   subjectLibraryQuery,
+  subjectPageQuery,
   subjectRatingQuery,
   subjectRelationsQuery,
   subjectReactionsQuery,
@@ -53,6 +54,12 @@ export function SubjectOverview({
   const locale = getLocale();
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const id = page.subject!;
+  // The region checks this exact loader source. Observe it without starting a second read.
+  useQuery({
+    ...subjectPageQuery(id, locale, 'overview', data.realm, initialReader, page.requestedBoard),
+    enabled: false,
+    notifyOnChangeProps: [],
+  });
   const labelUndo = subjectLabelUndoFromSearch(search);
   const type = subjectPageType(page);
   const frameQuery = useQuery({

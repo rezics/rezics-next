@@ -654,9 +654,9 @@ export const subjectPageQuery = (
   queryOptions({
     ...publicRead,
     // A successful composition is a new admission even when all disclosed values compare equal.
+    // Keep the loader result through rendering and hydration so the mounted reader can bind it.
     structuralSharing: false,
     staleTime: 0,
-    gcTime: 0,
     queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader, board ?? null],
     retry: false,
     queryFn: async ({ signal }) =>
@@ -682,7 +682,6 @@ export const subjectViewPagesQuery = (
     ...publicRead,
     structuralSharing: false,
     staleTime: 0,
-    gcTime: 0,
     queryKey: [
       'subject-view-pages',
       id,
