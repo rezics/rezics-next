@@ -41,23 +41,61 @@ test('creation prefix closes only complete unrelated event groups under the reta
     ]);
   }
 
-  // Replay stops at the retained head even if unrelated new positions have since committed.
+  // Both retained homes have since advanced. The first needs its unread
+  // sequence, while the second is already proved by the grouped dispatch.
+  const type = 'com.rezics.access.account-updated.v1';
+  const { repairs_subject: _ignored, ...point } = event;
+  let earlierGap = false;
+  let suffixReads = 0;
   const pool = {
     async query(sql: string, values: unknown[]) {
-      if (sql.includes('generate_series')) return { rows: [{ ...first, head: '5' }] };
-      expect(values).toEqual([6, '3', '4', 7]);
-      return { rows: [event, tail] };
+      if (sql.includes('generate_series')) return { rows: [{ ...first, head: '5' }, second] };
+      if (sql.includes('jsonb_to_recordset')) {
+        expect(JSON.parse(String(values[0])).map(({ through }: { through: string }) => through)).toEqual(['4', '4']);
+        const later = { ...point, home: 7, type, event_count: 1 };
+        return { rows: earlierGap ? [later] : [{ ...point, home: 6, type }, later] };
+      }
+      suffixReads++;
+      expect(values).toEqual([6, '4', '4', 1, 0]);
+      return { rows: [tail] };
     },
   } as unknown as Pool;
+  const cost = { inputKeys: 0, rows: 0, dependencyPoints: 0 };
   const replay = await readPublicFilterCreationPrefix(
     pool,
-    { bootstrap, from: 6, inputLimit: 8, through: ['4'] },
+    { bootstrap, from: 6, inputLimit: 5, through: ['4', '4'] },
+    { deadline },
+    cost,
+  );
+  expect(replay.map(({ window, events }) => [window.through, events])).toEqual([
+    [4n, [event, tail]],
+    [4n, [{ ...event, event_count: 1 }]],
+  ]);
+  expect(cost.inputKeys).toBe(5);
+  earlierGap = true;
+  expect(
+    await readPublicFilterCreationPrefix(
+      pool,
+      { bootstrap, from: 6, inputLimit: 5, through: ['4', '4'] },
+      { deadline },
+      { inputKeys: 0, rows: 0, dependencyPoints: 0 },
+    ),
+  ).toEqual([]);
+  expect(suffixReads).toBe(1);
+
+  const unfunded = await readPublicFilterCreationPrefix(
     {
-      deadline,
-    },
+      async query(sql: string, values: unknown[]) {
+        if (sql.includes('generate_series')) return { rows: [first, second] };
+        expect(values).toEqual([6, '3', '4', 2]);
+        return { rows: [event, tail] };
+      },
+    } as unknown as Pool,
+    { bootstrap, from: 6, inputLimit: 4, through: ['4', '5'] },
+    { deadline },
     { inputKeys: 0, rows: 0, dependencyPoints: 0 },
   );
-  expect(replay[0]?.window.through).toBe(4n);
+  expect(unfunded.map(({ window }) => window.partition)).toEqual([6]);
 });
 
 test('quiet windows use the full remaining metadata allowance across groups', async () => {

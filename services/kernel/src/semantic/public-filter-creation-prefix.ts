@@ -135,18 +135,21 @@ export async function readPublicFilterCreationPrefix(
       eventCount: null,
     };
   };
-  if (input.accounts) {
+  const exactHomes = exact === undefined ? undefined : await readHomes(input.from, exact);
+  let retainedEvents: Map<number, EventPoint[]> | undefined;
+  let retainedEventCount = 0;
+  if (input.accounts || exactHomes) {
     const count = exact ?? Math.min(homes, mixedCreationPrefixHomes(input.inputLimit));
     const windows: PublicFilterCreationWindow[] = [];
     const ranges: { home: number; epoch: number; receipt: string; base: string; through: string; points: number }[] =
       [];
     let points = 0;
-    const homesInOrder = await readHomes(input.from, count);
+    const homesInOrder = exactHomes ?? (await readHomes(input.from, count));
     for (const [offset, row] of homesInOrder.entries()) {
       const window = readWindow(row, input.from + offset);
       if (!window) break;
       const width = window.through - window.base;
-      const required = width === 0n ? 0n : width + 1n;
+      const required = width === 0n || !input.accounts ? width : width + 1n;
       if (required > BigInt(input.inputLimit - count - points)) break;
       windows.push(window);
       if (width === 0n) continue;
@@ -161,11 +164,13 @@ export async function readPublicFilterCreationPrefix(
       points += Number(required);
     }
     const eventsByHome = new Map<number, EventPoint[]>();
-    if (points) {
+    // A retained Subject cut can reserve one event per position across the
+    // original endpoints. Leave unfunded cuts to the serial reader.
+    if (points && (input.accounts || (windows.length === count && ranges.length > 1))) {
       requireAccessDeadline(context.deadline);
-      charge(points, points + 2 * ranges.length);
-      // One native event per position fits this page. A gap, multi-event
-      // position or relevant event leaves that home to the ordinary bridge.
+      charge(points, points + (input.accounts ? 2 : 3) * ranges.length);
+      // Mixed discovery only closes complete single-event windows. Retained
+      // Subject replay can finish a multi-event window from its last read key.
       const { rows } = await pool.query<Omit<EventPoint, 'repairs_subject'> & { home: number; type: string }>(
         `/* semantic.native-keyed:0:0 */
          SELECT x.home,o.position::text,o.epoch,o.event_seq,o.event_count,o.type
@@ -190,17 +195,24 @@ export async function readPublicFilterCreationPrefix(
       for (const { home, type, ...point } of rows) {
         let events = eventsByHome.get(home);
         if (!events) eventsByHome.set(home, (events = []));
-        events.push({ ...point, repairs_subject: publicFilterCreationAction(type, true) !== null });
+        events.push({ ...point, repairs_subject: publicFilterCreationAction(type, input.accounts === true) !== null });
+      }
+      if (!input.accounts) {
+        retainedEvents = eventsByHome;
+        retainedEventCount = rows.length;
+        charge(rows.length - points);
       }
     }
-    for (const window of windows) {
-      const events = eventsByHome.get(window.partition) ?? [];
-      if (!completeWindow(events, window)) break;
-      prefix.push({ window, events });
+    if (input.accounts) {
+      for (const window of windows) {
+        const events = eventsByHome.get(window.partition) ?? [];
+        if (!completeWindow(events, window)) break;
+        prefix.push({ window, events });
+      }
+      return prefix;
     }
-    return prefix;
   }
-  let remaining = input.inputLimit;
+  let remaining = input.inputLimit - retainedEventCount;
   let group = 16;
   while (prefix.length < (exact ?? homes) && remaining > 0) {
     // Spend unused event capacity on more metadata points, and give quiet
@@ -209,30 +221,41 @@ export async function readPublicFilterCreationPrefix(
     const count = exact ?? Math.min(group, homes - prefix.length, Math.ceil(remaining / 2));
     remaining -= count;
     const eventBudget = remaining;
-    const rows = await readHomes(from, count);
+    const rows = exactHomes ?? (await readHomes(from, count));
     for (const [offset, row] of rows.entries()) {
       const window = readWindow(row, from + offset);
       if (!window) return prefix;
       const { base, through } = window;
       let events: readonly EventPoint[] = [];
       if (through > base) {
-        if (through - base > BigInt(remaining)) return prefix;
-        requireAccessDeadline(context.deadline);
-        // Reserve the whole bounded range read. A dispatched query only refunds
-        // unused points after its original result has returned.
-        charge(remaining);
-        const result = await pool.query<EventPoint>(
-          `/* semantic.native-keyed:0:0 */
+        const grouped = retainedEvents?.get(row.home) ?? [];
+        events = grouped;
+        if (!completeWindow(events, window)) {
+          const width = through - base;
+          // A short grouped read cannot contain the complete window, even
+          // with multiple events at some positions. It may also mean pin drift.
+          if (retainedEvents && (BigInt(grouped.length) !== width || grouped.every((event) => event.event_count === 1)))
+            return prefix;
+          if (width - BigInt(grouped.length) > BigInt(remaining) || remaining === 0) return prefix;
+          requireAccessDeadline(context.deadline);
+          // Reserve the whole bounded range read. A dispatched query only
+          // refunds unused points after its original result has returned.
+          charge(remaining);
+          const last = grouped.at(-1);
+          const after = last ? '(o.position,o.event_seq)>($2::bigint,$5::integer)' : 'o.position>$2::bigint';
+          const result = await pool.query<EventPoint>(
+            `/* semantic.native-keyed:0:0 */
          SELECT o.position::text,epoch,event_seq,event_count,
            (starts_with(type,'com.rezics.subject.') OR starts_with(type,'com.rezics.statement.')) AS repairs_subject
-         FROM core.outbox o WHERE partition_no=$1 AND o.position>$2::bigint AND o.position<=$3::bigint
+         FROM core.outbox o WHERE partition_no=$1 AND ${after} AND o.position<=$3::bigint
          ORDER BY o.position,o.event_seq LIMIT $4`,
-          [row.home, String(base), String(through), remaining],
-        );
-        const unused = remaining - result.rows.length;
-        charge(-unused);
-        remaining = unused;
-        events = result.rows;
+            [row.home, last?.position ?? String(base), String(through), remaining, ...(last ? [last.event_seq] : [])],
+          );
+          const unused = remaining - result.rows.length;
+          charge(-unused);
+          remaining = unused;
+          events = [...grouped, ...result.rows];
+        }
         if (!completeWindow(events, window)) return prefix;
       }
       prefix.push({ window, events });

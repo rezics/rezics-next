@@ -1154,6 +1154,13 @@ test('native Source replays its original creation window after the same home adv
       receipts: [],
     });
     const openHome = 40;
+    const changedHomes = [openHome - 2, openHome - 1];
+    const appendUnrelated = (partition: number) =>
+      runCommand(f.db.pool, { partition }, async () => ({
+        value: null,
+        events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
+      }));
+    for (const home of changedHomes) await appendUnrelated(home);
     let key = 0;
     while (
       key < 65536 &&
@@ -1210,8 +1217,44 @@ test('native Source replays its original creation window after the same home adv
             resumeBridge?: PublicFilterCreationWindow;
           };
         }>(row.state);
-      if (window && window.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome)
+      if (window?.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome) {
         prefixPredecessor = frontier;
+        const { from, through } = window.windowBatch;
+        expect(from).toBeLessThanOrEqual(changedHomes[0]!);
+        const prefixInput = { bootstrap: request.bootstrap.slice(2), from, inputLimit: request.inputLimit };
+        async function readPrefix(retainedThrough?: readonly string[]) {
+          const dispatches: string[] = [];
+          const meter = { inputKeys: 0, rows: 0, dependencyPoints: 0 };
+          const windows = await withQueryAccounting(
+            {
+              query: (sql, parameters, dispatch) => {
+                if (sql.includes('core.outbox') && parameters[0] !== openHome) dispatches.push(sql);
+                return dispatch();
+              },
+              connection: (dispatch) => dispatch(),
+            },
+            () =>
+              readPublicFilterCreationPrefix(
+                f.db.pool,
+                { ...prefixInput, through: retainedThrough },
+                readContext(),
+                meter,
+              ),
+          );
+          return { windows, dispatches, inputs: meter.inputKeys };
+        }
+        const original = await readPrefix();
+        expect(original.windows.map(({ window }) => String(window.through))).toEqual(through);
+        expect(original.dispatches).toHaveLength(changedHomes.length);
+        await appendUnrelated(changedHomes[0]!);
+        const replayed = await readPrefix(through);
+        expect(replayed.windows).toEqual(original.windows);
+        expect(replayed.inputs).toBe(through.length + changedHomes.length);
+        expect(replayed.dispatches).toHaveLength(1);
+        expect(replayed.dispatches[0]).toContain('jsonb_to_recordset');
+        const lost = await recovered.repairPage(nextRequest, readContext());
+        expect(lost).toMatchObject({ status: 'progress', frontier: next.frontier, repairs: next.repairs });
+      }
       const fallback = !fallbackPredecessor && window && window.windowBatch?.from === openHome;
       if (fallback && window?.windowBatch) {
         if (frontier === null || prefixPredecessor === undefined) throw new Error('Missing verified creation prefix');
