@@ -1016,6 +1016,12 @@ A route module reads Worker bindings only inside server functions; `head()` and 
 
 **Pending and errors**: Routes declare `pendingComponent`, `errorComponent` and `notFoundComponent` where they differ from the router defaults.
 
+## Presentation curation
+
+The localized presentation editor uses `presentation:publish` to save an immutable profile.
+Activation uses `presentation:activate` with the expected current head. A retry reuses the original
+command key for the same operation. See the [native presentation contract](../../services/kernel/src/presentation/README.md).
+
 ## Security headers
 
 Page HTML receives a fresh base64 nonce from one 16-byte cryptographic random draw. Request middleware keeps
