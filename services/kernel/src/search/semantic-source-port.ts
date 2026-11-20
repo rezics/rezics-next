@@ -35,6 +35,10 @@ type SemanticPublicFilterOriginApi = Pick<
   typeof import('../semantic/public-filter-source.ts'),
   'publicFilterSourceOrigin'
 >;
+type SemanticColdEnrollmentApi = Pick<
+  typeof import('../semantic/public-filter-coverage-baseline.ts'),
+  'planColdSubjectEnrollment'
+>;
 type SemanticReadApi = Pick<typeof import('../semantic/read.ts'), 'currentReadSnapshot' | 'withReadTransaction'>;
 type SemanticIdentityStoreApi = Pick<
   typeof import('../semantic/identity-adapters/index.ts'),
@@ -60,6 +64,7 @@ export type SearchSemanticSourcePort = Readonly<
     SemanticDefinitionReadApi &
     SemanticDefinitionDigestApi &
     SemanticPublicFilterBindingApi &
+    SemanticColdEnrollmentApi &
     SemanticPublicFilterOriginApi &
     SemanticReadApi &
     SemanticIdentityStoreApi &

@@ -12,6 +12,7 @@ export let admitCollectionKindPreparationStep: SearchNativePorts['admitCollectio
 export let admitCollectionMemberQuery: SearchNativePorts['admitCollectionMemberQuery'];
 export let admitCollectionPublicationStep: SearchNativePorts['admitCollectionPublicationStep'];
 export let advanceNativePublicFilterPreparation: SearchNativePorts['advanceNativePublicFilterPreparation'];
+export let planColdSubjectEnrollment: SearchNativePorts['planColdSubjectEnrollment'];
 export let bindCollectionKindPreparationStep: SearchNativePorts['bindCollectionKindPreparationStep'];
 export let bindOwnerFilterRead: SearchNativePorts['bindOwnerFilterRead'];
 export let createIdentityScopedObservations: SearchNativePorts['createIdentityScopedObservations'];
@@ -81,6 +82,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   admitCollectionMemberQuery = port.admitCollectionMemberQuery;
   admitCollectionPublicationStep = port.admitCollectionPublicationStep;
   advanceNativePublicFilterPreparation = port.advanceNativePublicFilterPreparation;
+  planColdSubjectEnrollment = port.planColdSubjectEnrollment;
   bindCollectionKindPreparationStep = port.bindCollectionKindPreparationStep;
   bindOwnerFilterRead = port.bindOwnerFilterRead;
   createIdentityScopedObservations = port.createIdentityScopedObservations;

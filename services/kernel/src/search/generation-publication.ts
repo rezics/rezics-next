@@ -3,7 +3,7 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
-import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
+import { advanceNativePublicFilterPreparation, planColdSubjectEnrollment } from './native-bindings.ts';
 import {
   bindSearchWriterPublicationReader,
   nativeSourceForHeldPublication,
@@ -507,7 +507,7 @@ export function createSearchGenerationPublication(
       !same(resolved.definition.dependencyKeys, custody.definition.dependencyKeys)
     )
       throw new Pending('source_pending');
-    return capture;
+    return { capture, definition: resolved.definition };
   }
   async function completeSource(
     job: Job,
@@ -690,6 +690,66 @@ export function createSearchGenerationPublication(
     return rows.length === 1 ? rows[0]! : null;
   }
 
+  async function enrollPreparedSubjectRanges(
+    job: Job,
+    definition: SearchPublicFilterSourceDefinition,
+    frontier: SubjectEnrollmentFrontier,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    reserve: number,
+  ): Promise<SubjectEnrollmentFrontier | null> {
+    if (!planColdSubjectEnrollment || !advanceNativePublicFilterPreparation) return null;
+    const inputLimit = () => PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - reserve - meter.inputKeys;
+    const byteLimit = () => VALIDATION_BYTE_LIMIT - meter[validationBytes];
+    const ranges = planColdSubjectEnrollment(definition.dependencyKeys, frontier.end, inputLimit(), byteLimit());
+    if (!ranges) return null;
+    const request = {
+      bootstrap: frontier.bootstrap,
+      subjectEnrollment: {
+        consumer: job.consumer,
+        source: job.binding.source,
+        registration: { partition: 0, id: frontier.registration },
+        capturingOnly: true as const,
+      },
+    };
+    const prepared = await advanceNativePublicFilterPreparation(
+      binding,
+      {
+        ...request,
+        inputLimit: inputLimit(),
+        coldEnrollment: { version: 1, job: job.job, byteLimit: byteLimit(), action: 'prepare', ranges },
+      },
+      context,
+    );
+    if (!prepared) return null;
+    add(meter, prepared.cost);
+    if (prepared.status !== 'ranges-prepared') {
+      if ('reason' in prepared && prepared.reason === 'deadline') throw new Pending('deadline');
+      return null;
+    }
+    let end = frontier.end;
+    for (const range of prepared.ranges) {
+      if (inputLimit() <= 0 || byteLimit() <= 0 || context.deadline <= Date.now()) break;
+      const adopted = await advanceNativePublicFilterPreparation(
+        binding,
+        {
+          ...request,
+          inputLimit: inputLimit(),
+          coldEnrollment: { version: 1, job: job.job, byteLimit: byteLimit(), action: 'adopt', range },
+        },
+        context,
+      );
+      if (!adopted) break;
+      add(meter, adopted.cost);
+      if (adopted.status !== 'range-adopted') break;
+      end = range.end;
+      if (range.start < 40 || end === 4096) bookPreparationTiming?.mark('enrollmentRangeAdopted', end);
+    }
+    // A failed successor can be retried from its original receipts. Only the
+    // prefix that Source accepted can admit reconciliation.
+    return end > frontier.end ? { ...frontier, end } : null;
+  }
+
   async function checkpointEnrolledSubjects(
     job: Job,
     client: PoolClient,
@@ -732,6 +792,8 @@ export function createSearchGenerationPublication(
           await checkpointEnrolledSubjects(job, client, context, meter, frontier);
         return;
       }
+      if (job.home > home && (home === 0 || Math.floor(job.home / 512) > Math.floor(home / 512)))
+        bookPreparationTiming?.mark('enrolledSubjectReconciled', job.home);
       longest = Math.max(longest, Date.now() - started);
     }
   }
@@ -924,14 +986,14 @@ export function createSearchGenerationPublication(
                 const enrollmentAdvanced = await continueSubjectEnrollment(job, client, context, meter);
                 if (enrollmentAdvanced !== null) return work(job, client, current, undefined, enrollmentAdvanced);
               }
-              let capture: ReturnType<typeof populationDefinition> | undefined;
+              let adopted: Awaited<ReturnType<typeof adopt>> | undefined;
               if (job.phase === 'active') {
                 // Settled publication may still need idempotent fence release after a lost response.
                 // A later Source change must not strand the ordinary repair writer behind that old fence.
                 await native(job.consumer, context);
               } else {
                 try {
-                  capture = await adopt(job, context, meter, physical);
+                  adopted = await adopt(job, context, meter, physical);
                 } catch (error) {
                   if (
                     error instanceof Pending &&
@@ -949,17 +1011,42 @@ export function createSearchGenerationPublication(
               }
               // A committed enrollment prefix admits a first-pass Subject slice alongside
               // future Source pages. The publication session remains the only cursor writer.
-              if (earlyEnrollment && physical?.activeSubjectGeneration === null) {
-                const enrollment = await continueSubjectEnrollment(job, client, context, meter, true);
+              if (earlyEnrollment && physical?.activeSubjectGeneration === null && adopted) {
+                const { capture, definition } = adopted;
+                const canPrepareRanges =
+                  nativeMeaning &&
+                  hasPublicationGuard() &&
+                  job.source_home === 0 &&
+                  job.pass === '1' &&
+                  !job.pit &&
+                  job.previous_uuid === null;
+                let frontier = canPrepareRanges ? await subjectEnrollmentFrontier(job, client, meter) : null;
+                const enrollPage = async (connection: PoolClient | null, pageMeter: Meter, reservedInputs = 0) => {
+                  if (frontier) {
+                    const reserve = Math.max(
+                      reservedInputs,
+                      job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+                    );
+                    frontier = await enrollPreparedSubjectRanges(
+                      job,
+                      definition,
+                      frontier,
+                      context,
+                      pageMeter,
+                      reserve,
+                    );
+                    if (frontier) return true;
+                  }
+                  return continueSubjectEnrollment(job, connection, context, pageMeter, true, reservedInputs);
+                };
+                const enrollment = await enrollPage(client, meter);
                 if (enrollment === 'sealed') return work(job, client, current, capture, enrollment);
                 if (enrollment === false) throw new Pending('source_pending');
                 if (enrollment !== true) return work(job, client, current, capture);
                 const subjectMeter = cost();
-                const frontier =
-                  job.phase === 'subject' && job.pass === '1' && !job.pit && job.previous_uuid === null
-                    ? await subjectEnrollmentFrontier(job, client, subjectMeter)
-                    : null;
-                const scan = frontier && job.home < frontier.end;
+                if (canPrepareRanges && !frontier)
+                  frontier = await subjectEnrollmentFrontier(job, client, subjectMeter);
+                const scan = job.phase === 'subject' && frontier && job.home < frontier.end ? frontier : null;
                 const additionalEnrollmentCosts: Meter[] = [];
                 const enroll = async () => {
                   let duration = 0;
@@ -968,12 +1055,9 @@ export function createSearchGenerationPublication(
                     if (started + 2 * duration >= context.deadline) break;
                     const pageMeter = cost();
                     additionalEnrollmentCosts.push(pageMeter);
-                    const advanced = await continueSubjectEnrollment(
-                      job,
+                    const advanced = await enrollPage(
                       scan ? null : client,
-                      context,
                       pageMeter,
-                      true,
                       page === 1 && scan ? SUBJECT_ENROLLMENT_SCAN_INPUTS : 0,
                     );
                     if (advanced !== true) break;
@@ -982,7 +1066,7 @@ export function createSearchGenerationPublication(
                 };
                 const results = await Promise.allSettled([
                   enroll(),
-                  scan ? advanceEnrolledSubjects(job, client, context, subjectMeter, frontier) : undefined,
+                  scan ? advanceEnrolledSubjects(job, client, context, subjectMeter, scan) : undefined,
                 ]);
                 add(additionalEnrollmentCosts[0] ?? meter, subjectMeter);
                 // The initial enrollment page committed even if either lane stopped.
@@ -990,7 +1074,7 @@ export function createSearchGenerationPublication(
                   if (result.status === 'rejected' && !(result.reason instanceof Pending)) throw result.reason;
                 return work(job, client, current, capture, true, additionalEnrollmentCosts);
               }
-              return await work(job, client, current, capture);
+              return await work(job, client, current, adopted?.capture);
             } finally {
               const unlocked = await client.query<{ unlocked: boolean }>(
                 'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',

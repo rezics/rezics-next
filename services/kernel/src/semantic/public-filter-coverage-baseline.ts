@@ -5,9 +5,12 @@ import type { AccountDiscoveryEnrollment } from '../access/account-discovery-red
 import type { PublicFilterConsumer } from './public-filter-source-contract.ts';
 import type { NativePublicSource } from './public-filter-source-binding.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
+import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import type { PublicFilterDependencyKey } from './public-filter-source-contract.ts';
 import { maxPublicFilterEnrollmentHomes } from './public-filter-preparation-budget.ts';
 import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { discardConnection, withBoundedCommandConnection, withConnection } from '../database/pool.ts';
+import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 
 export type PublicFilterBaselineBinding = Readonly<{
   bootstrap: string;
@@ -398,6 +401,38 @@ export type ColdEnrollmentRequest = Readonly<{ version: 1; job: string; byteLimi
     | Readonly<{ action: 'adopt'; range: PreparedEnrollmentRange }>
   );
 
+const coldEnrollmentFixedInputs = 24;
+const coldEnrollmentFixedBytes = 64 * 1024;
+const coldEnrollmentAdoptInputsPerHome = 20;
+const coldEnrollmentPrepareInputsPerHome = (keyCount: number) => 26 + 2 * keyCount;
+const coldEnrollmentBytesPerHome = (keys: readonly string[]) => 12 * 1024 + 4 * Buffer.byteLength(JSON.stringify(keys));
+
+/** Fund a two-range prepare and its ordered adoptions from the same Search offer. */
+export function planColdSubjectEnrollment(
+  dependencies: readonly PublicFilterDependencyKey[],
+  frontier: number,
+  inputLimit: number,
+  byteLimit: number,
+): readonly HomeRange[] | null {
+  const keys = publicFilterCoverageKeys(dependencies, true);
+  if (keys.length > 450) return null;
+  // Prepare plus two adoptions, each with its own retained definition and bootstrap read.
+  const inputs = inputLimit - 3 * (coldEnrollmentFixedInputs + 16);
+  const bytes = byteLimit - 3 * (coldEnrollmentFixedBytes + 64 * 1024);
+  const homes = Math.min(
+    4096 - frontier,
+    maxPublicFilterEnrollmentHomes,
+    Math.floor(inputs / (coldEnrollmentPrepareInputsPerHome(keys.length) + coldEnrollmentAdoptInputsPerHome)),
+    Math.floor(bytes / (2 * coldEnrollmentBytesPerHome(keys))),
+  );
+  if (homes < 2) return null;
+  const middle = frontier + Math.ceil(homes / 2);
+  return [
+    { start: frontier, end: middle },
+    { start: middle, end: frontier + homes },
+  ];
+}
+
 type ColdEnrollmentBinding = PublicFilterBaselineBinding &
   Readonly<{
     originalConsumer: PublicFilterConsumer;
@@ -438,10 +473,11 @@ export function coldEnrollmentFunding(request: ColdEnrollmentRequest, keys: read
     throw new RangeError('Cold enrollment exceeds its native page bound');
   // A failed group probe can repeat the Access reads on the retained path.
   // Reserve the original writes, the independent receipt reread, and both binding reads.
-  const perHome = request.action === 'prepare' ? 26 + 2 * keys.length : 20;
+  const perHome =
+    request.action === 'prepare' ? coldEnrollmentPrepareInputsPerHome(keys.length) : coldEnrollmentAdoptInputsPerHome;
   return {
-    inputs: 24 + homes * perHome,
-    bytes: 64 * 1024 + homes * (12 * 1024 + 4 * Buffer.byteLength(JSON.stringify(keys))),
+    inputs: coldEnrollmentFixedInputs + homes * perHome,
+    bytes: coldEnrollmentFixedBytes + homes * coldEnrollmentBytesPerHome(keys),
   };
 }
 
@@ -583,10 +619,16 @@ export async function prepareColdEnrollment(
   const frontier = await coldEnrollmentFrontier(pool, binding);
   const results = await Promise.allSettled(
     ranges.map(async (range) => {
-      // An already adopted range can be read back after a lost response.
-      if (range.end > frontier) await enroll(range);
-      const proof = await readColdEnrollment(pool, binding, range, false);
-      return { start: range.start, end: range.end, digest: proof.digest };
+      const timing = range.start < 40 ? bookPreparationTiming : undefined;
+      timing?.mark('enrollmentRangePrepareStart', range.start);
+      try {
+        // An already adopted range can be read back after a lost response.
+        if (range.end > frontier) await enroll(range);
+        const proof = await readColdEnrollment(pool, binding, range, false);
+        return { start: range.start, end: range.end, digest: proof.digest };
+      } finally {
+        timing?.mark('enrollmentRangePrepareEnd', range.start);
+      }
     }),
   );
   // Drain all funded work before returning its shared accounting, even on failure.

@@ -37,6 +37,10 @@ export type BookPreparationSpan =
   | 'ackCursor';
 
 export type BookPreparationMark =
+  | 'enrollmentRangePrepareStart'
+  | 'enrollmentRangePrepareEnd'
+  | 'enrollmentRangeAdopted'
+  | 'enrolledSubjectReconciled'
   | 'terminalRepair'
   | 'ackAdvanced'
   | 'writerFence'
