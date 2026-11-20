@@ -36,6 +36,11 @@ import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenan
 import {
   beginPublicFilterCoverageBaseline,
   adoptPublicFilterCoverageBaselinePage,
+  adoptColdEnrollment,
+  coldEnrollmentFunding,
+  prepareColdEnrollment,
+  type ColdEnrollmentRequest,
+  type PreparedEnrollmentRange,
 } from './public-filter-coverage-baseline.ts';
 import {
   readPublicFilterCreationWindow,
@@ -642,6 +647,7 @@ type NativePreparationInput =
       bootstrap: string;
       inputLimit?: number;
       subjectEnrollment?: SubjectEnrollment;
+      coldEnrollment?: ColdEnrollmentRequest;
     }>;
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
@@ -661,7 +667,9 @@ export type NativePublicFilterPreparation =
     }>;
 type NativePreparationResult =
   | NativePublicFilterPreparation
-  | Readonly<{ status: 'enrollment-sealed'; cost: PublicFilterCost }>;
+  | Readonly<{ status: 'enrollment-sealed'; cost: PublicFilterCost }>
+  | Readonly<{ status: 'ranges-prepared'; ranges: readonly PreparedEnrollmentRange[]; cost: BindingCost }>
+  | Readonly<{ status: 'range-adopted' | 'range-pending'; cost: BindingCost }>;
 const nativePreparations = new WeakMap<
   PublicFilterSourceBinding,
   (input: NativePreparationInput, context: PublicFilterConsumerContext) => Promise<NativePreparationResult>
@@ -789,6 +797,16 @@ export function advanceNativePublicFilterPreparation(
   input: BookPreparationGroup,
   context: PublicFilterConsumerContext,
 ): Promise<NativePublicFilterPreparation[] | null>;
+export function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding,
+  input: {
+    bootstrap: string;
+    inputLimit: number;
+    subjectEnrollment: SubjectEnrollment;
+    coldEnrollment: ColdEnrollmentRequest;
+  },
+  context: PublicFilterConsumerContext,
+): Promise<NativePreparationResult | null>;
 export function advanceNativePublicFilterPreparation(
   binding: PublicFilterSourceBinding,
   input: { bootstrap: string; inputLimit?: number; subjectEnrollment: SubjectEnrollment },
@@ -4671,6 +4689,83 @@ export function createNativePublicFilterSourceBinding(
         input.usePublishedCoverage ?? false,
         input.definition,
       );
+    if (input.coldEnrollment) {
+      return run(context, async (cost, db) => {
+        const request = structuredClone(input.coldEnrollment!);
+        const expected = structuredClone(input.subjectEnrollment);
+        const inputLimit = input.inputLimit ?? preparationInputLimit;
+        if (
+          !expected?.capturingOnly ||
+          expected.registration.partition !== 0 ||
+          !Number.isSafeInteger(inputLimit) ||
+          inputLimit < 0 ||
+          inputLimit > preparationInputLimit
+        )
+          throw new BindingError('binding_mismatch');
+        const { row, definition, bootstrap } = await withReadTransaction(
+          db,
+          (client) => loadBootstrap(input.bootstrap, client),
+          context.deadline,
+        );
+        if (
+          row.coverage_generation === null ||
+          bootstrap.snapshot !== 'prepared' ||
+          !('catalogueCoverage' in definition.capture) ||
+          definition.capture.catalogueCoverage !== true ||
+          'representation' in definition.capture ||
+          !isDeepStrictEqual(definition.source, expected.source) ||
+          encode(bootstrap.consumer) !== encode(expected.consumer) ||
+          definition.readDefinition !== expected.consumer.readDefinition ||
+          definition.meaning.digest !== expected.consumer.meaningDigest
+        )
+          throw new BindingError('binding_mismatch');
+
+        const keys = [...publicFilterCoverageKeys(definition.dependencyKeys, true)].sort((a, b) =>
+          Buffer.compare(Buffer.from(a), Buffer.from(b)),
+        );
+        const funding = coldEnrollmentFunding(request, keys);
+        if (cost.inputKeys + funding.inputs > inputLimit || cost.bytes + funding.bytes > request.byteLimit)
+          throw new BindingError('owner_unavailable');
+
+        const baseline = {
+          bootstrap: row.bootstrap,
+          registration: expected.registration,
+          definition: definition.readDefinition,
+          consumer: ports.search.encodeConsumer(bootstrap.consumer),
+          originalConsumer: bootstrap.consumer,
+          sourceConsumer: row.consumer,
+          accounts: false,
+          generation: row.coverage_generation,
+          source: definition.source,
+          job: request.job,
+          keys,
+        };
+        if (request.action === 'adopt') {
+          const state = await adoptColdEnrollment(db, baseline, request.range, context.deadline);
+          return { status: state === 'adopted' ? ('range-adopted' as const) : ('range-pending' as const), cost };
+        }
+        const ranges = await prepareColdEnrollment(db, baseline, request.ranges, async (range) => {
+          const grouped = ports.access.newAccountEnrollment;
+          const enrollment = {
+            bootstrap: row.bootstrap,
+            registration: baseline.registration,
+            readDefinition: baseline.definition,
+            keys,
+            keyLimit: Math.max(1, keys.length),
+            accounts: false,
+          };
+          const size = grouped?.groupSize ?? 1;
+          for (let start = range.start; start < range.end; start += size) {
+            const partitions = Array.from({ length: Math.min(size, range.end - start) }, (_, i) => start + i);
+            if (grouped && partitions.length > 1 && (await grouped.enroll(db, { ...enrollment, partitions }, context)))
+              continue;
+            for (const partition of partitions)
+              await ports.access.enrollAccountHome(db, { ...enrollment, partition }, context);
+          }
+        });
+        return { status: 'ranges-prepared' as const, ranges, cost };
+      });
+    }
     const retained = await run(context, async (cost, db) => {
       // Finish the original Source read before Search registration or Access enrollment takes a checkout.
       const expected = input.subjectEnrollment;

@@ -284,57 +284,49 @@ test('native public Source configuration and immutable meaning/read definition r
   }
 });
 
-test('native Subject enrollment rechecks the original definition and release on one checkout', async () => {
-  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
-  const { createOpenSearch } = await import('../../src/search/opensearch.ts');
+test('native Subject enrollment prepares disjoint ranges and rechecks the original ordered cut', async () => {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
-  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
-  const index = `source-enrollment-${crypto.randomUUID()}`;
-  let created = false;
+  const source = publicFilterSource(f.config);
+  const consumer = await consumerFixture(f, source);
   try {
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
-    const source = publicFilterSource(f.config);
-    const capture = {
-      sort: 'id' as const,
-      size: 1,
-      filterDocument: undefined,
-      text: undefined,
-      catalogueCoverage: true as const,
-      catalogueNameSort: true as const,
-    };
-    const input = { source, meaning: f.meaning, capture };
-    const resolved = await binding.resolve(input, readContext());
+    const capture = await consumer.operations.capture(
+      {
+        plan: {
+          sort: 'id',
+          size: 1,
+          filterDocument: undefined,
+          text: undefined,
+          catalogueCoverage: true,
+          catalogueNameSort: true,
+        },
+        snapshot: 'prepared',
+      },
+      readContext(),
+    );
+    if (capture.status !== 'preparing') throw new Error(`Expected a capturing bootstrap, got ${capture.status}`);
+    const originalConsumer = capture.repair.consumer;
+    if (!originalConsumer.readDefinition) throw new Error('Capture lost its original definition');
+    const bootstrap = decodeURIComponent(capture.repair.job.slice('0:bootstrap:'.length));
+    const resolved = await binding.readDefinition!({ source, id: originalConsumer.readDefinition }, readContext());
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
-    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
-    created = true;
-    const registered = await createPublicFilterCustody(f.db.pool).register(
-      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
-      search,
-      readContext(),
+    const {
+      rows: [registration],
+    } = await f.db.admin.query<{ id: string }>(
+      'SELECT id FROM search.public_filter_registration WHERE partition_no=0 AND consumer_bootstrap=$1',
+      [bootstrap],
     );
-    if (registered.status !== 'registered') throw new Error(registered.reason);
-    const original = await advanceNativePublicFilterPreparation(
-      binding,
-      { ...input, consumer: registered.consumer, snapshot: 'prepared' },
-      readContext(),
-    );
-    if (original?.status !== 'preparing') throw new Error(`Expected a capturing bootstrap, got ${original?.status}`);
     const resume = {
-      bootstrap: original.bootstrap.id,
+      bootstrap,
       subjectEnrollment: {
-        consumer: registered.consumer,
+        consumer: originalConsumer,
         source: resolved.definition.source,
-        registration: registered.registration,
+        registration: { partition: 0, id: registration!.id },
         capturingOnly: true as const,
       },
     };
     const advance = () => advanceNativePublicFilterPreparation(binding, resume, readContext());
-    expect(await advance()).toMatchObject({
-      status: 'preparing',
-      enrollmentAdvanced: true,
-      bootstrap: { id: resume.bootstrap },
-    });
     const readFrontier = async () =>
       (
         await f.db.admin.query(
@@ -342,6 +334,91 @@ test('native Subject enrollment rechecks the original definition and release on 
           [resume.bootstrap.slice(2)],
         )
       ).rows;
+    const beforeRanges = (await readFrontier())[0]!;
+    const start = beforeRanges.coverage_after as number;
+    const next = start + 1;
+    const job = await publicationJob(f, source, originalConsumer);
+    const rangeContext = { version: 1 as const, job, byteLimit: 4 * 1024 * 1024 };
+    const prepare = (
+      ranges: { start: number; end: number }[],
+      inputLimit = 872,
+      byteLimit = rangeContext.byteLimit,
+      owner = binding,
+      context = readContext(),
+    ) =>
+      advanceNativePublicFilterPreparation(
+        owner,
+        {
+          ...resume,
+          inputLimit,
+          coldEnrollment: { ...rangeContext, byteLimit, action: 'prepare', ranges },
+        },
+        context,
+      );
+    const adopt = (range: { start: number; end: number; digest: string }) =>
+      advanceNativePublicFilterPreparation(
+        binding,
+        {
+          ...resume,
+          inputLimit: 872,
+          coldEnrollment: { ...rangeContext, action: 'adopt', range },
+        },
+        readContext(),
+      );
+
+    const first = { start, end: next };
+    const later = { start: next, end: next + 1 };
+    expect(await prepare([first, later], 80)).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable' });
+    expect(await prepare([first, later], 872, 64 * 1024)).toMatchObject({
+      status: 'unavailable',
+      reason: 'owner_unavailable',
+    });
+    const held = await f.db.admin.connect();
+    let running: ReturnType<typeof prepare> | undefined;
+    let prepared: Awaited<ReturnType<typeof prepare>> | undefined;
+    let laterRange: { start: number; end: number; digest: string } | undefined;
+    try {
+      await held.query('BEGIN');
+      await held.query('SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE', [start]);
+      running = prepare([first, later], 872, rangeContext.byteLimit, binding, { deadline: Date.now() + 10_000 });
+      const staged = await prepare([later]);
+      if (staged?.status !== 'ranges-prepared') throw new Error(`Later range ${staged?.status}`);
+      laterRange = staged.ranges[0]!;
+      const { rows } = await f.db.admin.query(
+        'SELECT partition_no,complete FROM semantic.public_filter_home_enrollment WHERE bootstrap=$1 AND partition_no BETWEEN $2 AND $3 ORDER BY partition_no',
+        [bootstrap.slice(2), start, next],
+      );
+      expect(rows).toEqual([{ partition_no: next, complete: true }]);
+      expect(await adopt(laterRange)).toMatchObject({ status: 'range-pending' });
+      expect((await readFrontier())[0]).toEqual(beforeRanges);
+    } finally {
+      try {
+        await held.query('ROLLBACK');
+      } finally {
+        held.release();
+        prepared = await running;
+      }
+    }
+    if (prepared?.status !== 'ranges-prepared' || !laterRange) throw new Error(`Range offer ${prepared?.status}`);
+    const [firstRange, retainedRange] = prepared.ranges;
+    expect(retainedRange).toEqual(laterRange);
+    const newOwner = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    expect(await prepare([later], 872, rangeContext.byteLimit, newOwner)).toMatchObject({
+      status: 'ranges-prepared',
+      ranges: [laterRange],
+    });
+    expect(await adopt(firstRange!)).toMatchObject({ status: 'range-adopted' });
+    const nextEpoch = (
+      await f.db.admin.query<{ epoch: number }>('SELECT epoch FROM core.partition WHERE partition_no=$1', [next])
+    ).rows[0]!.epoch;
+    await setNativePartitionEpochForFixture(f.db, next, nextEpoch + 1);
+    expect(await adopt(laterRange)).toMatchObject({ status: 'unavailable', reason: 'owner_unavailable' });
+    expect((await readFrontier())[0]!.coverage_after).toBe(next);
+    await setNativePartitionEpochForFixture(f.db, next, nextEpoch);
+    expect(await adopt(laterRange)).toMatchObject({ status: 'range-adopted' });
+    expect(await adopt(laterRange)).toMatchObject({ status: 'range-adopted' });
+    expect((await readFrontier())[0]).toEqual({ account_after: next + 1, coverage_after: next + 1 });
+    console.log('Cold enrollment Source cost', JSON.stringify(prepared.cost));
     const beforeLoss = (await readFrontier())[0]!;
     let lost = false;
     const queries = new Map<PoolClient, PoolClient['query']>();
@@ -412,7 +489,7 @@ test('native Subject enrollment rechecks the original definition and release on 
     expect(await readFrontier()).toEqual(frontier);
   } finally {
     try {
-      if (created) await search.request('DELETE', `/${index}`);
+      await consumer.close();
     } finally {
       await f.close();
     }

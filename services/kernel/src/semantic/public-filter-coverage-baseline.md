@@ -16,6 +16,32 @@ Binding and receipt fields are copied before checkout. They must be own data fie
 proxies, coercible positions and out-of-domain scalars are refused before native work. The database proof and receiver
 use the same snapshot.
 
+## Cold Subject enrollment ranges
+
+The version 1 native preparation input accepts at most four ordered, disjoint ranges on one funded offer for a
+pinned, unpublished Subject job. Complete home enrollment rows and creation checkpoints are the durable range
+evidence. Recovery reconstructs the same digest from those original rows, including for empty homes. No duplicate
+payload needs a separate retention lifetime. Parallel preparation only enrolls the compiler keys and verifies
+their committed receipts. It leaves the Search and Source cursors untouched.
+
+Adoption rereads the native receipts under their owner and checkpoint locks, compares the digest, and binds the
+existing Source and Search prefix to the same job, bootstrap, definition, registration generation and incarnation.
+A gap returns pending. An overlapping retry appends only the unadopted suffix with its original predecessors.
+The existing ordinary path can consume the same home receipts. Observation, repair, ACK and serving still use
+their original authority checks.
+
+### Cold Subject enrollment preparation and adoption
+
+- Touches: Original registration and Source binding, Access writer-home enrollment and compiler edges, then the
+  keyed home receipt and creation checkpoint. Adoption also writes the existing receiver baseline and both cursors.
+- Bound: One offer reserves aggregate inputs and bytes before dispatch. Preparation reserves 24 fixed inputs plus
+  26 inputs per home and two per compiler key per home, including a rejected fresh group probe and single-home
+  fallback. Adoption reserves 24 fixed and 20 inputs per home. Initial definition and bootstrap reads are charged
+  separately. Range size and the number of concurrent ranges share these bounds.
+- Growth check: The focused native enrollment fixture holds one predecessor, reads the later committed home from
+  a second connection and checks the unchanged prefix, recovery, native epoch drift and ordinary continuation.
+  It records input keys, statements and bytes for the prepared pair.
+
 ## Serving from published catalogue coverage
 
 Full Subject publication enrolls a catalogue-text key for label, alias, description, name-order and relevance

@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
+import type { PublicFilterConsumer } from './public-filter-source-contract.ts';
+import type { NativePublicSource } from './public-filter-source-binding.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import { maxPublicFilterEnrollmentHomes } from './public-filter-preparation-budget.ts';
 import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { discardConnection, withBoundedCommandConnection, withConnection } from '../database/pool.ts';
 
-type Binding = Readonly<{
+export type PublicFilterBaselineBinding = Readonly<{
   bootstrap: string;
   registration: Readonly<{ partition: number; id: string }>;
   definition: string;
@@ -39,7 +41,7 @@ function scalarFields<T extends object>(input: T, keys: readonly (keyof T)[]): T
   return Object.freeze(snapshot) as T;
 }
 
-function snapshotBinding(input: Binding): Binding {
+function snapshotBinding(input: PublicFilterBaselineBinding): PublicFilterBaselineBinding {
   const binding = scalarFields(input, ['bootstrap', 'registration', 'definition', 'consumer', 'accounts']);
   const registration = scalarFields(binding.registration, ['partition', 'id']);
   if (
@@ -125,7 +127,7 @@ async function transaction<T>(pool: Pool, deadline: number, body: (client: PoolC
   });
 }
 
-async function lockRegistration(client: PoolClient, binding: Binding) {
+async function lockRegistration(client: PoolClient, binding: PublicFilterBaselineBinding) {
   const owner = (
     await client.query<{ write_state: string }>(
       '/* semantic.native-keyed:1:1 */ SELECT write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
@@ -150,7 +152,11 @@ async function lockRegistration(client: PoolClient, binding: Binding) {
 /** Pin the generation BEFORE taking any native home baseline. A later ACK can
  * never renew this preparation's generation or original immutable chain.
  */
-export async function beginPublicFilterCoverageBaseline(pool: Pool, input: Binding, deadline: number) {
+export async function beginPublicFilterCoverageBaseline(
+  pool: Pool,
+  input: PublicFilterBaselineBinding,
+  deadline: number,
+) {
   const binding = snapshotBinding(input);
   return transaction(pool, deadline, async (client) => {
     const registration = await lockRegistration(client, binding);
@@ -198,7 +204,7 @@ export async function beginPublicFilterCoverageBaseline(pool: Pool, input: Bindi
   });
 }
 
-function requireReceipt(binding: Binding, receipt: AccountDiscoveryEnrollment) {
+function requireReceipt(binding: PublicFilterBaselineBinding, receipt: AccountDiscoveryEnrollment) {
   if (
     !Number.isInteger(receipt.partition) ||
     receipt.partition < 0 ||
@@ -229,7 +235,7 @@ function requireReceipt(binding: Binding, receipt: AccountDiscoveryEnrollment) {
  */
 async function verifyReceipts(
   transact: BaselineTransaction,
-  binding: Binding,
+  binding: PublicFilterBaselineBinding,
   receipts: readonly AccountDiscoveryEnrollment[],
 ) {
   const originals = await transact((client) =>
@@ -297,7 +303,7 @@ async function verifyReceipts(
  */
 export async function adoptPublicFilterCoverageBaselinePage<T = void>(
   pool: Pool,
-  input: Binding,
+  input: PublicFilterBaselineBinding,
   enrollments: readonly AccountDiscoveryEnrollment[],
   deadline: number,
   readCommitted?: (client: PoolClient) => Promise<T>,
@@ -341,37 +347,285 @@ export async function adoptPublicFilterCoverageBaselinePage<T = void>(
 
 async function adoptVerifiedPrefix(
   transact: BaselineTransaction,
-  binding: Binding,
+  binding: PublicFilterBaselineBinding,
   receipts: readonly AccountDiscoveryEnrollment[],
 ) {
   const verified = await verifyReceipts(transact, binding, receipts);
   await transact(async (client) => {
     await lockRegistration(client, binding);
-    // Keep the original input reservation, including the bounded interval
-    // checks. Each home can write four rows, plus two cursor writes per page.
-    await client.query(
-      `/* semantic.native-keyed:${16 * verified.length + 1}:${16 * verified.length + 1}:${4 * verified.length + 2} */
-       SELECT semantic.adopt_public_filter_baseline_page($1,$2,$3,$4,$5,$6::jsonb)`,
-      [
-        binding.registration.id,
-        binding.bootstrap,
-        binding.definition,
-        binding.consumer,
-        binding.accounts,
-        JSON.stringify(
-          verified.map((receipt) => ({
-            partition: receipt.partition,
-            epoch: receipt.epoch,
-            source_position: String(receipt.sourcePosition),
-            creation_position: String(receipt.creationPosition),
-            enqueue_revision: String(receipt.enqueueRevision),
-            revision: String(receipt.revision),
-            claim_revision: String(receipt.claimRevision),
-            receipt: receipt.receipt,
-          })),
-        ),
-      ],
-    );
+    await writeBaselinePage(client, binding, verified);
   });
   return verified.length === receipts.length;
+}
+
+async function writeBaselinePage(
+  client: PoolClient,
+  binding: PublicFilterBaselineBinding,
+  receipts: readonly AccountDiscoveryEnrollment[],
+) {
+  // Keep the original input reservation, including the bounded interval
+  // checks. Each home can write four rows, plus two cursor writes per page.
+  await client.query(
+    `/* semantic.native-keyed:${16 * receipts.length + 1}:${16 * receipts.length + 1}:${4 * receipts.length + 2} */
+     SELECT semantic.adopt_public_filter_baseline_page($1,$2,$3,$4,$5,$6::jsonb)`,
+    [
+      binding.registration.id,
+      binding.bootstrap,
+      binding.definition,
+      binding.consumer,
+      binding.accounts,
+      JSON.stringify(
+        receipts.map((receipt) => ({
+          partition: receipt.partition,
+          epoch: receipt.epoch,
+          source_position: String(receipt.sourcePosition),
+          creation_position: String(receipt.creationPosition),
+          enqueue_revision: String(receipt.enqueueRevision),
+          revision: String(receipt.revision),
+          claim_revision: String(receipt.claimRevision),
+          receipt: receipt.receipt,
+        })),
+      ),
+    ],
+  );
+}
+
+type HomeRange = Readonly<{ start: number; end: number }>;
+export type PreparedEnrollmentRange = HomeRange & Readonly<{ digest: string }>;
+export type ColdEnrollmentRequest = Readonly<{ version: 1; job: string; byteLimit: number }> &
+  (
+    | Readonly<{ action: 'prepare'; ranges: readonly HomeRange[] }>
+    | Readonly<{ action: 'adopt'; range: PreparedEnrollmentRange }>
+  );
+
+type ColdEnrollmentBinding = PublicFilterBaselineBinding &
+  Readonly<{
+    originalConsumer: PublicFilterConsumer;
+    sourceConsumer: string;
+    source: NativePublicSource;
+    generation: string;
+    job: string;
+    keys: readonly string[];
+  }>;
+
+export function coldEnrollmentFunding(request: ColdEnrollmentRequest, keys: readonly string[]) {
+  const ranges = request.action === 'adopt' ? [request.range] : request.ranges;
+  if (
+    request.version !== 1 ||
+    !uuid.test(request.job) ||
+    (request.action !== 'prepare' && request.action !== 'adopt') ||
+    !Number.isSafeInteger(request.byteLimit) ||
+    request.byteLimit < 0 ||
+    request.byteLimit > 4 * 1024 * 1024 ||
+    !Array.isArray(ranges) ||
+    ranges.length < 1 ||
+    ranges.length > 4 ||
+    ranges.some(
+      ({ start, end }, i) =>
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start < 0 ||
+        start >= end ||
+        end > 4096 ||
+        end - start > maxPublicFilterEnrollmentHomes ||
+        (i > 0 && ranges[i - 1]!.end > start),
+    ) ||
+    (request.action === 'adopt' && !/^[0-9a-f]{64}$/.test(request.range.digest))
+  )
+    throw new TypeError('Invalid cold Subject enrollment range');
+  const homes = ranges.reduce((sum, range) => sum + range.end - range.start, 0);
+  if (homes > maxPublicFilterEnrollmentHomes || keys.length > 450)
+    throw new RangeError('Cold enrollment exceeds its native page bound');
+  // A failed group probe can repeat the Access reads on the retained path.
+  // Reserve the original writes, the independent receipt reread, and both binding reads.
+  const perHome = request.action === 'prepare' ? 26 + 2 * keys.length : 20;
+  return {
+    inputs: 24 + homes * perHome,
+    bytes: 64 * 1024 + homes * (12 * 1024 + 4 * Buffer.byteLength(JSON.stringify(keys))),
+  };
+}
+
+async function coldEnrollmentFrontier(client: Pool | PoolClient, binding: ColdEnrollmentBinding, locked = false) {
+  const result = await client.query<{ after_home: number }>(
+    `/* semantic.native-keyed:9:9 */
+     SELECT c.after_home FROM search.public_filter_coverage_preparation c
+     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(c.partition_no,c.registration)
+     JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
+     JOIN search.generation_publication j ON (j.partition_no,j.job)=(c.partition_no,$7::uuid)
+     JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap)
+     JOIN core.partition p ON p.partition_no=b.partition_no
+     WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2::uuid)
+       AND c.definition=$3::uuid AND c.consumer=$4 AND c.generation=$5::bigint AND c.population_protocol=1
+       AND r.consumer=c.consumer AND r.consumer_bootstrap='0:'||b.bootstrap::text
+       AND r.consumer_work IS NOT NULL AND r.state='active'
+       AND j.family='subjects' AND j.pass=1 AND j.phase IN ('subject','engine','validate','reconciled')
+       AND j.source_home=0 AND NOT j.fenced_pass AND j.fence IS NULL AND j.previous_uuid IS NULL
+       AND j.bootstrap IS NULL AND j.physical_target=r.physical_target AND j.native_incarnation=t.incarnation
+       AND j.physical_target=j.consumer->>'physicalTarget' AND j.native_incarnation=j.consumer->>'incarnation'
+       AND j.consumer=$8::jsonb AND j.binding=$9::jsonb
+       AND b.consumer=$10 AND b.read_definition=c.definition AND b.state IN ('capturing','begun') AND b.snapshot_kind='prepared'
+       AND b.owner_epoch=$6 AND p.epoch=b.owner_epoch AND p.write_state='active'
+       AND b.coverage_publication IS NULL AND b.queried IS NULL AND b.publication_job IS NULL
+       AND b.account_after=c.after_home AND b.coverage_after=c.after_home AND b.coverage_root=c.root
+       AND b.coverage_generation=c.generation
+       AND NOT EXISTS (SELECT FROM search.public_filter_observation o
+         WHERE (o.partition_no,o.registration)=(r.partition_no,r.id) AND o.state<>'closed')
+       AND NOT EXISTS (SELECT FROM search.identity_writer_gate g
+         WHERE (g.partition_no,g.physical_target)=(r.partition_no,r.physical_target)
+           AND g.publication_fence IS NOT NULL)
+     ${locked ? 'FOR SHARE OF j,c,b' : ''}`,
+    [
+      binding.registration.id,
+      binding.bootstrap,
+      binding.definition,
+      binding.consumer,
+      binding.generation,
+      binding.source.epoch,
+      binding.job,
+      binding.originalConsumer,
+      {
+        source: binding.source,
+        meaning: { digest: binding.originalConsumer.meaningDigest },
+        readDefinition: binding.definition,
+      },
+      binding.sourceConsumer,
+    ],
+  );
+  if (result.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
+  return result.rows[0]!.after_home;
+}
+
+async function readColdEnrollment(
+  client: Pool | PoolClient,
+  binding: ColdEnrollmentBinding,
+  range: HomeRange,
+  locked: boolean,
+) {
+  const { rows } = await client.query<{
+    partition: number;
+    epoch: number;
+    source: string;
+    creation: string;
+    enqueue: string;
+    revision: string;
+    claim_revision: string;
+    key_digest: string;
+    receipt: string;
+  }>(
+    `/* semantic.native-keyed:${4 * (range.end - range.start)}:${4 * (range.end - range.start)} */
+     SELECT h.home AS partition, p.epoch,e.source_position::text AS source,e.creation_position::text AS creation,
+       e.native_enqueue_revision::text AS enqueue,e.key_digest,e.receipt,
+       a.revision::text,a.claim_revision::text
+     FROM generate_series($1::integer,$2::integer-1) h(home)
+     JOIN LATERAL (SELECT epoch FROM core.partition WHERE partition_no=h.home AND write_state='active'
+       LIMIT 1 ${locked ? 'FOR SHARE' : ''}) p ON true
+     JOIN LATERAL (SELECT * FROM semantic.public_filter_home_enrollment
+       WHERE (partition_no,bootstrap)=(h.home,$3::uuid)
+         AND (registration_partition,registration,read_definition,owner_epoch)=(0,$4,$5::uuid,p.epoch)
+         AND complete AND native_revision IS NULL AND receipt IS NOT NULL
+         AND key_digest=$7 AND key_after IS NOT DISTINCT FROM $8 AND creation_consumer=$6
+       LIMIT 1 ${locked ? 'FOR SHARE' : ''}) e ON true
+     JOIN LATERAL (SELECT 1 FROM core.consumer_checkpoint
+       WHERE (partition_no,consumer)=(h.home,$6) AND (epoch IS NULL OR epoch=p.epoch)
+         AND position<=e.creation_position LIMIT 1 ${locked ? 'FOR SHARE' : ''}) pin ON true
+     JOIN LATERAL (SELECT revision,claim_revision FROM access.account_discovery_population
+       WHERE partition_no=h.home LIMIT 1) a ON true
+     ORDER BY h.home`,
+    [
+      range.start,
+      range.end,
+      binding.bootstrap,
+      binding.registration.id,
+      binding.definition,
+      publicFilterCreationConsumer(binding.bootstrap),
+      hash(binding.keys),
+      binding.keys.at(-1) ?? null,
+    ],
+  );
+  if (rows.length !== range.end - range.start) throw new CommandUnavailableError('contention', range.start);
+  const receipts = rows.map((row): AccountDiscoveryEnrollment => ({
+    partition: row.partition,
+    epoch: row.epoch,
+    sourcePosition: BigInt(row.source),
+    creationPosition: BigInt(row.creation),
+    enqueueRevision: BigInt(row.enqueue),
+    // The original Source cursor also retains the Access counters. Subject
+    // receipts exclude them from the digest and receiver authority.
+    revision: BigInt(row.revision),
+    claimRevision: BigInt(row.claim_revision),
+    keyDigest: row.key_digest,
+    receipt: row.receipt,
+    complete: true,
+  }));
+  for (const receipt of receipts) requireReceipt(binding, receipt);
+  const digest = hash([
+    1,
+    binding.job,
+    binding.bootstrap,
+    binding.registration.id,
+    binding.generation,
+    binding.definition,
+    binding.consumer,
+    binding.source.epoch,
+    range.start,
+    range.end,
+    receipts.map((receipt) => receipt.receipt),
+  ]);
+  return { receipts, digest };
+}
+
+export async function prepareColdEnrollment(
+  pool: Pool,
+  binding: ColdEnrollmentBinding,
+  ranges: readonly HomeRange[],
+  enroll: (range: HomeRange) => Promise<void>,
+) {
+  const frontier = await coldEnrollmentFrontier(pool, binding);
+  const results = await Promise.allSettled(
+    ranges.map(async (range) => {
+      // An already adopted range can be read back after a lost response.
+      if (range.end > frontier) await enroll(range);
+      const proof = await readColdEnrollment(pool, binding, range, false);
+      return { start: range.start, end: range.end, digest: proof.digest };
+    }),
+  );
+  // Drain all funded work before returning its shared accounting, even on failure.
+  const prepared = results.map((result) => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
+  await coldEnrollmentFrontier(pool, binding);
+  return prepared;
+}
+
+export async function adoptColdEnrollment(
+  pool: Pool,
+  binding: ColdEnrollmentBinding,
+  range: PreparedEnrollmentRange,
+  deadline: number,
+) {
+  // A gap can be reported while its predecessor is still taking writer locks.
+  const frontier = await coldEnrollmentFrontier(pool, binding);
+  if (range.start > frontier) return 'pending' as const;
+  return transaction(pool, deadline, async (client) => {
+    // Lock home zero before higher homes, and keep the original pins and owner
+    // epochs stable through the ordered cursor write.
+    await client.query('/* semantic.native-keyed:1:1 */ SELECT 1 FROM core.partition WHERE partition_no=0 FOR SHARE');
+    const proof = await readColdEnrollment(client, binding, range, true);
+    if (proof.digest !== range.digest) throw new CommandUnavailableError('contention', range.start);
+    // Registration replaces the native target before taking its own row lock.
+    const target = await client.query(
+      `/* semantic.native-keyed:1:1 */ SELECT 1 FROM search.public_filter_target
+       WHERE (partition_no,physical_target,incarnation)=(0,$1,$2) FOR SHARE`,
+      [binding.originalConsumer.physicalTarget, binding.originalConsumer.incarnation],
+    );
+    if (target.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
+    await lockRegistration(client, binding);
+    const current = await coldEnrollmentFrontier(client, binding, true);
+    if (range.end <= current) return 'adopted' as const;
+    if (range.start > current) return 'pending' as const;
+    // An ordinary enrollment may have adopted part of this range in the meantime.
+    await writeBaselinePage(client, binding, proof.receipts.slice(current - range.start));
+    return 'adopted' as const;
+  });
 }
