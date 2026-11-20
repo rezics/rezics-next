@@ -2002,6 +2002,13 @@
       "researcher": "gpt-6-astra",
       "state": "adopted",
       "decision": "docs/knowledge-workspaces.md#research-adoption"
+    },
+    {
+      "path": "docs/research/economy-system-design-codex.md",
+      "topic": "economy-system-design",
+      "researcher": "codex",
+      "state": "adopted",
+      "decision": "docs/economy.md"
     }
   ]
 }

@@ -11,6 +11,7 @@ These tracked definitions follow [public scope](../scope.md), which controls whi
 - [Content and communities](content.md)
 - [Subject-connected knowledge workspaces](knowledge-workspaces.md) — Content owns the coordinating contract
 - [Commerce](commerce.md) — closed; inactive by default
+- [Economy](economy.md) — later private capability
 - [Library and Collections](library.md) — separate owner documentation
 - [Imports](imports.md)
 - [Web and Auth interfaces](web.md)
