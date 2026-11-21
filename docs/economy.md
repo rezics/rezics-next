@@ -99,12 +99,20 @@ Matching follows price-time priority with stable fill identities and protected a
 step can resume before crossing subsequent instructions. A canceled order frees only its unallocated remainder.
 The native worker schedules bounded spot work for the configured book and node. Market settlement also requires the
 configured item home. An old queued job advances work only if its owner binding still matches.
+After an accepted spot order commits, Kernel attempts to enqueue matching for that exact order sequence. The worker
+rechecks the active matching sequence and advances one bounded step. Enqueue failure or saturation leaves accepted
+orders available to the scheduled recovery sweep.
 Shared spot price and volume derive from completed settlements and remain behind Economy admission and `spot:read`.
 `GET /v1/economy/spot/:instrumentId/trades` reports price, lots, base units, quote units and settlement time for one
 instrument. It carries no participant, order, reservation or settlement authority identifiers. Sort newest settlement
 first, break ties by stable native fill identity, and continue with a bounded opaque cursor scoped to the requesting
-account and instrument. Fills awaiting ledger settlement remain visible through their own order lifecycle and do not
-enter the shared feed.
+account and instrument.
+
+Under `spot:read`, `GET /v1/economy/spot/:instrumentId/orders/:orderId/fills` lists a caller's own matched fills.
+Return the price, lots, delivered units, the caller's charged quote-asset fee and whether each fill is pending or
+settled. Include settlement time only once the ledger has posted the fill. Page in stable native fill order and bind
+the opaque continuation to the account, book, instrument and order. Keep counterparty and reservation identities
+private. Pending fills stay out of the shared trade feed.
 
 ## Book reconciliation and restore
 
