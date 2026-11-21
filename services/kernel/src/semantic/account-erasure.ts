@@ -1,4 +1,5 @@
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
+import { canonicalGenerationAnnouncement } from './canonical-generation-delivery.ts';
 import { minimizeSemanticRecordPayload } from './retention-payload.ts';
 import type { Pool } from 'pg';
 import {
@@ -18,6 +19,7 @@ import {
   CANONICAL_GENERATION_COMMITTED,
   CANONICAL_GENERATION_CONTINUATION,
   IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
+  SEMANTIC_ERASURE_PROGRESS,
   SEMANTIC_EVENTS,
 } from './events.ts';
 import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
@@ -27,7 +29,7 @@ import { recordSemanticSourceDisposition } from './erasure-producer.ts';
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
 export { SEMANTIC_LOCATOR_ADVANCED };
-export const SEMANTIC_ERASURE_PROGRESS = 'com.rezics.semantic.erasure.progress.v1';
+export { SEMANTIC_ERASURE_PROGRESS };
 const platform = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',
   clientId: 'internal-semantic-erasure',
@@ -372,12 +374,12 @@ async function minimizePayload(
     });
   } else if (store === 'fact') {
     // Historical values are removed; a private latest slot keeps an empty retract marker so older values cannot reappear.
-    await tx.query(
+    const removed = await tx.query(
       `DELETE FROM semantic.fact f WHERE ${where} AND EXISTS
       (SELECT 1 FROM semantic.fact newer WHERE newer.route=f.route AND newer.subject_id=f.subject_id AND newer.slot_id=f.slot_id AND newer.log_seq>f.log_seq)`,
       values,
     );
-    await tx.query(
+    const retracted = await tx.query(
       `WITH changed AS (
       UPDATE semantic.fact f SET body='{}',operation='retract',release=NULL WHERE ${where} AND f.operation='assert' AND (
        NOT EXISTS(SELECT 1 FROM semantic.subject s WHERE s.route=f.route AND s.subject_id=f.subject_id AND s.visibility='visible')
@@ -388,6 +390,9 @@ async function minimizePayload(
       UPDATE semantic.subject s SET current_facts=greatest(0,current_facts-1) FROM changed c WHERE s.route=c.route AND s.subject_id=c.subject_id`,
       [...values, accountId],
     );
+    // Fact triggers can change the canonical name, and retraction also updates the Subject.
+    if (removed.rowCount || retracted.rowCount)
+      events.push(...(await canonicalGenerationAnnouncement(tx, partition, true)));
   } else if (store === 'revision') {
     await minimizeSemanticRecordPayload(tx, 'revision', { low, high, recordKey: key });
   } else if (store === 'moderation') {

@@ -4,9 +4,17 @@ import { EXTENSION_FORMAT, termPrefix } from '@rezics/definitions/extension';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { GLOBAL_CONTEXT, readRelease } from '../../src/semantic/definitions.ts';
 import { effectiveRelease } from '../../src/semantic/extensions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
+import { createCanonicalGenerationWakeEffect } from '../../src/semantic/canonical-generation-delivery.ts';
+import { CANONICAL_GENERATION_COMMITTED, SEMANTIC_ERASURE_PROGRESS } from '../../src/semantic/events.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
-import { beginSemanticErasure, readSemanticErasure, stepSemanticErasure } from '../../src/semantic/account-erasure.ts';
+import {
+  beginSemanticErasure,
+  createSemanticLocatorEffect,
+  readSemanticErasure,
+  stepSemanticErasure,
+} from '../../src/semantic/account-erasure.ts';
 import { accountErasureWorker } from './support/account-erasure-worker.ts';
 import { createBody as starterBody } from '../zones/resource-fixture.ts';
 
@@ -840,3 +848,57 @@ test('default native relation copies retain indexed source roles after an adopti
     await worker.crash();
   }
 }, 90_000);
+
+test('erasing a hidden label announces its native canonical generation without subscribing to erasure checkpoints', async () => {
+  const wake = createCanonicalGenerationWakeEffect(f.db.pool);
+  expect(wake.types).not.toContain(SEMANTIC_ERASURE_PROGRESS);
+  const author = await f.author();
+  await f.grant(GLOBAL_CONTEXT, author, ['moderation:hide']);
+  const created = await f.call(author, 'POST', '/v1/subjects', {
+    type: 'schema:Person',
+    labels: { en: 'Private label' },
+  });
+  expect(created.status).toBe(201);
+  const id = created.body.subject.id as string;
+  const partition = partitionOf(routeOf(id)!);
+  expect((await f.call(author, 'POST', `/v1/subjects/${id}:hide`, { reason: 'Private' })).status).toBe(200);
+  await f.tombstone(author);
+  await beginSemanticErasure(f.db.pool, author.accountId);
+
+  let source: CloudEvent | undefined;
+  for (;;) {
+    const page = await projectBatch(f.db.pool, {
+      consumer: 'erasure_canonical_test',
+      partition,
+      async apply(envelopes) {
+        source = envelopes
+          .flatMap((envelope) => envelope.events)
+          .find((event) => event.subject === id && event.type === 'com.rezics.subject.created.v1');
+      },
+    });
+    if (page.status !== 'read') throw new Error('Could not read the native Subject creation');
+    if (source || !page.envelopes) break;
+  }
+  if (!source) throw new Error('Missing native Subject creation');
+  const locator = createSemanticLocatorEffect(f.db.pool);
+  const label = () =>
+    f.db.admin.query("SELECT operation,body FROM semantic.fact WHERE route=$1 AND subject_id=$2 AND kind='label'", [
+      routeOf(id),
+      id,
+    ]);
+  expect((await label()).rows).toEqual([{ operation: 'assert', body: 'Private label' }]);
+  for (let step = 0; step < 100 && (await label()).rows[0]?.operation === 'assert'; step++) await locator.run(source);
+  expect((await label()).rows).toEqual([{ operation: 'retract', body: {} }]);
+  expect(
+    (
+      await f.db.admin.query(
+        `SELECT notice.data FROM core.outbox notice JOIN core.outbox progress USING(partition_no,position)
+         JOIN semantic.partition_subjects home USING(partition_no)
+         WHERE notice.partition_no=$1 AND notice.type=$2 AND progress.type=$3 AND progress.subject=$4
+           AND (notice.data->>'generation')::bigint=home.canonical_generation
+           AND home.canonical_announced_generation=home.canonical_generation`,
+        [partition, CANONICAL_GENERATION_COMMITTED, SEMANTIC_ERASURE_PROGRESS, author.accountId],
+      )
+    ).rows,
+  ).toHaveLength(1);
+}, 120_000);
