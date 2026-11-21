@@ -264,6 +264,37 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   });
 });
 
+test('a transaction bound to a different History set locator rejects the command and rolls back its binding', async () => {
+  const producer = actualProducer();
+  let transactionId: string | undefined;
+  await expect(
+    command(async (tx) => {
+      const set = await producer.beginSemanticRecordSourceSet(tx);
+      const locator = producer.semanticRecordSourceSetLocator(tx, set);
+      transactionId = locator.transactionId;
+      const outcome = sourceSetCommand('conflicting locator');
+      await declareCommandHistory(tx, kind, outcome.declaration);
+      await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
+      await producer.sealSemanticRecordSourceSet(tx, set);
+      await tx.query(
+        `INSERT INTO core.record_history_source_set
+         (source_partition,set_locator,set_revision,original_transaction,member_count,producer_version)
+         VALUES($1,'legacy','1',$2,1,1)`,
+        [locator.partition, transactionId],
+      );
+      return outcome.result;
+    }),
+  ).rejects.toThrow(new TypeError('Conflicting immutable native record source set'));
+  expect(transactionId).toBeDefined();
+  expect(
+    (
+      await f.db.admin.query('SELECT 1 FROM core.record_history_source_set WHERE original_transaction=$1', [
+        transactionId,
+      ])
+    ).rowCount,
+  ).toBe(0);
+});
+
 test('the native seal guard rolls back building source and generated work together and rejects a different command handle', async () => {
   const producer = actualProducer();
   let handle: OwnerSourceSet | undefined;

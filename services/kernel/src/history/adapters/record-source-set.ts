@@ -111,18 +111,26 @@ export async function recordCommandRecordSourceSetCopy(
   const set = declaredLocator(tx, declaration);
   const command = currentCommand(tx);
   const key = recordSourceSetStorageKey(set);
-  await tx.query(
-    `INSERT INTO core.record_history_source_set
+  const original = await tx
+    .query(
+      `INSERT INTO core.record_history_source_set
      (source_partition,set_locator,set_revision,original_transaction,original_position,member_count,producer_version,
       native_revision,snapshot_digest,metadata_state)
-     VALUES($1,$2,$3,$4,$5,NULL,1,$6,NULL,'building') ON CONFLICT DO NOTHING`,
-    [...key, set.transactionId, position?.toString() ?? null, set.revision],
-  );
-  const original = await tx.query(
-    `SELECT original_transaction,original_position,native_revision,metadata_state FROM core.record_history_source_set
-     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 FOR SHARE`,
-    key,
-  );
+     VALUES($1,$2,$3,$4,$5,NULL,1,$6,NULL,'building')
+     ON CONFLICT(source_partition,set_locator,set_revision) DO SELECT FOR SHARE
+     RETURNING original_transaction,original_position,native_revision,metadata_state`,
+      [...key, set.transactionId, position?.toString() ?? null, set.revision],
+    )
+    .catch((error: unknown) => {
+      // Older commitments can bind this transaction to a different locator.
+      if (
+        error instanceof Error &&
+        'constraint' in error &&
+        error.constraint === 'record_history_source_set_source_partition_original_transac_key'
+      )
+        throw new TypeError('Conflicting immutable native record source set', { cause: error });
+      throw error;
+    });
   const row = original.rows[0];
   if (
     !row ||
@@ -133,17 +141,13 @@ export async function recordCommandRecordSourceSetCopy(
   )
     throw new TypeError('Conflicting immutable native record source set');
   const encoded = Buffer.from(encodeLocator(locator));
-  await tx.query(
+  const accepted = await tx.query(
     `INSERT INTO core.record_history_source_set_copy
      (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,1) ON CONFLICT DO NOTHING`,
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,1)
+     ON CONFLICT(partition_no,artifact_type,locator) DO SELECT FOR SHARE
+     RETURNING source_partition,set_locator,set_revision,original_transaction,original_position,producer_version`,
     [...key, command.partition, locator.artifactType, encoded, command.transactionId, position?.toString() ?? null],
-  );
-  const accepted = await tx.query(
-    `SELECT source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
-     FROM core.record_history_source_set_copy
-     WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3 FOR SHARE`,
-    [command.partition, locator.artifactType, encoded],
   );
   const copy = accepted.rows[0];
   if (
