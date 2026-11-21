@@ -100,10 +100,10 @@ export async function drainReleasedPublicationPit(
            WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation))
          AND NOT EXISTS (SELECT FROM search.public_filter_execution e
            WHERE (e.partition_no,e.observation)=(o.partition_no,o.observation))
-         AND NOT EXISTS (SELECT FROM search.public_filter_coverage_page p
-           WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation))
-         AND NOT EXISTS (SELECT FROM semantic.public_filter_population_start s
-           WHERE (s.partition_no,s.observation)=(o.partition_no,o.observation))
+         AND (SELECT true FROM search.public_filter_coverage_page p
+           WHERE p.partition_no=0 AND p.observation=o.observation COLLATE "C" LIMIT 1) IS NULL
+         AND (SELECT true FROM semantic.public_filter_population_start s
+           WHERE s.partition_no=0 AND s.observation=o.observation COLLATE "C" LIMIT 1) IS NULL
          AND NOT EXISTS (SELECT FROM semantic.public_filter_bootstrap b WHERE b.partition_no=0
            AND (b.queried COLLATE "C"=o.observation OR b.publication_observation COLLATE "C"=o.observation))
          AND NOT EXISTS (SELECT FROM search.public_filter_pit_claim c WHERE c.partition_no=0 AND c.registration=$1
