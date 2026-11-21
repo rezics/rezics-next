@@ -707,6 +707,23 @@ $$;
 
 
 --
+-- Name: mark_freshness_position_change(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.mark_freshness_position_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' OR (NEW.consumer, NEW.shard, NEW.positions) IS DISTINCT FROM
+      (OLD.consumer, OLD.shard, OLD.positions) THEN
+    NEW.change_xid := pg_current_xact_id();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: mark_public_filter_repair_allocation(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1430,6 +1447,36 @@ END $$;
 
 
 --
+-- Name: reset_deleted_freshness_points(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.reset_deleted_freshness_points() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM removed) THEN
+    UPDATE search.freshness_observation_reset SET revision = gen_random_uuid() WHERE singleton;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: reset_freshness_observation(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.reset_freshness_observation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE search.freshness_observation_reset SET revision = gen_random_uuid() WHERE singleton;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: retain_pending_freshness_home(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1866,6 +1913,17 @@ END) STORED,
 
 
 --
+-- Name: freshness_observation_reset; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.freshness_observation_reset (
+    singleton boolean NOT NULL,
+    revision uuid NOT NULL,
+    CONSTRAINT freshness_observation_reset_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: freshness_positions; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1874,6 +1932,7 @@ CREATE TABLE search.freshness_positions (
     shard integer NOT NULL,
     positions jsonb NOT NULL,
     pending boolean DEFAULT false NOT NULL,
+    change_xid xid8,
     CONSTRAINT freshness_positions_consumer_check CHECK (((consumer = ''::text) OR starts_with(consumer, 'search_'::text))),
     CONSTRAINT freshness_positions_positions_check CHECK ((jsonb_typeof(positions) = 'object'::text)),
     CONSTRAINT freshness_positions_shard_check CHECK ((shard >= 0))
@@ -3295,6 +3354,14 @@ ALTER TABLE ONLY search.freshness_home
 
 
 --
+-- Name: freshness_observation_reset freshness_observation_reset_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.freshness_observation_reset
+    ADD CONSTRAINT freshness_observation_reset_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: freshness_positions freshness_positions_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -3887,6 +3954,13 @@ CREATE INDEX freshness_pending_home ON search.freshness_positions USING btree (s
 
 
 --
+-- Name: freshness_position_change; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX freshness_position_change ON search.freshness_positions USING btree (consumer, change_xid) WHERE (change_xid IS NOT NULL);
+
+
+--
 -- Name: generation_publication_bootstrap; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -4300,6 +4374,33 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 
 
 --
+-- Name: freshness_positions freshness_observation_moved; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_moved AFTER UPDATE OF consumer, shard ON search.freshness_positions FOR EACH ROW WHEN (((old.consumer IS DISTINCT FROM new.consumer) OR (old.shard IS DISTINCT FROM new.shard))) EXECUTE FUNCTION search.reset_freshness_observation();
+
+ALTER TABLE search.freshness_positions ENABLE ALWAYS TRIGGER freshness_observation_moved;
+
+
+--
+-- Name: freshness_positions freshness_observation_removed; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_removed AFTER DELETE ON search.freshness_positions REFERENCING OLD TABLE AS removed FOR EACH STATEMENT EXECUTE FUNCTION search.reset_deleted_freshness_points();
+
+ALTER TABLE search.freshness_positions ENABLE ALWAYS TRIGGER freshness_observation_removed;
+
+
+--
+-- Name: freshness_positions freshness_observation_reset; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_reset AFTER TRUNCATE ON search.freshness_positions FOR EACH STATEMENT EXECUTE FUNCTION search.reset_freshness_observation();
+
+ALTER TABLE search.freshness_positions ENABLE ALWAYS TRIGGER freshness_observation_reset;
+
+
+--
 -- Name: freshness_home freshness_position; Type: TRIGGER; Schema: search; Owner: -
 --
 
@@ -4355,6 +4456,15 @@ CREATE TRIGGER invalidate_deleted_population_ordinals AFTER DELETE ON search.pub
 --
 
 CREATE TRIGGER invalidate_updated_population_ordinals AFTER UPDATE ON search.public_filter_preparation_segment REFERENCING OLD TABLE AS original_segments FOR EACH STATEMENT EXECUTE FUNCTION search.invalidate_population_verification();
+
+
+--
+-- Name: freshness_positions mark_freshness_position_change; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER mark_freshness_position_change BEFORE INSERT OR UPDATE OF consumer, shard, positions ON search.freshness_positions FOR EACH ROW EXECUTE FUNCTION search.mark_freshness_position_change();
+
+ALTER TABLE search.freshness_positions ENABLE ALWAYS TRIGGER mark_freshness_position_change;
 
 
 --

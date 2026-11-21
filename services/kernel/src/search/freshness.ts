@@ -1,8 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { BoundedReadDeadlineError, withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { PARTITIONS } from '../route/contract.ts';
 import read from './freshness.sql';
+import readObservation from './freshness-observation.sql';
 
 export type Freshness = { asOf: Date; behind: number; catchingUp: boolean };
 /** Absolute caller deadline; omission inherits request time or admits ten seconds at the call. */
@@ -46,15 +48,61 @@ function beforeDeadline<T>(operation: Promise<T>, deadline: number): Promise<T> 
   }).finally(() => clearTimeout(timer));
 }
 
+type ObservationCut = { snapshot: string; revision: string; pending: Map<number, number | null> };
+type ObservationState = { dense: boolean; clients: WeakMap<PoolClient, ObservationCut> };
+
+// At sparse cuts the one-shot aggregate avoids transporting individual points.
+const DENSE_BACKLOG = 128;
+
+function freshnessAt(at: Date, behind: number, oldest: Date | null): Freshness {
+  if (!behind) return { asOf: at, behind, catchingUp: false };
+  if (!oldest) throw new Error('Freshness query found partitions behind without an envelope');
+  return { asOf: oldest, behind, catchingUp: at.getTime() - oldest.getTime() > 60_000 };
+}
+
+async function observeChangedHomes(client: PoolClient, consumer: string, previous?: ObservationCut) {
+  const [row] = await readObservation.run(client, {
+    consumer,
+    snapshot: previous?.snapshot ?? '',
+    revision: previous?.revision ?? '',
+  });
+  if (!row?.snapshot || !Array.isArray(row.homes) || row.homes.length > PARTITIONS || (!row.complete && !previous))
+    throw new Error('Freshness observation is incomplete');
+  const pending = new Map(row.complete ? undefined : previous!.pending);
+  for (const point of row.homes) {
+    if (!Array.isArray(point)) throw new Error('Freshness observation returned an invalid home');
+    const [home, behind, recorded] = point;
+    if (!Number.isInteger(home) || home < 0 || home >= PARTITIONS || typeof behind !== 'boolean')
+      throw new Error('Freshness observation returned an invalid home');
+    if (behind) pending.set(home, recorded === null ? null : new Date(recorded).getTime());
+    else pending.delete(home);
+  }
+  let oldest = Infinity;
+  let missing = false;
+  for (const value of pending.values()) {
+    if (value === null) missing = true;
+    else oldest = Math.min(oldest, value);
+  }
+  const freshness = freshnessAt(new Date(row.now), pending.size, oldest === Infinity ? null : new Date(oldest));
+  // An insert can fill a hole without moving the head or checkpoint.
+  const cut = missing ? undefined : { snapshot: row.snapshot, revision: row.revision, pending };
+  return { freshness, cut };
+}
+
 /** Settle only after acquired-client cleanup; an expired pending checkout cannot dispatch SQL later. */
-async function physicalFreshness(pool: Pool, consumer: string, deadline: number): Promise<Freshness> {
-  let acquired = false;
+async function physicalFreshness(
+  pool: Pool,
+  consumer: string,
+  deadline: number,
+  state?: ObservationState,
+): Promise<Freshness> {
+  let physical: PoolClient | undefined;
   let released: Promise<void> | undefined;
   try {
     return await withBoundedReadLifetime(
       (work) => {
         const checkout = withConnection(pool, (client) => {
-          acquired = true;
+          physical = client;
           return work(client);
         });
         released = checkout.then(
@@ -66,16 +114,20 @@ async function physicalFreshness(pool: Pool, consumer: string, deadline: number)
       discardConnection,
       deadline,
       async (client) => {
+        if (state?.dense && physical) {
+          // The next observation must use the same PostgreSQL instance and transaction history.
+          // Replacing a physical connection starts a fresh cut.
+          const observed = await observeChangedHomes(client, consumer, state.clients.get(physical));
+          state.dense = observed.freshness.behind >= DENSE_BACKLOG;
+          if (state.dense && observed.cut) state.clients.set(physical, observed.cut);
+          else state.clients.delete(physical);
+          return observed.freshness;
+        }
         const row = await read.run(client, { consumer });
         if (!row) throw new Error('Freshness query returned no row');
 
-        const now = new Date(row.now);
-        const behind = row.behind;
-        if (behind > 0 && row.oldest === null)
-          throw new Error('Freshness query found partitions behind without an envelope');
-        const asOf = behind > 0 ? new Date(row.oldest!) : now;
-
-        return { asOf, behind, catchingUp: behind > 0 && now.getTime() - asOf.getTime() > 60_000 };
+        if (state) state.dense = row.behind >= DENSE_BACKLOG;
+        return freshnessAt(new Date(row.now), row.behind, row.oldest === null ? null : new Date(row.oldest));
       },
       {
         // A driver timeout can reject its promise before the server has stopped the statement.
@@ -83,7 +135,7 @@ async function physicalFreshness(pool: Pool, consumer: string, deadline: number)
       },
     );
   } finally {
-    if (acquired) await released;
+    if (physical) await released;
   }
 }
 
@@ -107,6 +159,9 @@ export function createFreshness(
     resolve(value: Freshness): void;
     reject(error: unknown): void;
   };
+  const state: ObservationState | undefined = consumer.startsWith('search_')
+    ? { dense: false, clients: new WeakMap() }
+    : undefined;
   let running = false;
   let queued: Batch | undefined;
 
@@ -122,7 +177,7 @@ export function createFreshness(
 
   function start(pending: Batch): void {
     running = true;
-    const read = physicalFreshness(pool, consumer, pending.deadline);
+    const read = physicalFreshness(pool, consumer, pending.deadline, state);
     read.then(pending.resolve, pending.reject);
     const settled = () => {
       const next = queued;

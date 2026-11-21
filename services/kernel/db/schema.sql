@@ -3696,6 +3696,33 @@ ALTER TABLE core.partition ENABLE ALWAYS TRIGGER freshness_home_truncate;
 
 
 --
+-- Name: outbox freshness_observation_removed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_removed AFTER DELETE ON core.outbox REFERENCING OLD TABLE AS removed FOR EACH STATEMENT EXECUTE FUNCTION search.reset_deleted_freshness_points();
+
+ALTER TABLE core.outbox ENABLE ALWAYS TRIGGER freshness_observation_removed;
+
+
+--
+-- Name: outbox freshness_observation_reset; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_reset AFTER TRUNCATE ON core.outbox FOR EACH STATEMENT EXECUTE FUNCTION search.reset_freshness_observation();
+
+ALTER TABLE core.outbox ENABLE ALWAYS TRIGGER freshness_observation_reset;
+
+
+--
+-- Name: outbox freshness_observation_timestamp; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_observation_timestamp AFTER UPDATE OF partition_no, "position", event_seq, recorded_at ON core.outbox FOR EACH STATEMENT EXECUTE FUNCTION search.reset_freshness_observation();
+
+ALTER TABLE core.outbox ENABLE ALWAYS TRIGGER freshness_observation_timestamp;
+
+
+--
 -- Name: consumer_checkpoint freshness_position; Type: TRIGGER; Schema: core; Owner: -
 --
 

@@ -1647,16 +1647,26 @@ population completeness, or expand the existing preview's disclosure guarantees.
   and folds that home's pending head into the shared group in the same transaction. Most successive
   advances of an already-behind head leave the bounded head unchanged. A key move clears the previous
   checkpoint slot. Backfill and rollback lock both native sources. Replica-mode writes and truncation
-  use the same triggers. Outbox retention and timestamp changes need no summary updates.
+  use the same triggers.
+- After an observation finds at least 128 behind homes, a physical connection records its committed PostgreSQL
+  snapshot and the first unapplied timestamp for each behind home. Its next statement checks changed positions
+  by top-level transaction ID against that snapshot, including transactions that were still in progress.
+  Removed position keys and outbox retention or timestamp edits invalidate the cut. An incomplete first-envelope
+  set, a replacement connection or a generation change requires a full read. The database statement supplies the
+  observation time for both full and incremental reads.
 - At most 64 stored head groups and 64 checkpoint groups qualify for one named Search generation.
   An index locates the pending homes, up to 4,096 if every home has advanced since its last checkpoint.
-  Only differing groups expand into home rows. Each behind home adds one indexed envelope seek.
+  Only differing groups expand into home rows. Each behind home adds one indexed envelope seek on a full read. A dense incremental read examines at most
+  the two consumers’ current position rows (4,096 homes each), seeks changed homes and updates at most 4,096
+  pending timestamps per physical connection. A long-running transaction can keep the index range wide.
   Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
   callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
   the deadline (default one hour).
 - Growth check: [test/search/freshness.test.ts](../../test/search/freshness.test.ts): “the reader answers each call
   from a read that began after the call”; SQL: [test/search/growth-query.test.ts](../../test/search/growth-query.test.ts):
   “Freshness stays within its bound as H grows” (rows/blocks, also P/N).
+  [Dense observation](../../test/search/freshness-observation.test.ts) compares each incremental answer with a
+  new full query across concurrent commits, rollback, retention and connection replacement.
 
 ### Generation discovery and bootstrap
 
