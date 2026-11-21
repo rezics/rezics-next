@@ -89,6 +89,18 @@ test('a grant ending one microsecond after T is held and one ending exactly at T
   expect(await resourceRoleHeld(pool, ended)).toBe(false);
 });
 
+test('unbounded and negative-infinity lower endpoints retain their native order', async () => {
+  const value = await input();
+  await pool.query(
+    `INSERT INTO access.resource_role_grant(route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+     SELECT $1,$2,'identity',$3,'',$4,valid,$2 FROM unnest(ARRAY[
+       tstzrange('-infinity', NULL, '[)'), tstzrange(NULL, '-infinity', '()')
+     ]) AS intervals(valid)`,
+    [route, value.resource.id, value.accountId, value.role],
+  );
+  expect(await resourceRoleHeld(pool, value)).toBe(true);
+});
+
 test('a revoked grant is not held after revocation', async () => {
   const value = await input();
   await grant(pool, value);

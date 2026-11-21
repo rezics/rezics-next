@@ -3428,8 +3428,11 @@ disclose the answer to anyone else. It uses the caller's open query client and s
 transaction. Invalid resource routes, unroutable account UUIDs, malformed roles or roles longer than 128 characters,
 and times that were not minted throw `TypeError` before any read. `Date` and string times are rejected.
 
-The one `SELECT EXISTS` statement probes the temporal primary key's equality columns plus `valid @> at` in the
-resource's partition: constant rows and statements, logarithmic blocks in role grants.
+The one statement seeks the latest exact-key grant starting on or before T through
+`resource_role_grant_point_lookup`, using the maximal range starting at T as the upper seek key, then checks
+that single interval with `valid @> at`. Native range ordering distinguishes unbounded lower bounds from the
+timestamp value `-infinity`. The temporal primary key excludes overlaps and every finite start is inclusive. The lookup reads at most one candidate, using
+logarithmic index blocks as grant history grows.
 `test/access/growth-resource-role-held.test.ts` checks this at three scales with unrelated grants on the same
 resource, other resources and ended ranges for the same account.
 

@@ -30,8 +30,9 @@ test('resourceRoleHeld stays constant as role grants grow', async () => {
           [route, resource.id, accountId, role, authoritativeTimeValue(at)],
         );
       // Thousands of rows in each competing neighborhood even at the smallest scale.
-      await database.admin.query(
-        `INSERT INTO access.resource_role_grant
+      for (let start = previous * 2048; start < scale * 2048; start += 2048) {
+        await database.admin.query(
+          `INSERT INTO access.resource_role_grant
          (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
          SELECT $1::integer,$2::uuid,'identity',gen_random_uuid(),'',$4::text,'(,)'::tstzrange,$2
          FROM generate_series(1,$5::integer)
@@ -46,8 +47,9 @@ test('resourceRoleHeld stays constant as role grants grow', async () => {
            tstzrange('2000-01-01'::timestamptz+n*interval '2 seconds',
                      '2000-01-01'::timestamptz+(n*2+1)*interval '1 second','[)'),$2
          FROM generate_series($6::integer+1,$7::integer) n`,
-        [route, resource.id, accountId, role, (scale - previous) * 2048, previous * 2048, scale * 2048],
-      );
+          [route, resource.id, accountId, role, 2048, start, start + 2048],
+        );
+      }
     },
     async operation() {
       expect(await resourceRoleHeld(db.pool, { resource, role, accountId, at })).toBe(true);
@@ -58,4 +60,4 @@ test('resourceRoleHeld stays constant as role grants grow', async () => {
     expect(cost.rows).toBe(1);
     expect(cost.statements).toBe(1);
   }
-}, 120_000);
+}, 600_000);
