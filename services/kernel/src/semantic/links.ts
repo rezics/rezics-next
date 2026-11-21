@@ -2,7 +2,7 @@ import type { Source } from '@rezics/definitions/bulk';
 import { statementAudience } from './statement-disclosure.ts';
 import currentRelations from './current-relations-read.sql';
 import { fenceKey, sourceTuple, readAnchoredFences } from './fences.ts';
-import { semanticCopyRoles } from './erasure-producer.ts';
+import { runSemanticCopyCommand, semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readWorkReleaseCards, workReleaseCardLimit, type WorkReleaseCards } from './work-release-cards.ts';
@@ -70,6 +70,7 @@ import scanLinkReadDemand from './links-scan-read-demand.sql';
 
 export const LINKS_CONSUMER = 'semantic_links';
 const FRESHNESS_TARGET_SECONDS = 10;
+const LINK_PROJECTION_CLIENT = 'internal-semantic-links';
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -162,7 +163,7 @@ function preferredChange(change: StoredChange, current: StoredChange): boolean {
   return change.position >= current.position;
 }
 
-function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange[]> {
+function newestChanges(envelopes: readonly Envelope[]): StoredChange[] {
   const newest = new Map<string, StoredChange>();
   for (const envelope of envelopes) {
     for (const event of envelope.events) {
@@ -195,14 +196,7 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
       }
     }
   }
-  const grouped = new Map<number, StoredChange[]>();
-  for (const change of newest.values()) {
-    const partition = partitionOf(change.route);
-    const list = grouped.get(partition) ?? [];
-    list.push(change);
-    grouped.set(partition, list);
-  }
-  return grouped;
+  return [...newest.values()];
 }
 
 function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, StoredOutboundChange[]> {
@@ -272,14 +266,28 @@ function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, Stor
 }
 
 async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> {
+  // Relay batches, key re-emissions, visibility changes, and redirects can all span receiving homes.
+  const grouped = new Map<number, StoredChange[]>();
+  for (const change of changes) {
+    const partition = partitionOf(change.route);
+    const list = grouped.get(partition) ?? [];
+    list.push(change);
+    grouped.set(partition, list);
+  }
+  for (const partition of [...grouped.keys()].sort((a, b) => a - b))
+    await applyChangesAtHome(pool, partition, grouped.get(partition)!);
+}
+
+async function applyChangesAtHome(pool: Pool, partition: number, changes: StoredChange[]): Promise<void> {
   const contexts = [...new Set(changes.map((change) => change.context_id ?? GLOBAL_CONTEXT))];
   if (contexts.length > 1) {
     contexts.sort((left, right) =>
       left === GLOBAL_CONTEXT ? -1 : right === GLOBAL_CONTEXT ? 1 : left.localeCompare(right),
     );
     for (const context of contexts)
-      await applyChanges(
+      await applyChangesAtHome(
         pool,
+        partition,
         changes.filter((change) => (change.context_id ?? GLOBAL_CONTEXT) === context),
       );
     return;
@@ -304,8 +312,8 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
     const roles = await Promise.all(
       page.map((change) => semanticCopyRoles(pool, change.sourceSubjectId, change.statementId)),
     );
-    const partition = partitionOf(page[0]!.route);
-    const command = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+    const options = { partition, clientId: LINK_PROJECTION_CLIENT };
+    const command = await runSemanticCopyCommand(pool, options, async (tx, transactionId) => {
       const forwarded: StoredChange[] = [];
       const local: StoredChange[] = [];
       for (const change of page) {
@@ -348,14 +356,7 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
           : [{ type: LINKS_PROJECTED, data: { subjects: [...new Set(page.map((change) => change.subjectId))] } }],
       };
     });
-    const groups = new Map<number, StoredChange[]>();
-    for (const change of command.value) {
-      const partition = partitionOf(change.route);
-      const group = groups.get(partition) ?? [];
-      group.push(change);
-      groups.set(partition, group);
-    }
-    for (const group of groups.values()) await applyChanges(pool, group);
+    await applyChanges(pool, command.value);
   }
 }
 
@@ -408,7 +409,8 @@ async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[])
       const roles = await Promise.all(
         page.map((change) => semanticCopyRoles(pool, change.subjectId, change.statementId)),
       );
-      await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+      const partition = partitionOf(route);
+      await runSemanticCopyCommand(pool, { partition, clientId: LINK_PROJECTION_CLIENT }, async (tx, transactionId) => {
         await upsertOutboundLinks.run(tx, {
           route,
           transaction_id: transactionId,
@@ -812,10 +814,7 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
   const outbound = newestOutboundChanges(envelopes);
   for (const partition of [...outbound.keys()].sort((a, b) => a - b))
     await applyOutboundChanges(pool, outbound.get(partition)!);
-  const grouped = newestChanges(envelopes);
-  for (const partition of [...grouped.keys()].sort((a, b) => a - b)) {
-    await applyChanges(pool, grouped.get(partition)!);
-  }
+  await applyChanges(pool, newestChanges(envelopes));
   const merges = envelopes.flatMap((envelope) =>
     envelope.events.flatMap((event) => {
       if (event.type !== SUBJECT_MERGED) return [];

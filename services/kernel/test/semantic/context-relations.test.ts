@@ -2,11 +2,13 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
+import { runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { LINKS_PROJECTED } from '../../src/semantic/events.ts';
 import { linkProjection, listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { createRealAccess } from './real-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -408,14 +410,20 @@ test("a Context relation page examines rows bounded by the page and the Context'
     expect(report.samples.map((sample) => sample.scale)).toEqual([16, 128, 1024]);
   }
   // Growth-only projection rows have no candidates or relay counters.
-  await admin.query(
-    "DELETE FROM semantic.outbound_link WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND property='ex:elsewhere'",
-    [routeOf(work), work, context],
-  );
-  await admin.query(
-    "DELETE FROM semantic.inbound_link WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND property='ex:elsewhere'",
-    [routeOf(people[1]!), people[1], context],
-  );
+  const basis = { actorAccountId: editor, clientId: 'context-relations-test', requestedBy: null };
+  for (const [table, subject] of [
+    ['outbound_link', work],
+    ['inbound_link', people[1]!],
+  ] as const) {
+    const route = routeOf(subject)!;
+    await runCommand(pool, { partition: partitionOf(route), basis }, async (tx) => {
+      await tx.query(
+        `DELETE FROM semantic.${table} WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND property='ex:elsewhere'`,
+        [route, subject, context],
+      );
+      return { value: null, events: [{ type: LINKS_PROJECTED, data: { subjects: [subject] } }] };
+    });
+  }
 }, 60_000);
 
 test('Context paging and inheritance remain correct when Global adopts a local relation', async () => {
