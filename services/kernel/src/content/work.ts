@@ -25,6 +25,12 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { purgeDeletedPostPage } from './deleted-post-purge.ts';
+import {
+  readDueContentRetention,
+  type RetentionFamily,
+  type RetentionFrontier,
+  type RetentionPartition,
+} from './retention-routes.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
 import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
@@ -372,17 +378,47 @@ async function registerWork(
     name: 'content.deletedPostPurge.step',
     ...retry,
   });
+  const dueContent = DBOS.registerStep(
+    async (family: RetentionFamily, cutoff: string | null, frontier: RetentionFrontier) =>
+      readDueContentRetention(context.pool, family, cutoff ?? context.clock().toISOString(), frontier),
+    { name: 'content.retention.due', ...retry },
+  );
+  const selectedPartitions = new Set(partitions);
+  async function drainDue(
+    family: RetentionFamily,
+    cutoff: string | null,
+    run: (work: RetentionPartition, cutoff: string, id: string) => Promise<unknown>,
+  ) {
+    let frontier: RetentionFrontier = {};
+    const sweep = DBOS.workflowID!;
+    for (let page = 0; ; page++) {
+      const due = await dueContent(family, cutoff, frontier);
+      const selected = due.work.filter((work) => selectedPartitions.has(work.partition));
+      for (let offset = 0; offset < selected.length; offset += PARTITION_CONCURRENCY) {
+        await Promise.all(
+          selected
+            .slice(offset, offset + PARTITION_CONCURRENCY)
+            .map((work) => run(work, due.cutoff, `${sweep}:due:${page}:partition:${work.partition}`)),
+        );
+      }
+      if (due.complete) return;
+      cutoff = due.cutoff;
+      frontier = due.frontier;
+    }
+  }
   const drain = DBOS.registerWorkflow(
-    async (partition: number) => {
+    async (partition: number, selected?: { routes: number[]; media: boolean; cutoff: string }) => {
       if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
         throw new RangeError('Invalid collection partition');
-      for (let offset = 0; offset < 16; offset++) {
+      const routes = selected?.routes ?? Array.from({ length: 16 }, (_, offset) => partition * 16 + offset);
+      for (const route of routes) {
+        if (partitionOf(route) !== partition) throw new RangeError('Invalid post purge route');
         while (
           (
             await purgeDeletedPostPage(
               context.pool,
-              partition * 16 + offset,
-              context.clock(),
+              route,
+              selected ? new Date(selected.cutoff) : context.clock(),
               () => now() + 120_000,
               <T>(name: string, action: () => Promise<T>) => purgeDeleted(name, action) as Promise<T>,
               createErasureJob(context.pool, storage),
@@ -392,6 +428,7 @@ async function registerWork(
           /* Completed posts leave the index before the next bounded durable step. */
         }
       }
+      if (selected && !selected.media) return;
       // Each bounded batch is its own durable step, so recovery replays progress.
       while (!(await collect(partition)).complete) {
         /* Drain actual changed rows only. */
@@ -407,6 +444,17 @@ async function registerWork(
       for (let segment = 0; segment < HOSTED_PUBLICATION_RETENTION_SWEEP_STEP_BUDGET; segment++) {
         const result = await hostedPublicationRetentionPage(`${sweep}:retention:${segment}`, cutoff);
         if (!result.hasMoreWork) break;
+      }
+      if (await DBOS.patch('content.collect.due-routes')) {
+        await drainDue('collect', null, async (work, cutoff, workflowID) => {
+          const handle = await DBOS.startWorkflow(drain, { workflowID })(work.partition, {
+            routes: work.routes,
+            media: work.media,
+            cutoff,
+          });
+          await handle.getResult();
+        });
+        return;
       }
       // A maintenance slot stays occupied until all children complete. Queuing
       // children behind their parents would deadlock when two sweeps overlap.
@@ -466,11 +514,12 @@ async function registerWork(
     { name: 'content.notice-retention.page', ...retry },
   );
   const noticeRetentionPartition = DBOS.registerWorkflow(
-    async (partition: number, cutoff: string) => {
+    async (partition: number, cutoff: string, selected?: number[]) => {
       if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
         throw new RangeError('Invalid notice retention partition');
-      for (let routeOffset = 0; routeOffset < 16; routeOffset++) {
-        const route = partition * 16 + routeOffset;
+      const routes = selected ?? Array.from({ length: 16 }, (_, offset) => partition * 16 + offset);
+      for (const route of routes) {
+        if (partitionOf(route) !== partition) throw new RangeError('Invalid notice retention route');
         for (;;) {
           if ((await noticeRetentionPage(route, cutoff)) < NOTICE_PAGE_SIZE) break;
         }
@@ -481,6 +530,17 @@ async function registerWork(
   DBOS.registerWorkflow(
     async (_scheduledDate: Date, _context: unknown) => {
       const cutoff = await noticeRetentionCutoff();
+      if (await DBOS.patch('content.notice-retention.due-routes')) {
+        await drainDue('notice', cutoff, async (work, cut, workflowID) => {
+          const handle = await DBOS.startWorkflow(noticeRetentionPartition, { workflowID })(
+            work.partition,
+            cut,
+            work.routes,
+          );
+          await handle.getResult();
+        });
+        return;
+      }
       const sweep = DBOS.workflowID!;
       for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY) {
         const handles = await Promise.all(

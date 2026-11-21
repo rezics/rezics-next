@@ -7206,6 +7206,13 @@ CREATE INDEX board_watch_fanout_idx ON content.board_watch USING btree (board_id
 
 
 --
+-- Name: board_watch_notice_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_watch_notice_retention_due ON content.board_watch_notice_work USING btree (published_at, route);
+
+
+--
 -- Name: board_watch_notice_work_expire_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -7584,6 +7591,13 @@ CREATE INDEX knowledge_structure_parent_root_at ON content.knowledge_structure_p
 
 
 --
+-- Name: media_collection_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX media_collection_due ON content.media USING btree (created_at, route) WHERE ((claimed_at IS NULL) AND (NOT erased) AND (NOT collection_pending));
+
+
+--
 -- Name: media_collection_eligible_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -7662,6 +7676,13 @@ CREATE INDEX notice_finalization_recipient_created_idx ON content.notice_finaliz
 
 
 --
+-- Name: notice_finalization_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX notice_finalization_retention_due ON content.notice_finalization USING btree (created_at, route);
+
+
+--
 -- Name: notice_finalization_route_created_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -7673,6 +7694,13 @@ CREATE INDEX notice_finalization_route_created_idx ON content.notice_finalizatio
 --
 
 CREATE INDEX notice_recipient_created_idx ON content.notice USING btree (route, recipient_id, created_at DESC, notice_id DESC);
+
+
+--
+-- Name: notice_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX notice_retention_due ON content.notice USING btree (created_at, route);
 
 
 --
@@ -7715,6 +7743,13 @@ CREATE INDEX post_hosted_pending_page_idx ON content.post USING btree (route, po
 --
 
 CREATE INDEX post_pending_draft_locator_idx ON content.post USING btree (author_account_id, route, post_id) WHERE (draft_locator_pending AND (visibility = 'draft'::text) AND (availability = 'available'::text));
+
+
+--
+-- Name: post_purge_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_purge_due ON content.post USING btree (deleted_at, route) WHERE ((deleted_at IS NOT NULL) AND (NOT purge_completed));
 
 
 --
@@ -7932,6 +7967,13 @@ CREATE INDEX thread_watch_fanout_idx ON content.thread_watch USING btree (thread
 --
 
 CREATE INDEX thread_watch_management_idx ON content.thread_watch USING btree (route, watcher_account_id, created_at, watch_id) INCLUDE (thread_id);
+
+
+--
+-- Name: thread_watch_notice_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_notice_retention_due ON content.thread_watch_notice_work USING btree (published_at, route);
 
 
 --

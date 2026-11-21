@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import pg, { type PoolClient, type QueryConfig } from 'pg';
 import sharp from 'sharp';
 import { createCollectionJob } from '../../src/content/collection-job.ts';
+import { readDueContentRetention } from '../../src/content/retention-routes.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import { claimMedia, type MediaState } from '../../src/content/media.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
@@ -265,6 +266,33 @@ beforeEach(async () => {
 afterAll(async () => {
   await pool.end();
   await admin.end();
+});
+
+test('the hourly directory elects exactly aged unclaimed and already pending media', async () => {
+  const cutoff = '1900-01-02T00:00:00.000Z';
+  const eligible = await media('reserved', '1900-01-01T00:00:00.000Z', route);
+  const young = await media('reserved', '1900-01-01T00:00:00.001Z', route + 16);
+  const pending = await media('reserved', cutoff, route + 32);
+  await admin.query('UPDATE content.media SET collection_pending=true WHERE route=$1 AND media_id=$2', [
+    route + 32,
+    pending.id,
+  ]);
+  const found = await readDueContentRetention(admin, 'collect', cutoff, {});
+  expect(
+    found.work
+      .filter((work) => work.media)
+      .map((work) => work.partition)
+      .sort((a, b) => a - b),
+  ).toEqual([partition, partition + 2]);
+  expect(found.work.every((work) => work.routes.length === 0)).toBe(true);
+  const resumed = await readDueContentRetention(admin, 'collect', cutoff, structuredClone(found.frontier));
+  expect(resumed.work).toEqual([]);
+  await admin.query('DELETE FROM content.media WHERE media_id=ANY($1::uuid[])', [[eligible.id, pending.id]]);
+  expect((await readDueContentRetention(admin, 'collect', cutoff, {})).work).toEqual([]);
+  expect((await readDueContentRetention(admin, 'collect', '1900-01-02T00:00:00.001Z', {})).work).toEqual([
+    { partition: partition + 1, routes: [], media: true },
+  ]);
+  await admin.query('DELETE FROM content.media WHERE route=$1 AND media_id=$2', [route + 16, young.id]);
 });
 
 test('all unclaimed states collect at exactly 24 hours; younger, claimed, erased and remote objects survive', async () => {

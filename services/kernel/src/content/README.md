@@ -1358,6 +1358,18 @@ Notification costs are bounded independently of inbox or thread size:
 - Retention deletes bounded batches on recipient routes. The Content erasure participant removes notices, watch
   edges and the one seen marker in bounded batches; neither cleanup requires one transaction over an inbox or thread.
 
+Hourly notice retention and collection read the next eight indexed (time, route) witnesses per original source.
+The notice cutoff covers notices, finalizations and both watch work tables. Collection elects expired unfinished
+posts, eligible unclaimed media and already pending media. A pending media route uses the existing pending index.
+Each durable directory step stores its exact database time and route frontier for each source. Rows with equal
+time and route elect the same owner, which drains its existing bounded pages with its normal ownership and state
+checks. Only selected owners receive child workflows. Every new sweep starts at the beginning with a fresh clock
+cutoff, including after an empty run or a missed tick. An idle sweep reads one directory page and starts no
+partition workflows. Recovery of the original exhaustive sweeps retains their original durable step sequence.
+DBOS dispatches recovery by application version and executor identity. Keep the original version's executor
+available to drain its admitted work, or retain its exact `DBOS__APPVERSION` and executor identity on a compatible
+worker with the checkpointed workflow patches.
+
 ## Native community reports
 
 `ReportTarget` and the existing `createReport`, `readReport`, `listTargetReports`,

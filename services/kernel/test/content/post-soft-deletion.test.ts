@@ -612,16 +612,69 @@ test('the hourly durable sweep purges an expired post even without an erased eve
     expect(
       (await revisions(f.post)).every((r) => r.body === null && r.body_sha256 === null && r.search_text === null),
     ).toBe(true);
-    const recorded = await db.admin.query(
-      "SELECT 1 FROM dbos.operation_outputs WHERE function_name='content.deletedPostPurge.step' LIMIT 1",
+    async function counts(sweep: string) {
+      const rows = await db.admin.query<{ name: string; count: number }>(
+        `SELECT function_name AS name,count(*)::integer AS count FROM dbos.operation_outputs
+         WHERE workflow_uuid=$1 OR starts_with(workflow_uuid,$1 || ':') GROUP BY function_name`,
+        [sweep],
+      );
+      return new Map(rows.rows.map(({ name, count }) => [name, count]));
+    }
+    const worked = await counts(id);
+    expect(worked.get('content.retention.due')).toBe(1);
+    expect(worked.get('content.deletedPostPurge.step')).toBeGreaterThan(0);
+    expect(worked.has('content.collect.step')).toBe(false);
+    for (const workflowName of ['content.collect', 'content.notice-retention']) {
+      const workflowID = `empty-${workflowName}-${randomUUID()}`;
+      const empty = await client.enqueue({ workflowName, queueName: 'maintenance', workflowID }, new Date(), null);
+      await empty.getResult();
+      const recorded = await counts(workflowID);
+      expect(recorded.get('content.retention.due')).toBe(1);
+      expect(recorded.has('content.deletedPostPurge.step')).toBe(false);
+      expect(recorded.has('content.notice-retention.page')).toBe(false);
+      expect(recorded.has('content.collect.step')).toBe(false);
+    }
+    const notice = newId(route);
+    await db.admin.query(
+      "INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at) VALUES($1,$2,$2,'reply',$2,$3)",
+      [route, notice, new Date(now.getTime() - 181 * day)],
     );
-    expect(recorded.rows).toHaveLength(1);
+    const overlapping = await Promise.all(
+      [randomUUID(), randomUUID()].map(async (workflowID) => {
+        const handle = await client.enqueue(
+          { workflowName: 'content.notice-retention', queueName: 'maintenance', workflowID },
+          new Date(),
+          null,
+        );
+        await handle.getResult();
+        return workflowID;
+      }),
+    );
+    const pages = await db.admin.query<{ removed: number }>(
+      `SELECT sum((output::jsonb->>'json')::integer)::integer AS removed FROM dbos.operation_outputs
+       WHERE function_name='content.notice-retention.page' AND
+         (starts_with(workflow_uuid,$1 || ':') OR starts_with(workflow_uuid,$2 || ':'))`,
+      overlapping,
+    );
+    expect(pages.rows[0]?.removed).toBe(1);
+    expect(
+      (await db.admin.query('SELECT 1 FROM content.notice WHERE route=$1 AND notice_id=$2', [route, notice])).rows,
+    ).toHaveLength(0);
+    // The previous partition input keeps its original sixteen durable steps on recovery.
+    const oldID = `original-notice-partition-${randomUUID()}`;
+    const old = await client.enqueue(
+      { workflowName: 'content.notice-retention.partition', queueName: 'maintenance', workflowID: oldID },
+      partitionOf(route),
+      new Date(now.getTime() - 180 * day).toISOString(),
+    );
+    await old.getResult();
+    expect((await counts(oldID)).get('content.notice-retention.page')).toBe(16);
     expect((await request(`/posts/${f.post}:restore`, 'POST', author)).status).toBe(404);
   } finally {
     await client.close();
     await runtime.stop();
   }
-});
+}, 120_000);
 
 test('soft delete retains its authorized receipt replay while restore requires current authority', async () => {
   now = new Date();

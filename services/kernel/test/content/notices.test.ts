@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { readDueContentRetention } from '../../src/content/retention-routes.ts';
 import {
   deleteAccountNoticePage,
   deleteAccountNoticeSeen,
@@ -92,6 +93,55 @@ test('notices older than 180 days are deleted in bounded pages and newer ones st
     [route, recipientId],
   );
   expect(remaining.rows.map((row) => row.notice_id).sort()).toEqual(freshIds.sort());
+});
+
+test('the notice sweep elects each due owner through the exact time and route frontier', async () => {
+  const cutoff = '1900-02-01T00:00:00Z';
+  const old = '1900-01-01T00:00:00.123456Z';
+  const [first, second, later, finalization, thread, board] = [0x7141, 0x7142, 0x7143, 0x7150, 0x7160, 0x7170] as const;
+  const scan = (frontier = {}) => readDueContentRetention(db.pool, 'notice', cutoff, frontier);
+  expect((await scan()).work).toEqual([]);
+  async function insert(route: number, date: string, count: number) {
+    const ids = Array.from({ length: count }, () => newId(route));
+    await db.admin.query(
+      `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+       SELECT $1,id,id,'reply',id,$3::timestamptz FROM unnest($2::uuid[]) AS id`,
+      [route, ids, date],
+    );
+  }
+  await insert(first, old, 11);
+  await insert(second, old, 1);
+  await insert(later, cutoff, 1);
+  await db.admin.query(
+    "INSERT INTO content.notice_finalization VALUES ($1,$2,'thread_watch',$2,true,$3::timestamptz)",
+    [finalization, newId(finalization), old],
+  );
+  await db.admin.query(
+    'INSERT INTO content.thread_watch_notice_work(route,post_id,thread_id,published_at) VALUES ($1,$2,$2,$3)',
+    [thread, newId(thread), old],
+  );
+  await db.admin.query(
+    `INSERT INTO content.board_watch_notice_work
+       (route,post_id,board_id,thread_id,source_epoch,source_position,source_id,published_at)
+       VALUES ($1,$2,$2,$2,1,1,$2,$3)`,
+    [board, newId(board), old],
+  );
+  const found = await scan();
+  const routes = (work: typeof found.work) => work.flatMap((group) => group.routes).sort((a, b) => a - b);
+  expect(found.complete).toBe(false);
+  expect(routes(found.work)).toEqual([first, finalization, thread, board]);
+  expect(found.frontier.notice?.through).toContain('.123456');
+  const next = await scan(structuredClone(found.frontier));
+  expect(routes(next.work)).toEqual([second]);
+  expect(next.complete).toBe(true);
+  for (const route of [...routes(found.work), second])
+    expect(await deleteExpiredNoticesPage(db.pool, route, new Date(cutoff))).toBeGreaterThan(0);
+  expect((await scan()).work).toEqual([]);
+  await insert(first, old, 1);
+  expect(routes((await scan()).work)).toEqual([first]);
+  const future = await readDueContentRetention(db.pool, 'notice', '1900-02-01T00:00:00.000001Z', {});
+  expect(routes(future.work)).toEqual([first, later]);
+  for (const route of [first, later]) await deleteExpiredNoticesPage(db.pool, route, new Date('1901-01-01'));
 });
 
 test("account erasure deletes the account's notices and seen marker in bounded pages", async () => {
