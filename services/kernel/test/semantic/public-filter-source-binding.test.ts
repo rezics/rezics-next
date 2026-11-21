@@ -202,13 +202,16 @@ async function prepareSource(
   f: Awaited<ReturnType<typeof fixture>>,
   binding: SourceBinding,
   input: Parameters<SourceBinding['begin']>[0],
+  generation = false,
 ): Promise<Awaited<ReturnType<SourceBinding['begin']>>> {
-  let result = await advanceNativePublicFilterPreparation(binding, input, readContext());
+  const budget = generation ? { inputLimit: 1000 } : {};
+  const nextContext = generation ? () => ({ deadline: Date.now() + 10_000 }) : readContext;
+  let result = await advanceNativePublicFilterPreparation(binding, { ...input, ...budget }, nextContext());
   if (!result || !('bootstrap' in result)) throw new Error(`Native Source preparation: ${JSON.stringify(result)}`);
   const original = result.bootstrap.id;
   for (let step = 0; result.status === 'preparing'; step++) {
     expect(step, 'Bounded retained home batches must complete the original enrollment').toBeLessThan(512);
-    result = await advanceNativePublicFilterPreparation(binding, { bootstrap: original }, readContext());
+    result = await advanceNativePublicFilterPreparation(binding, { bootstrap: original, ...budget }, nextContext());
     if (!result || !('bootstrap' in result)) {
       const state = await f.db.admin.query(
         `SELECT b.state,b.account_after,b.coverage_after,b.coverage_sealed,b.coverage_generation::text,
@@ -1478,6 +1481,177 @@ test('Native public Source repair step and complete original cut are durably rev
     } finally {
       await f.close();
     }
+  }
+}, 300000);
+
+test('only a reconciled generation may extend and verify its private custody population beyond a serving build', async () => {
+  const { createPublicFilterCustody, readGenerationPublicationCustody } =
+    await import('../../src/search/public-filter-custody.ts');
+  const { createOpenSearch } = await import('../../src/search/opensearch.ts');
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture(),
+    search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `private-population-${crypto.randomUUID().slice(0, 8)}-`,
+    index = subjectIndexName(prefix, 1);
+  const custody = createPublicFilterCustody(f.db.pool);
+  try {
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const source = publicFilterSource(f.config),
+      capture = { sort: 'id' as const, size: 10, filterDocument: undefined, text: undefined };
+    const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
+    if (resolved.status !== 'resolved') throw new Error(resolved.reason);
+    await createSubjectIndex(search, prefix, 1);
+    const reg = await custody.register(
+      {
+        definition: resolved.definition,
+        physicalTarget: index,
+        consumerGeneration: '1',
+        projectionGeneration: resolved.definition.readDefinition,
+      },
+      search,
+      readContext(),
+    );
+    if (reg.status !== 'registered') throw new Error(reg.reason);
+    const populationJob = await publicationJob(f, source, reg.consumer, true);
+    const cut = await prepareSource(
+      f,
+      binding,
+      {
+        source,
+        meaning: f.meaning,
+        capture,
+        consumer: reg.consumer,
+        snapshot: 'prepared',
+      },
+      true,
+    );
+    if (cut.status !== 'begun') throw new Error('Expected the actual sealed Source cut');
+    const build = cut.bootstrap.id,
+      scope = { registration: reg.registration, consumer: reg.consumer, build, generation: 1n };
+    const materializing = await custody.openPit(
+      { registration: reg.registration, covered: cut.bootstrap.covered, keepAliveMs: 1 },
+      search,
+      readContext(),
+    );
+    if (materializing.status !== 'retained') throw new Error(materializing.reason);
+    const work = encodeSearch({
+      bootstrap: { id: build },
+      registration: reg.registration,
+      materializing: materializing.queried,
+      queried: null,
+      adopted: false,
+    });
+    // A generation resumes its original registered work. A pinned or ordinary read still needs a live observation.
+    await f.db.pool.query(
+      `UPDATE search.public_filter_registration SET consumer_bootstrap=$2,consumer_work=$3
+      WHERE partition_no=0 AND id=$1`,
+      [reg.registration.id, build, work],
+    );
+    await Bun.sleep(10);
+    expect(await readGenerationPublicationCustody(f.db.pool, reg.consumer, 0, readContext())).toMatchObject({
+      reason: 'observation_lost',
+    });
+    expect(
+      await readGenerationPublicationCustody(
+        f.db.pool,
+        reg.consumer,
+        0,
+        readContext(),
+        materializing.queried.snapshot.observation,
+        'population',
+      ),
+    ).toMatchObject({ reason: 'observation_lost' });
+    expect(
+      await readGenerationPublicationCustody(f.db.pool, reg.consumer, 0, readContext(), undefined, 'population'),
+    ).toMatchObject({ registrationWork: work, queried: null });
+    expect((await custody.closeObservation(materializing.queried, search, readContext())).status).toBe('closed');
+    // Exercise the private segment writer while the generation remains unadopted.
+    let raw = 0,
+      output = 0;
+    let after: readonly (string | number | null)[] | undefined;
+    while (raw < 1023) {
+      const count = Math.min(100, 1023 - raw),
+        expected = { rawCount: raw, outputCount: output, after };
+      const entries = Array.from({ length: count }, () => {
+        const rawOrdinal = raw++,
+          id = String(rawOrdinal);
+        return {
+          rawOrdinal,
+          outputOrdinal: rawOrdinal % 2 === 0 ? output++ : null,
+          payload: { hit: { id }, owner: { original: id, terminal: id } },
+        };
+      });
+      after = [raw];
+      const input = { ...scope, expected, entries, after, rawExhausted: raw === 1023 };
+      if (raw > 1000) {
+        expect((await custody.appendPreparationSegment(input, readContext())).status).toBe('unready');
+        expect(
+          (await custody.appendPreparationSegment({ ...input, populationJob: crypto.randomUUID() }, readContext()))
+            .status,
+        ).toBe('unready');
+      }
+      expect((await custody.appendPreparationSegment({ ...input, populationJob }, readContext())).status).toBe(
+        'appended',
+      );
+    }
+    const retained = await custody.retainPreparedSegments(
+      {
+        ...scope,
+        populationJob,
+        covered: cut.bootstrap.covered,
+        rawCount: raw,
+        outputCount: output,
+        expiresAt: Date.now() + 60_000,
+      },
+      readContext(),
+    );
+    if (retained.status !== 'retained') throw new Error(retained.reason);
+    const verify = () =>
+      custody.completePreparationBuild(
+        { queried: retained.queried, populationJob, rawCount: raw, outputCount: output },
+        readContext(),
+      );
+    expect((await verify()).status).toBe('verifying');
+    const key = [reg.registration.id, build];
+    const erased = await f.db.pool.query(
+      `DELETE FROM search.public_filter_preparation_segment
+      WHERE (partition_no,registration,build,generation,raw_ordinal)=(0,$1,$2,1,12) RETURNING *`,
+      key,
+    );
+    expect((await verify()).status).toBe('unready');
+    await f.db.pool.query(
+      `INSERT INTO search.public_filter_preparation_segment SELECT * FROM
+      jsonb_populate_record(NULL::search.public_filter_preparation_segment,$1::jsonb)`,
+      [erased.rows[0]],
+    );
+    for (let i = 0; i < 10; i++) expect((await verify()).status).toBe('verifying');
+    expect((await verify()).status).toBe('complete');
+    const use = await custody.acquire(retained.queried, readContext());
+    if (use.status !== 'acquired') throw new Error(use.reason);
+    try {
+      expect(
+        (
+          await custody.readPreparedWindow(
+            { queried: retained.queried, use: use.use, afterOutputOrdinal: 0, size: 1 },
+            readContext(),
+          )
+        ).status,
+      ).toBe('missing');
+    } finally {
+      await custody.release(use.use, readContext());
+    }
+    expect(
+      (
+        await f.db.pool.query(
+          'SELECT phase,bootstrap,observation,execution,fence FROM search.generation_publication WHERE job=$1',
+          [populationJob],
+        )
+      ).rows[0],
+    ).toEqual({ phase: 'reconciled', bootstrap: null, observation: null, execution: null, fence: null });
+  } finally {
+    await custody.close();
+    await search.request('DELETE', `/${index}`).catch(() => {});
+    await f.close();
   }
 }, 300000);
 

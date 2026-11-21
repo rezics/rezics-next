@@ -1816,7 +1816,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     q: PublicFilterQueriedObservation,
     m: Meter,
     context: PublicFilterConsumerContext,
-    settledPublication = false,
+    publication?: Readonly<{ job: string; settled?: boolean }>,
   ): Promise<boolean> {
     if (q.snapshot.kind !== 'prepared') return true;
     if (q.snapshot.build !== work.bootstrap.id) throw new ConsumerFailure('observation_lost');
@@ -1833,15 +1833,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (frontier.state === 'legacy') return true;
     // A publication restart may revisit the original proof after its payload started
     // draining. The verified Source tuple is reusable, and this build stays unavailable to readers.
-    if (settledPublication && frontier.state === 'erasing') return true;
+    if (publication?.settled && frontier.state === 'erasing') return frontier.populationVerified ?? true;
     if (frontier.state === 'complete') return frontier.rawExhausted;
     if (frontier.state !== 'building' || !frontier.rawExhausted) return false;
     const completed = m.take(
       await custody.completePreparationBuild(
-        { queried: q, rawCount: frontier.rawCount, outputCount: frontier.outputCount },
+        {
+          queried: q,
+          rawCount: frontier.rawCount,
+          outputCount: frontier.outputCount,
+          ...(publication ? { populationJob: publication.job } : {}),
+        },
         context,
       ),
     );
+    if (completed.status === 'verifying') return false;
     if (completed.status !== 'complete') throw new ConsumerFailure('observation_lost');
     return true;
   }
@@ -2204,13 +2210,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       total: executed.result.total,
     };
   }
+  const materializationPitLifetimeMs = 300_000;
   async function advanceCapture(
     work: ConsumerWork,
     encoded: string,
     m: Meter,
     context: PublicFilterConsumerContext,
     page?: Page,
-    publication?: PublicFilterConsumer,
+    publication?: Readonly<{ job: string; consumer: PublicFilterConsumer }>,
     inlinePublishedPreparation = false,
     bookPage?: boolean,
     freshPit?: {
@@ -2278,7 +2285,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           {
             registration: work.registration,
             covered: work.bootstrap.covered,
-            keepAliveMs: 300_000,
+            keepAliveMs: materializationPitLifetimeMs,
             ...(work.independentPit ? { claim: work.bootstrap.id } : {}),
           },
           config.search,
@@ -2383,22 +2390,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         // exact custody tuple before resuming so a lost consumer-work save can
         // still continue from the database frontier and current PIT locator.
         const saved = (
-          await m.sql<{ queried: string; registration: string; state: string; expired: boolean }>(
-            `SELECT queried,registration,state,expires_at<=$3 AS expired FROM search.public_filter_observation
+          await m.sql<{ queried: string; registration: string; state: string; expires_at: string }>(
+            `SELECT queried,registration,state,expires_at::text FROM search.public_filter_observation
              WHERE (partition_no,observation)=($1,$2)`,
-            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation, Date.now()],
+            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation],
           )
         ).rows[0];
         if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
-        const q = decodeNative<PublicFilterQueriedObservation>(saved.queried);
+        let q = decodeNative<PublicFilterQueriedObservation>(saved.queried);
         if (
           q.snapshot.kind !== 'pit' ||
           q.snapshot.observation !== work.materializing.snapshot.observation ||
           !isDeepStrictEqual(q.consumer, consumer)
         )
           return m.unavailable('observation_lost');
-        if (saved.state !== 'open' || saved.expired) {
-          if (!publication && !work.adopted && work.bootstrap.coveragePublication && !config.discoveryTarget) {
+        if (saved.state !== 'open' || Number(saved.expires_at) <= Date.now()) {
+          if (!work.adopted && (publication || (work.bootstrap.coveragePublication && !config.discoveryTarget))) {
             // No public observation was adopted. Require the exact physical PIT
             // to be closed before retiring the incomplete build and releasing the claim.
             if (saved.state !== 'closed') {
@@ -2410,6 +2417,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 {
                   bootstrap: work.bootstrap.id,
                   closedPreparation: {
+                    ...(publication ? { populationJob: publication.job } : {}),
                     registration: work.registration.id,
                     observation: q.snapshot.observation,
                     work: encoded,
@@ -2421,6 +2429,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             if (retired.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
           }
           return m.unavailable('observation_lost');
+        }
+        // A population may span many physical PIT lifetimes. Extend only this still-live
+        // observation and persist the exact locator returned by its original allocation.
+        if (publication && Number(saved.expires_at) - Date.now() <= materializationPitLifetimeMs / 2) {
+          const renewed = m.take(await custody.renewPit(q, materializationPitLifetimeMs, config.search, context));
+          if (renewed.status !== 'retained') return m.unavailable('observation_lost');
+          q = renewed.queried;
         }
         work.materializing = q;
         encoded = await save(work, encoded, true, m);
@@ -2507,10 +2522,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               });
               nextRawCount = rawCount + raw.length;
             }
-            if (nextRawCount > PUBLIC_FILTER_PREPARATION_RAW_LIMIT) return m.unavailable('dependency_unavailable');
+            if (!publication && nextRawCount > PUBLIC_FILTER_PREPARATION_RAW_LIMIT)
+              return m.unavailable('dependency_unavailable');
             const appended = m.take(
               await custody.appendPreparationSegment(
                 {
+                  ...(publication ? { populationJob: publication.job } : {}),
                   registration: work.registration,
                   consumer,
                   build: work.bootstrap.id,
@@ -2543,6 +2560,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         const prepared = m.take(
           await custody.retainPreparedSegments(
             {
+              ...(publication ? { populationJob: publication.job } : {}),
               registration: work.registration,
               covered: work.bootstrap.covered,
               build: work.bootstrap.id,
@@ -2728,7 +2746,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     snapshot: 'pit' | 'prepared',
     context: PublicFilterConsumerContext,
     page?: Page,
-    publication?: PublicFilterConsumer,
+    publication?: Readonly<{ job: string; consumer: PublicFilterConsumer }>,
     preparationMeter?: Meter,
   ): Promise<PublicFilterConsumerCapture> {
     let unpublished: { registration: string; bootstrap: string } | undefined;
@@ -2769,7 +2787,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           {
             definition: resolved.definition,
             physicalTarget: target,
-            consumerGeneration: publication?.consumerGeneration ?? resolved.definition.source.configuration,
+            consumerGeneration: publication?.consumer.consumerGeneration ?? resolved.definition.source.configuration,
             projectionGeneration: resolved.definition.readDefinition,
             catalogue: null,
           },
@@ -4039,7 +4057,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           } else if (original.publication.queried.snapshot.kind === 'prepared') {
             const q = original.publication.queried;
             const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
-            if (!(await finishPreparationBuild(loaded.work, q, m, context, true)))
+            if (!(await finishPreparationBuild(loaded.work, q, m, context, { job: input.job, settled: true })))
               return m.unavailable('source_pending');
           }
           return { ...original, cost: m.cost };
@@ -4047,17 +4065,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const { readGenerationPublicationCustody } = await import('./public-filter-custody.ts');
       const retained = m.take(
-        await readGenerationPublicationCustody(config.pool, input.consumer, 0, context, input.observation),
+        await readGenerationPublicationCustody(
+          config.pool,
+          input.consumer,
+          0,
+          context,
+          input.observation,
+          'population',
+        ),
       );
       if (!('definition' in retained)) return m.unavailable('registration_missing');
       let q = retained.queried;
-      const preparing = await m.sql<{ consumer_work: string | null }>(
-        'SELECT consumer_work FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)',
-        [retained.registration.partition, retained.registration.id],
-      );
-      const registrationWork = preparing.rows[0];
-      if (!registrationWork) return m.unavailable('registration_missing');
-      const encoded = registrationWork.consumer_work;
+      const encoded = retained.registrationWork;
       if (!q || q.snapshot.kind !== 'prepared' || encoded) {
         let capture: PublicFilterConsumerCapture;
         if (encoded) {
@@ -4070,9 +4089,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           )
             return m.unavailable('registration_missing');
           if ('representation' in input.capture) await mixedGeneration(m);
-          capture = await advanceCapture(work, encoded, m, context, undefined, input.consumer);
+          capture = await advanceCapture(work, encoded, m, context, undefined, input);
         } else {
-          capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer, m);
+          capture = await capturePlan(input.capture, 'prepared', context, undefined, input, m);
         }
         if (capture.status !== 'captured')
           return {
@@ -4145,7 +4164,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         const repair = await repairStep(job, context, m, completion.publication);
         return { ...completion, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
       }
-      if (completion.status === 'complete' && !(await finishPreparationBuild(work, q, m, context)))
+      if (completion.status === 'complete' && !(await finishPreparationBuild(work, q, m, context, { job: input.job })))
         return m.unavailable('source_pending');
       return { ...completion, cost: m.cost };
     } catch (error) {

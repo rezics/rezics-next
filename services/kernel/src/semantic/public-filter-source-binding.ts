@@ -538,7 +538,12 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
     abort(
       request: Readonly<{
         bootstrap: string;
-        closedPreparation?: Readonly<{ registration: string; observation: string; work: string }>;
+        closedPreparation?: Readonly<{
+          registration: string;
+          observation: string;
+          work: string;
+          populationJob?: string;
+        }>;
       }>,
       context: PublicFilterConsumerContext,
     ): Promise<Readonly<{ status: 'aborted' | 'pending'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
@@ -4583,6 +4588,17 @@ export function createNativePublicFilterSourceBinding(
             materializing: PublicFilterQueriedObservation | null;
           }>(closed.work);
           const original = work.materializing ?? work.queried;
+          if (closed.populationJob) {
+            requirePopulationBaseline(cut.row);
+            if (
+              work.queried ||
+              !work.materializing ||
+              cut.row.coverage_publication !== null ||
+              cut.row.publication_job !== null ||
+              cut.row.state !== 'begun'
+            )
+              throw new BindingError('binding_mismatch');
+          }
           if (
             work.adopted !== false ||
             work.bootstrap.id !== id ||
@@ -4595,14 +4611,18 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
           const result = await db.query(
-            `/* semantic.native-keyed:43:49:19 */
+            `/* semantic.native-keyed:${closed.populationJob ? '50:67:19' : '43:49:19'} */
              WITH owned AS MATERIALIZED (
                SELECT b.bootstrap,r.id FROM semantic.public_filter_bootstrap b
                JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
                JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
                JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(r.partition_no,$3)
                WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.queried IS NULL
-                 AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL
+                 AND b.publication_job IS NULL AND ${
+                   closed.populationJob
+                     ? 'b.coverage_publication IS NULL AND search.private_population_build($8::uuid,$2,$4,$9::jsonb)'
+                     : 'b.coverage_publication IS NOT NULL'
+                 }
                  AND (($6::text IS NULL AND b.state='begun' AND b.snapshot_kind='prepared')
                    OR (b.state='aborting' AND EXISTS (SELECT FROM search.public_filter_observation q
                        WHERE (q.partition_no,q.registration,q.observation)=(r.partition_no,r.id,$6)
@@ -4642,6 +4662,7 @@ export function createNativePublicFilterSourceBinding(
               closed.work,
               work.queried?.snapshot.observation ?? null,
               work.queried ? ports.search.encodeState(work.queried) : null,
+              ...(closed.populationJob ? [closed.populationJob, cut.bootstrap.consumer] : []),
             ],
           );
           return { status: result.rowCount === 1 ? ('aborted' as const) : ('pending' as const), cost };

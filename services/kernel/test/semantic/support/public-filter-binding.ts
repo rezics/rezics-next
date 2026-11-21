@@ -11,7 +11,12 @@ import type { PublicFilterConsumer, PublicFilterSource } from '../../../src/sema
 import { readContext, type Fixture } from './public-filter-source.ts';
 
 /** Retain an actual generation job through its owner; no Source/engine receipt is manufactured. */
-export async function publicationJob(f: Fixture, source: PublicFilterSource, consumer: PublicFilterConsumer) {
+export async function publicationJob(
+  f: Fixture,
+  source: PublicFilterSource,
+  consumer: PublicFilterConsumer,
+  reconcile = false,
+) {
   const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
   const publication = createSearchGenerationPublication({
     pool: f.db.pool,
@@ -34,6 +39,14 @@ export async function publicationJob(f: Fixture, source: PublicFilterSource, con
     const prepared = await publication.prepare(consumer, readContext());
     expect(prepared.status).toBe('preparing');
     if (prepared.status !== 'preparing') throw new Error(`Native publication ${prepared.reason}`);
+    if (reconcile) {
+      for (let step = 0; ; step++) {
+        if (step > 1024) throw new Error('The empty native generation did not finish reconciliation');
+        const result = await publication.step(prepared.job, readContext(), { enrollSource: false });
+        if (result.status === 'reconciled') break;
+        if (result.status !== 'progress') throw new Error(`Generation reconciliation returned ${result.status}`);
+      }
+    }
     return prepared.job.job;
   } finally {
     await publication.close();

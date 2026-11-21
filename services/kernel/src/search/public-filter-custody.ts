@@ -536,6 +536,8 @@ function preparationFrontier(
         output_count: number;
         source_cursor: string | null;
         raw_exhausted: boolean;
+        population_job?: string | null;
+        population_verified?: boolean;
       }
     | undefined,
 ): CustodyPreparationFrontier {
@@ -546,6 +548,7 @@ function preparationFrontier(
     outputCount: row.output_count,
     after: row.source_cursor === null ? undefined : decode(row.source_cursor),
     rawExhausted: row.raw_exhausted,
+    ...(row.population_job ? { populationVerified: row.population_verified === true } : {}),
   };
 }
 
@@ -2036,7 +2039,7 @@ export function createPublicFilterCustody(
         const result = await sql(
           pool,
           meter,
-          `SELECT segment_state,raw_count,output_count,source_cursor,raw_exhausted
+          `SELECT population_job,population_verified,segment_state,raw_count,output_count,source_cursor,raw_exhausted
            FROM search.public_filter_prepared
            WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
           [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
@@ -2079,13 +2082,19 @@ export function createPublicFilterCustody(
           const saved = await sql(
             client,
             meter,
-            `SELECT state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
+            `SELECT population_job,state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
              FROM search.public_filter_prepared
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) FOR UPDATE`,
             [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
           );
           const row = saved.rows[0];
-          if (!row || row.state !== 'active' || row.segment_state === 'erasing' || row.segment_state === 'legacy')
+          if (
+            !row ||
+            (row.population_job && row.population_job !== input.populationJob) ||
+            row.state !== 'active' ||
+            row.segment_state === 'erasing' ||
+            row.segment_state === 'legacy'
+          )
             throw new Failure('binding_mismatch');
           const current = preparationFrontier(row);
           const nextRaw = input.expected.rawCount + input.entries.length;
@@ -2128,15 +2137,44 @@ export function createPublicFilterCustody(
             current.rawCount !== input.expected.rawCount ||
             current.outputCount !== input.expected.outputCount ||
             !isDeepStrictEqual(current.after, input.expected.after) ||
-            nextRaw > 1000
+            (nextRaw > 1000 && !input.populationJob)
           )
             throw new Failure('observation_lost');
+          if (nextRaw > 1000) {
+            const admitted = await sql(
+              client,
+              meter,
+              `UPDATE search.public_filter_prepared SET population_job=$5
+               WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+                 AND (population_job IS NULL OR population_job=$5)
+                 AND search.private_population_build($5::uuid,$2,$3,$6::jsonb)
+               RETURNING population_job`,
+              [
+                key.partition,
+                key.registration,
+                key.build,
+                key.generation.toString(),
+                input.populationJob,
+                input.consumer,
+              ],
+              { points: 7, keys: 18, writes: 1 },
+            );
+            if (admitted.rowCount !== 1) throw new Failure('binding_mismatch');
+          }
           let nextOutputOrdinal = input.expected.outputCount;
           for (const entry of input.entries) {
             if (entry.outputOrdinal !== null) {
               if (entry.outputOrdinal !== nextOutputOrdinal) throw new Failure('binding_mismatch');
               nextOutputOrdinal++;
             }
+          }
+          // The transition-table check reads the offered rows and at most their
+          // single original parent. Its narrow registered build stays on the indexed frontier.
+          meter.rows += input.entries.length;
+          if (nextRaw > 1000 && input.entries.length) {
+            meter.inputKeys += 4;
+            meter.dependencyPoints++;
+            meter.rows++;
           }
           const inserted = await insertSegmentRows(
             (statement, values) => sql(client, meter, statement, values),
@@ -2177,7 +2215,9 @@ export function createPublicFilterCustody(
       text(input.build);
       text(input.covered.observation);
       requireValue(typeof input.generation === 'bigint' && input.generation > 0n);
-      requireValue(Number.isInteger(input.rawCount) && input.rawCount >= 0 && input.rawCount <= 1000);
+      requireValue(
+        Number.isInteger(input.rawCount) && input.rawCount >= 0 && (input.rawCount <= 1000 || !!input.populationJob),
+      );
       requireValue(
         Number.isInteger(input.outputCount) && input.outputCount >= 0 && input.outputCount <= input.rawCount,
       );
@@ -2189,7 +2229,7 @@ export function createPublicFilterCustody(
           const prepared = await sql(
             client,
             meter,
-            `SELECT state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
+            `SELECT population_job,state,segment_state,raw_count,output_count,source_cursor,raw_exhausted
              FROM search.public_filter_prepared
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) FOR UPDATE`,
             [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
@@ -2197,6 +2237,7 @@ export function createPublicFilterCustody(
           const frontier = preparationFrontier(prepared.rows[0]);
           if (
             prepared.rows[0]?.state !== 'active' ||
+            (input.rawCount > 1000 && prepared.rows[0]?.population_job !== input.populationJob) ||
             (frontier.state !== 'building' && frontier.state !== 'complete') ||
             !frontier.rawExhausted ||
             frontier.rawCount !== input.rawCount ||
@@ -2255,7 +2296,9 @@ export function createPublicFilterCustody(
       const input = decode<typeof request>(encode(request));
       queried(input.queried);
       requireValue(input.queried.snapshot.kind === 'prepared');
-      requireValue(Number.isInteger(input.rawCount) && input.rawCount >= 0 && input.rawCount <= 1000);
+      requireValue(
+        Number.isInteger(input.rawCount) && input.rawCount >= 0 && (input.rawCount <= 1000 || !!input.populationJob),
+      );
       requireValue(
         Number.isInteger(input.outputCount) && input.outputCount >= 0 && input.outputCount <= input.rawCount,
       );
@@ -2269,7 +2312,7 @@ export function createPublicFilterCustody(
             client,
             meter,
             `SELECT o.state,o.queried,o.registration,p.state AS prepared_state,p.segment_state,p.raw_count,p.output_count,
-                    p.raw_exhausted
+                    p.raw_exhausted,p.population_job,p.verified_raw,p.verified_output
              FROM search.public_filter_observation o
              JOIN search.public_filter_prepared p
                ON (p.partition_no,p.registration,p.build,p.generation)=
@@ -2287,6 +2330,8 @@ export function createPublicFilterCustody(
           );
           const row = found.rows[0];
           if (!row || row.state !== 'open' || row.prepared_state !== 'active') throw new Failure('observation_lost');
+          if (input.rawCount > 1000 && (!input.populationJob || row.population_job !== input.populationJob))
+            throw new Failure('binding_mismatch');
           if (row.segment_state === 'complete') {
             if (row.raw_count !== input.rawCount || row.output_count !== input.outputCount)
               throw new Failure('binding_mismatch');
@@ -2299,30 +2344,98 @@ export function createPublicFilterCustody(
             row.output_count !== input.outputCount
           )
             throw new Failure('observation_lost');
-          const exact = await sql(
-            client,
-            meter,
-            `SELECT count(*)::integer AS raw_count,min(raw_ordinal) AS first_raw,max(raw_ordinal) AS last_raw,
+          if (row.population_job && row.raw_count > 1000) {
+            // A publication can have arbitrarily many pages. Verify the same contiguous
+            // raw and selected-output ordinals in bounded passes under the build lock.
+            const from = Number(row.verified_raw);
+            let output = Number(row.verified_output);
+            const end = Math.min(input.rawCount, from + 100);
+            const page = await sql(
+              client,
+              meter,
+              `SELECT raw_ordinal,output_ordinal FROM search.public_filter_preparation_segment
+              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+              AND raw_ordinal >= $5 AND raw_ordinal < $6 ORDER BY raw_ordinal LIMIT 100`,
+              [
+                partition(snapshot.observation),
+                row.registration,
+                snapshot.build,
+                snapshot.generation.toString(),
+                from,
+                end,
+              ],
+            );
+            if (page.rows.length !== end - from) throw new Failure('observation_lost');
+            for (const [offset, entry] of page.rows.entries()) {
+              if (entry.raw_ordinal !== from + offset) throw new Failure('observation_lost');
+              if (entry.output_ordinal !== null) {
+                if (entry.output_ordinal !== output) throw new Failure('observation_lost');
+                output++;
+              }
+            }
+            if (end === input.rawCount) {
+              if (output !== input.outputCount) throw new Failure('observation_lost');
+              const tail = await sql(
+                client,
+                meter,
+                `SELECT 1 WHERE EXISTS (SELECT FROM search.public_filter_preparation_segment
+                WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) AND raw_ordinal >= $5)
+                OR EXISTS (SELECT FROM search.public_filter_preparation_segment
+                WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric) AND output_ordinal >= $6)`,
+                [
+                  partition(snapshot.observation),
+                  row.registration,
+                  snapshot.build,
+                  snapshot.generation.toString(),
+                  input.rawCount,
+                  input.outputCount,
+                ],
+                { points: 2, keys: 10, writes: 0 },
+              );
+              if (tail.rowCount) throw new Failure('observation_lost');
+            }
+            await sql(
+              client,
+              meter,
+              `UPDATE search.public_filter_prepared SET verified_raw=$5,verified_output=$6
+              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
+              [
+                partition(snapshot.observation),
+                row.registration,
+                snapshot.build,
+                snapshot.generation.toString(),
+                end,
+                output,
+              ],
+            );
+            meter.frontierWrites++;
+            if (end < input.rawCount) return { status: 'verifying' as const, cost: meter };
+          } else {
+            const exact = await sql(
+              client,
+              meter,
+              `SELECT count(*)::integer AS raw_count,min(raw_ordinal) AS first_raw,max(raw_ordinal) AS last_raw,
                     count(output_ordinal)::integer AS output_count,min(output_ordinal) AS first_output,
                     max(output_ordinal) AS last_output
              FROM search.public_filter_preparation_segment
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)`,
-            [partition(snapshot.observation), row.registration, snapshot.build, snapshot.generation.toString()],
-          );
-          const counts = exact.rows[0]!;
-          const rawCount = Number(counts.raw_count);
-          const outputCount = Number(counts.output_count);
-          const rawComplete =
-            rawCount === input.rawCount &&
-            (rawCount === 0 || (counts.first_raw === 0 && counts.last_raw === rawCount - 1));
-          const outputComplete =
-            outputCount === input.outputCount &&
-            (outputCount === 0 || (counts.first_output === 0 && counts.last_output === outputCount - 1));
-          if (!rawComplete || !outputComplete) throw new Failure('observation_lost');
+              [partition(snapshot.observation), row.registration, snapshot.build, snapshot.generation.toString()],
+            );
+            const counts = exact.rows[0]!;
+            const rawCount = Number(counts.raw_count);
+            const outputCount = Number(counts.output_count);
+            const rawComplete =
+              rawCount === input.rawCount &&
+              (rawCount === 0 || (counts.first_raw === 0 && counts.last_raw === rawCount - 1));
+            const outputComplete =
+              outputCount === input.outputCount &&
+              (outputCount === 0 || (counts.first_output === 0 && counts.last_output === outputCount - 1));
+            if (!rawComplete || !outputComplete) throw new Failure('observation_lost');
+          }
           const completed = await sql(
             client,
             meter,
-            `UPDATE search.public_filter_prepared SET segment_state='complete'
+            `UPDATE search.public_filter_prepared SET segment_state='complete',population_verified=(population_job IS NOT NULL)
              WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
                AND state='active' AND segment_state='building' AND raw_exhausted=true
                AND raw_count=$5 AND output_count=$6 RETURNING build`,
@@ -2384,6 +2497,7 @@ export function createPublicFilterCustody(
           );
           const row = result.rows[0];
           if (!row) return { status: 'missing' as const, cost: meter };
+          if (row.raw_count > 1000) return { status: 'missing' as const, cost: meter };
           if (row.segment_state !== 'complete' || !row.raw_exhausted)
             return { status: 'preparing' as const, cost: meter };
           const hits = result.rows.flatMap((entry) => (entry.payload === null ? [] : [entry.payload.hit]));
@@ -3511,12 +3625,16 @@ export async function readGenerationPublicationCustody(
   sourceHome: number | undefined,
   context: PublicFilterConsumerContext,
   observation?: string,
-  recovery?: 'registration' | Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
+  recovery?:
+    | 'registration'
+    | 'population'
+    | Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
       registration: CustodyRegistration;
       queried: PublicFilterQueriedObservation | null;
+      registrationWork: string | null;
       cost: CustodyCost;
     }>
   | CustodyFailure
@@ -3527,16 +3645,18 @@ export async function readGenerationPublicationCustody(
     check(context);
     if (sourceHome !== undefined) home(sourceHome);
     const original = typeof recovery === 'object' ? recovery : undefined;
+    // Only an unpinned population may resume its registered, unfinished materialization.
+    const population = recovery === 'population' && observation === undefined;
     const registered = await sql(
       pool,
       meter,
-      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at
+      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at${population ? ',r.consumer_work AS registration_work' : ''}
        FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
        LEFT JOIN LATERAL (
          SELECT queried,expires_at FROM search.public_filter_observation
          WHERE (partition_no,registration)=(r.partition_no,r.id)
-           AND NOT $8::boolean AND (observation=$5::text OR $5::text IS NULL) AND state='open'
+           AND NOT $8::boolean AND ${population ? 'r.consumer_work IS NULL AND ' : ''}(observation=$5::text OR $5::text IS NULL) AND state='open'
            AND ($6::text IS NULL OR
              (md5(covered)=md5($6) AND covered=$6 AND prepared_build IS NOT DISTINCT FROM $7::text))
          ORDER BY observation DESC LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
@@ -3559,7 +3679,14 @@ export async function readGenerationPublicationCustody(
     const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
     requireValue(definition.digest === digest(definition.data));
     const registration = { partition: row.partition_no as number, id: row.id as string };
-    if (row.queried === null) return { definition: definition.data, registration, queried: null, cost: meter };
+    const registrationWork = population ? (row.registration_work as string | null) : null;
+    if (row.queried === null) {
+      if (registrationWork && isReleaseReference(definition.data.meaning.release)) {
+        requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
+        await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
+      }
+      return { definition: definition.data, registration, queried: null, registrationWork, cost: meter };
+    }
     const q = decode<PublicFilterQueriedObservation>(row.queried);
     queried(q);
     requireValue(encode(q.consumer) === encode(consumer) && encode(q) === row.queried);
@@ -3569,7 +3696,7 @@ export async function readGenerationPublicationCustody(
       await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
     }
     check(context);
-    return { definition: definition.data, registration, queried: q, cost: meter };
+    return { definition: definition.data, registration, queried: q, registrationWork, cost: meter };
   } catch (error) {
     return failure(error, meter);
   }

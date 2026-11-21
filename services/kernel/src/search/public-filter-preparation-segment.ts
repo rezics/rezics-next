@@ -20,6 +20,7 @@ export type PublicFilterPreparationSegmentFrontier = Readonly<{
   outputCount: number;
   after: readonly (string | number | null)[] | undefined;
   rawExhausted: boolean;
+  populationVerified?: boolean;
   state: 'missing' | 'building' | 'complete' | 'legacy' | 'erasing';
 }>;
 

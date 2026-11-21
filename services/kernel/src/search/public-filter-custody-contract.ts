@@ -210,6 +210,7 @@ export interface PublicFilterCustody {
   /** Atomically append one bounded step and advance its indexed raw/output frontier. */
   appendPreparationSegment(
     request: Readonly<{
+      populationJob?: string;
       registration: CustodyRegistration;
       consumer: PublicFilterConsumer;
       build: string;
@@ -228,6 +229,7 @@ export interface PublicFilterCustody {
   /** Create or recover the prepared observation after raw Search exhaustion; still unreadable until finalization. */
   retainPreparedSegments(
     request: Readonly<{
+      populationJob?: string;
       registration: CustodyRegistration;
       covered: PrivacyReductionStart;
       build: string;
@@ -241,12 +243,13 @@ export interface PublicFilterCustody {
   /** Mark a raw-exhausted build servable after the consumer's source disclosure has completed. */
   completePreparationBuild(
     request: Readonly<{
+      populationJob?: string;
       queried: PublicFilterQueriedObservation;
       rawCount: number;
       outputCount: number;
     }>,
     context: PublicFilterConsumerContext,
-  ): Promise<Readonly<{ status: 'complete'; cost: CustodyCost }> | CustodyFailure>;
+  ): Promise<Readonly<{ status: 'complete' | 'verifying'; cost: CustodyCost }> | CustodyFailure>;
   /** One indexed output-ordinal window. It never includes the stored owner witness. */
   readPreparedWindow(
     request: Readonly<{

@@ -234,7 +234,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
           expected: { rawCount, outputCount: expectedOutputCount, after },
           entries,
           after: nextAfter,
-          rawExhausted: end === count,
+          rawExhausted: end === count && count < 1000,
         };
         // The producer loses its reply after the committed first segment.
         const first = await registry.appendPreparationSegment(request, context());
@@ -260,6 +260,41 @@ test('native interrupted prepared builds replay one fixed segment and read exact
         rawCount = end;
         after = nextAfter;
       }
+      if (count === 1000) {
+        const boundary = {
+          registration: n.registration,
+          consumer: n.consumer,
+          build,
+          generation,
+          expected: { rawCount, outputCount, after },
+          after,
+          rawExhausted: true,
+        };
+        const entries = [
+          {
+            rawOrdinal: rawCount,
+            outputOrdinal: null,
+            payload: { hit: { id: 'extra' }, owner: { original: 'extra', terminal: 'extra' } },
+          },
+        ];
+        const ordinary = await resumed.appendPreparationSegment({ ...boundary, entries }, context());
+        expect(ordinary.status).toBe('unready');
+        const forged = await resumed.appendPreparationSegment(
+          { ...boundary, entries, populationJob: crypto.randomUUID() },
+          context(),
+        );
+        expect(forged.status).not.toBe('appended');
+        await expect(
+          pool.query(
+            `INSERT INTO search.public_filter_preparation_segment
+          (partition_no,registration,build,generation,raw_ordinal,output_ordinal,payload)
+          VALUES($1,$2,$3,$4,1000,NULL,'{}')`,
+            [n.registration.partition, n.registration.id, build, generation.toString()],
+          ),
+        ).rejects.toThrow();
+        const exhausted = await resumed.appendPreparationSegment({ ...boundary, entries: [] }, context());
+        expect(exhausted.status).toBe('appended');
+      }
       const retained = await resumed.retainPreparedSegments(
         {
           registration: n.registration,
@@ -280,7 +315,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
         context(),
       );
       expect(completed.status).toBe('complete');
-      if (completed.status !== 'complete') throw new Error(completed.reason);
+      if (completed.status !== 'complete') throw new Error(completed.status);
       charge(completed);
       const acquired = await resumed.acquire(retained.queried, context());
       expect(acquired.status).toBe('acquired');

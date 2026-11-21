@@ -488,6 +488,7 @@ export function createSearchGenerationPublication(
       job.source_home,
       context,
       job.observation ?? undefined,
+      job.observation || job.fence || job.bootstrap ? undefined : 'population',
     );
     add(meter, custody.cost);
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
@@ -2080,7 +2081,14 @@ export function createSearchGenerationPublication(
       locator(input);
       return run(context, async (meter) => {
         const target = await native(input, context);
-        const custody = await readGenerationPublicationCustody(pool, input, undefined, context);
+        const custody = await readGenerationPublicationCustody(
+          pool,
+          input,
+          undefined,
+          context,
+          undefined,
+          'population',
+        );
         add(meter, custody.cost);
         if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
         const resolved = await binding.resolve(

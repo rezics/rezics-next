@@ -600,6 +600,26 @@ END $$;
 
 
 --
+-- Name: invalidate_population_verification(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.invalidate_population_verification() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE search.public_filter_prepared p
+     SET verified_raw=0,verified_output=0,population_verified=false,segment_state='building'
+    FROM (SELECT partition_no,registration,build,generation,min(raw_ordinal) AS changed
+            FROM original_segments GROUP BY partition_no,registration,build,generation) s
+   WHERE (p.partition_no,p.registration,p.build,p.generation)=(s.partition_no,s.registration,s.build,s.generation)
+     AND p.population_job IS NOT NULL AND p.raw_exhausted AND p.state='active'
+     AND p.segment_state IN ('building','complete') AND p.verified_raw>s.changed;
+  RETURN NULL;
+END
+$$;
+
+
+--
 -- Name: invalidate_public_filter_repair_evidence(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -940,6 +960,32 @@ CREATE FUNCTION search.prevent_receiving_plan_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN RAISE EXCEPTION 'Native receiving plans are immutable'; END; $$;
+
+
+--
+-- Name: private_population_build(uuid, text, text, jsonb); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.private_population_build(original_job uuid, original_registration text, original_build text, original_consumer jsonb) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT EXISTS (
+    SELECT FROM search.generation_publication j
+    JOIN search.public_filter_target t ON (t.partition_no,t.physical_target,t.incarnation)=
+      (j.partition_no,j.physical_target,j.native_incarnation)
+    JOIN search.public_filter_registration r ON (r.partition_no,r.physical_target)=(t.partition_no,t.physical_target)
+    JOIN semantic.public_filter_bootstrap b ON b.partition_no=j.partition_no AND b.bootstrap=substring(original_build FROM 3)::uuid
+    JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+    WHERE (j.partition_no,j.job)=(0,original_job) AND j.phase='reconciled' AND j.source_home=0
+      AND j.consumer=original_consumer AND j.binding->>'readDefinition'=b.read_definition::text
+      AND j.fence IS NULL AND j.bootstrap IS NULL AND j.queried IS NULL AND j.observation IS NULL AND j.execution IS NULL
+      AND r.id=original_registration AND r.state='active' AND r.consumer_bootstrap=original_build AND r.consumer_work IS NOT NULL
+      AND original_build='0:'||b.bootstrap::text AND b.snapshot_kind='prepared' AND b.state='begun' AND b.queried IS NULL
+      AND b.coverage_publication IS NULL AND b.publication_job IS NULL AND b.publication_observation IS NULL
+      AND b.publication_execution IS NULL AND b.account_after=4096 AND b.coverage_after=4096
+      AND b.coverage_sealed AND b.coverage_root IS NOT NULL AND b.coverage_generation IS NOT NULL
+  )
+$$;
 
 
 --
@@ -1338,6 +1384,29 @@ BEGIN
   FROM search.release_relevance_membership_node n
   WHERE n.execution_id = p_execution_id AND n.id = v_node AND n.depth = 32;
   RETURN COALESCE(v_work = p_work_id, false);
+END
+$$;
+
+
+--
+-- Name: require_generation_population_batch(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.require_generation_population_batch() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (
+    SELECT FROM (SELECT DISTINCT partition_no,registration,build,generation FROM appended
+                  WHERE raw_ordinal>=1000 OR output_ordinal>=1000) a
+    WHERE NOT EXISTS (SELECT FROM search.public_filter_prepared p
+      WHERE (p.partition_no,p.registration,p.build,p.generation)=(a.partition_no,a.registration,a.build,a.generation)
+        AND p.population_job IS NOT NULL AND p.state='active' AND p.segment_state='building'
+        AND NOT p.raw_exhausted FOR SHARE OF p)
+  ) THEN
+    RAISE EXCEPTION 'A wide prepared segment requires its original private generation build' USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
 END
 $$;
 
@@ -2660,8 +2729,8 @@ CREATE TABLE search.public_filter_preparation_segment (
     output_ordinal integer,
     payload jsonb NOT NULL,
     CONSTRAINT public_filter_preparation_segment_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
-    CONSTRAINT public_filter_preparation_segment_output_ordinal_check CHECK (((output_ordinal >= 0) AND (output_ordinal <= 999))),
-    CONSTRAINT public_filter_preparation_segment_raw_ordinal_check CHECK (((raw_ordinal >= 0) AND (raw_ordinal <= 999)))
+    CONSTRAINT public_filter_preparation_segment_output_ordinal_check CHECK ((output_ordinal >= 0)),
+    CONSTRAINT public_filter_preparation_segment_raw_ordinal_check CHECK ((raw_ordinal >= 0))
 );
 
 
@@ -2681,13 +2750,19 @@ CREATE TABLE search.public_filter_prepared (
     output_count integer DEFAULT 0 NOT NULL,
     raw_exhausted boolean DEFAULT false NOT NULL,
     source_cursor text,
+    population_job uuid,
+    population_verified boolean DEFAULT false NOT NULL,
+    verified_raw integer DEFAULT 0 NOT NULL,
+    verified_output integer DEFAULT 0 NOT NULL,
     CONSTRAINT public_filter_prepared_check CHECK (((output_count >= 0) AND (output_count <= raw_count))),
+    CONSTRAINT public_filter_prepared_check1 CHECK (((verified_output >= 0) AND (verified_output <= verified_raw))),
     CONSTRAINT public_filter_prepared_generation_check CHECK (((generation > (0)::numeric) AND (scale(generation) = 0))),
-    CONSTRAINT public_filter_prepared_raw_count_check CHECK (((raw_count >= 0) AND (raw_count <= 1000))),
+    CONSTRAINT public_filter_prepared_raw_count_check CHECK (((raw_count >= 0) AND ((population_job IS NOT NULL) OR (raw_count <= 1000)))),
     CONSTRAINT public_filter_prepared_rows_check CHECK ((octet_length(rows) <= 1048576)),
     CONSTRAINT public_filter_prepared_segment_state_check CHECK ((segment_state = ANY (ARRAY['legacy'::text, 'building'::text, 'complete'::text, 'erasing'::text]))),
     CONSTRAINT public_filter_prepared_source_cursor_check CHECK ((octet_length(source_cursor) <= 4096)),
-    CONSTRAINT public_filter_prepared_state_check CHECK ((state = ANY (ARRAY['active'::text, 'erasing'::text])))
+    CONSTRAINT public_filter_prepared_state_check CHECK ((state = ANY (ARRAY['active'::text, 'erasing'::text]))),
+    CONSTRAINT public_filter_prepared_verified_raw_check CHECK ((verified_raw >= 0))
 );
 
 
@@ -4227,6 +4302,20 @@ ALTER TABLE search.freshness_home ENABLE ALWAYS TRIGGER freshness_position;
 
 
 --
+-- Name: public_filter_preparation_segment generation_population_append; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER generation_population_append AFTER INSERT ON search.public_filter_preparation_segment REFERENCING NEW TABLE AS appended FOR EACH STATEMENT EXECUTE FUNCTION search.require_generation_population_batch();
+
+
+--
+-- Name: public_filter_preparation_segment generation_population_update; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER generation_population_update AFTER UPDATE ON search.public_filter_preparation_segment REFERENCING NEW TABLE AS appended FOR EACH STATEMENT EXECUTE FUNCTION search.require_generation_population_batch();
+
+
+--
 -- Name: generation_publication generation_publication_ack_protocol_immutable; Type: TRIGGER; Schema: search; Owner: -
 --
 
@@ -4245,6 +4334,20 @@ CREATE TRIGGER identity_receiving_native_plan_immutable BEFORE DELETE OR UPDATE 
 --
 
 CREATE TRIGGER identity_writer_clear_settled_relay_intent BEFORE UPDATE OF writer_token ON search.identity_writer FOR EACH ROW WHEN (((old.relay_intent IS NOT NULL) AND (new.relay_intent = old.relay_intent) AND (old.relay_receipt IS NOT NULL) AND (new.relay_receipt IS NULL) AND (new.dispatch_state = 'settled'::text) AND (new.writer_token IS NULL))) EXECUTE FUNCTION search.clear_settled_relay_intent();
+
+
+--
+-- Name: public_filter_preparation_segment invalidate_deleted_population_ordinals; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER invalidate_deleted_population_ordinals AFTER DELETE ON search.public_filter_preparation_segment REFERENCING OLD TABLE AS original_segments FOR EACH STATEMENT EXECUTE FUNCTION search.invalidate_population_verification();
+
+
+--
+-- Name: public_filter_preparation_segment invalidate_updated_population_ordinals; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER invalidate_updated_population_ordinals AFTER UPDATE ON search.public_filter_preparation_segment REFERENCING OLD TABLE AS original_segments FOR EACH STATEMENT EXECUTE FUNCTION search.invalidate_population_verification();
 
 
 --
@@ -4678,6 +4781,14 @@ ALTER TABLE ONLY search.public_filter_preparation_segment
 
 ALTER TABLE ONLY search.public_filter_prepared
     ADD CONSTRAINT public_filter_prepared_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_prepared public_filter_prepared_population_job_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_prepared
+    ADD CONSTRAINT public_filter_prepared_population_job_fkey FOREIGN KEY (partition_no, population_job) REFERENCES search.generation_publication(partition_no, job);
 
 
 --
