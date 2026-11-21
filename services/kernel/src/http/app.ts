@@ -310,7 +310,7 @@ export function createApp({
         detail?.['x-rate-limit'] === undefined
       )
         return;
-      await admission.run('normal', job, async () => {
+      const preflight = async () => {
         await admitExposure({
           pool,
           access: accessForApp,
@@ -334,7 +334,11 @@ export function createApp({
           context: { pool, actor, deadline: job.deadline },
           peer: ratePeer ? ratePeer(original) : (server?.requestIP(original)?.address ?? socketPeer(original)),
         });
-      });
+      };
+      // Public routes without a rate declaration only validate local metadata and credentials here.
+      // Their handler owns admission for its native work.
+      if (gated || detail?.['x-rate-limit'] !== undefined) await admission.run('normal', job, preflight);
+      else await preflight();
     })
     .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {
