@@ -278,7 +278,7 @@ function validatedPage(input: Page) {
   return page;
 }
 
-async function readOrSaveStep(db: PoolClient, page: Page, context: Context): Promise<Step> {
+async function readOrSaveStep(db: PoolClient, page: Page, context: Context, acceptReceiver = false): Promise<Step> {
   const { job, bootstrap, birth, firstHome, endHome, ordinal } = page;
   const { rows } = await db.query<{ cuts: Cut[] }>(
     acceptReceiver
