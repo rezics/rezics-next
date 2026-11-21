@@ -131,11 +131,17 @@ memory is O(R); indexed update work is O(R log N). Ordinary figure upsert adds a
 DDL work over retained rank rows, not request work. There is no migration data backfill or request-time repair.
 
 The default worker binds this Rating command to Content's canonical-work effect. Semantic's startup inventory
-and mutation wakes notify outstanding homes, including retained empty homes. Each receiving command commits one
-page. A full page emits a durable continuation with the original notification. A terminal page verifies coverage
-for the locked current generation and advances Semantic's delivery watermark for the original generation in the
-same transaction. A later notification can acknowledge a newer generation; missing or stale coverage continues
-to return `index_not_ready`.
+and mutation wakes seek the partial index on outstanding homes. Migration records an empty generation-1 seed
+only at an active epoch-1, position-zero home with zero population, no announcement or acknowledgement, and
+no retained Rating rank, publication or rebuild state. A blank installation therefore needs one empty seek and
+zero native commands or Rating coverage rows. A first Subject write advances the generation and enters the
+index. Deleting the last Subject advances it again. A generation-1 announcement from an older sender also
+remains recoverable.
+
+Each receiving command commits one page. A full page emits a durable continuation with the original notification.
+A terminal page verifies coverage for the locked current generation and advances Semantic's delivery watermark
+for the original generation in the same transaction. A later notification can acknowledge a newer generation.
+Missing or stale coverage continues to return `index_not_ready`.
 
 For a complete Search page, preserve the existing collector's useful size U (1–100), at most three rounds,
 `B <= min(200, 2 * remainingUseful + 1, remainingCandidateAllowance)`, and at most

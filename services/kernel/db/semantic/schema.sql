@@ -10160,6 +10160,7 @@ CREATE TABLE semantic.partition_subjects (
     canonical_generation bigint DEFAULT 1 NOT NULL,
     canonical_delivered_generation bigint DEFAULT 0 NOT NULL,
     canonical_announced_generation bigint DEFAULT 0 NOT NULL,
+    canonical_empty_seed boolean DEFAULT false NOT NULL,
     CONSTRAINT partition_subjects_canonical_announcement_check CHECK (((canonical_announced_generation >= 0) AND (canonical_announced_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
     CONSTRAINT partition_subjects_canonical_delivery_check CHECK (((canonical_delivered_generation >= 0) AND (canonical_delivered_generation <= canonical_generation))),
@@ -10167,6 +10168,18 @@ CREATE TABLE semantic.partition_subjects (
     CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
 );
+
+
+--
+-- Name: pending_canonical_generation; Type: VIEW; Schema: semantic; Owner: -
+--
+
+CREATE VIEW semantic.pending_canonical_generation AS
+ SELECT partition_no,
+    canonical_generation,
+    canonical_announced_generation
+   FROM semantic.partition_subjects
+  WHERE ((canonical_delivered_generation < canonical_generation) AND ((NOT canonical_empty_seed) OR (canonical_generation > 1) OR (canonical_announced_generation > 0)));
 
 
 --
@@ -14857,7 +14870,7 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 -- Name: partition_subjects_canonical_delivery; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX partition_subjects_canonical_delivery ON semantic.partition_subjects USING btree (partition_no) WHERE (canonical_delivered_generation < canonical_generation);
+CREATE INDEX partition_subjects_canonical_delivery ON semantic.partition_subjects USING btree (partition_no) WHERE ((canonical_delivered_generation < canonical_generation) AND ((NOT canonical_empty_seed) OR (canonical_generation > 1) OR (canonical_announced_generation > 0)));
 
 
 --
@@ -14871,7 +14884,7 @@ CREATE INDEX partition_subjects_canonical_frontier ON semantic.partition_subject
 -- Name: partition_subjects_canonical_unannounced; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX partition_subjects_canonical_unannounced ON semantic.partition_subjects USING btree (partition_no) WHERE ((canonical_delivered_generation < canonical_generation) AND (canonical_announced_generation < canonical_generation));
+CREATE INDEX partition_subjects_canonical_unannounced ON semantic.partition_subjects USING btree (partition_no) WHERE ((canonical_delivered_generation < canonical_generation) AND (canonical_announced_generation < canonical_generation) AND ((NOT canonical_empty_seed) OR (canonical_generation > 1) OR (canonical_announced_generation > 0)));
 
 
 --

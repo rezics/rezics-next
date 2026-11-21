@@ -72,7 +72,8 @@ function nativeHome(event: CloudEvent): number {
 }
 
 /** One keyset seek over the existing <=4096 home counters, including retained empty homes.
- * This is delivery inventory, not a second name/population observer or a coverage certificate.
+ * The pending view excludes the installation seed and stays writable so announcement
+ * rechecks the same eligibility under the home command.
  * The connection is released before the caller starts any command or foreign work.
  */
 export async function readCanonicalGenerationDeliveryPage(
@@ -88,8 +89,8 @@ export async function readCanonicalGenerationDeliveryPage(
     (client) =>
       deadlineClient(client, deadline).query<CanonicalGenerationDelivery>(
         `SELECT partition_no AS partition,canonical_generation::text AS generation
-       FROM semantic.partition_subjects
-       WHERE partition_no>$1 AND canonical_delivered_generation<canonical_generation
+       FROM semantic.pending_canonical_generation
+       WHERE partition_no>$1
          ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
        ORDER BY partition_no LIMIT $2`,
         [after ?? -1, limit],
@@ -121,8 +122,8 @@ export async function canonicalGenerationAnnouncement(
   unannouncedOnly: boolean,
 ) {
   const announced = await tx.query<{ generation: string }>(
-    `UPDATE semantic.partition_subjects SET canonical_announced_generation=canonical_generation
-     WHERE partition_no=$1 AND canonical_delivered_generation<canonical_generation
+    `UPDATE semantic.pending_canonical_generation SET canonical_announced_generation=canonical_generation
+     WHERE partition_no=$1
        ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
      RETURNING canonical_generation::text AS generation`,
     [partition],
