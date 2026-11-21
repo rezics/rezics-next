@@ -216,8 +216,9 @@ async function rebuild(): Promise<void> {
       const discovery = await rebuildDiscovery({
         pool,
         search,
-        producers,
         listing: subjectListingSource(pool),
+        observeWorker: true,
+        producers,
         prefix: config.prefix,
         routeKey,
       });
