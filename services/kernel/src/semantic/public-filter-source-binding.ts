@@ -69,7 +69,11 @@ import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairSourceScan from './public-filter-source-binding-repair-source-scan.sql';
-import { readHeldSubjectOriginals } from './public-filter-held-subject-originals.ts';
+import {
+  heldRepairHomes,
+  readHeldRepairHomes,
+  readHeldSubjectOriginals,
+} from './public-filter-held-subject-originals.ts';
 import repairAccountScan from './public-filter-source-binding-repair-account-scan.sql';
 import repairWindowScan from './public-filter-source-binding-repair-window-scan.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
@@ -1264,7 +1268,13 @@ export function createNativePublicFilterSourceBinding(
       };
     } | null;
     account?: AccountDiscoveryRepairObservation;
-    scan?: Readonly<{ kind: 'semantic' | 'accounts'; homes: number; digest: string; heldHead?: string }>;
+    scan?: Readonly<{
+      kind: 'semantic' | 'accounts';
+      homes: number;
+      digest: string;
+      heldHead?: string;
+      heldHeads?: readonly string[];
+    }>;
     bridgeEvents?: Readonly<{ count: number; digest: string } | { envelopes: string }>;
     windowBatch?: Readonly<{
       from: number;
@@ -1310,8 +1320,38 @@ export function createNativePublicFilterSourceBinding(
       throw new BindingError('binding_mismatch');
     const limit = Math.min(inputLimit, repairHomeBatchLimit, 4096 - state.partition);
     let heldHead: string | undefined;
+    let heldHeads: readonly string[] | undefined;
     async function scan() {
       if (state.heldBirth !== undefined) {
+        if (!retained || retained.scan?.heldHeads) {
+          const page = await readHeldRepairHomes(
+            db,
+            {
+              bootstrap,
+              birth: state.heldBirth,
+              partition: state.partition,
+              after: state.after,
+              limit: Math.min(limit, heldRepairHomes),
+              inventory: true,
+            },
+            context,
+            retained?.scan?.heldHeads
+              ? {
+                  heads: retained.scan.heldHeads,
+                  key: retained.next.subject === null ? null : retained.next.after,
+                }
+              : undefined,
+          );
+          heldHeads = page.map((row) => row.head);
+          return page.map((row) => ({
+            partition_no: row.partition,
+            epoch: row.epoch,
+            write_state: 'active',
+            route: row.route,
+            subject_id: row.id,
+            receipt: row.receipt,
+          }));
+        }
         const saved = retained?.scan?.heldHead;
         if (retained && !saved) throw new BindingError('binding_mismatch');
         const original = await readHeldSubjectOriginals(
@@ -1400,8 +1440,17 @@ export function createNativePublicFilterSourceBinding(
       receipt: {
         kind: 'semantic',
         homes: rows.length,
-        digest: hash(encode({ input: state, inputLimit, rows, ...(heldHead !== undefined && { heldHead }) })),
+        digest: hash(
+          encode({
+            input: state,
+            inputLimit,
+            rows,
+            ...(heldHead !== undefined && { heldHead }),
+            ...(heldHeads && { heldHeads }),
+          }),
+        ),
         ...(heldHead !== undefined && { heldHead }),
+        ...(heldHeads && { heldHeads }),
       },
     };
   }
@@ -1672,6 +1721,86 @@ export function createNativePublicFilterSourceBinding(
         digest: hash(encode({ input: state, inputLimit, prefix })),
         packed: packClosedCreationWindows(windows),
         through: windows.map(({ through }) => String(through)),
+      },
+    };
+  }
+  async function scanHeldCreationWindows(
+    bootstrap: string,
+    state: RepairState,
+    inputLimit: number,
+    db: Pool,
+    context: PublicFilterConsumerContext,
+    retained?: RepairRecord,
+  ) {
+    const batch = retained?.windowBatch;
+    const limit = Math.min(inputLimit, heldRepairHomes);
+    if (
+      !state.heldBirth ||
+      state.owner !== 'semantic' ||
+      state.phase !== 'window' ||
+      state.epoch !== null ||
+      state.subject !== null ||
+      state.after ||
+      state.projection ||
+      state.bridge ||
+      state.resumeBridge ||
+      (batch && (batch.from !== state.partition || batch.examined > limit || batch.through !== undefined))
+    )
+      throw new BindingError('binding_mismatch');
+    const heads =
+      batch &&
+      Array.from({ length: batch.examined }, (_, index) => {
+        const partition = state.partition + index;
+        const window = creationWindowFromBatch(batch, partition) ?? retained?.next.bridge;
+        if (!window || window.partition !== partition) throw new BindingError('binding_mismatch');
+        return String(window.through);
+      });
+    const rows = await readHeldRepairHomes(
+      db,
+      {
+        bootstrap: nativeId(bootstrap),
+        birth: state.heldBirth,
+        partition: state.partition,
+        limit,
+        after: null,
+        inventory: false,
+      },
+      context,
+      heads ? { heads, key: null } : undefined,
+    );
+    const closed: PublicFilterCreationWindow[] = [];
+    let open: PublicFilterCreationWindow | undefined;
+    for (const row of rows) {
+      const base = BigInt(row.base),
+        through = BigInt(row.head);
+      const window = {
+        partition: row.partition,
+        epoch: row.epoch,
+        receipt: row.receipt,
+        heldBirth: state.heldBirth,
+        base,
+        through,
+        position: base + 1n,
+        sequence: 0,
+        eventCount: null,
+      };
+      if (through !== base) {
+        open = window;
+        break;
+      }
+      closed.push(window);
+    }
+    const examined = closed.length + Number(!!open);
+    return {
+      next: open
+        ? { ...state, partition: open.partition, epoch: open.epoch, phase: 'bridge' as const, bridge: open }
+        : { ...state, partition: state.partition + examined },
+      batch: {
+        from: state.partition,
+        count: closed.length,
+        examined,
+        packed: packClosedCreationWindows(closed),
+        digest: hash(encode({ input: state, inputLimit, rows: rows.slice(0, examined) })),
       },
     };
   }
@@ -2268,6 +2397,10 @@ export function createNativePublicFilterSourceBinding(
           phase: 'window',
         };
       }
+    } else if (state.phase === 'window' && heldBirth !== undefined && (!replay || replay.windowBatch)) {
+      const scanned = await scanHeldCreationWindows(bootstrap.id, state, inputLimit, db, context, replay ?? undefined);
+      next = scanned.next;
+      windowBatch = scanned.batch;
     } else if (state.phase === 'window' && heldBirth === undefined && (!replay || replay.windowBatch)) {
       const accounts = mixed;
       const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined && !mixed;
@@ -3880,7 +4013,7 @@ export function createNativePublicFilterSourceBinding(
         const record = decode<RepairRecord>(row.state);
         if (
           record.input.heldBirth !== (cut.row.held_birth ?? undefined) ||
-          (record.input.heldBirth !== undefined && (!originalSubject || record.windowBatch !== undefined))
+          (record.input.heldBirth !== undefined && !originalSubject)
         )
           throw new BindingError('binding_mismatch');
         const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
@@ -4092,18 +4225,27 @@ export function createNativePublicFilterSourceBinding(
             if (record.windowBatch.through !== undefined && !accounts && !boundSubjectPublication(cut, input))
               throw new BindingError('binding_mismatch');
             const scanned =
-              record.windowBatch.through === undefined
-                ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
-                : await scanIrrelevantCreationPrefix(
+              record.input.heldBirth !== undefined
+                ? await scanHeldCreationWindows(
                     input.bootstrap,
                     record.input,
                     row.input_limit,
                     db,
                     { deadline },
-                    cost,
-                    accounts,
-                    record.windowBatch,
-                  );
+                    record,
+                  )
+                : record.windowBatch.through === undefined
+                  ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
+                  : await scanIrrelevantCreationPrefix(
+                      input.bootstrap,
+                      record.input,
+                      row.input_limit,
+                      db,
+                      { deadline },
+                      cost,
+                      accounts,
+                      record.windowBatch,
+                    );
             if (!scanned) throw new BindingError('owner_unavailable');
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
@@ -4315,7 +4457,11 @@ export function createNativePublicFilterSourceBinding(
               repairs,
               account: record.account ?? null,
               ...(subject ? { subject } : {}),
-              ...(!scope && subjectPublication && record.scan?.kind === 'semantic' && subjectHomeScan(record.next)
+              ...(!scope &&
+              record.input.heldBirth === undefined &&
+              subjectPublication &&
+              record.scan?.kind === 'semantic' &&
+              subjectHomeScan(record.next)
                 ? {
                     nextScan: {
                       // Two full home reads, two exact custody joins, and keyed

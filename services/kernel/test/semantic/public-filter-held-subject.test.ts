@@ -9,7 +9,10 @@ import {
   advanceHeldSubjectPage,
   reconcileHeldSubjectPage,
 } from '../../src/semantic/public-filter-held-subject.ts';
-import { readHeldSubjectOriginals } from '../../src/semantic/public-filter-held-subject-originals.ts';
+import {
+  readHeldRepairHomes,
+  readHeldSubjectOriginals,
+} from '../../src/semantic/public-filter-held-subject-originals.ts';
 import { readPublicFilterCreationWindow } from '../../src/semantic/public-filter-creation-window.ts';
 import { identityEpochDatabase } from './support/identity-epoch.ts';
 import { retentionFixture } from '../history/subject-retention-fixture.ts';
@@ -308,3 +311,47 @@ test('Source resumes the original Access page and replays both command groups af
     await db.close();
   }
 }, 60_000);
+
+test('held repair reopens the exact ordered prefix through a real original and rejects a moved interior home', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    const { resident, book, bootstrap, job } = await retentionFixture(db);
+    const last = await book(6);
+    const birth = await openHeldSubjectPreparation(db.pool, { bootstrap, job }, context());
+    await db.pool.query('SELECT semantic.capture_subject_access_page_v1($1,0,8)', [birth]);
+    const input = {
+      bootstrap,
+      birth,
+      partition: 0,
+      limit: 8,
+      after: { route: 0, id: resident.subject.id },
+      inventory: true,
+    };
+    const original = await readHeldRepairHomes(db.pool, input, context());
+    expect(original.map((row) => row.partition)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(original.at(-1)?.id).toBe(last.subject.id);
+    const retained = { heads: original.map((row) => row.head), key: { route: 96, id: last.subject.id } };
+    const later = await book(3);
+    expect((await readHeldRepairHomes(db.pool, input, context())).at(-1)?.id).toBe(later.subject.id);
+    expect(await readHeldRepairHomes(db.pool, input, context(), retained)).toEqual(original);
+    const successor = { ...input, partition: 6, after: retained.key };
+    const empty = await readHeldRepairHomes(db.pool, successor, context());
+    expect(empty.map((row) => row.id)).toEqual([null, null]);
+    await book(7);
+    expect(
+      await readHeldRepairHomes(db.pool, successor, context(), { heads: empty.map((row) => row.head), key: null }),
+    ).toEqual(empty);
+    const client = await db.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE core.publication_authority_epoch SET generation=gen_random_uuid() WHERE home_no=4');
+      await expect(readHeldRepairHomes(client, input, context(), retained)).rejects.toThrow();
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+    expect(await readHeldRepairHomes(db.pool, input, context(), retained)).toEqual(original);
+  } finally {
+    await db.close();
+  }
+}, 60000);

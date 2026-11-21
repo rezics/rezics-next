@@ -1025,9 +1025,18 @@ export function createSearchGenerationPublication(
                   job.next_ordinal === null
                 )
                   throw new Pending('source_pending');
-                const physical = await native(job.consumer, context, validationSearch(context, meter));
-                if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
-                await adopt(job, context, meter, physical);
+                // Source reopens the job and the original Core/Access page on every ordinal.
+                // After admission, reopen physical custody on the first writer obligation of each turn.
+                let checkedWriterTarget = false;
+                const checkWriterTarget = async () => {
+                  if (checkedWriterTarget) return;
+                  const physical = await native(job.consumer, context, validationSearch(context, meter));
+                  if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
+                  await adopt(job, context, meter, physical);
+                  checkedWriterTarget = true;
+                };
+                if (job.subscription_protocol !== 1 || (job.next_home === 0 && job.next_ordinal === 0))
+                  await checkWriterTarget();
                 // Reserve the capture, original owner checks, 32 inventory keys or
                 // event slots and the closing custody comparison before dispatch.
                 const fixedInputs = 176;
@@ -1051,6 +1060,7 @@ export function createSearchGenerationPublication(
                   },
                   context,
                   async (obligation) => {
+                    await checkWriterTarget();
                     await reconcile(
                       job,
                       obligation.partition,

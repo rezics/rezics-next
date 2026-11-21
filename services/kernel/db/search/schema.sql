@@ -541,10 +541,23 @@ BEGIN
   WITH member AS MATERIALIZED (
     SELECT m.birth,semantic.subject_access_definition_v1(m.birth) AS definition_digest
     FROM core.subject_subscription_v1 m WHERE (m.job,m.bootstrap)=(a.job,a.bootstrap)
+  ), steps AS MATERIALIZED (
+    (SELECT s.verified_home,s.state,s.verified_root FROM semantic.public_filter_repair_step s
+      WHERE (s.partition_no,s.bootstrap,s.execution,s.verified_binding)=(0,a.bootstrap,a.execution,NEW.binding)
+        AND s.verified_home<=NEW.first_home AND s.verified_root IS NOT NULL AND NOT s.complete
+      ORDER BY s.verified_home DESC LIMIT 1)
+    UNION ALL
+    SELECT s.verified_home,s.state,s.verified_root FROM semantic.public_filter_repair_step s
+      WHERE (s.partition_no,s.bootstrap,s.execution,s.verified_binding)=(0,a.bootstrap,a.execution,NEW.binding)
+        AND s.verified_home>NEW.first_home AND s.verified_home<NEW.first_home+NEW.width
+        AND s.verified_root IS NOT NULL AND NOT s.complete
+  ), windows AS (
+    SELECT steps.*,lead(verified_home,1,NEW.first_home+NEW.width) OVER (ORDER BY verified_home) AS end_home FROM steps
   ), compared AS (
     SELECT i.home,win.receipt,step.verified_root,win.through_pos,base.cut->>'predecessor' AS predecessor,
       base.cut->>'root' AS root,lag(base.cut->>'root') OVER (ORDER BY i.home) AS prior
-    FROM member m CROSS JOIN generate_series(NEW.first_home,NEW.first_home+NEW.width-1) i(home)
+    FROM member m CROSS JOIN windows step
+    CROSS JOIN LATERAL generate_series(greatest(NEW.first_home,step.verified_home),step.end_home-1) i(home)
     CROSS JOIN LATERAL (SELECT * FROM search.subject_receiver_page_v1 p
       WHERE p.birth=m.birth AND p.first_home<=i.home ORDER BY p.first_home DESC LIMIT 1) p
     JOIN semantic.subject_access_page_v1 ap ON (ap.birth,ap.first_home,ap.end_home,ap.definition_digest)=
@@ -552,9 +565,6 @@ BEGIN
     JOIN core.subject_retention_page_v1 cp ON (cp.birth,cp.first_home,cp.end_home)=(p.birth,p.first_home,p.end_home)
     CROSS JOIN LATERAL (SELECT p.cuts->(i.home-p.first_home) AS cut,ap.cuts->(i.home-p.first_home) AS src,
       cp.cuts->(i.home-p.first_home) AS original) base
-    CROSS JOIN LATERAL (SELECT s.state,s.verified_root FROM semantic.public_filter_repair_step s
-      WHERE (s.partition_no,s.bootstrap,s.execution,s.verified_home)=(0,a.bootstrap,a.execution,i.home)
-        AND s.verified_binding=NEW.binding AND s.verified_root IS NOT NULL AND NOT s.complete LIMIT 1) step
     CROSS JOIN LATERAL search.public_filter_ack_window(step.state,i.home) win
     CROSS JOIN LATERAL core.subject_retention_heads_v1(i.home) h
     CROSS JOIN LATERAL semantic.subject_access_heads_v1(i.home,h.epoch) acc
