@@ -81,6 +81,21 @@ $$;
 
 
 --
+-- Name: queue_asset_program_expiry(); Type: FUNCTION; Schema: economy; Owner: -
+--
+
+CREATE FUNCTION economy.queue_asset_program_expiry() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO economy.asset_program_expiry (book_id, asset_id, expires_at)
+  VALUES (NEW.book_id, NEW.asset_id, NEW.expires_at);
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: reject_history_edit(); Type: FUNCTION; Schema: economy; Owner: -
 --
 
@@ -130,6 +145,19 @@ CREATE TABLE economy.asset_program (
     CONSTRAINT asset_program_program_id_check CHECK (((char_length(program_id) >= 1) AND (char_length(program_id) <= 64))),
     CONSTRAINT asset_program_supply_cap_check CHECK ((supply_cap > 0)),
     CONSTRAINT asset_program_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: asset_program_expiry; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.asset_program_expiry (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    retired_at timestamp with time zone,
+    CONSTRAINT asset_program_expiry_check CHECK ((retired_at >= expires_at))
 );
 
 
@@ -279,7 +307,9 @@ CREATE TABLE economy.funding_dispatch (
     due_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     active_claim_id uuid,
     closed_at timestamp with time zone,
-    CONSTRAINT funding_dispatch_action_check CHECK ((action = ANY (ARRAY['submit'::text, 'reconcile'::text])))
+    test_lane text,
+    CONSTRAINT funding_dispatch_action_check CHECK ((action = ANY (ARRAY['submit'::text, 'reconcile'::text]))),
+    CONSTRAINT funding_dispatch_test_lane_check CHECK ((test_lane ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -817,6 +847,14 @@ ALTER TABLE ONLY economy.asset_program
 
 
 --
+-- Name: asset_program_expiry asset_program_expiry_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_expiry
+    ADD CONSTRAINT asset_program_expiry_pkey PRIMARY KEY (book_id, asset_id);
+
+
+--
 -- Name: asset_program asset_program_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1209,10 +1247,24 @@ ALTER TABLE ONLY economy.spot_settlement
 
 
 --
+-- Name: asset_program_expiry_ready_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX asset_program_expiry_ready_idx ON economy.asset_program_expiry USING btree (book_id, expires_at, asset_id) WHERE (retired_at IS NULL);
+
+
+--
 -- Name: funding_dispatch_due_idx; Type: INDEX; Schema: economy; Owner: -
 --
 
 CREATE INDEX funding_dispatch_due_idx ON economy.funding_dispatch USING btree (book_id, due_at, intent_id) WHERE (closed_at IS NULL);
+
+
+--
+-- Name: funding_dispatch_test_due_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX funding_dispatch_test_due_idx ON economy.funding_dispatch USING btree (book_id, test_lane, due_at, intent_id) WHERE ((closed_at IS NULL) AND (test_lane IS NOT NULL));
 
 
 --
@@ -1304,6 +1356,13 @@ CREATE UNIQUE INDEX spot_one_matching_order ON economy.spot_order USING btree (b
 --
 
 CREATE TRIGGER asset_immutable BEFORE DELETE OR UPDATE ON economy.asset FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: asset_program asset_program_enqueue_expiry; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER asset_program_enqueue_expiry AFTER INSERT ON economy.asset_program FOR EACH ROW WHEN ((new.expires_at IS NOT NULL)) EXECUTE FUNCTION economy.queue_asset_program_expiry();
 
 
 --
@@ -1445,6 +1504,14 @@ CREATE TRIGGER spot_settlement_immutable BEFORE DELETE OR UPDATE ON economy.spot
 
 ALTER TABLE ONLY economy.asset_program
     ADD CONSTRAINT asset_program_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: asset_program_expiry asset_program_expiry_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_expiry
+    ADD CONSTRAINT asset_program_expiry_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset_program(book_id, asset_id);
 
 
 --

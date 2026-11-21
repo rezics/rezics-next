@@ -32,6 +32,10 @@ The synthetic deposit and withdrawal routes are available only with explicit dev
 `KERNEL_ECONOMY_TEST_FUNDING_MODE=test`, `KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID` and
 `KERNEL_ECONOMY_TEST_FUNDING_NAMESPACE`. The server omits the routes and their discovery entries without these
 bindings, including in production.
+The development worker drains only the configured synthetic lane. Prepared intents retain their original attempt and
+movement identities across a lost claim. The lane migration admits matching open intents from the prior development
+intake, using its retained destination identity. The production worker removes the synthetic schedule and leaves already
+queued synthetic work inert.
 
 ## Book and wallet
 
@@ -61,6 +65,8 @@ across versions of the same programme. Redeeming returns the consumed units to t
 programmes use the wallet transfer rules. Expiring promotional credit is non-transferable and uses redemption
 where the programme permits it. Native time makes expired units unavailable, and a named expiry posting returns
 the remaining units to the issuer. Provider funding uses independently issued assets.
+The owner worker pages due programmes and wallet accounts. A version leaves the ready queue only after the native
+issuer lock proves that no positive wallet balance remains.
 
 ## External funds and trading
 
