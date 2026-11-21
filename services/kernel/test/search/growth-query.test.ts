@@ -87,15 +87,27 @@ const growthPopulation: Population = {
 };
 
 async function reset(database: GrowthDatabase): Promise<void> {
-  await database.admin.query(
-    'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 OR consumer LIKE $2 OR consumer LIKE $3 OR consumer LIKE $4',
-    [consumer, `${baseConsumerPrefix}%`, `${allConsumerPrefix}%`, `${anchorConsumerPrefix}%`],
-  );
-  await database.admin.query('DELETE FROM core.outbox WHERE type = $1', [eventType]);
-  await database.admin.query(
-    'UPDATE core.partition p SET position = COALESCE((SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no), 0) WHERE p.partition_no = ANY($1)',
-    [partitions],
-  );
+  const client = await database.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 OR consumer LIKE $2 OR consumer LIKE $3 OR consumer LIKE $4',
+      [consumer, `${baseConsumerPrefix}%`, `${allConsumerPrefix}%`, `${anchorConsumerPrefix}%`],
+    );
+    await client.query('DELETE FROM core.outbox WHERE type = $1', [eventType]);
+    // Restore fixture heads offline. Freshness triggers also run during replica replay.
+    await client.query('SET LOCAL session_replication_role = replica');
+    await client.query(
+      'UPDATE core.partition p SET position = COALESCE((SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no), 0) WHERE p.partition_no = ANY($1)',
+      [partitions],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 beforeAll(async () => {

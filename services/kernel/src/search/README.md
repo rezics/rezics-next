@@ -1635,13 +1635,13 @@ population completeness, or expand the existing preview's disclosure guarantees.
 ### Freshness
 
 - One statement compares the shared committed outbox heads with the queried generation's checkpoints.
-  `search.grouped_freshness_positions` combines each stored group of up to 64 homes with its pending changes. Checkpoint groups retain exact positive native bigint
+  The reader compares stored groups of up to 64 homes, then applies pending head changes by their individual home keys. An unchanged group needs no expansion when one of its homes has a pending change. Checkpoint groups retain exact positive native bigint
   positions. A missing home starts at zero. A head group retains the smaller of the native head and one past
   the largest checkpoint ever observed on that home. Every current checkpoint is at most that ceiling,
   so both equality and lag match the native comparison. Equal groups need no home expansion. For each
   behind home in a differing group, the reader seeks exactly `(home, checkpoint + 1, event_seq = 0)` in the
   live outbox. It returns the behind count and minimum retained timestamp. A positive count with no retained
-  timestamp fails. Other consumers of this reader use their native checkpoints directly for positive heads.
+  timestamp fails. Other consumers of this reader compare native partition heads with their own native checkpoints.
 - Each home maintains its exact head and checkpoint ceiling in one transactionally updated
   `search.freshness_home` row. A command whose bounded head changes writes only its own home in
   `search.freshness_positions`. Earlier readers compare that table's single-home shards directly.

@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import freshness from '../../src/search/freshness.sql';
 import { createFreshness, readFreshness } from '../../src/search/freshness.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -104,18 +105,32 @@ function heldPool() {
   let open!: () => void;
   const gate = new Promise<void>((resolve) => (open = resolve));
   let statements = 0;
+  let observed!: () => void;
+  const firstRead = new Promise<void>((resolve) => (observed = resolve));
   const held = new Proxy(pool, {
     get(target, key) {
-      if (key !== 'query') return Reflect.get(target, key, target);
-      return async (...args: Parameters<typeof target.query>) => {
-        statements++;
-        const result = await (target.query as (...args: unknown[]) => Promise<unknown>)(...args);
-        await gate;
-        return result;
+      if (key !== 'connect') return Reflect.get(target, key, target);
+      return async () => {
+        const raw = await target.connect();
+        return new Proxy(raw, {
+          get(client, property) {
+            if (property !== 'query') return Reflect.get(client, property, client);
+            return async (...args: unknown[]) => {
+              const result = await Reflect.apply(client.query, client, args);
+              const query = args[0] as string | { text: string };
+              if ((typeof query === 'string' ? query : query.text) === freshness['~standard'].query.text) {
+                statements++;
+                observed();
+                await gate;
+              }
+              return result;
+            };
+          },
+        });
       };
     },
   });
-  return { pool: held, open, statements: () => statements };
+  return { pool: held, open, firstRead, statements: () => statements };
 }
 
 test('the reader answers each call from a read that began after the call', async () => {
@@ -123,11 +138,10 @@ test('the reader answers each call from a read that began after the call', async
   const held = heldPool();
   const reader = createFreshness(held.pool, consumer);
   const first = reader.current();
-  await Bun.sleep(50);
+  await held.firstRead;
   expect(held.statements()).toBe(1);
   await append(600, '2025-12-31T00:00:00.000Z');
   const waiting = [reader.current(), reader.current(), reader.current()];
-  await Bun.sleep(50);
   expect(held.statements()).toBe(1);
   held.open();
   const before = await first;
