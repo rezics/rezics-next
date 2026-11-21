@@ -12,13 +12,13 @@ WITH originals AS MATERIALIZED (
   WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='adopted' AND b.snapshot_kind='pit'
     AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL AND b.consumer=$7
     AND r.state='active' AND r.consumer_bootstrap=$4 AND r.consumer_work=$5 AND r.consumer=$10 AND t.incarnation=$11
-    AND b.queried<>$3 AND loser.queried=$6 AND loser.registration=r.id AND winner.registration=r.id
+    AND b.queried<>loser.observation AND loser.queried=$6 AND loser.registration=r.id AND winner.registration=r.id
     AND loser.covered=$8 AND winner.covered=loser.covered
     AND loser.prepared_build IS NULL AND winner.prepared_build IS NULL
     AND loser.prepared_rows IS NULL AND winner.prepared_rows IS NULL
     AND loser.consumer_work IS NULL AND loser.consumer_bootstrap IS NULL
     AND winner.consumer_work IS NULL AND winner.consumer_bootstrap IS NULL
-    AND loser.expires_at<=$9 AND winner.expires_at<=$9
+    AND GREATEST(loser.expires_at,winner.expires_at)<=$9
   FOR UPDATE OF r,loser,winner
 ), fenced AS (
   UPDATE search.public_filter_observation o SET state='closing' FROM originals x
