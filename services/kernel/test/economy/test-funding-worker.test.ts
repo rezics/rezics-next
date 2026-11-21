@@ -14,12 +14,21 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { openIsolatedEconomyDatabase } from './fixtures/isolated-database.ts';
 
 let db: GrowthDatabase;
+let isolated: Awaited<ReturnType<typeof openIsolatedEconomyDatabase>>;
 beforeAll(async () => {
-  db = await openGrowthDatabase();
+  isolated = await openIsolatedEconomyDatabase();
+  db = await openGrowthDatabase(isolated.url);
 }, 90_000);
-afterAll(() => db?.close());
+afterAll(async () => {
+  try {
+    await db?.close();
+  } finally {
+    await isolated?.close();
+  }
+});
 
 function success<T>(result: { kind: 'ok'; value: T } | { kind: string }): T {
   if (result.kind !== 'ok' || !('value' in result)) throw new Error(`Expected success, received ${result.kind}`);
