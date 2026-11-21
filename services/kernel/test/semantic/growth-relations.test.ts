@@ -401,6 +401,26 @@ function examined(node: Record<string, unknown>): number {
   );
 }
 
+function assertGlobalPropertyProbe(raw: Capture, scale: number, labelOnly: boolean): void {
+  const plans = raw.plans.filter((plan) => JSON.stringify(plan).includes('subject-global-property-data.sql'));
+  expect(plans).toHaveLength(1);
+  writeFileSync(`${evidenceDirectory}/property-${labelOnly ? 'empty-' : ''}${scale}.json`, JSON.stringify(plans[0]));
+  const probes = nodes(plans[0]).filter(
+    (node) => Number(node['Actual Loops']) > 0 && ['fact', 'outbound_link'].includes(String(node['Relation Name'])),
+  );
+  if (labelOnly) {
+    expect(probes.map((node) => node['Relation Name']).sort()).toEqual(['fact', 'outbound_link']);
+    expect(probes.every((node) => Number(node['Actual Rows']) === 0)).toBe(true);
+  } else {
+    expect(probes.some((node) => Number(node['Actual Rows']) === 1)).toBe(true);
+  }
+  for (const probe of probes) {
+    expect(String(probe['Node Type'])).toContain('Index');
+    for (const key of ['route', 'subject_id']) expect(String(probe['Index Cond'])).toContain(key);
+    expect(examined(probe)).toBeLessThanOrEqual(1);
+  }
+}
+
 function assertPlans(raw: Capture, scale: number): void {
   // Keep raw native evidence before assertions: a query failure belongs to its owner, not a weaker test.
   mkdirSync(evidenceDirectory, { recursive: true });
@@ -660,6 +680,17 @@ test('A subject read examines the same rows whatever the number of relations it 
       const measured = await capture(database, () => operation(database, scale), { includeBackends: true });
       try {
         assertPlans(measured.capture, scale);
+        assertGlobalPropertyProbe(measured.capture, scale, false);
+        const ordinal = Math.floor(scale / 2);
+        const labelOnly = await capture(
+          database,
+          () =>
+            readSubject(database.pool, people[ordinal]!, async () => true, GLOBAL_CONTEXT, new Uint8Array(32).fill(1)),
+          { includeBackends: true },
+        );
+        expect(labelOnly.value?.subject.labels.en).toBe(`Author ${String(ordinal).padStart(4, '0')}`);
+        expect(Object.values(labelOnly.value!.subject.statements).every((records) => records.length === 0)).toBe(true);
+        assertGlobalPropertyProbe(labelOnly.capture, scale, true);
         plannedScales.add(scale);
       } catch (error) {
         // Remote check workspaces are disposable; preserve the owner's raw failure in the returned log too.
