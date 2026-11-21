@@ -1067,7 +1067,8 @@ export function createSearchGenerationPublication(
     if (!retained) persistPin(job, pin);
     if (job.subject_fenced_cut) {
       const current = await sparseCut(job, client, context, meter);
-      if (!current || !current.digest.equals(job.subject_fenced_cut)) throw new Pending('source_pending');
+      if (!current || current === 'dense' || !current.digest.equals(job.subject_fenced_cut))
+        throw new Pending('source_pending');
     }
     return pin.queried;
   }
@@ -2122,11 +2123,13 @@ export function createSearchGenerationPublication(
     meter: Meter,
   ) {
     const before = await sparseCut(job, client, context, meter);
-    if (!before) return false;
+    if (before === 'dense') return null;
+    if (!before) throw new Pending('source_pending');
     const transport = validationSearch(context, meter);
     const refresh = await transport.request('POST', `/${job.physical_target}/_refresh`);
     validateRefreshResponse(refresh.status, refresh.body);
     const visible = new Set<string>();
+    let matched = true;
     for (const [partition, rows] of Map.groupBy(before.keys, (row) => row.home)) {
       const page = await sourceKeys.read({ partition, after: null, inputLimit: rows.length + 1 }, context);
       add(meter, page.cost);
@@ -2150,22 +2153,21 @@ export function createSearchGenerationPublication(
       try {
         meter.inputKeys += await assertNativeGenerationActionsVisible(transport, job.physical_target, actions);
       } catch (error) {
-        if (error instanceof GenerationReconciliationMismatch) throw new Pending('source_pending');
-        throw error;
+        if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+        matched = false;
+        break;
       }
     }
-    const matches = await matchSparseSubjectKeys(transport, job.physical_target, visible, (count) => {
-      meter.engineSearches++;
-      meter.engineIteratorSteps++;
-      meter.inputKeys += count;
-    });
-    if (!matches) throw new Pending('source_pending');
+    if (matched)
+      matched = await matchSparseSubjectKeys(transport, job.physical_target, visible, (count) => {
+        meter.engineSearches++;
+        meter.engineIteratorSteps++;
+        meter.inputKeys += count;
+      });
     const current = await sparseCut(job, client, context, meter);
+    if (current === 'dense') return null;
     if (!current || !before.digest.equals(current.digest)) throw new Pending('source_pending');
-    job.subject_fenced_cut = current.digest;
-    job.phase = 'reconciled';
-    job.home = 4096;
-    return true;
+    return matched ? current.digest : null;
   }
 
   async function advance(
@@ -2871,14 +2873,12 @@ export function createSearchGenerationPublication(
                 const retained = jobPin(job);
                 if (!retained || !sameGenerationPublicationPin(retained, source)) throw new Pending('source_pending');
               } else await held(job, context, meter);
-              // Revisit the real finite key population under the continuously held writer/copy barrier.
-              job.fenced_pass = true;
-              job.pass = (BigInt(job.pass) + 1n).toString();
-              job.phase = 'subject';
-              job.home = 0;
-              job.after_id = null;
-              job.after_route = null;
-              bookPreparationTiming?.mark('writerDrain');
+              // Fencing starts at the completed first-pass frontier. Home zero in fencing
+              // retains one inconclusive sparse comparison for a fresh activation turn.
+              const retryingSparse = job.home === 0;
+              if (!retryingSparse) bookPreparationTiming?.mark('writerDrain');
+              let proofCost = meter;
+              let cut: Buffer | null = null;
               if (
                 source &&
                 !registry &&
@@ -2887,28 +2887,42 @@ export function createSearchGenerationPublication(
                 (options?.batchSource ||
                   meter.inputKeys + 12 * SPARSE_SUBJECT_KEYS + 80 < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT)
               ) {
-                // The drain paid for current Source completion. The bounded physical proof runs
-                // as its own turn under the same admission token, alias lock and absolute deadline.
-                const proofCost = options?.batchSource ? cost() : meter;
-                let matched = false;
+                proofCost = options?.batchSource ? cost() : meter;
                 try {
-                  matched = await reconcileSparseSubject(job, client, context, proofCost);
+                  cut = await reconcileSparseSubject(job, client, context, proofCost);
                 } catch (error) {
                   if (
                     !(error instanceof SearchUnavailableError) &&
                     !(error instanceof Pending && error.reason === 'source_pending')
                   )
                     throw error;
+                  if (!retryingSparse) {
+                    job.home = 0;
+                    await save(client, job, meter);
+                    return {
+                      ...preparing('activate', true),
+                      ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
+                    };
+                  }
                 }
-                if (matched) await prepareIntent(job, client, context, proofCost, source.queried);
-                else await save(client, job, meter);
-                return {
-                  ...preparing(matched ? 'activate' : 'step', true),
-                  ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
-                };
               }
-              await save(client, job, meter);
-              return preparing('step', true);
+              job.fenced_pass = true;
+              job.pass = (BigInt(job.pass) + 1n).toString();
+              job.after_id = null;
+              job.after_route = null;
+              job.subject_fenced_cut = cut;
+              if (source && cut) {
+                job.home = 4096;
+                await prepareIntent(job, client, context, proofCost, source.queried);
+              } else {
+                job.phase = 'subject';
+                job.home = 0;
+                await save(client, job, meter);
+              }
+              return {
+                ...preparing(cut ? 'activate' : 'step', true),
+                ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
+              };
             }
             if (job.phase !== 'intent') {
               const queried = await adoptHeld(job, client, context, meter);

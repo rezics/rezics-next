@@ -58,13 +58,26 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
   });
   const release = await readRelease(pool, f.meaning.digest);
   if (!release) throw new Error('Missing original publication meaning');
+  const sourceKeys = createSubjectSourceKeyPages(pool, f.config.routeKey, f.config.access);
+  const quietCommand = (partition: number) =>
+    runCommand(pool, { partition }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
+    }));
+  let proofReads: number | undefined;
   const publication = createSearchGenerationPublication({
     subjectSubscriptionProtocol: 1,
     pool,
     search,
     source,
     binding,
-    sourceKeys: createSubjectSourceKeyPages(pool, f.config.routeKey, f.config.access),
+    sourceKeys: {
+      async read(request, context) {
+        const page = await sourceKeys.read(request, context);
+        if (request.partition === 47 && proofReads !== undefined && ++proofReads === 1) await quietCommand(47);
+        return page;
+      },
+    },
     readPublicationCompletion: (request, ctx) => readNativePublicFilterPublicationCompletion(binding, request, ctx),
     clock: f.config.clock,
     meaning: retainNativePublicFilterMeaning({ digest: f.meaning.digest, release }, hasVerifiedReleaseDigest),
@@ -127,11 +140,6 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       expect((await pool.query('SELECT FROM semantic.subject_access_page_v1 WHERE birth=$1', [birth])).rowCount).toBe(
         0,
       );
-      const quietCommand = (partition: number) =>
-        runCommand(pool, { partition }, async () => ({
-          value: null,
-          events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
-        }));
       // A full 64-home ACK has nonzero bases and a later committed singleton in every home.
       for (let home = 64; home < 128; home++) await quietCommand(home);
       const base = await position(70);
@@ -140,7 +148,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       await search.request('POST', '/' + target + '/_refresh');
       let reconciled = false;
       let cleanLeaf: string | undefined;
-      const prefix = () =>
+      const readAckPrefix = () =>
         pool.query<{ first_home: number; width: number; revision: string }>(
           `WITH basis AS MATERIALIZED (SELECT search.public_filter_ack_basis_v1(true) AS value)
          SELECT n.first_home,n.width,n.revision FROM search.public_filter_ack_range n,basis
@@ -161,12 +169,12 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         if (activation.status !== 'preparing' && activation.status !== 'activated')
           throw new Error('reason' in activation ? activation.reason : activation.status);
         if (!cleanLeaf) {
-          const { rows } = await prefix();
+          const { rows } = await readAckPrefix();
           if (rows.length === 3) {
             cleanLeaf = rows[0]!.revision;
             // An interior cleanup changes this page and its parents in the original binding.
             await pool.query('SELECT core.advance_subject_cleanup_v1(45)');
-            expect((await prefix()).rows).toEqual([rows[0]!]);
+            expect((await readAckPrefix()).rows).toEqual([rows[0]!]);
           }
         }
         const proof = (
@@ -227,11 +235,42 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         await pool.query('SELECT core.advance_subject_cleanup_v1(73)');
         await expect(reopen()).rejects.toThrow();
         expect(await reopen()).toEqual(sealed);
-        const extended = (await prefix()).rows;
+        const extended = (await readAckPrefix()).rows;
         expect(extended).toHaveLength(3);
         if (cleanLeaf === undefined) throw new Error('Missing original clean leaf');
         expect(extended[0]!.revision).toBe(cleanLeaf);
-        return;
+
+        // A real command advances an occupied home between the two sparse cuts.
+        // The same drained writer must retry against the original completed Source.
+        proofReads = 0;
+        let retryFence: string | undefined;
+        for (let offer = 0; offer < 32; offer++) {
+          const result = await publication.activate(prepared.job, context(), { batchSource: true });
+          if (result.status === 'activated') {
+            expect(proofReads).toBe(2);
+            expect(retryFence).toBeString();
+            expect((await subjectGenerations(search, prefix)).active).toBe(1);
+            return;
+          }
+          expect(result).toMatchObject({ status: 'preparing', next: 'activate' });
+          if (proofReads) {
+            const job = (
+              await pool.query(
+                'SELECT phase,pass,fence,subject_fenced_cut FROM search.generation_publication WHERE job=$1',
+                [prepared.job.job],
+              )
+            ).rows[0];
+            if (proofReads === 1) {
+              expect(job).toMatchObject({ phase: 'fencing', pass: '1', subject_fenced_cut: null });
+              expect((await subjectGenerations(search, prefix)).active).toBeNull();
+              retryFence = job.fence;
+            } else {
+              expect(job).toMatchObject({ phase: 'intent', pass: '2', fence: retryFence });
+              expect(job.subject_fenced_cut).toHaveLength(32);
+            }
+          }
+        }
+        throw new Error('Drained publication did not activate');
       }
       throw new Error('Original publication did not acknowledge all 4096 homes');
     }

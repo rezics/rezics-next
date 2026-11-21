@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { assertCompleteSearch } from './complete-search.ts';
 import type { PoolClient } from 'pg';
-import type { OpenSearch } from './opensearch.ts';
+import { type OpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { readRepairWinnerCheckpoint } from './public-filter-repair-checkpoint.ts';
 import type { SearchWriterPublicationFence } from './writer-guard.ts';
 
@@ -19,7 +19,7 @@ export async function readSparseSubjectCut(
   client: PoolClient,
   search: OpenSearch,
   owner: SearchWriterPublicationFence,
-): Promise<Cut | null> {
+): Promise<Cut | 'dense' | null> {
   const { consumer, job, fence } = owner;
   const result = await client.query<{ keys: Candidate[]; authority: string | null; gate_revision: string }>(
     `WITH inventory AS MATERIALIZED (
@@ -44,8 +44,8 @@ export async function readSparseSubjectCut(
     [job, fence, consumer.physicalTarget, consumer.incarnation, SPARSE_SUBJECT_KEYS + 1, consumer],
   );
   const cut = result.rows[0];
-  if (!cut?.authority || cut.keys.length > SPARSE_SUBJECT_KEYS || cut.keys.some((row) => row.position === null))
-    return null;
+  if (cut && cut.keys.length > SPARSE_SUBJECT_KEYS) return 'dense';
+  if (!cut?.authority || cut.keys.some((row) => row.position === null)) return null;
   const physical = await readRepairWinnerCheckpoint(search, consumer.physicalTarget, consumer.incarnation);
   const digest = createHash('sha256')
     .update(JSON.stringify([owner.job, fence, consumer.incarnation, cut, physical]))
@@ -91,14 +91,15 @@ export async function matchSparseSubjectKeys(
     assertCompleteSearch(body);
     const keys = body.aggregations?.keys;
     if (status !== 200 || !keys || !Array.isArray(keys.buckets) || keys.buckets.length > SPARSE_SUBJECT_KEYS + 1)
-      return false;
+      throw new SearchUnavailableError('Sparse Subject key enumeration is unavailable');
     examined(keys.buckets.length);
     for (const bucket of keys.buckets) {
       if (bucket?.doc_count !== 1 || typeof bucket.key?.id !== 'string' || !remaining.delete(bucket.key.id))
         return false;
     }
     if (keys.after_key === undefined) return remaining.size === 0;
-    if (!keys.buckets.length || typeof keys.after_key?.id !== 'string') return false;
+    if (!keys.buckets.length || typeof keys.after_key?.id !== 'string')
+      throw new SearchUnavailableError('Sparse Subject key enumeration cannot advance');
     after = keys.after_key;
   }
   return false;

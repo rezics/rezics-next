@@ -2236,14 +2236,16 @@ Physical observation, materialization, and original repair still begin after rec
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
-barrier. For a cold shared Subject job with a committed receiver manifest, the drained writer may fund one
+barrier. For a cold shared Subject job with a committed receiver manifest, the drained writer may fund a
 bounded physical comparison under the same fence. The raw Subject primary-key scan admits at most 32 keys plus a
 lookahead. Source must return complete pages for their homes. The ordinary writer supplies current actions, bodies
 and external versions. Search refreshes the physical UUID and exhausts its composite key enumeration. The shard
 checkpoints, occupied home heads, placement, receiver and writer clocks must match across that work. A larger
-population continues on the paged pass. The retained digest is checked again against the live fence before alias
-intent, switch and confirmation. Source evidence comes from `readNativePublicFilterPublicationCompletion` for the original persisted
-job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
+population or a physical mismatch continues on the paged pass. An inconclusive read or changed cut retains the
+fence for one more bounded comparison. Activation rechecks the original Source completion and drain on that
+turn. A second inconclusive comparison resumes the paged pass. Activation rechecks the retained digest against
+the live fence before alias intent, switch and confirmation. Source evidence comes from
+`readNativePublicFilterPublicationCompletion` for the original persisted job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
 dispatch or adoption, and resumes the same repair after restart. Changed-since-start remains a disclosure fact;
 verified original repair, current ACK, independent settlement and no pending or unresolved homes still gate
 maintenance completion. Missing custody, routing, Source or native
