@@ -1,14 +1,16 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createNativeEconomyLedger, createNativeEconomyWallet } from '../../src/composition/economy.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withBoundedReadConnection } from '../../src/database/pool.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
@@ -24,8 +26,12 @@ const routeKey = new Uint8Array(32).fill(81);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) };
 const readScope = 'wallet:read';
 const gate = 'gate:economy';
+const operatorAction = 'exposure:close';
+const resourceAction = 'fixture:resource_read';
+const resourcePath = '/v1/economy/resource-fixture';
+const fixedPaths = ['/v1/economy/global-operator-fixture', '/v1/economy/global-operator-sibling'] as const;
 const readScopes = [readScope, 'spot:read', 'market:read'] as const;
-const grantScopes = ['access:grant', 'exposure:open', 'gate:any', ...readScopes] as const;
+const grantScopes = ['access:grant', 'exposure:open', operatorAction, 'gate:any', ...readScopes] as const;
 const bookId = 'governance-acceptance';
 const assetId = 'points';
 const wallets = '/v1/economy/wallets';
@@ -49,6 +55,7 @@ let authCreated = false;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
 let kernel: ReturnType<typeof createKernel>;
+let nativeAccess: ReturnType<typeof createAccess>;
 
 beforeAll(async () => {
   database = await openIsolatedEconomyDatabase();
@@ -64,6 +71,38 @@ beforeAll(async () => {
     routeKey,
     tokens,
     receiptKeys: testReceiptKeys(),
+    onAccessReady(access) {
+      nativeAccess = access;
+    },
+    modules: [
+      (app) => {
+        for (const [index, path] of fixedPaths.entries()) {
+          const detail = {
+            operationId: index === 0 ? 'fixture.global_operator' : 'fixture.global_operator_sibling',
+            'x-exposure': gate,
+            'x-action': operatorAction,
+            'x-authority-resource-types': ['semantic.context'],
+            'x-authority-resource-id': PLATFORM_RESOURCE.id,
+            security: [{ bearerAuth: [] }],
+          };
+          app.get(path, { detail }, async ({ authorize, job }) => {
+            const check = await authorize(PLATFORM_RESOURCE);
+            if (!(await withBoundedReadConnection(pool, job.deadline, check))) throw new ProblemError('forbidden');
+            return { accepted: true };
+          });
+        }
+        const detail = {
+          operationId: 'fixture.resource_read',
+          'x-exposure': gate,
+          'x-action': resourceAction,
+          'x-authority-resource-types': ['semantic.context'],
+          security: [{ bearerAuth: [] }],
+        };
+        app.get(`${resourcePath}/:resourceId`, { detail }, () => {
+          throw new ProblemError('not_found');
+        });
+      },
+    ],
     economy: createNativeEconomyWallet(pool, { bookId, node: 'b' }),
     access: (config) =>
       createAccess({
@@ -101,7 +140,7 @@ beforeAll(async () => {
   await service.internal.registerClient({
     clientId,
     firstParty: true,
-    scopes: [...grantScopes, gate, 'exposure:read'],
+    scopes: [...grantScopes, gate, resourceAction, 'exposure:read'],
   });
   await host.start();
 }, 90_000);
@@ -169,8 +208,8 @@ function call(path: string, bearer?: string, payload?: object) {
   );
 }
 
-function directGrant(accountId: string) {
-  return { resource: PLATFORM_RESOURCE, subject: { kind: 'account', id: accountId }, actions: [gate], valid: '(,)' };
+function directGrant(accountId: string, action: string = gate) {
+  return { resource: PLATFORM_RESOURCE, subject: { kind: 'account', id: accountId }, actions: [action], valid: '(,)' };
 }
 
 async function economyDiscovery(bearer: string | undefined, visible: boolean) {
@@ -283,4 +322,96 @@ test('Global governance grants Economy access individually and cannot open its r
   expect({ status: revoked.status, body: await revoked.json() }).toMatchObject({ status: 200 });
   await expectClosed(member.bearer);
   await expectOwnWallet(other.bearer, '37');
-}, 60_000);
+
+  const tester = await person('economy_fixed_operator', [operatorAction]);
+  const combined = await issue(tester.email, [operatorAction, readScope, resourceAction]);
+  const noRepairScope = await issue(tester.email, [readScope]);
+  const document = async (bearer?: string) => {
+    const response = await call('/v1/openapi.json', bearer);
+    expect(response.status).toBe(200);
+    return (await response.json()).paths as Record<string, Record<string, { operationId?: string }>>;
+  };
+  const expectOperatorDiscovery = async (bearer: string, visible: boolean) => {
+    const paths = await document(bearer);
+    for (const path of fixedPaths) expect(paths[path] !== undefined).toBe(visible);
+    expect(
+      Object.values(paths)
+        .flatMap((methods) => Object.values(methods))
+        .some((operation) => operation.operationId === 'exposure.close'),
+    ).toBe(true);
+    const groups = await call('/v1/platform/exposure', bearer);
+    expect(groups.status).toBe(200);
+    expect(((await groups.json()) as { admitted: string[] }).admitted.includes('economy')).toBe(visible);
+  };
+  const assign = async (action: string) => {
+    expect((await call('/v1/grants', operator.bearer, directGrant(tester.accountId, action))).status).toBe(201);
+  };
+  const remove = async (action: string) => {
+    expect((await call('/v1/grants:revoke', operator.bearer, directGrant(tester.accountId, action))).status).toBe(200);
+  };
+
+  await expectOperatorDiscovery(tester.bearer, false);
+  await assign(operatorAction);
+  await expectOperatorDiscovery(tester.bearer, false);
+  await assign('gate:any');
+  await expectOperatorDiscovery(tester.bearer, false);
+  expect((await call(fixedPaths[0], tester.bearer)).status).toBe(403);
+  await remove(operatorAction);
+  await assign(gate);
+  await expectOperatorDiscovery(tester.bearer, false);
+  expect((await call(fixedPaths[0], tester.bearer)).status).toBe(403);
+  const ordinaryPaths = await document(combined);
+  expect(ordinaryPaths[publicWallet]).toBeDefined();
+  expect(ordinaryPaths[`${resourcePath}/{resourceId}`]).toBeDefined();
+  expect(ordinaryPaths[fixedPaths[0]]).toBeUndefined();
+
+  // Observe the real native decisions. Two mounted operations share one Global action per request.
+  await assign(operatorAction);
+  const prepare = nativeAccess.prepareReadDecisions!.bind(nativeAccess);
+  let fixedChecks = 0;
+  const probe = spyOn(nativeAccess, 'prepareReadDecisions').mockImplementation(async (input) => {
+    const prepared = await prepare(input);
+    return {
+      ...prepared,
+      async decide(...args) {
+        if (args[1].action === operatorAction) {
+          expect(args[1]).toEqual({
+            action: operatorAction,
+            resourceType: 'semantic.context',
+            ids: [PLATFORM_RESOURCE.id],
+          });
+          fixedChecks++;
+        }
+        return prepared.decide(...args);
+      },
+    };
+  });
+  try {
+    await expectOperatorDiscovery(tester.bearer, true);
+    expect(fixedChecks).toBe(2);
+  } finally {
+    probe.mockRestore();
+  }
+  expect((await document(noRepairScope))[fixedPaths[0]]).toBeUndefined();
+  expect((await call(fixedPaths[0], tester.bearer)).status).toBe(200);
+
+  const outage = spyOn(nativeAccess, 'prepareReadDecisions').mockImplementation(async (input) => {
+    if (input.actions.has(operatorAction)) throw new AccessUnavailableError('overloaded');
+    return prepare(input);
+  });
+  try {
+    for (const path of ['/v1/openapi.json', '/v1/platform/exposure']) {
+      const response = await call(path, tester.bearer);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ code: 'overloaded' });
+    }
+  } finally {
+    outage.mockRestore();
+  }
+  await remove(operatorAction);
+  await expectOperatorDiscovery(tester.bearer, false);
+  expect((await document(combined))[publicWallet]).toBeDefined();
+  await assign(operatorAction);
+  await remove(gate);
+  await expectOperatorDiscovery(tester.bearer, false);
+}, 90_000);

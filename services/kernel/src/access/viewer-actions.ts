@@ -8,8 +8,7 @@ import { withViewerActionsReadSnapshot } from './viewer-actions-read-connection.
 import { viewerActionReadTime } from './read-bindings.ts';
 import { requiresExplicitExposureGrant } from './gates/catalogue.ts';
 import { authorizeExposureGroup } from './gates/admission.ts';
-import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
-import { parseExposure, type Exposure } from './gates/declaration.ts';
+import { fixedGlobalResourceId, parseExposure, type Exposure } from './gates/declaration.ts';
 import openGroups from './gates/open-groups.sql';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import type { createApp } from '../http/app.ts';
@@ -82,17 +81,7 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
       throw new Error(`${route.method} ${route.path}: invalid x-authority-anchor`);
     if (authority === 'own-account' && anchor === undefined)
       throw new Error(`${route.method} ${route.path}: own-account requires x-authority-resource-types`);
-    const fixedResourceId = detail['x-authority-resource-id'];
-    if (
-      fixedResourceId !== undefined &&
-      (fixedResourceId !== PLATFORM_RESOURCE.id ||
-        authority !== 'resource' ||
-        !Array.isArray(anchor) ||
-        anchor.length !== 1 ||
-        anchor[0] !== 'semantic.context' ||
-        detail['x-account-authority'] !== undefined)
-    )
-      throw new Error(`${route.method} ${route.path}: invalid x-authority-resource-id`);
+    const fixedResourceId = fixedGlobalResourceId(detail, route);
     if (types === undefined) continue;
     if (
       !Array.isArray(types) ||
@@ -122,7 +111,7 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
           operationId: detail.operationId,
           exposure: parseExposure(detail),
           authority,
-          ...(fixedResourceId === undefined ? {} : { fixedResourceId: fixedResourceId as string }),
+          ...(fixedResourceId === undefined ? {} : { fixedResourceId }),
           ...(accountAuthority === undefined ? {} : { accountAuthority: accountAuthority as AccountAuthorityKind }),
         }),
       );

@@ -7,12 +7,14 @@ import {
   type ExposureCatalogue,
   type ExposureOperation,
 } from '@rezics/access';
+import { releaseOperationalTime } from '../../command/command.ts';
 import { withBoundedReadConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
-import type { Access, Actor } from '../../request/access.ts';
-import { requiresExplicitExposureGrant } from './catalogue.ts';
+import { prepareReadDecisions, type Access, type Actor } from '../check.ts';
+import { readNativeAccessTime } from '../native-time.ts';
+import { GLOBAL_CONTEXT, requiresExplicitExposureGrant } from './catalogue.ts';
 import { authorizeExposureGroup } from './admission.ts';
-import { parseExposure } from './declaration.ts';
+import { fixedGlobalResourceId, parseExposure } from './declaration.ts';
 import openGroups from './open-groups.sql';
 
 export type VisibleOperation = {
@@ -27,13 +29,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+type MountedOperation = ExposureOperation & Readonly<{ fixedGlobalResourceId?: string }>;
+type MountedCatalogue = Omit<ExposureCatalogue, 'operations'> & Readonly<{ operations: readonly MountedOperation[] }>;
+
 /** Mounted contract operations. Hidden routes are omitted, matching the generated document. */
-export function classifyExposureRoutes(routes: readonly MountedRoute[]): readonly ExposureOperation[] {
-  const operations: ExposureOperation[] = [];
+export function classifyExposureRoutes(routes: readonly MountedRoute[]): readonly MountedOperation[] {
+  const operations: MountedOperation[] = [];
   for (const route of routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : undefined;
     if (detail?.hide === true) continue;
     const exposure = parseExposure(detail);
+    const fixedResourceId = exposure.kind === 'gate' && detail ? fixedGlobalResourceId(detail, route) : undefined;
     const operationId = detail?.operationId;
     if (typeof operationId !== 'string') throw new Error(`${route.method} ${route.path}: routes declare operationId`);
     operations.push(
@@ -43,16 +49,17 @@ export function classifyExposureRoutes(routes: readonly MountedRoute[]): readonl
         operationId,
         action: actionLabelOfMountedRoute(route),
         exposure,
+        ...(fixedResourceId === undefined ? {} : { fixedGlobalResourceId: fixedResourceId }),
       }),
     );
   }
   return Object.freeze(operations);
 }
 
-const deploymentCatalogues = new WeakMap<readonly MountedRoute[], ExposureCatalogue>();
+const deploymentCatalogues = new WeakMap<readonly MountedRoute[], MountedCatalogue>();
 
 /** Cache only immutable mounted policy facts; opening and authority observations remain request-local. */
-export function mountedExposureCatalogue(routes: readonly MountedRoute[]): ExposureCatalogue {
+export function mountedExposureCatalogue(routes: readonly MountedRoute[]): MountedCatalogue {
   let catalogue = deploymentCatalogues.get(routes);
   if (!catalogue) {
     catalogue = compileExposureCatalogue(classifyExposureRoutes(routes));
@@ -69,6 +76,50 @@ type DiscoveryInput = {
   deadline: number;
   clock: () => Date;
 };
+
+/** One native decision per distinct in-scope fixed Global action, after exposure admission. */
+async function checkFixedGlobalActions(
+  input: DiscoveryInput,
+  operations: readonly MountedOperation[],
+  at: string,
+): Promise<ReadonlySet<string>> {
+  const { viewer, pool, deadline } = input;
+  const allowed = new Set<string>();
+  if (viewer.kind !== 'account') return allowed;
+  const actions = new Set(
+    operations.flatMap((operation) =>
+      operation.fixedGlobalResourceId !== undefined && viewer.scopes.includes(operation.action)
+        ? [operation.action]
+        : [],
+    ),
+  );
+  if (!actions.size) return allowed;
+  const context = { pool, deadline };
+  const time = await readNativeAccessTime(context, undefined, at);
+  try {
+    const resourceType = 'semantic.context';
+    const decisions = await prepareReadDecisions(input.access, {
+      actor: viewer,
+      actions,
+      typeActions: new Map([[resourceType, actions]]),
+      context,
+      time,
+    });
+    return await withBoundedReadConnection(pool, deadline, async (client) => {
+      for (const action of actions) {
+        const answer = await decisions.decide(client, { action, resourceType, ids: [GLOBAL_CONTEXT.id] }, time);
+        if (answer[GLOBAL_CONTEXT.id]?.allowed === true) allowed.add(action);
+      }
+      requireAccessDeadline(deadline);
+      return allowed;
+    });
+  } catch (error) {
+    throwAccessUnavailable(error, deadline);
+    throw error;
+  } finally {
+    releaseOperationalTime(time);
+  }
+}
 
 /** Read openings and ask admission's formula once per closed group with an in-scope operation. */
 async function discover(input: DiscoveryInput): Promise<readonly ExposureOperation[]> {
@@ -125,7 +176,7 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
       held.add(group);
     }
   }
-  return operations.filter((operation) => {
+  const exposed = operations.filter((operation) => {
     const group = operation.exposure.kind === 'gate' ? operation.exposure.group : undefined;
     return decideExposure({
       exposure: operation.exposure,
@@ -135,6 +186,10 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
       gateAuthority: group !== undefined && held.has(group),
     }).allowed;
   });
+  const qualified = await checkFixedGlobalActions(input, exposed, instant);
+  return exposed.filter(
+    ({ fixedGlobalResourceId, action }) => fixedGlobalResourceId === undefined || qualified.has(action),
+  );
 }
 
 /** Mounted groups that are open or have at least one visible operation for this viewer. */
