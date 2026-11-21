@@ -2,17 +2,25 @@ import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
-import { isEconomyBookId } from '../economy/contract.ts';
+import { isEconomyBookId, type ExpiredAssetProgram } from '../economy/contract.ts';
 import { createNativeMarket } from '../economy/storage/market-runner.ts';
 import type { MarketStoreDatabase } from '../economy/storage/market-store.ts';
 import { WORK_APPLICATION } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
-import { createNativeEconomyDatabase } from './economy.ts';
+import { createNativeEconomyDatabase, createNativeEconomyLedger } from './economy.ts';
 import { createNativeEconomySpotWork } from './economy-spot.ts';
 
 type BookBinding = Readonly<{ bookId: string; node: string }>;
 type MarketBinding = BookBinding & Readonly<{ itemHomeId: string }>;
 type MatchContinuation = Readonly<{ kind: 'match-page'; root: string; after: string; book: BookBinding }>;
+
+type CreditPage = Readonly<{
+  kind: 'credit-page';
+  root: string;
+  book: BookBinding;
+  program: ExpiredAssetProgram;
+  afterAccount: string | null;
+}>;
 
 type NamedSchedule = Readonly<{ name: string; workflow: string }>;
 export const ECONOMY_SPOT_OWNER_WORK = {
@@ -23,7 +31,12 @@ export const ECONOMY_MARKET_OWNER_WORK = {
   name: 'economy.market.ownerWork.every-10-seconds',
   workflow: 'economy.market.ownerWork',
 } satisfies NamedSchedule;
+export const ECONOMY_CREDIT_EXPIRY_WORK = {
+  name: 'economy.creditExpiry.every-10-seconds',
+  workflow: 'economy.creditExpiry',
+} satisfies NamedSchedule;
 const marketWindow = 16;
+const creditWindow = 32;
 
 function binding(env: WorkContext['env']) {
   const bookId = env.KERNEL_ECONOMY_BOOK_ID;
@@ -34,8 +47,8 @@ function binding(env: WorkContext['env']) {
   if (itemHomeId !== undefined && !isEconomyBookId(itemHomeId))
     throw new ConfigError('KERNEL_ECONOMY_MARKET_ITEM_HOME_ID');
   if (bookId === undefined || node === undefined) return {};
-  const spot = { bookId, node };
-  return { spot, market: itemHomeId === undefined ? undefined : { ...spot, itemHomeId } };
+  const book = { bookId, node };
+  return { book, market: itemHomeId === undefined ? undefined : { ...book, itemHomeId } };
 }
 
 function matchesBook(value: unknown, expected: BookBinding): value is BookBinding {
@@ -213,13 +226,114 @@ function registerMarket(context: WorkContext, target?: MarketBinding) {
   );
 }
 
+function registerCreditExpiry(context: WorkContext, book?: BookBinding) {
+  if (!book) {
+    DBOS.registerWorkflow(async () => ({ kind: 'disabled' }), { name: ECONOMY_CREDIT_EXPIRY_WORK.workflow });
+    return;
+  }
+  const ledger = createNativeEconomyLedger(context.pool, book.bookId);
+  const nextProgram = DBOS.registerStep(ledger.nextExpiredAssetProgram, { name: 'economy.creditExpiry.nextProgram' });
+  const listAccounts = DBOS.registerStep(ledger.listExpiredProgramCredits, {
+    name: 'economy.creditExpiry.listAccounts',
+  });
+  const expire = DBOS.registerStep(
+    async (assetId: string, accountId: string) => {
+      try {
+        return (await ledger.expireProgramCredits({ assetId, accountId })).kind === 'ok';
+      } catch {
+        return false;
+      }
+    },
+    { name: 'economy.creditExpiry.expireAccount' },
+  );
+  const retire = DBOS.registerStep(
+    async (assetId: string) => {
+      try {
+        return (await ledger.retireExpiredAssetProgram(assetId)).kind === 'ok';
+      } catch {
+        return false;
+      }
+    },
+    { name: 'economy.creditExpiry.retireProgram' },
+  );
+  const enqueueNext = DBOS.registerStep(
+    async (page: CreditPage) => {
+      const id = createHash('sha256')
+        .update(JSON.stringify([page.book, page.root, page.program, page.afterAccount]))
+        .digest('hex');
+      const handle = await context.client.enqueue(
+        {
+          workflowName: ECONOMY_CREDIT_EXPIRY_WORK.workflow,
+          queueName: 'maintenance',
+          workflowID: `economy:credit-expiry:page:${id}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        page,
+      );
+      return handle.workflowID;
+    },
+    { name: 'economy.creditExpiry.enqueuePage' },
+  );
+
+  DBOS.registerWorkflow(
+    async (argument?: Date | CreditPage, scheduledBook?: unknown) => {
+      const continuation =
+        typeof argument === 'object' && argument !== null && 'kind' in argument && argument.kind === 'credit-page'
+          ? argument
+          : undefined;
+      if (!matchesBook(continuation?.book ?? scheduledBook, book)) return { kind: 'disabled' };
+      const selected = continuation ? { kind: 'ok' as const, value: continuation.program } : await nextProgram();
+      if (selected.kind !== 'ok') return { kind: 'unavailable' };
+      const program = selected.value;
+      if (!program) return { kind: 'idle' };
+
+      const after = continuation?.afterAccount;
+      const page = await listAccounts({
+        assetId: program.assetId,
+        limit: creditWindow,
+        ...(after == null ? {} : { after }),
+      });
+      let expired = 0;
+      let deferred = 0;
+      let nextAsset: ExpiredAssetProgram | null = program;
+      const nextAccount = page.kind === 'ok' ? page.value.next : null;
+      if (page.kind === 'ok') {
+        for (const accountId of page.value.accounts) {
+          if (await expire(program.assetId, accountId)) expired++;
+          else deferred++;
+        }
+      } else deferred++;
+      if (nextAccount === null) {
+        // Retirement is conditional on the native wallet check. Retry earlier failures on the next sweep.
+        if (!(await retire(program.assetId))) deferred++;
+        const following = await nextProgram(program);
+        nextAsset = following.kind === 'ok' ? following.value : null;
+        if (following.kind !== 'ok') deferred++;
+      }
+      const next = nextAsset
+        ? await enqueueNext({
+            kind: 'credit-page',
+            root: continuation?.root ?? DBOS.workflowID!,
+            book,
+            program: nextAsset,
+            afterAccount: nextAccount,
+          })
+        : null;
+      return { kind: 'advanced', expired, deferred, next };
+    },
+    { name: ECONOMY_CREDIT_EXPIRY_WORK.workflow },
+  );
+}
+
 export const economyOwnerWorkModule: WorkModule = {
   name: 'economy',
   async register(context) {
-    const { spot, market } = binding(context.env);
-    registerSpot(context, spot);
+    const { book, market } = binding(context.env);
+    registerSpot(context, book);
     registerMarket(context, market);
-    await reconcileSchedule(context.client, ECONOMY_SPOT_OWNER_WORK, spot);
+    registerCreditExpiry(context, book);
+    await reconcileSchedule(context.client, ECONOMY_SPOT_OWNER_WORK, book);
     await reconcileSchedule(context.client, ECONOMY_MARKET_OWNER_WORK, market);
+    await reconcileSchedule(context.client, ECONOMY_CREDIT_EXPIRY_WORK, book);
   },
 };

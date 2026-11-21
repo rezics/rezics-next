@@ -18,6 +18,9 @@ export type AssetProgram = EconomyAsset &
     expiresAt: string | null;
   }>;
 
+/** A native expiry key that preserves the database timestamp's full precision. */
+export type ExpiredAssetProgram = Readonly<{ assetId: string; expiresAt: string }>;
+
 export type WalletBalance = Readonly<{
   asset: EconomyAsset;
   posted: string;
@@ -131,6 +134,8 @@ export interface EconomyLedger extends EconomyWalletPort {
   redeemProgramUnits(
     input: WalletKey & Readonly<{ amount: string; redemptionReference: string }>,
   ): Promise<EconomyResult<EconomyReceipt>>;
+  nextExpiredAssetProgram(after?: ExpiredAssetProgram): Promise<EconomyResult<ExpiredAssetProgram | null>>;
+  retireExpiredAssetProgram(assetId: string): Promise<EconomyResult<boolean>>;
   expireProgramCredits(input: WalletKey): Promise<EconomyResult<EconomyReceipt>>;
   listExpiredProgramCredits(
     input: Readonly<{ assetId: string; limit: number; after?: string }>,
