@@ -27,7 +27,7 @@ import { readPartitions, readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
 import { relatedReadEligibility } from './eligibility.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
-import { slotId, slotView } from './slots.ts';
+import { propertySlotViews, slotId, slotView } from './slots.ts';
 import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
@@ -56,6 +56,7 @@ import readSubjectIdentity from './read-subject-identity.sql';
 import readSubjectStatement from './read-subject.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
+import globalLinkPreviews from './subject-global-link-previews.sql';
 import readSourceMembers from './source-records-members.sql';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
 export type { RelatedState } from './related-subject-read.ts';
@@ -1131,46 +1132,56 @@ async function readSubjectNative(
           const relationCounts: Record<string, number> = {};
           if (allowed) {
             const properties = release.types[rows[0]!.type]!.properties;
+            const relations = properties.filter((property) => isRelationProperty(release, property));
+            const scalarViews = await propertySlotViews(
+              client,
+              subjectId,
+              properties.filter((property) => !isRelationProperty(release, property)),
+              context,
+              defaults,
+            );
+            const globalRows = relations.length
+              ? await globalLinkPreviews.run(client, {
+                  route,
+                  subject_id: subjectId,
+                  properties: relations,
+                  page_limit: context === GLOBAL_SUBJECT_CONTEXT ? 13 : 12,
+                })
+              : [];
+            const globalPages = Map.groupBy(globalRows, (entry) => entry.property);
             for (const property of properties) {
-              if (!isRelationProperty(release, property)) {
-                const view = await slotView(client, subjectId, property, context, defaults);
+              const view = scalarViews.get(property);
+              if (view) {
                 statementFacts.push(...view.facts);
                 if (view.resolution) resolution[property] = view.resolution;
                 continue;
               }
-              const preview = (await listOutboundLinks.run(client, {
-                context_id: context,
-                route,
-                subject_id: subjectId,
-                property,
-                filter_value: NIL_UUID,
-                after_order: '',
-                after_target: NIL_UUID,
-                after_statement: NIL_UUID,
-                page_limit: 13,
-              })) as {
-                slot: string;
-                statement: string;
-                target: string | null;
-                external: string | null;
-                value: 'value' | 'somevalue' | 'novalue';
-                order_key: string;
-              }[];
+              const globalPreview = globalPages.get(property) ?? [];
+              const preview =
+                context === GLOBAL_SUBJECT_CONTEXT
+                  ? globalPreview
+                  : ((await listOutboundLinks.run(client, {
+                      context_id: context,
+                      route,
+                      subject_id: subjectId,
+                      property,
+                      filter_value: NIL_UUID,
+                      after_order: '',
+                      after_target: NIL_UUID,
+                      after_statement: NIL_UUID,
+                      page_limit: 13,
+                    })) as {
+                      slot: string;
+                      statement: string;
+                      target: string | null;
+                      external: string | null;
+                      value: 'value' | 'somevalue' | 'novalue';
+                      order_key: string;
+                    }[]);
               // Resolution describes omitted Global slots too. Keep that diagnostic at
               // the same bounded Global preview it used before Context projection rows.
               if (context !== GLOBAL_SUBJECT_CONTEXT) {
-                const inheritedPreview = (await listOutboundLinks.run(client, {
-                  context_id: GLOBAL_SUBJECT_CONTEXT,
-                  route,
-                  subject_id: subjectId,
-                  property,
-                  filter_value: NIL_UUID,
-                  after_order: '',
-                  after_target: NIL_UUID,
-                  after_statement: NIL_UUID,
-                  page_limit: 12,
-                })) as { slot: string }[];
-                for (const entry of inheritedPreview) {
+                for (const entry of globalPreview) {
                   const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
                   if (view.resolution) resolution[property] = view.resolution;
                 }
@@ -1604,7 +1615,11 @@ async function readSubjectPage(
         ...(yieldAdmission ? { yieldAdmission } : {}),
         deadline,
         prepareSummaryBatch: input.authorization.prepareSummaryBatch,
-        prepareAuthorize: input.authorization.prepareDetail,
+        // Permission preparation has its own admission stage. Release the reader's permit
+        // while it runs, then reacquire before opening the next subject snapshot.
+        prepareAuthorize: yieldAdmission
+          ? (id) => yieldAdmission(() => input.authorization.prepareDetail(id))
+          : input.authorization.prepareDetail,
         readAs: input.readAs,
       }),
     )
@@ -1626,22 +1641,25 @@ async function readSubjectPage(
   const relatedList = [...subjectIds];
   if (relatedList.length > 256) throw new TypeError('A related read accepts at most 256 ids');
   const readableIds = relatedList.filter((id) => routeOf(id) !== null);
-  const decideRelated = readableIds.length ? await input.authorization.prepareSummaryBatch() : undefined;
-  const references = await input.runNative(() =>
-    withReadTransaction(
-      pool,
-      async (client) => {
-        const decisions = decideRelated ? await decideRelated(client, readableIds) : new Map<string, boolean>();
-        return application.readRelated(
-          client,
-          readableIds.filter((id) => decisions.get(id) === true),
-        );
-      },
-      deadline,
-    ),
-  );
-
-  const active = await ports.readActiveRelease(pool);
+  let references: Awaited<ReturnType<typeof readRelatedNative>> = {};
+  if (readableIds.length) {
+    const decideRelated = await input.authorization.prepareSummaryBatch();
+    references = await input.runNative(() =>
+      withReadTransaction(
+        pool,
+        async (client) => {
+          const decisions = await decideRelated(client, readableIds);
+          return application.readRelated(
+            client,
+            readableIds.filter((id) => decisions.get(id) === true),
+          );
+        },
+        deadline,
+      ),
+    );
+  }
+  const referencedIds = Object.entries(references).map(([id, value]) => value.redirect ?? id);
+  const active = input.includeViewerActions || referencedIds.length ? await ports.readActiveRelease(pool) : null;
   let currentViewerActions: SubjectReadingPageAnswer['viewerActions'];
   if (input.includeViewerActions) {
     if (!active || !Object.hasOwn(active.release.types, result.subject.type) || !input.viewerActionBindings) {
@@ -1670,20 +1688,21 @@ async function readSubjectPage(
     }
   }
 
-  const summaries = active
-    ? await application.readSubjectSummaries(
-        {
-          client: { query: pool.query.bind(pool) },
-          pool,
-          routeKey,
-          deadline,
-          release: active.release,
-          authorize: authorizeSummary,
-        },
-        Object.entries(references).map(([id, value]) => value.redirect ?? id),
-        { languages: input.languages },
-      )
-    : new Map<string, SubjectSummary | null>();
+  const summaries =
+    active && referencedIds.length
+      ? await application.readSubjectSummaries(
+          {
+            client: { query: pool.query.bind(pool) },
+            pool,
+            routeKey,
+            deadline,
+            release: active.release,
+            authorize: authorizeSummary,
+          },
+          referencedIds,
+          { languages: input.languages },
+        )
+      : new Map<string, SubjectSummary | null>();
   for (const [id, reference] of Object.entries(references)) {
     const summary = summaries.get(reference.redirect ?? id);
     if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };

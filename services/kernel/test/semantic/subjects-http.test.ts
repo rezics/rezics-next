@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
+import { Admission } from '../../src/http/admission.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -147,6 +148,20 @@ test('a create needs an account, a structured idempotency key, a valid item and 
     action: 'subject:create',
     resource: { route: 0, id: GLOBAL_CONTEXT },
   });
+});
+
+test('a public subject read completes its permission checks with one normal permit', async () => {
+  const created = await create({ type: 'schema:Book', labels: { en: 'Single permit' } });
+  expect(created.response.status).toBe(201);
+  const id = created.body.subject.id as string;
+  await catchUpLinks(id);
+  const admission = new Admission({ permits: 1, reserved: 1, queue: 2 });
+  const app = createKernel({ pool, access: realAccess.access, tokens, routeKey, admission });
+  const result = await app.handle(new Request(`http://kernel.test/v1/subjects/${id}`));
+  expect(result.status).toBe(200);
+  expect((await result.json()).subject.id).toBe(id);
+  expect(admission.running.normal).toBe(0);
+  expect(admission.waiting).toBe(0);
 });
 
 test('a read returns the subject, its session token and the labels of its properties and readable subjects', async () => {
