@@ -106,6 +106,14 @@ export async function recordCommandRecordSourceSetCopy(
   locator: HistoryLocator,
   position: bigint | null,
 ): Promise<void> {
+  return recordCommandRecordSourceSetCopies(tx, [locator], position);
+}
+
+export async function recordCommandRecordSourceSetCopies(
+  tx: CommandTransaction,
+  locators: readonly HistoryLocator[],
+  position: bigint | null,
+): Promise<void> {
   const declaration = sets.get(tx);
   if (!declaration) return;
   const set = declaredLocator(tx, declaration);
@@ -134,22 +142,23 @@ export async function recordCommandRecordSourceSetCopy(
        INSERT INTO core.record_history_source_set_copy
          (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,
           original_transaction,original_position,producer_version)
-       SELECT $1,$2,$3,$7,$8,$9,$4,$5,1 FROM eligible
+       SELECT $1,$2,$3,$7,input.kind,input.locator,$4,$5,1 FROM eligible
+       CROSS JOIN unnest($8::text[], $9::bytea[]) AS input(kind,locator)
        ON CONFLICT (partition_no,artifact_type,locator) DO SELECT FOR SHARE
        RETURNING source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
      )
      SELECT EXISTS (SELECT 1 FROM eligible) AS original_ok,
-       EXISTS (SELECT 1 FROM copy WHERE (source_partition,set_locator,set_revision)=($1,$2,$3)
+       (SELECT count(*) FROM copy WHERE (source_partition,set_locator,set_revision)=($1,$2,$3)
          AND original_transaction=$4 AND producer_version=1
-         AND (original_position IS NULL OR $5::bigint IS NULL OR original_position=$5)) AS copy_ok`,
+         AND (original_position IS NULL OR $5::bigint IS NULL OR original_position=$5)) = cardinality($8::text[]) AS copy_ok`,
     [
       ...key,
       set.transactionId,
       position?.toString() ?? null,
       set.revision,
       command.partition,
-      locator.artifactType,
-      Buffer.from(encodeLocator(locator)),
+      locators.map((locator) => locator.artifactType),
+      locators.map((locator) => Buffer.from(encodeLocator(locator))),
     ],
   );
   if (!accepted.rows[0]?.original_ok) throw new TypeError('Conflicting immutable native record source set');

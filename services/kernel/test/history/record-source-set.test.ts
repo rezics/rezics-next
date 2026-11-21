@@ -10,6 +10,7 @@ import {
 import {
   type SemanticRecordSourceSet,
   recordCommandRecordSourceSetCopy,
+  recordCommandRecordSourceSetCopies,
   validateRecordSourceSetCommitment,
 } from '../../src/history/adapters/record-source-set.ts';
 import { nativeRecordSourceSetProducer } from '../../src/history/adapters/record-source-set-native.ts';
@@ -243,13 +244,22 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   }
   const work = copies.rows.find((copy) => copy.artifact_type === 'durable-work/v1');
   expect(decodeLocator('durable-work/v1', work!.locator)).toEqual({ artifactType: 'durable-work/v1', workId });
+  const rejected = { artifactType: 'durable-work/v1' as const, workId: randomUUID() };
   await expect(
     command(async (tx) => {
       await producer.beginSemanticRecordSourceSet(tx);
-      await recordCommandRecordSourceSetCopy(tx, decodeLocator('durable-work/v1', work!.locator), null);
+      await recordCommandRecordSourceSetCopies(tx, [rejected, decodeLocator('durable-work/v1', work!.locator)], null);
       throw new Error('A later command enrolled the already owned artifact');
     }),
   ).rejects.toThrow('Conflicting native record source set copy');
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT 1 FROM core.record_history_source_set_copy WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3',
+        [partition, rejected.artifactType, Buffer.from(encodeLocator(rejected))],
+      )
+    ).rowCount,
+  ).toBe(0);
   let frontier: string | null = null;
   let found = false;
   for (let step = 0; step < 16; step++) {
