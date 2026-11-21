@@ -2457,8 +2457,7 @@ Decision: default Search returns its real runner before initial Subject inventor
 relays carry a cancellable native-request lifetime, and stop aborts and drains that work. Worker service startup is
 not Search readiness: the installed default producers and current native catalogue output remain the read gate.
 
-Decision: mixed Discovery generations sharing a Pool use one relay supervisor, capped by the configured demand and
-`relayConcurrencyForPool(pool)`. This reserves capacity for source reads, receiving and lifecycle commands; a complete
+Decision: mixed Discovery generations sharing a Pool use one relay supervisor. Subject and Discovery supervisors each overlap up to 16 refresh-visible homes by default, bounded below the physical pool size when it exceeds one. A smaller configured demand caps Discovery further. A complete
 replacement receiver/relay set is installed only after preparation, and pause, retirement and stop drain that owner.
 
 Cost: retaining the operation adds no capture or root, and at most one owner snapshot per Subject

@@ -106,6 +106,9 @@ function queueSearchTurn(
   return { queued, result };
 }
 
+// Each home releases PostgreSQL before waiting for its refresh-visible bulk receipt.
+const REFRESH_VISIBLE_RELAY_HOMES = 16;
+
 export async function startSearchIndexing(options: {
   pool: Pool;
   search: OpenSearch;
@@ -296,7 +299,7 @@ export async function startSearchIndexing(options: {
             // A replacement must inherit intent before its first partition scan can run.
             paused,
             ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
-            ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
+            concurrency: options.concurrency ?? relayConcurrencyForPool(options.pool, REFRESH_VISIBLE_RELAY_HOMES),
           }),
         );
         current = next;
@@ -437,7 +440,7 @@ export function startDiscoveryIndexing(options: {
   reviewSource?: ReviewDiscoverySource;
   publicPreparation?: PublicPreparation;
 }) {
-  const poolConcurrency = relayConcurrencyForPool(options.pool);
+  const poolConcurrency = relayConcurrencyForPool(options.pool, REFRESH_VISIBLE_RELAY_HOMES);
   const configuredConcurrency = options.concurrency ?? poolConcurrency;
   if (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
     throw new RangeError('concurrency must be a positive integer below the pool size');

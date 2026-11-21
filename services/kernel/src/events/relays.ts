@@ -11,10 +11,11 @@ export type Relay = {
 };
 
 /** Default in-flight relay homes. A max-one pool shares its only connection; larger pools keep one slot free. */
-export function relayConcurrencyForPool(pool: Pool): number {
+export function relayConcurrencyForPool(pool: Pool, ceiling = 4): number {
   const max = pool.options.max ?? 10;
   if (!Number.isInteger(max) || max < 1) return 1;
-  return max <= 1 ? 1 : Math.min(4, max - 1);
+  if (!Number.isSafeInteger(ceiling) || ceiling < 1) throw new RangeError('Invalid relay concurrency ceiling');
+  return max <= 1 ? 1 : Math.min(ceiling, max - 1);
 }
 
 /** A command already holds the only connection; do not queue behind it until the next interval. */
