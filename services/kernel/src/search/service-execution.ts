@@ -1585,13 +1585,21 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             // physical index. Its first page need not materialize the whole type.
             const indexedTypeList =
               !readContext?.savedCollection && !text && sort === 'name' && filter && 'type' in filter;
+            // A released type and a single relevance term are both evaluated in the retained PIT.
+            // Its useful-page reader owns current disclosure and the score/id continuation.
+            const indexedText =
+              !readContext?.savedCollection &&
+              !preparedScope &&
+              text?.kind === 'term' &&
+              sort === 'relevance' &&
+              hasPublicBookSearchShape(request);
             const readNameOrder = () => indexRequest(() => hasSubjectNameOrder(client, prefix, generation!));
             const boundedOrder =
               !capturePlan.bookTypeList ||
               (await (bookPage ? (bookPage.nameOrdered ??= readNameOrder()) : readNameOrder()));
             const bound = await indexRequest(() =>
               runtime.bindRequest(
-                { plan: capturePlan, snapshot: indexedTypeList && boundedOrder ? 'pit' : 'prepared' },
+                { plan: capturePlan, snapshot: (indexedTypeList && boundedOrder) || indexedText ? 'pit' : 'prepared' },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
                 bookPage,

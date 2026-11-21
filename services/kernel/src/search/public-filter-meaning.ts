@@ -1,3 +1,4 @@
+import { searchNativePorts } from './native-bindings.ts';
 import { releaseDigest } from '@rezics/definitions';
 import type { PublicFilterProjectionMeaning } from '../semantic/index.ts';
 
@@ -13,12 +14,19 @@ export function retainNativePublicFilterMeaning(
   meaning: PublicFilterProjectionMeaning,
   verifiedDigest: VerifiedReleaseDigest,
 ): PublicFilterProjectionMeaning {
+  return nativePublicFilterMeaning(meaning, verifiedDigest) ?? meaning;
+}
+
+/** Retain the body only when its owner recognizes this immutable release and digest. */
+export function nativePublicFilterMeaning(
+  meaning: PublicFilterProjectionMeaning,
+  verifiedDigest = searchNativePorts()?.hasVerifiedReleaseDigest,
+): PublicFilterProjectionMeaning | undefined {
+  if (!verifiedDigest) return;
   const retained = Object.freeze({ ...meaning });
-  if (hasMeaningShape(retained) && verifiedDigest(retained.release, retained.digest)) {
-    nativeMeanings.add(retained);
-    return retained;
-  }
-  return meaning;
+  if (!hasMeaningShape(retained) || !verifiedDigest(retained.release, retained.digest)) return;
+  nativeMeanings.add(retained);
+  return retained;
 }
 
 function hasMeaningShape(meaning: PublicFilterProjectionMeaning): boolean {
@@ -33,7 +41,7 @@ function hasMeaningShape(meaning: PublicFilterProjectionMeaning): boolean {
 /** Source meaning pins the complete release; type restrictions belong to the captured filter. */
 export function hasExactPublicFilterMeaning(
   meaning: PublicFilterProjectionMeaning,
-  verifiedDigest?: VerifiedReleaseDigest,
+  verifiedDigest: VerifiedReleaseDigest | undefined = searchNativePorts()?.hasVerifiedReleaseDigest,
 ): boolean {
   return (
     hasMeaningShape(meaning) &&

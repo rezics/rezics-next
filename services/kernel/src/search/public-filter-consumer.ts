@@ -1,4 +1,4 @@
-import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
+import { hasExactPublicFilterMeaning, nativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { hasDispatchableRepairCoverage, type RepairCoverageScope } from './public-filter-repair-coverage.ts';
@@ -188,7 +188,7 @@ export function compilePublicFilterConsumerCapture(
   if (!record(input) || !Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Capture requires explicit filterDocument and parsed text');
   const copied = structuredClone(input);
-  const meaning = structuredClone(acceptedMeaning);
+  const meaning = nativePublicFilterMeaning(acceptedMeaning) ?? structuredClone(acceptedMeaning);
   if (!hasExactPublicFilterMeaning(meaning)) throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
   validateCatalogueCoverage(copied);
@@ -861,8 +861,8 @@ export async function advanceNativeGenerationSource(
 export const createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory = async (config) => {
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
     throw new TypeError('Consumer requires its injected native owners');
-  const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
-  const meaning = nativeMeaning ? config.meaning : freeze(structuredClone(config.meaning));
+  const nativeMeaning = nativePublicFilterMeaning(config.meaning);
+  const meaning = nativeMeaning ?? freeze(structuredClone(config.meaning));
   if (!nativeMeaning && !hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
@@ -1335,7 +1335,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     prefix: PublicFilterConsumerRefill | undefined,
     previous: string | null,
     ceiling: number,
-    restoredBookPage: boolean,
+    restoredCursor: boolean,
   ) {
     if (
       page.queried &&
@@ -1365,7 +1365,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page.id = id;
     page.queried = q;
     page.use = use;
-    const observed = await observe(q, null, undefined, page.m, page.context, page, restoredBookPage);
+    const observed = await observe(q, null, undefined, page.m, page.context, page, restoredCursor);
     if (!observationIsDisclosableFromUnknown(observed)) throw new ConsumerFailure('source_pending');
     page.start = observed.start;
   }
@@ -1606,9 +1606,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     execution: string | undefined,
     m: Meter,
     context: PublicFilterConsumerContext,
-    restorePage?: 'book' | 'mixed',
+    restorePage?: 'subject' | 'mixed',
   ) {
-    const restored = restorePage === 'book' ? await restoreBookPageCut(binding, q, context) : undefined;
+    const restored = restorePage === 'subject' ? await restoreBookPageCut(binding, q, context) : undefined;
     const mixedPage = restorePage === 'mixed';
     const result =
       restored ??
@@ -1620,12 +1620,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         },
         context,
       ));
-    // A resumed mixed page has no capture work on its meter. Fund its original
-    // cut and serving proof from the native lookup's measured preparation inputs.
-    const joined =
-      (mixedPage && execution === undefined) || (restored?.status === 'joined' && restored.bookPopulation)
-        ? m.takePreparation(result)
-        : m.take(result);
+    // Opening a cursor page restores its original cut instead of capturing a new one.
+    // Only that first lookup contributes its measured native preparation inputs.
+    const joined = restorePage && execution === undefined ? m.takePreparation(result) : m.take(result);
     if (joined.status !== 'joined')
       throw new ConsumerFailure(joined.reason === 'deadline' ? 'deadline' : 'source_pending');
     if (
@@ -1643,7 +1640,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m: Meter,
     context: PublicFilterConsumerContext,
     page?: Page,
-    restoredBookStart = false,
+    restoredCursor = false,
   ) {
     const request =
       start === null
@@ -1651,7 +1648,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         : { kind: 'population' as const, queried: q, start, execution: execution!, context };
     // A cursor restores its cut without running capture. The native START
     // supplies that page's preparation inputs before any engine candidates.
-    const charge = restoredBookStart ? m.takePreparation : m.take;
+    const charge = restoredCursor ? m.takePreparation : m.take;
     const pageObservation = page?.id
       ? bookPageObservation(config.source, page.bookPopulation, page.id, request, charge)
       : undefined;
@@ -2066,7 +2063,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: PublicFilterConsumer,
     inlinePublishedPreparation = false,
     bookPage?: boolean,
-    freshBook?: {
+    freshPit?: {
       bootstrap: PublicSourceBootstrap;
       adopt: (q: PublicFilterQueriedObservation) => ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
     },
@@ -2076,8 +2073,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     // Source adopts the prepared observation after the original execution has been retained.
     // A resumed capture has no candidates yet. Its native bootstrap lookups
     // consume preparation inputs just as they do when starting a fresh cut.
-    let recovery = freshBook
-      ? { status: 'begun' as const, bootstrap: freshBook.bootstrap, queried: null }
+    let recovery = freshPit
+      ? { status: 'begun' as const, bootstrap: freshPit.bootstrap, queried: null }
       : publication
         ? null
         : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
@@ -2424,9 +2421,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (!work.adopted && !publication) {
       // Native adopt joins the exact PIT and performs the Source CAS. The
       // Book capture has already recovered the cut before opening that PIT.
-      const recovered = bookCut
-        ? recovery
-        : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+      const recovered =
+        bookCut || freshPit
+          ? recovery
+          : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
       if (recovered.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
@@ -2435,8 +2433,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         recovered.status === 'adopted'
           ? recovered
           : m.take(
-              freshBook
-                ? await freshBook.adopt(q)
+              freshPit
+                ? await freshPit.adopt(q)
                 : await binding.adopt({ bootstrap: work.bootstrap.id, queried: q }, context),
             );
       if (adopted.status !== 'adopted') return m.unavailable('source_pending');
@@ -2624,7 +2622,43 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 ),
               )
             : undefined;
-        if (handoff?.status !== 'released') {
+        let retired = false;
+        if (
+          handoff?.status === 'pending' &&
+          !retained.adopted &&
+          retained.queried &&
+          bootstrapBinding(binding) &&
+          binding.fenceExpiredRegistration
+        ) {
+          const claim = { bootstrap: retained.bootstrap.id, registration: registration.id, work: old.consumer_work };
+          const fence = m.takePreparation(await binding.fenceExpiredRegistration(claim, context));
+          if (fence.status === 'fenced') {
+            const observations = retained.materializing
+              ? [retained.queried, retained.materializing]
+              : [retained.queried];
+            for (const observation of observations) {
+              const closed = m.takePreparation(await custody.closeObservation(observation, config.search, context));
+              if (closed.status !== 'closed') return m.unavailable('source_pending');
+            }
+            const original = retained.materializing ?? retained.queried;
+            const cleared = m.takePreparation(
+              await binding.abort(
+                {
+                  bootstrap: claim.bootstrap,
+                  closedPreparation: {
+                    registration: claim.registration,
+                    work: claim.work,
+                    observation: original.snapshot.observation,
+                  },
+                },
+                context,
+              ),
+            );
+            if (cleared.status !== 'aborted') return m.unavailable('source_pending');
+            retired = true;
+          }
+        }
+        if (handoff?.status !== 'released' && !retired) {
           if (config.discoveryPreparation === 'enrollment' && retained.bootstrap.coveragePublication)
             return m.unavailable('source_pending');
           if (mixedPage)
@@ -2698,7 +2732,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           binding,
           {
             ...preparation,
-            ...('bookTypeList' in canonical && canonical.bookTypeList ? { definition: resolved.definition } : {}),
+            definition: resolved.definition,
             ...(!publication &&
             !('purpose' in canonical) &&
             ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
@@ -2778,7 +2812,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in canonical &&
         canonical.bookTypeList === true &&
         begun.bootstrap.coveragePublication !== undefined;
-      const fresh = bookPage && native?.status === 'begun' ? native.freshBook : undefined;
+      const fresh =
+        page && !publication && !config.discoveryTarget && native?.status === 'begun' ? native.freshPit : undefined;
       const claim = fresh && m.take(await fresh.unopened());
       if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
       return await advanceCapture(
@@ -2823,11 +2858,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
-      const restoringMixed = mixed && page?.id === null && prefix !== undefined;
-      const restorePage = restoringMixed ? 'mixed' : page && prefix && !mixed ? 'book' : undefined;
+      const restoring = page?.id === null && prefix !== undefined;
+      const restoringMixed = mixed && restoring;
+      const restorePage = restoring ? (mixed ? 'mixed' : 'subject') : undefined;
       const cut = bookCut ?? (await join(q, undefined, m, context, restorePage));
       const plan = cut.definition.capture;
-      let restoredBookPage = false;
       if (
         page &&
         !bookCut &&
@@ -2836,7 +2871,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in plan &&
         plan.bookTypeList
       ) {
-        restoredBookPage = prefix !== undefined;
         // A resumed page obtains its original immutable plan from native custody.
         // Each refill uses that plan and FINAL verifies every durable execution.
         page.bookCut = { definition: cut.definition, covered: cut.covered, bookPopulation: cut.bookPopulation };
@@ -2889,7 +2923,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
       if (page) {
-        await beginPage(page, q, use, prefix, previousEncoded, allowance, restoredBookPage);
+        await beginPage(page, q, use, prefix, previousEncoded, allowance, restoring);
       }
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
       if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();

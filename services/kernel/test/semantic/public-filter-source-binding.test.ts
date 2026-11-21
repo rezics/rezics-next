@@ -792,7 +792,7 @@ test('adopted serving handoff preserves live work and releases only the exact in
   }
 }, 300000);
 
-test('a closed materializing PIT retires only its matching unadopted build in bounded batches', async () => {
+async function retireClosedPreparation(retainedPage: boolean) {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
@@ -813,7 +813,12 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
     );
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
     const stored = await custody.register(
-      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      {
+        definition: resolved.definition,
+        physicalTarget: index,
+        consumerGeneration: '1',
+        projectionGeneration: '1',
+      },
       search,
       readContext(),
     );
@@ -823,10 +828,10 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
     // Stage only the interrupted request. This fixture neither publishes a generation nor serves a search.
     await f.db.pool.query(
       `INSERT INTO semantic.public_filter_bootstrap
-         (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,owner_epoch,
-          source_position,state,coverage_publication,coverage_generation)
-       SELECT 0,$1,$2,$3,$4,'prepared',pg_current_snapshot(),epoch,position,'begun',$5,0
-       FROM core.partition WHERE partition_no=0`,
+     (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,owner_epoch,
+      source_position,state,coverage_publication,coverage_generation)
+   SELECT 0,$1,$2,$3,$4,'prepared',pg_current_snapshot(),epoch,position,'begun',$5,0
+   FROM core.partition WHERE partition_no=0`,
       [
         bootstrap,
         resolved.definition.readDefinition,
@@ -841,17 +846,35 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
       readContext(),
     );
     if (pit.status !== 'retained') throw new Error(pit.reason);
+    const prepared = retainedPage
+      ? await custody.retainPrepared(
+          {
+            registration: stored.registration,
+            covered: { observation: build },
+            build,
+            generation: 1n,
+            rows: [],
+            expiresAt: Date.now() + 300_000,
+          },
+          readContext(),
+        )
+      : undefined;
+    if (prepared && prepared.status !== 'retained') throw new Error(prepared.reason);
     const retained = {
       registration: stored.registration,
       bootstrap: { id: build },
       materializing: pit.queried,
-      queried: null,
+      queried: prepared?.queried ?? null,
       adopted: false,
     };
     const work = JSON.stringify(tree(retained, 'value'));
     const request = {
       bootstrap: build,
-      closedPreparation: { registration: stored.registration.id, observation: pit.queried.snapshot.observation, work },
+      closedPreparation: {
+        registration: stored.registration.id,
+        observation: pit.queried.snapshot.observation,
+        work,
+      },
     };
     const args = [stored.registration.id, build];
     await f.db.pool.query(
@@ -860,12 +883,13 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
     );
     await f.db.pool.query(
       `INSERT INTO search.public_filter_prepared (partition_no,registration,build,generation,rows,segment_state,raw_count)
-       VALUES(0,$1,$2,1,'[]','building',19)`,
+   VALUES(0,$1,$2,1,'[]','building',19)
+   ON CONFLICT (partition_no,registration,build,generation) DO UPDATE SET segment_state='building',raw_count=19`,
       args,
     );
     await f.db.pool.query(
       `INSERT INTO search.public_filter_preparation_segment(partition_no,registration,build,generation,raw_ordinal,payload)
-       SELECT 0,$1,$2,1,n,'{}' FROM generate_series(0,18) n`,
+   SELECT 0,$1,$2,1,n,'{}' FROM generate_series(0,18) n`,
       args,
     );
     const remaining = async () =>
@@ -879,6 +903,33 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
       );
     expect((await binding.abort(request, readContext())).status).toBe('pending');
     expect(await remaining()).toBe(19);
+    if (prepared) {
+      const fence = (expected = work) =>
+        binding.fenceExpiredRegistration!(
+          {
+            bootstrap: build,
+            registration: stored.registration.id,
+            work: expected,
+          },
+          readContext(),
+        );
+      expect((await fence()).status).toBe('pending');
+      const expire = (observation: string) =>
+        f.db.pool.query(
+          'UPDATE search.public_filter_observation SET expires_at=$2 WHERE partition_no=0 AND observation=$1',
+          [observation, Date.now() - 1],
+        );
+      await expire(prepared.queried.snapshot.observation);
+      expect((await fence()).status).toBe('pending');
+      await expire(pit.queried.snapshot.observation);
+      expect((await fence(JSON.stringify(tree({ ...retained, rounds: 99 }, 'value')))).status).toBe('pending');
+      expect((await fence()).status).toBe('fenced');
+      expect((await binding.recover({ bootstrap: build }, readContext())).status).toBe('pending');
+      expect((await binding.abort(request, readContext())).status).toBe('pending');
+      expect((await custody.closeObservation(prepared.queried, search, readContext())).status).toBe('closed');
+      expect((await fence()).status).toBe('fenced');
+      expect((await binding.abort(request, readContext())).status).toBe('pending');
+    }
     expect((await custody.closeObservation(pit.queried, search, readContext())).status).toBe('closed');
     const wrongWork = JSON.stringify(tree({ ...retained, revision: 2 }, 'value'));
     expect(
@@ -924,7 +975,17 @@ test('a closed materializing PIT retires only its matching unadopted build in bo
     await search.request('DELETE', `/${index}`);
     await f.close();
   }
-}, 120_000);
+}
+test(
+  'a closed materializing PIT retires only its matching unadopted build in bounded batches',
+  () => retireClosedPreparation(false),
+  120_000,
+);
+test(
+  'an expired unadopted prepared observation closes both original copies before releasing its claim',
+  () => retireClosedPreparation(true),
+  120_000,
+);
 
 test('native Source repair receipts revalidate original steps, replay, and current ownership without completing an incomplete cut', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');

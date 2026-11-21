@@ -2,7 +2,7 @@ import { bookBindingStep, bookCostShare, type BindingStep } from '../request/boo
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
 import { encode, decode, requireValue } from './public-filter-codec.ts';
 import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
-import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { hasExactPublicFilterMeaning, nativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import { readRepairWinnerCheckpoint } from './public-filter-repair-checkpoint.ts';
@@ -349,21 +349,15 @@ async function hasReleaseAuthority(pool: Queryable, meter: Meter, digest: string
 async function requireReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
   if (!(await hasReleaseAuthority(pool, meter, digest))) throw new Failure('definition_missing');
 }
-async function retainedDefinition(
-  pool: Queryable,
-  meter: Meter,
-  definition: CustodyDefinition<PublicCanonicalCaptureInput>,
-) {
-  return encodeRetainedDefinition(definition, await hasReleaseAuthority(pool, meter, definition.meaning.digest));
-}
-function encodeRetainedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>, installed: boolean) {
+function encodeEmbeddedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   const embedded = encode({ digest: digest(definition), data: definition });
-  const embedsWithinLimit = Buffer.byteLength(embedded) <= 1_048_576;
-  if (!installed) {
-    if (!embedsWithinLimit) throw new Failure('definition_missing');
-    return { encoded: embedded, previous: null };
-  }
-  return { encoded: encodeInstalledDefinition(definition), previous: embedsWithinLimit ? embedded : null };
+  return Buffer.byteLength(embedded) <= 1_048_576 ? embedded : null;
+}
+function storedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>, installed: boolean) {
+  if (installed) return encodeInstalledDefinition(definition);
+  const embedded = encodeEmbeddedDefinition(definition);
+  if (!embedded) throw new Failure('definition_missing');
+  return embedded;
 }
 function encodeInstalledDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   // Installed releases share the same immutable owner reference at every size.
@@ -1614,7 +1608,12 @@ export function createPublicFilterCustody(
   const api: PublicFilterCustody = {
     register(request, search, context) {
       // Copy before the first await, so concurrent caller mutation never changes persisted identity.
-      const input = decode<typeof request>(encode(request));
+      const meaning = nativePublicFilterMeaning(request.definition.meaning);
+      // Unverified releases still take the complete owned copy and digest check.
+      const snapshot = decode<typeof request>(
+        encode(meaning ? { ...request, definition: { ...request.definition, meaning: null } } : request),
+      );
+      const input = meaning ? { ...snapshot, definition: { ...snapshot.definition, meaning } } : snapshot;
       validateDefinition(input.definition);
       text(input.consumerGeneration);
       text(input.projectionGeneration);
@@ -1637,9 +1636,7 @@ export function createPublicFilterCustody(
                 const installed = await hasReleaseAuthority(pool, shared, input.definition.meaning.digest);
                 const members = inputs.map((item) => {
                   const { consumer, identity } = registrationIdentity(item, incarnation);
-                  const encoded = installed
-                    ? encodeInstalledDefinition(item.definition)
-                    : encodeRetainedDefinition(item.definition, false).encoded;
+                  const encoded = storedDefinition(item.definition, installed);
                   return {
                     consumer,
                     identity,
@@ -1722,10 +1719,11 @@ export function createPublicFilterCustody(
         }
         const incarnation = await native(search, meter, context, input.physicalTarget);
         const { consumer, identity } = registrationIdentity(input, incarnation);
-        const retained = await retainedDefinition(pool, meter, input.definition);
+        const installed = await hasReleaseAuthority(pool, meter, input.definition.meaning.digest);
+        const encodedDefinition = storedDefinition(input.definition, installed);
         const encodedConsumer = encode(consumer);
         const current = await registeredWork(meter, identity.partition, consumer.physicalTarget, incarnation, [
-          { id: identity.id, consumer: encodedConsumer, definition: retained.encoded },
+          { id: identity.id, consumer: encodedConsumer, definition: encodedDefinition },
         ]);
         const consumerWork = current.get(identity.id);
         if (consumerWork !== undefined) {
@@ -1750,11 +1748,10 @@ export function createPublicFilterCustody(
                    AND t.incarnation=$4 AND r.consumer=$5 AND r.definition=$6 AND r.state='active'`,
                 [identity.partition, identity.id, consumer.physicalTarget, incarnation, encodedConsumer, encoded],
               );
-            if (
-              !(await replay(retained.encoded)).rowCount &&
-              (!retained.previous || !(await replay(retained.previous)).rowCount)
-            )
-              throw new Failure('binding_mismatch');
+            if (!(await replay(encodedDefinition)).rowCount) {
+              const previous = installed && encodeEmbeddedDefinition(input.definition);
+              if (!previous || !(await replay(previous)).rowCount) throw new Failure('binding_mismatch');
+            }
             return;
           }
           await sql(
@@ -1768,10 +1765,11 @@ export function createPublicFilterCustody(
             meter,
             `INSERT INTO search.public_filter_registration VALUES ($1,$2,$3,$4,$5,'active')
             ON CONFLICT (partition_no,id) DO UPDATE SET id=EXCLUDED.id WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition AND public_filter_registration.state='active' RETURNING id`,
-            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, retained.encoded],
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, encodedDefinition],
           );
           if (result.rowCount) return;
-          if (!retained.previous) throw new Failure('binding_mismatch');
+          const previous = installed && encodeEmbeddedDefinition(input.definition);
+          if (!previous) throw new Failure('binding_mismatch');
           // Convert an exact embedded definition under the same registration and writer admission lock.
           const upgraded = await sql(
             client,
@@ -1779,14 +1777,7 @@ export function createPublicFilterCustody(
             `UPDATE search.public_filter_registration SET definition=$6
              WHERE (partition_no,id,physical_target)=($1,$2,$3)
                AND consumer=$4 AND definition=$5 AND state='active' RETURNING id`,
-            [
-              identity.partition,
-              identity.id,
-              consumer.physicalTarget,
-              encodedConsumer,
-              retained.previous,
-              retained.encoded,
-            ],
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, previous, encodedDefinition],
           );
           if (!upgraded.rowCount) throw new Failure('binding_mismatch');
         });

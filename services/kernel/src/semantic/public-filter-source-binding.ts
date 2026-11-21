@@ -14,7 +14,7 @@ import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readRelease } from './definition-release-read.ts';
 import { withReadTransaction } from './read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
@@ -525,6 +525,11 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         }>
       | PublicFilterBindingFailure
     >;
+    /** Fence only an expired, unadopted serving observation before Search drains its original physical copies. */
+    fenceExpiredRegistration?(
+      request: Readonly<{ bootstrap: string; registration: string; work: string }>,
+      context: PublicFilterConsumerContext,
+    ): Promise<Readonly<{ status: 'fenced' | 'pending'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
     /** Finish the original Search handoff after Source committed adoption and its serving request ended. */
     releaseAdoptedRegistration?(
       request: Readonly<{ bootstrap: string; registration: string; observation: string; work: string }>,
@@ -661,7 +666,7 @@ type NativePreparationInput =
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
       enrollmentAdvanced?: true;
-      freshBook?: Readonly<{
+      freshPit?: Readonly<{
         unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
       }>;
@@ -2633,7 +2638,8 @@ export function createNativePublicFilterSourceBinding(
       if (!ownsSource(request.source)) return fail('source_missing');
       try {
         if (!hasPublicFilterMeaningShape(request.meaning)) return fail('binding_mismatch');
-        meaning = structuredClone(request.meaning);
+        const { digest, release } = request.meaning;
+        meaning = hasVerifiedReleaseDigest(release, digest) ? { digest, release } : structuredClone(request.meaning);
         capture = structuredClone(request.capture);
         if (!hasPublicFilterMeaningShape(meaning) || Object.keys(meaning.release.types).length === 0)
           return fail('binding_mismatch');
@@ -2891,35 +2897,37 @@ export function createNativePublicFilterSourceBinding(
           const bootstrap = cut.bootstrap;
           // A conflict can return an earlier begun cut with an uncertain PIT.
           // Only the UUID inserted by THIS invocation may take the fresh path.
-          if (!bookList || id !== newId || cut.row.state !== 'begun' || cut.row.queried !== null)
+          if (mixed || snapshot !== 'pit' || id !== newId || cut.row.state !== 'begun' || cut.row.queried !== null)
             return { status: 'begun' as const, bootstrap, cost };
           freeze(bootstrap);
           return {
             status: 'begun' as const,
             bootstrap,
             cost,
-            freshBook: {
+            freshPit: {
               unopened() {
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
-                  const batch = bookBindingStep(
-                    'unopened',
-                    binding,
-                    bootstrap.consumer.physicalTarget,
-                    id,
-                    deadline,
-                    {
+                  const batch =
+                    bookList &&
+                    bookBindingStep(
+                      'unopened',
+                      binding,
+                      bootstrap.consumer.physicalTarget,
                       id,
-                      registration: registration.registration.id,
-                      locator: bootstrap.id,
-                      consumer: ports.search.encodeConsumer(bootstrap.consumer),
-                      covered: ports.search.encodeState(bootstrap.covered),
-                    },
-                    async (members, until) => {
-                      const result = await run({ deadline: until }, async (shared, db) => {
-                        const rows = await db.query<{ id: string }>(
-                          `/* semantic.native-keyed:${members.length * 4}:${members.length * 9} */
+                      deadline,
+                      {
+                        id,
+                        registration: registration.registration.id,
+                        locator: bootstrap.id,
+                        consumer: ports.search.encodeConsumer(bootstrap.consumer),
+                        covered: ports.search.encodeState(bootstrap.covered),
+                      },
+                      async (members, until) => {
+                        const result = await run({ deadline: until }, async (shared, db) => {
+                          const rows = await db.query<{ id: string }>(
+                            `/* semantic.native-keyed:${members.length * 4}:${members.length * 9} */
                            SELECT i.id FROM jsonb_to_recordset($1) i(id uuid,registration text,locator text,consumer text,covered text)
                            JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,i.id)
                            JOIN core.partition p ON p.partition_no=b.partition_no AND p.write_state='active' AND p.epoch=b.owner_epoch
@@ -2927,16 +2935,16 @@ export function createNativePublicFilterSourceBinding(
                            WHERE b.state='begun' AND b.queried IS NULL AND r.state='active' AND r.consumer_bootstrap=i.locator AND r.consumer=i.consumer
                              AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o WHERE (o.partition_no,o.registration)=(0,r.id)
                                AND o.state='open' AND o.prepared_build IS NULL AND md5(o.covered)=md5(i.covered) AND o.covered=i.covered)`,
-                          [JSON.stringify(members)],
-                        );
-                        return { ids: new Set(rows.rows.map((r) => r.id)), cost: shared };
-                      });
-                      return members.map((m, i) => {
-                        const cost = bookCostShare(result.cost, i, members.length);
-                        return 'ids' in result ? { unopened: result.ids.has(m.id), cost } : { ...result, cost };
-                      });
-                    },
-                  );
+                            [JSON.stringify(members)],
+                          );
+                          return { ids: new Set(rows.rows.map((r) => r.id)), cost: shared };
+                        });
+                        return members.map((m, i) => {
+                          const cost = bookCostShare(result.cost, i, members.length);
+                          return 'ids' in result ? { unopened: result.ids.has(m.id), cost } : { ...result, cost };
+                        });
+                      },
+                    );
                   if (batch) return batch;
                   const result = await store.query(
                     `/* semantic.native-keyed:4:9 */
@@ -2966,6 +2974,7 @@ export function createNativePublicFilterSourceBinding(
                     throw new BindingError('binding_mismatch');
                   const definitionPayload = registration.registeredDefinition;
                   const batch =
+                    bookList &&
                     definitionPayload !== undefined &&
                     bookBindingStep(
                       'adopt',
@@ -4399,6 +4408,66 @@ export function createNativePublicFilterSourceBinding(
         };
       });
     },
+    async fenceExpiredRegistration({ bootstrap, registration, work }, context) {
+      return run(context, async (cost, db) => {
+        const retained = decode<{
+          registration: { partition: number; id: string };
+          bootstrap: { id: string };
+          adopted: boolean;
+          queried: PublicFilterQueriedObservation | null;
+          materializing: PublicFilterQueriedObservation | null;
+        }>(work);
+        const q = retained.queried;
+        const pit = retained.materializing;
+        if (
+          !q ||
+          retained.adopted ||
+          retained.registration.partition !== 0 ||
+          retained.registration.id !== registration ||
+          retained.bootstrap.id !== bootstrap ||
+          (q.snapshot.kind === 'prepared' && (q.snapshot.build !== bootstrap || q.snapshot.generation !== 1n)) ||
+          (pit && (pit.snapshot.kind !== 'pit' || !isDeepStrictEqual(pit.consumer, q.consumer)))
+        )
+          throw new BindingError('binding_mismatch');
+        // Lock the original claim and expired observation. A competing adoption updates the same
+        // Source row. After this barrier it cannot publish the cut, even if Search closes in another process.
+        const row = await db.query(
+          `/* semantic.native-keyed:7:15:1 */
+           WITH claim AS MATERIALIZED (
+             SELECT b.bootstrap FROM semantic.public_filter_bootstrap b
+             JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+             JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
+             JOIN search.public_filter_observation o ON (o.partition_no,o.registration,o.observation)=(r.partition_no,r.id,$5)
+             WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state IN ('begun','aborting') AND b.queried IS NULL
+               AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL AND b.consumer=$8 AND b.snapshot_kind=$9
+               AND r.state='active' AND r.consumer_bootstrap=$3 AND r.consumer_work=$4
+               AND o.queried=$6 AND o.covered=$7 AND o.expires_at<=$10 AND o.consumer_work IS NULL
+               AND ($11::text IS NULL OR EXISTS (
+                 SELECT FROM search.public_filter_observation m
+                 WHERE (m.partition_no,m.registration,m.observation)=(r.partition_no,r.id,$11)
+                   AND m.covered=o.covered AND m.queried=$12 AND m.consumer_work IS NULL
+                   AND (m.state='closed' OR m.expires_at<=$10)))
+             FOR UPDATE OF b,r,o
+           ) UPDATE semantic.public_filter_bootstrap b SET state='aborting' FROM claim
+             WHERE (b.partition_no,b.bootstrap)=(0,claim.bootstrap) RETURNING b.bootstrap`,
+          [
+            nativeId(bootstrap),
+            registration,
+            bootstrap,
+            work,
+            q.snapshot.observation,
+            ports.search.encodeState(q),
+            ports.search.encodeState({ observation: bootstrap }),
+            encode(q.consumer),
+            q.snapshot.kind,
+            Date.now(),
+            pit?.snapshot.observation ?? null,
+            pit ? ports.search.encodeState(pit) : null,
+          ],
+        );
+        return { status: row.rowCount === 1 ? ('fenced' as const) : ('pending' as const), cost };
+      });
+    },
     async releaseAdoptedRegistration(request, context) {
       const { bootstrap, registration, observation, work } = request;
       return run({ deadline: context.deadline }, async (cost, db) => {
@@ -4471,25 +4540,31 @@ export function createNativePublicFilterSourceBinding(
             queried: PublicFilterQueriedObservation | null;
             materializing: PublicFilterQueriedObservation | null;
           }>(closed.work);
+          const original = work.materializing ?? work.queried;
           if (
             work.adopted !== false ||
-            work.queried !== null ||
             work.bootstrap.id !== id ||
             work.registration.id !== closed.registration ||
-            work.materializing?.snapshot.kind !== 'pit' ||
-            work.materializing.snapshot.observation !== closed.observation ||
-            !isDeepStrictEqual(work.materializing.consumer, cut.bootstrap.consumer)
+            !original ||
+            original.snapshot.observation !== closed.observation ||
+            (work.materializing && work.materializing.snapshot.kind !== 'pit') ||
+            (work.queried && !isDeepStrictEqual(work.queried.consumer, cut.bootstrap.consumer)) ||
+            !isDeepStrictEqual(original.consumer, cut.bootstrap.consumer)
           )
             throw new BindingError('binding_mismatch');
           const result = await db.query(
-            `/* semantic.native-keyed:42:46:19 */
+            `/* semantic.native-keyed:43:49:19 */
              WITH owned AS MATERIALIZED (
                SELECT b.bootstrap,r.id FROM semantic.public_filter_bootstrap b
                JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
                JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
                JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(r.partition_no,$3)
-               WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='begun' AND b.queried IS NULL
-                 AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='prepared'
+               WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.queried IS NULL
+                 AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL
+                 AND (($6::text IS NULL AND b.state='begun' AND b.snapshot_kind='prepared')
+                   OR (b.state='aborting' AND EXISTS (SELECT FROM search.public_filter_observation q
+                       WHERE (q.partition_no,q.registration,q.observation)=(r.partition_no,r.id,$6)
+                         AND q.state='closed' AND q.queried=$7)))
                  AND r.consumer_bootstrap=$4 AND r.consumer_work=$5 AND r.state='active'
                  AND o.registration=r.id AND o.state='closed' AND NOT EXISTS (
                    SELECT FROM search.public_filter_observation prepared
@@ -4517,7 +4592,15 @@ export function createNativePublicFilterSourceBinding(
                WHERE (b.partition_no,b.bootstrap)=(0,finished.bootstrap) RETURNING finished.id
              ) UPDATE search.public_filter_registration r SET consumer_work=NULL,consumer_bootstrap=NULL
                FROM aborted WHERE (r.partition_no,r.id)=(0,aborted.id) RETURNING r.id`,
-            [cut.row.bootstrap, closed.registration, closed.observation, id, closed.work],
+            [
+              cut.row.bootstrap,
+              closed.registration,
+              closed.observation,
+              id,
+              closed.work,
+              work.queried?.snapshot.observation ?? null,
+              work.queried ? ports.search.encodeState(work.queried) : null,
+            ],
           );
           return { status: result.rowCount === 1 ? ('aborted' as const) : ('pending' as const), cost };
         }

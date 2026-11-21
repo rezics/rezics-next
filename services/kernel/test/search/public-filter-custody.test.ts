@@ -10,6 +10,8 @@ import {
 import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
 import { releaseDigest, RELEASE_FORMAT, RELEASE_LIMITS, releaseAdmission, validateRelease } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
+import { compilePublicFilterConsumerCapture } from '../../src/search/public-filter-consumer.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId } from '../../src/route/route.ts';
@@ -982,6 +984,20 @@ test('accepted native wide release capture and cold keyed recovery retain full i
   expect(published.status).toBe(201);
   const identity = (await published.json()) as { digest: string };
   expect(identity.digest).toBe(releaseDigest(release));
+  const { readRelease } = composeSearchNativePorts();
+  const installed = await readRelease(pool, identity.digest);
+  if (!installed) throw new Error('Published release is missing');
+  const captureInput = { filterDocument: undefined, text: undefined, sort: 'id', size: 1 } as const;
+  const accepted = { release: installed, digest: identity.digest };
+  const compiled = compilePublicFilterConsumerCapture(captureInput, accepted);
+  expect(compiled.meaning.release).toBe(installed);
+  expect(compiled.meaning).not.toBe(accepted);
+  expect(Object.isFrozen(compiled.meaning)).toBe(true);
+  const copied = compilePublicFilterConsumerCapture(captureInput, { release, digest: identity.digest });
+  expect(copied.meaning.release).not.toBe(release);
+  expect(() => compilePublicFilterConsumerCapture(captureInput, { ...accepted, digest: 'invalid' })).toThrow(
+    'Capture requires an exact accepted release',
+  );
   const physical = await target();
   const d = definition();
   const subject = crypto.randomUUID();
