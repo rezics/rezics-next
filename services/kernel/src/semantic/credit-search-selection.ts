@@ -2,7 +2,7 @@ import { createReleasedRelationDirectionResolver, releaseDigest, type Release } 
 import type { Pool, PoolClient } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CreditSearchQualifier } from '../search/credit-search.ts';
-import { readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readBaseReleases, readRelease } from './definition-release-read.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { workCreditProperties } from './list-presentation-work-context.ts';
 import { semanticCopyWorkApplication } from './copy-work-application.ts';
@@ -20,7 +20,6 @@ import {
 } from './credit-search-cut.ts';
 import { inSearchSnapshot, readPartition, readSearchCanonicalGeneration } from './search-source.ts';
 import readSubjects from './search-source-subjects.sql';
-import readReleases from './search-source-releases.sql';
 import rebuildSelection from './search-selected-rebuild.sql';
 import readCreditPage from './credit-search-page.sql';
 import readNonemptyCreditKeys from './credit-search-empty-keys.sql';
@@ -57,17 +56,11 @@ export type CreditPlan = {
 };
 
 export async function loadReleases(client: PoolClient, digests: readonly string[]): Promise<Map<string, Release>> {
-  const unique = [...new Set(digests)];
-  if (!unique.length) return new Map();
-  const rows = (await readReleases.run(client, { route: 0, digests: unique })) as {
-    digest: string;
-    body: Release;
-  }[];
-  const releases = new Map(rows.map((row) => [row.digest, row.body]));
-  for (const digest of unique) {
-    if (releases.has(digest)) continue;
-    const composed = await readRelease(client, digest);
-    if (composed) releases.set(digest, composed);
+  const base = await readBaseReleases(client, digests);
+  const releases = new Map<string, Release>();
+  for (const digest of new Set(digests)) {
+    const release = base.has(digest) ? base.get(digest) : await readRelease(client, digest);
+    if (release) releases.set(digest, release);
   }
   return releases;
 }
@@ -128,7 +121,7 @@ export async function emptyCreditObservations(pool: Pool, partition: number, ids
       if (!types) plans.set(release, (types = new Map()));
       let properties = types.get(work.type);
       if (!properties) {
-        properties = [...creditSearchProperties(release, work.type)];
+        properties = [...creditSearchProperties(release, work.type, work.currentRelease)];
         types.set(work.type, properties);
       }
       if (!properties.length) continue;
@@ -159,18 +152,21 @@ export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPl
   const releases = await inSearchSnapshot(pool, async (client) => loadReleases(client, [digest]));
   const release = releases.get(digest);
   if (!release) return 'unsupported';
-  const properties = creditSearchProperties(release, work.type);
+  const properties = creditSearchProperties(release, work.type, work.currentRelease);
   if (!properties.length) return 'unsupported';
   return { properties, releases };
 }
 
-export function creditSearchProperties(release: Release, type: string): readonly string[] {
-  return workCreditProperties(
-    release,
-    type,
-    semanticCopyWorkApplication().searchEvidence,
-    createReleasedRelationDirectionResolver(release, releaseDigest(release)),
-  );
+const verifiedDirections = new WeakMap<Release, ReturnType<typeof createReleasedRelationDirectionResolver>>();
+
+export function creditSearchProperties(release: Release, type: string, digest?: string | null): readonly string[] {
+  let directions = verifiedDirections.get(release);
+  if (!directions) {
+    const verified = digest != null && hasVerifiedReleaseDigest(release, digest);
+    directions = createReleasedRelationDirectionResolver(release, verified ? digest : releaseDigest(release));
+    if (verified) verifiedDirections.set(release, directions);
+  }
+  return workCreditProperties(release, type, semanticCopyWorkApplication().searchEvidence, directions);
 }
 
 export async function selectedCredits(

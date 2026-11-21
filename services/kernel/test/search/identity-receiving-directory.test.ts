@@ -114,7 +114,7 @@ import publicFigures from '../../src/rating/public-figures-read.sql';
 import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
 import { GLOBAL_CONTEXT_RESOURCE } from '../../src/semantic/contract/global-context.ts';
 import listingCounts from '../../src/library/listing-counts.sql';
-import projectionRelease from '../../src/semantic/search-source-releases.sql';
+import projectionRelease from '../../src/semantic/definitions-read-bodies.sql';
 import projectionSubjects from '../../src/semantic/search-source-subjects.sql';
 import projectionPrivacy from '../../src/semantic/public-filter-projection-head-read.sql';
 import projectionPage from '../../src/semantic/public-filter-projection-page.sql';

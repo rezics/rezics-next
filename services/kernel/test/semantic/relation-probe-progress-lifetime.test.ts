@@ -141,7 +141,12 @@ test('retained relation progress expires on its original budget and resumes an u
     namedExports: { sourceTuple: () => assert.fail('No imported tuple is present') },
   });
   t.mock.module('../../src/semantic/definition-release-read.ts', {
-    namedExports: { activeRelease: async () => runtime, readRelease: async () => release },
+    namedExports: {
+      activeRelease: async () => runtime,
+      readRelease: async () => release,
+      readBaseReleases: async (_client: unknown, ids: readonly string[]) =>
+        new Map(ids.filter((id) => id === digest).map((id) => [id, release])),
+    },
   });
   t.mock.module('../../src/search/current-leaf.ts', {
     namedExports: { holdsCurrentStatements: () => assert.fail('Ineligible rows cannot become witnesses') },
@@ -165,9 +170,6 @@ test('retained relation progress expires on its original budget and resumes an u
   });
   t.mock.module('../../src/semantic/search-source-subjects.sql', {
     defaultExport: { run: async () => [subject] },
-  });
-  t.mock.module('../../src/semantic/search-source-releases.sql', {
-    defaultExport: { run: async () => [{ digest, body: release }] },
   });
   t.mock.module('../../src/semantic/search-selected-cursors.sql', {
     defaultExport: {

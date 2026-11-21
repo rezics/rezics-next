@@ -62,7 +62,7 @@ import extensionRead from './extension-read.sql';
 import eligibilityRead from './scope-leaf-evidence-eligibility.sql';
 import sourceVisibilityRead from './read-visibility.sql';
 import { readIdentitySearchIndexTermSlotShapeSql } from './identity-search-index-terms.ts';
-import projectionReleasesRead from './search-source-releases.sql';
+import projectionReleasesRead from './definitions-read-bodies.sql';
 import projectionPrivacyRead from './public-filter-projection-head-read.sql';
 import projectionBuildRead from './public-filter-projection-build-read.sql';
 import {

@@ -15,7 +15,7 @@ import type {
   ConceptBrowseSource,
   ConceptDescendantSelection,
 } from '../search/concept-browse.ts';
-import { releaseDigest, type Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
 import {
   createFilterConstruction,
@@ -45,7 +45,7 @@ import {
   type RelationFacetProbe,
   type RetainedRelationFacetPage,
 } from '../search/source.ts';
-import { activeRelease, readRelease } from './definition-release-read.ts';
+import { activeRelease, readBaseReleases, readRelease } from './definition-release-read.ts';
 import { sourceTuple } from './fences.ts';
 import { prepareCharacterPersonPage } from '../search/character-person-voice.ts';
 import { indexedStatement, inSearchSnapshot, readSearchCanonicalGeneration } from './search-source.ts';
@@ -54,7 +54,6 @@ import readBatch from './search-selected-batch.sql';
 import readProbeBatch from './search-selected-probe-batch.sql';
 import readCursors from './search-selected-cursors.sql';
 import writeCursor from './search-selected-progress.sql';
-import readReleases from './search-source-releases.sql';
 import rebuild from './search-selected-rebuild.sql';
 
 const ZERO = '00000000-0000-0000-0000-000000000000';
@@ -568,13 +567,8 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         subject_ids: unique.map((p) => p.subject),
       });
       const subjects = new Map(local.map((row) => [row.id, row]));
-      const releases = new Map<string, Release | null>();
-      const digests = [...new Set(local.flatMap((row) => (row.currentRelease ? [row.currentRelease] : [])))];
-      if (digests.length)
-        for (const row of await readReleases.run(client, { route: 0, digests })) {
-          const body = row.body as Release;
-          if (releaseDigest(body) === row.digest) releases.set(row.digest, body);
-        }
+      const digests = local.flatMap((row) => (row.currentRelease ? [row.currentRelease] : []));
+      const releases = await readBaseReleases(client, digests);
       const requests: { route: number; subject_id: string; property: string; value: string; revision: number }[] = [];
       for (const probe of unique) {
         const subject = subjects.get(probe.subject);
@@ -661,11 +655,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           })) as SelectedStatement[])
         : [];
       const missing = [...new Set(rows.map((row) => row.release).filter((digest) => !releases.has(digest)))];
-      if (missing.length)
-        for (const row of await readReleases.run(client, { route: 0, digests: missing })) {
-          const body = row.body as Release;
-          if (releaseDigest(body) === row.digest) releases.set(row.digest, body);
-        }
+      for (const [digest, release] of await readBaseReleases(client, missing)) releases.set(digest, release);
       return {
         runtime,
         subjects,
@@ -916,10 +906,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             : [];
           const digests = [...new Set(selected.map((row) => row.release))];
           if (digests.length) reserve(1, digests.length);
-          const releaseRows = digests.length
-            ? ((await readReleases.run(client, { route: 0, digests })) as { digest: string; body: Release }[])
-            : [];
-          const releases = new Map<string, Release | null>(releaseRows.map((row) => [row.digest, row.body]));
+          const releases = await readBaseReleases(client, digests);
           for (const digest of digests)
             if (!releases.has(digest)) {
               reserve(3, 1);

@@ -129,7 +129,7 @@ export async function prepareCanonicalIdentityDocument(
       if (statementKeys && !selected) return null;
       const publicRating = await readNativeSearchPublicRating(tx, partition, subject);
       const count = await collectionCount(tx, partition, subject);
-      const creditProperties = creditSearchProperties(release, header.type);
+      const creditProperties = creditSearchProperties(release, header.type, header.currentRelease);
       const credit: CreditSearchIndexProjection =
         selected?.credit ?? (creditProperties.length ? { state: 'complete', names: [] } : { state: 'unsupported' });
       const indexed: IndexedSubject = {

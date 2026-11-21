@@ -107,7 +107,7 @@ export async function readCanonicalIndexStatements(
   const relationProperties = facetProperties(runtime.release, [subject.type]).filter((property) =>
     relationFacetProperty(runtime.release, property),
   );
-  const creditProperties = new Set(creditSearchProperties(release, subject.type));
+  const creditProperties = new Set(creditSearchProperties(release, subject.type, subject.currentRelease));
   const relationOrCreditProperties = [...new Set([...relationProperties, ...creditProperties])];
   const { rows } = await tx.query<Selected>(readCanonicalStatementsSql, [
     subject.route,
