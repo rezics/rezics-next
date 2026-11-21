@@ -57,6 +57,7 @@ import { requireLibraryPresentation } from './domain-binding.ts';
 import collectionRead from './collection-reads-collection.sql';
 import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';
+import { COLLECTION_MEMBER_APPLICATION_LIMIT } from './collection-member-applications.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
@@ -352,6 +353,8 @@ export function createCollectionReads(
     listCollections,
     listAccountCollections,
     listMembers,
+    listMemberApplications,
+    listAppliedMembers,
     readMembers,
     withViewerFacts,
     observeMemberSource,
@@ -1469,6 +1472,103 @@ export function createCollectionReads(
       considered.filter((row) => readable.has(row.subjectId)).map(memberView),
       // Cursor epoch 0 is rejected by the seal, while a new Collection's order epoch is 0.
       hasMore && last ? { epoch: collection.orderEpoch + 1, after: [last.ordinalKey, last.id] } : null,
+      (position) => encodeCursor(tokens, binding, position),
+      (cursor) => decodeCursor(tokens, binding, cursor),
+    );
+  }
+
+  async function listMemberApplications(viewer: Actor, collectionId: string, memberId: string, deadline: number) {
+    const route = routeOf(collectionId);
+    if (route === null || routeOf(memberId) !== route) throw notFound();
+    const capture = async () => {
+      const source = await withReadableCollection(viewer, collectionId, deadline, async (client, collection) => {
+        if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
+        const member = await client.query<{ subjectId: string; appliedSubjectIds: string[] }>(
+          `SELECT m.subject_id AS "subjectId",
+                  ARRAY(SELECT a.applied_subject_id FROM library.collection_member_application a
+                    WHERE a.route=m.route AND a.collection_id=m.collection_id AND a.member_id=m.member_id
+                    ORDER BY a.applied_subject_id LIMIT $4) AS "appliedSubjectIds"
+           FROM library.collection_member m
+           WHERE m.route=$1 AND m.collection_id=$2 AND m.member_id=$3 AND m.deletion_id IS NULL`,
+          [route, collectionId, memberId, COLLECTION_MEMBER_APPLICATION_LIMIT],
+        );
+        return { revision: collection.revision, member: member.rows[0] ?? null };
+      });
+      if (!source?.member) throw notFound();
+      return { revision: source.revision, member: source.member };
+    };
+    const admitted = await capture();
+    const { subjectId, appliedSubjectIds } = admitted.member;
+    const readable = new Set(
+      await requireLibraryPresentation().identity.readable({ ...anchors, actor: viewer, context: { pool, deadline } }, [
+        ...new Set([subjectId, ...appliedSubjectIds]),
+      ]),
+    );
+    if (!readable.has(subjectId)) throw notFound();
+    if (JSON.stringify(await capture()) !== JSON.stringify(admitted)) throw new ProblemError('stale_cursor');
+    return { appliedSubjectIds: appliedSubjectIds.filter((id) => readable.has(id)) };
+  }
+
+  async function listAppliedMembers(
+    viewer: Actor,
+    collectionId: string,
+    appliedSubjectId: string,
+    options: { cursor?: string | null; limit?: number },
+    deadline: number,
+  ) {
+    const route = routeOf(collectionId);
+    if (route === null || routeOf(appliedSubjectId) === null) throw notFound();
+    const page = pageRequest(options, ['cursor', 'limit']);
+    const binding: CursorBinding = {
+      operation: 'library.collection.applied-members',
+      parameters: { collectionId, appliedSubjectId, viewer: actor(viewer) ? viewer.accountId : null },
+    };
+    const capture = async () => {
+      const source = await withReadableCollection(viewer, collectionId, deadline, async (client, collection) => {
+        if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
+        const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.revision);
+        const result = await client.query<MemberRow>(
+          `WITH candidates AS MATERIALIZED (
+              SELECT a.route, a.collection_id, a.member_id, a.live_ordinal
+              FROM library.collection_member_application a
+              WHERE a.route=$1 AND a.collection_id=$2 AND a.applied_subject_id=$3 AND a.live_ordinal IS NOT NULL
+                AND (a.live_ordinal, a.member_id) > ($4::text COLLATE "C", $5::uuid)
+              ORDER BY a.live_ordinal, a.member_id LIMIT $6
+            )
+            SELECT m.member_id AS id, m.subject_id AS "subjectId", m.note,
+                   m.ordinal_key AS "ordinalKey", m.added_at::text AS "addedAt"
+            FROM candidates a JOIN library.collection_member m
+              ON (m.route,m.collection_id,m.member_id)=(a.route,a.collection_id,a.member_id)
+            WHERE m.deletion_id IS NULL
+            ORDER BY a.live_ordinal, a.member_id`,
+          [
+            route,
+            collectionId,
+            appliedSubjectId,
+            position?.ordinalKey ?? '',
+            position?.memberId ?? '00000000-0000-0000-0000-000000000000',
+            page.limit + 1,
+          ],
+        );
+        return { revision: collection.revision, rows: result.rows };
+      });
+      if (!source) throw notFound();
+      return source;
+    };
+    const admitted = await capture();
+    const context = { ...anchors, actor: viewer, context: { pool, deadline } };
+    const identity = requireLibraryPresentation().identity;
+    if (!(await identity.readable(context, [appliedSubjectId])).includes(appliedSubjectId)) throw notFound();
+    const considered = admitted.rows.slice(0, page.limit);
+    const subjectIds = [...new Set(considered.map((row) => row.subjectId))];
+    const readable = new Set(subjectIds.length ? await identity.readable(context, subjectIds) : []);
+    if (JSON.stringify(await capture()) !== JSON.stringify(admitted)) throw new ProblemError('stale_cursor');
+    const last = considered.at(-1);
+    return nativeMemberPage(
+      considered.filter((member) => readable.has(member.subjectId)).map(memberView),
+      last && admitted.rows.length > page.limit
+        ? { epoch: admitted.revision + 1, after: [last.ordinalKey, last.id] }
+        : null,
       (position) => encodeCursor(tokens, binding, position),
       (cursor) => decodeCursor(tokens, binding, cursor),
     );

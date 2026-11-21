@@ -199,7 +199,7 @@ export type KnowledgePrivateOperations = Readonly<{
     expected: Pick<Binding, 'viewer' | 'csrfToken'>,
   ) => Promise<NavigationRead<KnowledgeOwnedNotebooksPage>>;
   readOutline: (
-    input: { notebookId: string; parentPlacementId: string | null; cursor: string | null },
+    input: { notebookId: string; parentPlacementId: string | null; cursor: string | null; appliedSubjectId?: string },
     expected: Pick<Binding, 'viewer' | 'csrfToken'>,
   ) => Promise<NavigationRead<KnowledgeOutlinePage>>;
   createDocument: (intent: DocumentIntent) => Promise<PrivateOperationResult<KnowledgeDocumentReceipt>>;

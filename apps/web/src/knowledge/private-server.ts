@@ -490,8 +490,11 @@ export const readKnowledgeOwnedNotebooksRequest = createServerFn({ method: 'POST
 export const readKnowledgeOutlineRequest = createServerFn({ method: 'POST' })
   .validator((value: unknown) => {
     if (!record(value) || !isKnowledgeId(value.notebookId)) throw new Error('Invalid Knowledge outline read');
+    if (value.appliedSubjectId !== undefined && !isKnowledgeId(value.appliedSubjectId))
+      throw new Error('Invalid applied Subject');
     return {
       expected: expectedSession(value),
+      appliedSubjectId: value.appliedSubjectId,
       notebookId: value.notebookId,
       parentPlacementId: parentPlacement(value.parentPlacementId),
       cursor: navigationCursor(value.cursor),
@@ -507,6 +510,7 @@ export const readKnowledgeOutlineRequest = createServerFn({ method: 'POST' })
         notebookId: data.notebookId,
         parentPlacementId: data.parentPlacementId,
         cursor: data.cursor,
+        ...(data.appliedSubjectId === undefined ? {} : { appliedSubjectId: data.appliedSubjectId }),
         authorization: identity.authorization,
       });
     } catch (error) {

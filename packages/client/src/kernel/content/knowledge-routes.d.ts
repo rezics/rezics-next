@@ -24898,6 +24898,7 @@ export declare function knowledgeRoutes(app: ReturnType<typeof hostedChapterRout
                                         cursor?: string;
                                         parentPlacementId?: string;
                                         revisionId?: string;
+                                        appliedSubjectId?: string;
                                     };
                                     headers: unknown;
                                     response: {

@@ -369,10 +369,11 @@ export async function readKnowledgeOutline(
     throw new KnowledgeNotFoundError();
   const parentId = page.parentPlacementId ?? null;
   const limit = page.limit;
+  const appliedSubjectId = query.appliedSubjectId;
   const binding = knowledgeCursorBinding(
     'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline',
     accountId,
-    { limit, notebookId, parentPlacementId: parentId },
+    { limit, notebookId, parentPlacementId: parentId, ...(appliedSubjectId ? { appliedSubjectId } : {}) },
   );
   const cursor = await readCursor(deps, binding, page.cursor);
   if (
@@ -391,6 +392,10 @@ export async function readKnowledgeOutline(
     { route: sourceRoute, id: accountId },
     { pool: deps.pool, deadline: readContext.deadline },
   );
+  const verifyAppliedSubject = appliedSubjectId
+    ? await prepareKnowledgeSubjectDisclosure(deps, [appliedSubjectId], readContext)
+    : undefined;
+  if (verifyAppliedSubject && !(await verifyAppliedSubject())) throw new KnowledgeNotFoundError();
   const result = await snapshot(deps, notebookId, readContext, async (client) => {
     if (!(await check(client))) return null;
     const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
@@ -415,9 +420,26 @@ export async function readKnowledgeOutline(
       KNOWLEDGE_OUTLINE_SCAN_LIMIT + 1,
     );
     const examined = candidates.slice(0, KNOWLEDGE_OUTLINE_SCAN_LIMIT);
+    const matched =
+      appliedSubjectId && examined.length
+        ? new Set(
+            (
+              await client.query<{ document_id: string }>(
+                `SELECT d.document_id
+               FROM content.knowledge_document d
+               JOIN content.knowledge_revision r
+                 ON r.route=d.route AND r.document_id=d.document_id AND r.revision_id=d.head_revision_id
+               WHERE d.route=$1 AND d.notebook_id=$2 AND d.document_id=ANY($3::uuid[])
+                 AND d.deleted_at IS NULL AND NOT d.account_erased AND $4::uuid=ANY(r.subject_ids)`,
+                [sourceRoute, notebookId, examined.map((candidate) => candidate.document_id), appliedSubjectId],
+              )
+            ).rows.map((row) => row.document_id),
+          )
+        : null;
     const placements: (typeof examined)[number][] = [];
     let nextAfter: Readonly<{ position: string; placementId: string }> | null = null;
     for (const candidate of examined) {
+      if (matched && !matched.has(candidate.document_id)) continue;
       const path = await knowledgeAncestorPath(client, sourceRoute, notebookId, candidate.placement_id);
       const stablePath = path.map(({ placement_id, parent_id }) => ({
         placementId: placement_id,
@@ -438,7 +460,7 @@ export async function readKnowledgeOutline(
     }
     return { structureRevisionId: notebook.structure_revision_id, placements, nextAfter };
   });
-  if (!result.value) throw new KnowledgeNotFoundError();
+  if (!result.value || (verifyAppliedSubject && !(await verifyAppliedSubject()))) throw new KnowledgeNotFoundError();
   if (cursor && cursor.epoch !== result.anchor.epoch) throw new KnowledgeStaleCursorError();
   const next = result.value.nextAfter
     ? encodeCursor(

@@ -259,3 +259,28 @@ test('annotation-only and provenance-only facts support Everything without creat
     ).rowCount,
   ).toBe(0);
 });
+
+test('private Subject applications do not share values or revisions with another account', async () => {
+  const subjectId = await f.createSubject('game');
+  const appliedSubjectId = await f.createSubject('game');
+  const list = `/v1/libraryEntries/${subjectId}/applications`;
+  const exact = `${list}/${appliedSubjectId}`;
+  const key = entryKey();
+  const changed = await f.send('owner', 'PUT', exact, { present: true }, key);
+  if (changed.status !== 200) throw new Error(`Application write returned ${changed.status}: ${await changed.text()}`);
+  const applied = { appliedSubjectId, present: true };
+  expect(await changed.json()).toEqual(applied);
+  expect(await (await f.send('owner', 'PUT', exact, { present: true }, key)).json()).toEqual(applied);
+  const owned = await f.send('owner', 'GET', list);
+  expect(owned.headers.get('cache-control')).toBe('private, no-store');
+  expect(await owned.json()).toEqual({ appliedSubjectIds: [appliedSubjectId] });
+  expect(await (await f.send('other', 'GET', list)).json()).toEqual({ appliedSubjectIds: [] });
+  expect(
+    (await (await f.send('owner', 'GET', `/v1/libraryEntries/${subjectId}/personal`)).json()).personalEntry,
+  ).toMatchObject({ annotationRevision: 0, note: null, priority: null });
+  expect(await (await f.send('owner', 'PUT', exact, { present: false }, entryKey())).json()).toEqual({
+    appliedSubjectId,
+    present: false,
+  });
+  expect(await (await f.send('owner', 'GET', list)).json()).toEqual({ appliedSubjectIds: [] });
+});

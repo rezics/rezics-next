@@ -60,7 +60,12 @@ export const KnowledgeOwnedNotebookPageQuerySchema = t.Object(
   { additionalProperties: false },
 );
 export const KnowledgeOutlinePageQuerySchema = t.Object(
-  { ...KnowledgePageQuerySchema.properties, parentPlacementId: t.Optional(UUID), revisionId: t.Optional(UUID) },
+  {
+    ...KnowledgePageQuerySchema.properties,
+    parentPlacementId: t.Optional(UUID),
+    revisionId: t.Optional(UUID),
+    appliedSubjectId: t.Optional(UUID),
+  },
   { additionalProperties: false },
 );
 export const KnowledgeDocumentCompareQuerySchema = t.Object(

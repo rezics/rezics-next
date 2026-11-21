@@ -29,7 +29,7 @@ export type KnowledgeReadContext = Readonly<{ actor: import('../request/access.t
 export type KnowledgePageInput = Readonly<{ limit?: number; cursor?: string }>;
 export type KnowledgeOwnedNotebookPageInput = KnowledgePageInput & Readonly<{ subjectId?: string }>;
 export type KnowledgeOutlinePageInput = KnowledgePageInput &
-  Readonly<{ parentPlacementId?: string; revisionId?: string }>;
+  Readonly<{ parentPlacementId?: string; revisionId?: string; appliedSubjectId?: string }>;
 export type KnowledgeStructureHistoryInput = KnowledgePageInput;
 export type KnowledgeMovePlacementInput = Readonly<{
   expectedStructureRevisionId: string;

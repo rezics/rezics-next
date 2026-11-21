@@ -1,4 +1,4 @@
-import type { MouseEvent, RefObject } from 'react';
+import type { MouseEvent, ReactNode, RefObject } from 'react';
 import type { PersonalEntry, PersonalEntryObservation, PersonalEntrySourceCorrection } from '@rezics/client';
 import { m } from '../../paraglide/messages.js';
 import type { AnnotationDraft, AnnotationConfirmation, AnnotationField, AnnotationIssues } from './contract';
@@ -110,6 +110,7 @@ type SourceWorkspaceProps = {
 };
 
 export type EntryWorkspaceProps = {
+  applications?: ReactNode;
   subject: { id: string; label: string };
   entry: PersonalEntry;
   diaryHref: string;
@@ -118,7 +119,15 @@ export type EntryWorkspaceProps = {
   source: SourceWorkspaceProps;
 };
 
-export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annotation, source }: EntryWorkspaceProps) {
+export function EntryWorkspace({
+  subject,
+  entry,
+  diaryHref,
+  onDiaryClick,
+  annotation,
+  source,
+  applications,
+}: EntryWorkspaceProps) {
   function correctionEditor(baseline: PersonalEntryObservation, current: PersonalEntryObservation | null) {
     return (
       <SourceCorrectionEditor
@@ -143,6 +152,7 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
 
   return (
     <section aria-labelledby="rich-private-entry-heading" className="mt-5 rounded-lg border p-4 sm:p-5">
+      {applications}
       <header className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h2 id="rich-private-entry-heading" className="text-lg font-semibold">

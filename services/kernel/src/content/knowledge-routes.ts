@@ -166,12 +166,19 @@ function knowledgePageInput(query: Readonly<{ limit?: string | number; cursor?: 
 }
 
 function knowledgeOutlinePageInput(
-  query: Readonly<{ limit?: string | number; cursor?: string; parentPlacementId?: string; revisionId?: string }>,
+  query: Readonly<{
+    limit?: string | number;
+    cursor?: string;
+    parentPlacementId?: string;
+    revisionId?: string;
+    appliedSubjectId?: string;
+  }>,
 ) {
   return {
     ...knowledgePageInput(query),
     ...(query.parentPlacementId === undefined ? {} : { parentPlacementId: query.parentPlacementId }),
     ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
+    ...(query.appliedSubjectId === undefined ? {} : { appliedSubjectId: query.appliedSubjectId }),
   };
 }
 
@@ -354,6 +361,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
       },
       async ({ params: { accountId, notebookId }, query, actor, admission, job, session, set }) => {
+        if (query.revisionId && query.appliedSubjectId) throw new ProblemError('invalid_request');
         const result = await operation(() =>
           admission.run('normal', job, () =>
             query.revisionId

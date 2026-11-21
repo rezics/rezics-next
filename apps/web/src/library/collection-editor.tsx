@@ -231,6 +231,7 @@ export function CollectionMemberList({
   onNoteChange,
   onRemove,
   onCopy,
+  renderApplications,
   typeRatios,
   listPresentations,
   comparisonDefinitions,
@@ -252,6 +253,7 @@ export function CollectionMemberList({
   onNoteChange?: (memberId: string, note: string) => void;
   onRemove?: (memberId: string) => void;
   onCopy?: (memberId: string) => void | Promise<void>;
+  renderApplications?: ((memberId: string) => ReactNode) | undefined;
   children?: ReactNode;
 }) {
   return (
@@ -403,6 +405,7 @@ export function CollectionMemberList({
               data-content-item-slot="actions"
               className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}
             >
+              {editing && member.subject ? renderApplications?.(member.id) : null}
               {member.subject && (onCopy || (editing && onBoundaryMove)) ? (
                 <Menu
                   title={actionLabel(m.library_collection_actions())}

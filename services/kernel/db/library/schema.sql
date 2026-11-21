@@ -2816,6 +2816,22 @@ $$;
 
 
 --
+-- Name: refresh_collection_member_application_order(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.refresh_collection_member_application_order() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE library.collection_member_application
+  SET live_ordinal = CASE WHEN NEW.deletion_id IS NULL THEN NEW.ordinal_key END
+  WHERE route = NEW.route AND collection_id = NEW.collection_id AND member_id = NEW.member_id;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: refresh_owner_activity(integer, uuid, uuid); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -3885,6 +3901,21 @@ CREATE TABLE library.collection_member (
 
 
 --
+-- Name: collection_member_application; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_member_application (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    member_id uuid NOT NULL,
+    applied_subject_id uuid NOT NULL,
+    slot smallint NOT NULL,
+    live_ordinal text COLLATE pg_catalog."C",
+    CONSTRAINT collection_member_application_slot_check CHECK (((slot >= 1) AND (slot <= 32)))
+);
+
+
+--
 -- Name: collection_metadata_history; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4757,7 +4788,9 @@ CREATE TABLE library.entry_personal_fact (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    applied_subject_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     CONSTRAINT entry_personal_fact_annotation_audit_check CHECK ((((annotation_revision = 0) AND (note IS NULL) AND (priority IS NULL) AND (annotation_updated_at IS NULL) AND (annotation_transaction_id IS NULL)) OR ((annotation_revision > 0) AND (annotation_updated_at IS NOT NULL) AND (annotation_transaction_id IS NOT NULL)))),
+    CONSTRAINT entry_personal_fact_applied_subject_ids_limit CHECK (((cardinality(applied_subject_ids) <= 32) AND (array_position(applied_subject_ids, NULL::uuid) IS NULL))),
     CONSTRAINT entry_personal_fact_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT entry_personal_fact_fact_route_check CHECK ((route = ((get_byte(uuid_send(fact_id), 10) * 256) + get_byte(uuid_send(fact_id), 11)))),
     CONSTRAINT entry_personal_fact_note_check CHECK (((note IS NULL) OR ((octet_length(note) >= 1) AND (octet_length(note) <= 4096)))),
@@ -7621,6 +7654,22 @@ ALTER TABLE ONLY library.collection_listing_history
 
 
 --
+-- Name: collection_member_application collection_member_application_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member_application
+    ADD CONSTRAINT collection_member_application_pkey PRIMARY KEY (route, collection_id, member_id, applied_subject_id);
+
+
+--
+-- Name: collection_member_application collection_member_application_route_collection_id_member_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member_application
+    ADD CONSTRAINT collection_member_application_route_collection_id_member_id_key UNIQUE (route, collection_id, member_id, slot);
+
+
+--
 -- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9372,6 +9421,13 @@ CREATE INDEX collection_listing_history_owner ON library.collection_listing_hist
 
 
 --
+-- Name: collection_member_application_order; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_application_order ON library.collection_member_application USING btree (route, collection_id, applied_subject_id, live_ordinal, member_id) WHERE (live_ordinal IS NOT NULL);
+
+
+--
 -- Name: collection_member_deletion_id; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -10765,6 +10821,13 @@ CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE O
 
 
 --
+-- Name: collection_member collection_member_application_order; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_member_application_order AFTER UPDATE OF ordinal_key, deletion_id ON library.collection_member FOR EACH ROW WHEN (((old.ordinal_key IS DISTINCT FROM new.ordinal_key) OR (old.deletion_id IS DISTINCT FROM new.deletion_id))) EXECUTE FUNCTION library.refresh_collection_member_application_order();
+
+
+--
 -- Name: collection_member collection_member_retained_immutable; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -11895,6 +11958,14 @@ ALTER TABLE ONLY library.collection_kind_consent_transition
 
 ALTER TABLE ONLY library.collection_kind_raw_input
     ADD CONSTRAINT collection_kind_raw_input_route_origin_id_fkey FOREIGN KEY (route, origin_id) REFERENCES library.collection_kind_audience_origin(route, origin_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_member_application collection_member_application_route_collection_id_member_i_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member_application
+    ADD CONSTRAINT collection_member_application_route_collection_id_member_i_fkey FOREIGN KEY (route, collection_id, member_id) REFERENCES library.collection_member(route, collection_id, member_id) ON DELETE CASCADE;
 
 
 --

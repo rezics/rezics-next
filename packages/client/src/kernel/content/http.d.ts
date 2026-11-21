@@ -24915,6 +24915,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             cursor?: string;
                                             parentPlacementId?: string;
                                             revisionId?: string;
+                                            appliedSubjectId?: string;
                                         };
                                         headers: unknown;
                                         response: {

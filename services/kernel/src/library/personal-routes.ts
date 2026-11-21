@@ -1418,6 +1418,48 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       },
     )
     .get(
+      '/v1/libraryEntries/:subjectId/applications',
+      {
+        params: t.Object({ subjectId: id }, closed),
+        response: { 200: t.Object({ appliedSubjectIds: t.Array(id, { maxItems: 32 }) }, closed), ...failures() },
+        detail: detail('library_entry_application.list', 'library_entry:read'),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        point(actor, params.subjectId, 'library_entry:read');
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          personalCommand(() => entries().listSubjectApplications(actor, params.subjectId)),
+        );
+      },
+    )
+    .put(
+      '/v1/libraryEntries/:subjectId/applications/:appliedSubjectId',
+      {
+        params: t.Object({ subjectId: id, appliedSubjectId: id }, closed),
+        body: t.Object({ present: t.Boolean() }, closed),
+        headers: headers(),
+        response: { 200: t.Object({ appliedSubjectId: id, present: t.Boolean() }, closed), ...failures() },
+        detail: personalDetail('library_entry_application.put', 'library_entry:update'),
+      },
+      async ({ actor, body, params, admission, job, headers, session, set }) => {
+        account(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const result = await admission.run('normal', job, () =>
+          personalCommand(() =>
+            entries().setSubjectApplication(
+              actor,
+              params.subjectId,
+              params.appliedSubjectId,
+              body.present,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+        session.record(result);
+        return result.value;
+      },
+    )
+    .get(
       '/v1/libraryEntries/:subjectId/personal',
       {
         params: t.Object({ subjectId: id }, closed),

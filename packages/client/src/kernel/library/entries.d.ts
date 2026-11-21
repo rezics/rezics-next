@@ -60,6 +60,13 @@ export declare function createEntryCommands(config: Dependencies): {
         authorize: (tx: CommandTransaction) => Promise<void>;
     }) => Promise<import("../command/command.ts").CommandOutcome<unknown> | null>;
     readPersonalEntry: (actor: Actor, subjectId: string) => Promise<import("./entry-personal-model.ts").PersonalEntry>;
+    listSubjectApplications: (actor: Actor, subjectId: string) => Promise<{
+        appliedSubjectIds: string[];
+    }>;
+    setSubjectApplication: (actor: Actor, subjectId: string, appliedSubjectId: string, present: boolean, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
+        appliedSubjectId: string;
+        present: boolean;
+    }>>;
     readSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, provider: string, recordId: string) => Promise<import("./entry-personal-model.ts").PersonalEntryObservation | null>>) => Promise<Readonly<{
         provider: string;
         recordId: string;
