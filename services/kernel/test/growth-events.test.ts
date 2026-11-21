@@ -9,15 +9,13 @@ import {
   capture,
   checkGrowth,
   costOf,
-  openGrowthDatabase,
   seed,
   type GrowthDatabase,
   type GrowthSample,
   type Population,
 } from './support/growth.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+import { openIsolatedGrowthDatabase } from './support/isolated-growth-database.ts';
 
 const anchorPartition = 3100;
 const otherPartition = 3101;
@@ -29,6 +27,7 @@ const checkpointPosition = 50_000;
 const batchLogCheckpointPosition = 150_000;
 const payload = { id: '00000000-0000-7000-8000-000000000001' };
 let db: GrowthDatabase | undefined;
+let fixture: Awaited<ReturnType<typeof openIsolatedGrowthDatabase>> | undefined;
 
 // Outbox rows mirror fence inserts with routed IDs and single-event envelopes; paired anchor rows grow history on both sides of the fixed checkpoint.
 function eventPopulation(name: string, historyPosition: number): Population {
@@ -156,15 +155,8 @@ const batchLogCheckpoints: Population = {
 };
 
 beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  await db.admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer = ANY($1) OR consumer LIKE $2', [
-    [consumer, batchLogConsumer],
-    `${scaledConsumerPrefix}%`,
-  ]);
-  await db.admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1)', [[anchorPartition, otherPartition]]);
-  await db.admin.query('UPDATE core.partition SET position = 0, epoch = 1 WHERE partition_no = ANY($1)', [
-    [anchorPartition, otherPartition],
-  ]);
+  fixture = await openIsolatedGrowthDatabase();
+  db = fixture.database;
   // Create the anchor event and consumer through the command and relay production paths before any scale is added.
   await runCommand(db.pool, { partition: anchorPartition }, async () => ({
     value: null,
@@ -183,16 +175,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!db) return;
-  await db.admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer = ANY($1) OR consumer LIKE $2', [
-    [consumer, batchLogConsumer],
-    `${scaledConsumerPrefix}%`,
-  ]);
-  await db.admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1)', [[anchorPartition, otherPartition]]);
-  await db.admin.query('UPDATE core.partition SET position = 0, epoch = 1 WHERE partition_no = ANY($1)', [
-    [anchorPartition, otherPartition],
-  ]);
-  await db.close();
+  await fixture?.close();
 });
 
 test('Batch checkpoints stays within its bound as C grows', async () => {

@@ -249,17 +249,13 @@ const poisons: Poison[] = [
   },
   {
     reason: 'epoch',
-    write: async (partition) => {
-      await admin.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [partition]);
-      return append(partition);
-    },
-    repair: async (partition) => {
-      await admin.query(
-        `UPDATE core.outbox SET epoch = epoch - 1
-         WHERE partition_no = $1 AND epoch = (SELECT epoch FROM core.partition WHERE partition_no = $1)`,
-        [partition],
-      );
-      await admin.query('UPDATE core.partition SET epoch = epoch - 1 WHERE partition_no = $1', [partition]);
+    write: async (partition) => append(partition, [created()], { epoch: (await epochOf(partition)) + 1 }),
+    repair: async (partition, position) => {
+      await admin.query('UPDATE core.outbox SET epoch = $3 WHERE partition_no = $1 AND position = $2', [
+        partition,
+        position,
+        await epochOf(partition),
+      ]);
     },
   },
 ];

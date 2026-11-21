@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { projectBatch } from '../src/events/log.ts';
 import { newId } from '../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
+import { checkGrowth, seed, type GrowthDatabase, type Population } from './support/growth.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+import { openIsolatedGrowthDatabase } from './support/isolated-growth-database.ts';
 
 const partition = 3100;
 const otherPartition = 3101;
@@ -17,6 +16,7 @@ const checkpointPosition = 500_000;
 const emptyPosition = 700_000;
 const payload = { id: '00000000-0000-7000-8000-000000000001' };
 let db: GrowthDatabase | undefined;
+let fixture: Awaited<ReturnType<typeof openIsolatedGrowthDatabase>> | undefined;
 
 function eventRow(partitionNo: number, position: number, ordinal: number) {
   const route = partitionNo * 16 + (ordinal % 16);
@@ -87,14 +87,6 @@ const history: Population = {
   },
 };
 
-async function reset(database: GrowthDatabase): Promise<void> {
-  await database.admin.query("DELETE FROM core.consumer_checkpoint WHERE consumer LIKE 'growth_projection_%'");
-  await database.admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1)', [partitions]);
-  await database.admin.query('UPDATE core.partition SET position = 0, epoch = 1 WHERE partition_no = ANY($1)', [
-    partitions,
-  ]);
-}
-
 function consumer(kind: string, repetition: number): string {
   return `growth_projection_${kind}_${repetition}`;
 }
@@ -113,17 +105,12 @@ async function createCheckpoint(
 }
 
 beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  await reset(db);
+  fixture = await openIsolatedGrowthDatabase();
+  db = fixture.database;
 });
 
 afterAll(async () => {
-  if (!db) return;
-  try {
-    await reset(db);
-  } finally {
-    await db.close();
-  }
+  await fixture?.close();
 });
 
 test('Released projection batch stays within its bound as checkpoint and outbox history grows', async () => {

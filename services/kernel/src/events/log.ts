@@ -4,9 +4,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import advanceCheckpoint from './advance-checkpoint.sql';
 import compareAdvanceCheckpoint from './compare-advance-checkpoint.sql';
 import ensureCheckpoint from './ensure-checkpoint.sql';
-import lockCheckpoint from './lock-checkpoint.sql';
 import readLog from './read-log.sql';
-import takeCheckpoint from './take-checkpoint.sql';
 
 export { EVENT_TYPES } from './catalogue.ts';
 
@@ -158,6 +156,22 @@ function validateOptions(options: { consumer: string; envelopes?: number }): num
   return limit;
 }
 
+async function readCheckpointLog(client: PoolClient, consumer: string, partition: number, limit: number) {
+  const key = { partition_no: partition, consumer };
+  const params = { ...key, envelopes: limit };
+  let rows = await readLog.run(client, params);
+  if (rows.length === 0) {
+    // A competing insert can commit after the first statement's snapshot.
+    // Enroll if needed, then observe its committed position or a still-locked row.
+    await ensureCheckpoint.run(client, key);
+    rows = await readLog.run(client, params);
+  }
+  const first = rows[0];
+  if (!first) return undefined;
+  const checkpoint = { epoch: first.checkpoint_epoch, position: first.checkpoint_position };
+  return { checkpoint, ...parseRows(rows, partition, checkpoint), rows };
+}
+
 async function readSnapshot(
   pool: Pool,
   options: {
@@ -170,31 +184,27 @@ async function readSnapshot(
 ) {
   const limit = validateOptions(options);
   return withConnection(pool, async (client) => {
+    const read = () => readCheckpointLog(client, options.consumer, options.partition, limit);
+    if (!options.noEffects || options.observe) {
+      const snapshot = await read();
+      return snapshot && { ...snapshot, advanced: false, rows: options.observe ? snapshot.rows : undefined };
+    }
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     try {
-      const key = { partition_no: options.partition, consumer: options.consumer };
-      // A concurrent insert can win the conflict before it becomes visible to the statement's snapshot.
-      const checkpoint = (await takeCheckpoint.run(client, key)) ?? (await lockCheckpoint.run(client, key));
-      if (!checkpoint) {
-        await client.query('COMMIT');
-        return undefined;
-      }
-      const rows = await readLog.run(client, {
-        partition_no: options.partition,
-        position: checkpoint.position,
-        envelopes: limit,
-      });
-      const parsed = parseRows(rows, options.partition, checkpoint);
-      const last = parsed.envelopes.at(-1);
-      const advanced = last !== undefined && !options.observe && options.noEffects?.(parsed.envelopes) === true;
-      if (advanced)
+      const snapshot = await read();
+      const last = snapshot?.envelopes.at(-1);
+      let advanced = false;
+      if (snapshot && last && options.noEffects(snapshot.envelopes)) {
         await advanceCheckpoint.run(client, {
-          ...key,
+          partition_no: options.partition,
+          consumer: options.consumer,
           epoch: last.epoch,
           position: last.position,
         });
+        advanced = true;
+      }
       await client.query('COMMIT');
-      return { checkpoint, ...parsed, advanced, rows: options.observe ? rows : undefined };
+      return snapshot && { ...snapshot, advanced, rows: undefined };
     } catch (error) {
       return rollbackEventTransaction(client, error);
     }
@@ -233,22 +243,18 @@ export async function readBatch(
     await ensureCheckpoint.run(client, { partition_no: options.partition, consumer: options.consumer });
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     try {
-      const checkpoint = await lockCheckpoint.run(client, {
+      const rows = await readLog.run(client, {
         partition_no: options.partition,
         consumer: options.consumer,
+        envelopes: limit,
       });
-      if (!checkpoint) {
+      const first = rows[0];
+      if (!first) {
         await client.query('COMMIT');
         return { status: 'busy' };
       }
-
-      const position = checkpoint.position;
-      const rows = await readLog.run(client, {
-        partition_no: options.partition,
-        position,
-        envelopes: limit,
-      });
-      const { envelopes, reason } = parseRows(rows, options.partition, checkpoint);
+      const position = first.checkpoint_position;
+      const { envelopes, reason } = parseRows(rows, options.partition, { epoch: first.checkpoint_epoch, position });
 
       if (envelopes.length > 0) {
         await options.apply(envelopes);

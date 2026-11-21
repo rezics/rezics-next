@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
 import { EFFECTS_CONSUMER, effectWorkflowId, effectsRelay, registerEffects } from '../src/events/effects.ts';
 import { readBatch, type Envelope } from '../src/events/log.ts';
-import { openGrowthDatabase, checkGrowth, type GrowthDatabase } from './support/growth.ts';
+import { checkGrowth, type GrowthDatabase } from './support/growth.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+import { openIsolatedGrowthDatabase } from './support/isolated-growth-database.ts';
 
 const created = 'com.rezics.subject.created.v1';
 const effectName = 'growth_relay_record';
@@ -15,14 +14,6 @@ const maxEventsPerEnvelope = 1_000;
 const enqueueFailure = new Error('simulated partial enqueue');
 
 type PartitionState = { partition: number; epoch: number; position: string };
-type CheckpointState = {
-  partition: number;
-  consumer: string;
-  epoch: number | null;
-  position: string;
-  updated_at: Date;
-};
-
 function freshPartition(used: Set<number>): number {
   let partition: number;
   do partition = 3072 + Math.floor(Math.random() * 512);
@@ -38,19 +29,6 @@ async function savePartition(db: GrowthDatabase, partition: number): Promise<Par
   );
   if (!rows[0]) throw new Error(`partition ${partition} is missing`);
   return { partition: rows[0].partition_no, epoch: rows[0].epoch, position: rows[0].position };
-}
-
-async function saveCheckpoint(
-  db: GrowthDatabase,
-  partition: number,
-  consumer: string,
-): Promise<CheckpointState | undefined> {
-  const { rows } = await db.admin.query<Omit<CheckpointState, 'partition' | 'consumer'>>(
-    `SELECT epoch, position::text, updated_at FROM core.consumer_checkpoint
-     WHERE partition_no = $1 AND consumer = $2`,
-    [partition, consumer],
-  );
-  return rows[0] ? { ...rows[0], partition, consumer } : undefined;
 }
 
 async function setCheckpoint(
@@ -118,88 +96,41 @@ async function insertLargeEnvelope(
   return rows.map(({ id }) => id);
 }
 
-async function restore(
-  db: GrowthDatabase,
-  partition: PartitionState,
-  checkpoints: readonly { partition: number; consumer: string; saved?: CheckpointState | undefined }[],
-): Promise<void> {
-  await db.admin.query('DELETE FROM core.outbox WHERE partition_no = $1 AND position > $2', [
-    partition.partition,
-    partition.position,
-  ]);
-  await db.admin.query('UPDATE core.partition SET epoch = $2, position = $3 WHERE partition_no = $1', [
-    partition.partition,
-    partition.epoch,
-    partition.position,
-  ]);
-  for (const checkpoint of checkpoints) {
-    await db.admin.query('DELETE FROM core.consumer_checkpoint WHERE partition_no = $1 AND consumer = $2', [
-      checkpoint.partition,
-      checkpoint.consumer,
-    ]);
-    if (!checkpoint.saved) continue;
-    await db.admin.query(
-      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position, updated_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        checkpoint.partition,
-        checkpoint.consumer,
-        checkpoint.saved.epoch,
-        checkpoint.saved.position,
-        checkpoint.saved.updated_at,
-      ],
-    );
-  }
-}
-
 test('empty relay and failed apply stay bounded and resume only through the validated prefix', async () => {
-  const db = await openGrowthDatabase(databaseUrl);
-  const used = new Set<number>();
-  const emptyPartition = freshPartition(used);
-  const resumePartition = freshPartition(used);
-  const busyPartition = freshPartition(used);
-  const emptyInitial = await savePartition(db, emptyPartition);
-  const resumeInitial = await savePartition(db, resumePartition);
-  const busyInitial = await savePartition(db, busyPartition);
-  const checkpoints = [
-    {
-      partition: emptyPartition,
-      consumer: EFFECTS_CONSUMER,
-      saved: await saveCheckpoint(db, emptyPartition, EFFECTS_CONSUMER),
-    },
-    {
-      partition: resumePartition,
-      consumer: EFFECTS_CONSUMER,
-      saved: await saveCheckpoint(db, resumePartition, EFFECTS_CONSUMER),
-    },
-    { partition: busyPartition, consumer: busyConsumer, saved: await saveCheckpoint(db, busyPartition, busyConsumer) },
-  ];
-  const emptyDeep = BigInt(emptyInitial.position) + 1_000_000n;
-  const resumeStart = BigInt(resumeInitial.position) + 1_000_000n;
-  const busyStart = BigInt(busyInitial.position) + 1_000_000n;
-  const resumePrefix = resumeStart + 1n;
-  const resumeGap = resumeStart + 2n;
-  const resumeTail = resumeStart + 3n;
-  const busyHead = busyStart + 1n;
-  const enqueued = new Set<string>();
-  let enqueueCalls = 0;
-  let failAfterFirstEnqueue = false;
-  const enqueue = async (envelopes: readonly Envelope[]): Promise<void> => {
-    enqueueCalls++;
-    for (const envelope of envelopes) {
-      for (let sequence = 0; sequence < envelope.events.length; sequence++) {
-        enqueued.add(effectWorkflowId(envelope, sequence, effectName));
-        if (failAfterFirstEnqueue) {
-          failAfterFirstEnqueue = false;
-          throw enqueueFailure;
+  const { database: db, close } = await openIsolatedGrowthDatabase();
+  try {
+    const used = new Set<number>();
+    const emptyPartition = freshPartition(used);
+    const resumePartition = freshPartition(used);
+    const busyPartition = freshPartition(used);
+    const emptyInitial = await savePartition(db, emptyPartition);
+    const resumeInitial = await savePartition(db, resumePartition);
+    const busyInitial = await savePartition(db, busyPartition);
+    const emptyDeep = BigInt(emptyInitial.position) + 1_000_000n;
+    const resumeStart = BigInt(resumeInitial.position) + 1_000_000n;
+    const busyStart = BigInt(busyInitial.position) + 1_000_000n;
+    const resumePrefix = resumeStart + 1n;
+    const resumeGap = resumeStart + 2n;
+    const resumeTail = resumeStart + 3n;
+    const busyHead = busyStart + 1n;
+    const enqueued = new Set<string>();
+    let enqueueCalls = 0;
+    let failAfterFirstEnqueue = false;
+    const enqueue = async (envelopes: readonly Envelope[]): Promise<void> => {
+      enqueueCalls++;
+      for (const envelope of envelopes) {
+        for (let sequence = 0; sequence < envelope.events.length; sequence++) {
+          enqueued.add(effectWorkflowId(envelope, sequence, effectName));
+          if (failAfterFirstEnqueue) {
+            failAfterFirstEnqueue = false;
+            throw enqueueFailure;
+          }
         }
       }
-    }
-  };
-  const effects = { enqueue } as unknown as ReturnType<typeof registerEffects>;
-  const relay = effectsRelay(db.pool, effects);
+    };
+    const effects = { enqueue } as unknown as ReturnType<typeof registerEffects>;
+    const relay = effectsRelay(db.pool, effects);
 
-  try {
     await db.admin.query('UPDATE core.partition SET position = $2 WHERE partition_no = $1', [
       emptyPartition,
       emptyDeep.toString(),
@@ -354,12 +285,6 @@ test('empty relay and failed apply stay bounded and resume only through the vali
     expect(await active).toEqual({ status: 'read', envelopes: 1, position: busyHead });
     expect(await checkpointPosition(db, busyPartition, busyConsumer)).toBe(busyHead.toString());
   } finally {
-    try {
-      await restore(db, emptyInitial, [checkpoints[0]!]);
-      await restore(db, resumeInitial, [checkpoints[1]!]);
-      await restore(db, busyInitial, [checkpoints[2]!]);
-    } finally {
-      await db.close();
-    }
+    await close();
   }
 }, 240_000);

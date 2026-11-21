@@ -1232,12 +1232,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Checkpoint snapshot and advance
 
-- Touches: `ensure-checkpoint.sql`, `lock-checkpoint.sql` and `compare-advance-checkpoint.sql` insert one
+- Touches: `ensure-checkpoint.sql`, `read-log.sql` and `compare-advance-checkpoint.sql` insert one
   `(partition_no,consumer)` row if absent, lock it with SKIP LOCKED, then compare-and-set after projection. One
   partition only; the snapshot transaction releases before source/engine calls. Grow N/P/H, fixing one consumer and b.
-- Bound: Constant rows read and `k <= 1` row changed; `O(L(P))` blocks per probe/mutation. A successful nonempty
-  batch uses six statements including BEGIN, ensure, lock, log read, COMMIT and CAS; busy/empty paths do less; retry
-  repeats the batch.
+- Bound: Constant rows read and `k <= 1` row changed; `O(L(P))` blocks per probe/mutation. For an enrolled Subject consumer a nonempty batch uses two native statements to read the locked cut and compare-and-advance after apply. An empty cut uses one. A missing or contended checkpoint adds an enrollment and a second read. Discovery can keep the read transaction open through a validated no-effect advance.
 - Growth check: [test/growth-events.test.ts](../../test/growth-events.test.ts): “Batch checkpoints stays within its
   bound as C grows” and “Batch log stays within its bound as H grows”.
 
