@@ -29,6 +29,10 @@ export function createNativeEconomySpot(pool: Pool, { bookId, node }: Configured
     readTrades: (input) => withOwner(input, (store) => store.readTrades(input.instrumentId, input.limit, input.after)),
     readOrder: (input) =>
       withOwner(input, (store) => store.readOwnOrder(input.instrumentId, input.orderId, input.accountId)),
+    readOrderFills: (input) =>
+      withOwner(input, (store) =>
+        store.readOrderFills(input.instrumentId, input.orderId, input.accountId, input.limit, input.after),
+      ),
     place: (input) => withOwner(input, (store) => store.place(input.instrumentId, input)),
     cancel: (input) => withOwner(input, (store) => store.cancel(input.instrumentId, input.orderId, input.accountId)),
   };
