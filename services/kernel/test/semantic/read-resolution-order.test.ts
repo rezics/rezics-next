@@ -30,6 +30,8 @@ import readPartitionBatch from '../../src/partition/read-batch.sql';
 import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
 import readSubjectReference from '../../src/semantic/read-subject-reference.sql';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
+import readDetailSources from '../../src/semantic/read-subject-detail-sources.sql';
+import readPropertySources from '../../src/semantic/read-subject-property-sources.sql';
 import readSummaries from '../../src/semantic/summaries-read.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
 
@@ -474,6 +476,66 @@ test('Subject GET sees the applied relation while the link checkpoint trails its
     foreign.component,
   ]);
   expect((await read(pending)).body.code).toBe('semantic_not_ready');
+}, 60_000);
+
+test('a term-only Book summary reuses its original labels and checks final Access and home changes', async () => {
+  const partition = freshPartition();
+  const book = await createFixed(partition, 'schema:Book', 'A term-only Book');
+  await realAccess.grant(book, 'reader', 'subject:read');
+  await catchUpLinks(partition);
+  const read = () => call('GET', `/v1/subjects/${book.id}`, { token: 'reader' });
+  const observer = observeSql(pool);
+  const denial = randomUUID();
+  async function changeAfterDetail(change: () => Promise<void>) {
+    const barrier = observer.hold({ statement: readDetailSources.sql }, 'after');
+    const response = read();
+    try {
+      await Promise.race([
+        barrier.entered,
+        response.then(() => {
+          throw new Error('Detail witness was not read');
+        }),
+      ]);
+      await change();
+    } finally {
+      barrier.release();
+    }
+    return response;
+  }
+  try {
+    const current = await read();
+    expect(current.response.status).toBe(200);
+    expect(current.body.summary).toMatchObject({
+      id: book.id,
+      type: 'schema:Book',
+      label: { language: 'en', value: 'A term-only Book' },
+      cover: null,
+    });
+    expect(observer.records.map(({ statement }) => statement)).not.toContain(summarySql);
+    expect(observer.records.map(({ statement }) => statement)).not.toContain(
+      readPropertySources['~standard'].query.text,
+    );
+
+    const denied = await changeAfterDetail(async () => {
+      await admin.query(
+        `INSERT INTO access.resource_denial
+           (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+         VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+        [book.route, book.id, accounts.reader, denial],
+      );
+    });
+    expect(denied.response.status).toBe(200);
+    expect(denied.body.summary).toBeNull();
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+
+    const hidden = await changeAfterDetail(() => hide(book.id));
+    expect(hidden.response.status).toBe(200);
+    expect(hidden.body.summary).toBeNull();
+    expect(observer.records.map(({ statement }) => statement)).toContain(summarySql);
+  } finally {
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await observer.close();
+  }
 }, 60_000);
 
 test('live subject construction preserves projection freshness and final authorization', async () => {
