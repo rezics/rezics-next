@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import type { QueryResult } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
@@ -732,37 +733,34 @@ test('native close revalidates a held obsolete maximum after another factory rel
   const leaseDeadline = Date.now() + 300_000;
   const acquired = await registry.acquire(n.queried, { deadline: leaseDeadline });
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
-  let reached!: () => void;
+  let reached!: (expiresAt: number) => void;
   let deliver!: () => void;
-  const maximumRead = new Promise<void>((resolve) => {
+  const maximumRead = new Promise<number>((resolve) => {
     reached = resolve;
   });
   const delivery = new Promise<void>((resolve) => {
     deliver = resolve;
   });
-  let held = false;
   let referenceReads = 0;
   const db = await openGrowthDatabase();
-  const heldPool = new Proxy(db.pool, {
-    get(target, key) {
-      if (key === 'query')
-        return async (query: string, values?: unknown[]) => {
-          // Execute the real statement first. The pool has returned its checkout before delivery is held.
-          const result = await target.query(query, values);
-          if (query.includes('SELECT expires_at FROM search.public_filter_reference')) {
-            referenceReads++;
-            if (!held) {
-              held = true;
-              expect(Number(result.rows[0].expires_at)).toBe(leaseDeadline);
-              reached();
-              await delivery;
-            }
+  const heldPool = db.openPool();
+  heldPool.on('connect', (client) => {
+    client.query = new Proxy(client.query, {
+      apply(query, receiver, args: unknown[]) {
+        const statement = args[0] as string | { text: string } | undefined;
+        const text = typeof statement === 'string' ? statement : statement?.text;
+        const result = Reflect.apply(query, receiver, args);
+        if (!text?.includes('SELECT expires_at FROM search.public_filter_reference')) return result;
+        return result.then(async (reply: QueryResult<{ expires_at: string }>) => {
+          // PostgreSQL has completed the read; delay delivery while another factory releases the lease.
+          if (++referenceReads === 1) {
+            reached(Number(reply.rows[0]?.expires_at));
+            await delivery;
           }
-          return result;
-        };
-      const value = Reflect.get(target, key);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
+          return reply;
+        });
+      },
+    });
   });
   const closer = createPublicFilterCustody(heldPool);
   const deleted: unknown[] = [];
@@ -784,7 +782,13 @@ test('native close revalidates a held obsolete maximum after another factory rel
   });
   const closing = measuredClose.then((measured) => measured.value);
   try {
-    await maximumRead;
+    const expiresAt = await Promise.race([
+      maximumRead,
+      closing.then((result) => {
+        throw new Error(`Close returned ${result.status} before holding the first native reference maximum`);
+      }),
+    ]);
+    expect(expiresAt).toBe(leaseDeadline);
     expect((await registry.acquire(n.queried, context())).status).toBe('unready');
     expect((await releaser.release(acquired.use, context())).status).toBe('released');
     expect(
@@ -812,7 +816,7 @@ test('native close revalidates a held obsolete maximum after another factory rel
     await append(unrelated.queried);
   } finally {
     deliver();
-    await closing;
+    await closing.catch(() => {});
     await closer.close();
     await db.close();
     await releaser.close();
