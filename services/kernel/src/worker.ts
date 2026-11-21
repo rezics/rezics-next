@@ -123,6 +123,10 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
  * outcome children decorate this live list instead of importing a second composition. */
 export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
 
+export function workerShutdownDeadline(): number {
+  return Date.now() + 5000;
+}
+
 export async function startWorker(
   config: WorkerConfig,
   modules?: readonly WorkModule[] | KernelWorkModuleDecorator,
@@ -222,7 +226,7 @@ export async function startWorker(
     })());
   };
   const signal = () => {
-    void stop(Date.now() + 5000)
+    void stop(workerShutdownDeadline())
       .then(() => {
         if (import.meta.main) process.exit(0);
       })

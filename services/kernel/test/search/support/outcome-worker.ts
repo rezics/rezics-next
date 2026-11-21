@@ -1,4 +1,4 @@
-import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/worker.ts';
+import { readWorkerConfig, startWorker, workerShutdownDeadline, type WorkerConfig } from '../../../src/worker.ts';
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects, RebuildError } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
@@ -328,6 +328,11 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   let searchServices = 0;
   let tail = Promise.resolve();
 
+  function stopWorker() {
+    // The owned executable uses the same Work drain budget as a signalled worker.
+    return worker?.stop(import.meta.main ? workerShutdownDeadline() : undefined);
+  }
+
   function close(): Promise<WorkerStats> {
     closing = true; // Seal admission before awaiting any in-flight initialization or controls.
     return (stopping ??= (async () => {
@@ -342,7 +347,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
       await starting?.catch(() => {});
       if (worker) {
         try {
-          await worker.stop();
+          await stopWorker();
         } catch (error) {
           failures.push(error);
         }
@@ -432,7 +437,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     } catch (error) {
       // Missing integrated composition is a failed init, never a readiness reply.
       try {
-        if (worker) await worker.stop();
+        if (worker) await stopWorker();
         else await slot.stop();
       } catch (cleanup) {
         throw new AggregateError([error, cleanup], 'Outcome worker initialization and cleanup failed');
