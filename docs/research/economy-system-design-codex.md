@@ -145,6 +145,18 @@ boundary and operational restore in the chosen topology. Extract service deploym
 versioned owner contract when operational isolation warrants it. This recommendation is based on source inspection;
 latency, throughput and compatibility with the REZICS runtime require measurement at representative admitted load.
 
+### Local contention sample
+
+On candidate `3525bbc0a53`, eight local clients each completed 16 commands against disposable PostgreSQL 19rc1.
+Wallet transfers from separate debit positions completed at 916 operations per second. One shared debit position
+completed at 602 operations per second, with all 128 transferred units accounted for. For spot, each command placed
+an ask and ran native matching to rest it on an empty opposing side. Eight independent instruments completed 496
+orders per second. One shared instrument completed 105 orders per second, returning 743 busy responses before the
+128 orders rested. Its p95 completion time including retries was 166 ms, compared with 21 ms across independent
+instruments. This measures native commands with immediate matching. Ordinary submission currently waits for a scheduled
+sweep before the first match, with additional delay possible under backlog. Order submission therefore needs a targeted
+wake with the schedule retained for recovery.
+
 ## Pinned source references
 
 Read-only clones are indexed under `.reference/economy/`. The revisions are for design and test reference. Refer to
