@@ -188,7 +188,6 @@ export async function canonicalFixture(db: GrowthDatabase) {
     'subject:read',
     'subject:merge',
     'moderation:hide',
-    'moderation:restore',
     'moderation:takedown',
     'collection:create',
     'collection:read',
@@ -248,13 +247,7 @@ export async function canonicalFixture(db: GrowthDatabase) {
     return access.authenticate(token, { pool: db.pool, deadline: deadline() });
   }
   const global = { route: 0, id: GLOBAL_CONTEXT };
-  for (const action of [
-    'subject:create',
-    'subject:merge',
-    'moderation:hide',
-    'moderation:restore',
-    'moderation:takedown',
-  ])
+  for (const action of ['subject:create', 'subject:merge', 'moderation:hide', 'moderation:takedown'])
     await real.grant(global, 'editor', action);
   await bootstrapRelease(db.pool, bundledRelease);
   let editor = await authenticate('editor');

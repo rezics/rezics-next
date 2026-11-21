@@ -60,7 +60,7 @@ beforeAll(async () => {
   expect(fixture.release.digest).toBe(bundledDigest);
   assert(fixture.search);
   await fixture.setup.openFeatures(['search', 'search_advanced', 'personal_library']);
-  await fixture.grant('editor', ['moderation:hide', 'moderation:restore', 'moderation:takedown'], GLOBAL_CONTEXT);
+  await fixture.grant('editor', ['moderation:hide', 'moderation:takedown'], GLOBAL_CONTEXT);
   classification = await fixture.classification();
   books = await fixture.books();
   filters = fixture.filters(classification, await fixture.diet());

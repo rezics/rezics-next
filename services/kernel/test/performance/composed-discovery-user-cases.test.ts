@@ -612,7 +612,7 @@ test('long-harem-light-novels/catalogue-direct/privacy-reduction-served-share', 
     repetitions: 1,
     warmup: async () => {},
     async grow(_db, scale, previous) {
-      await fixture.grant('editor', ['moderation:hide', 'moderation:restore'], GLOBAL_CONTEXT);
+      await fixture.grant('editor', ['moderation:hide'], GLOBAL_CONTEXT);
       const added: CreatedSubject[] = [];
       for (let start = previous; start < scale; start += 64) {
         const end = Math.min(scale, start + 64);
