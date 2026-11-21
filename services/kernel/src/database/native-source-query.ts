@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryConfig } from 'pg';
 import type { StandardQueryV1 } from 'reylo';
 
 /** Execute the declared statement inside an already admitted native work plan.
@@ -20,4 +20,12 @@ export async function nativeSourceQuery<Input, Output>(
     types: { getTypeParser: () => (value: string) => value },
   });
   return statement.decode(result.rows);
+}
+
+/** Reuse only the declared statement's native plan. Schema checks and every parameter still go through the caller's client. */
+export function preparedStatementClient<T extends Pick<PoolClient, 'query'>>(client: T, text: string, name: string): T {
+  const transport = Object.create(client) as T;
+  transport.query = ((query: QueryConfig | string, values?: unknown[]) =>
+    client.query(typeof query === 'object' && query.text === text ? { ...query, name } : query, values)) as T['query'];
+  return transport;
 }

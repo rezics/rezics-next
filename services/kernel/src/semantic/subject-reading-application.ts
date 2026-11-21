@@ -22,6 +22,7 @@ import { AccessUnavailableError, requireAccessDeadline } from '../access/unavail
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionReadClient, partitionReadClients } from '../database/pool.ts';
+import { preparedStatementClient } from '../database/native-source-query.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
@@ -543,8 +544,9 @@ async function readSummaryBatch(
       return await withReadTransaction(
         deps.pool,
         async (client) => {
-          // The owned batch contains only routed Subject and fact slot keys. Keep the caller's snapshot plan if nested.
-          if (!owned) await client.query('SET LOCAL enable_seqscan = off');
+          // A single routed summary has fixed probes. PostgreSQL otherwise replans the large join
+          // for each parameter set. Preserve the caller's planner settings in nested snapshots and larger batches.
+          if (!owned && results.size === 1) await client.query('SET LOCAL plan_cache_mode = force_generic_plan');
           const active = 'access' in deps ? await ports.readActiveRelease(client) : null;
           if ('access' in deps && !active) {
             await partitionReadClient(client, 0);
@@ -650,7 +652,11 @@ async function projectSummaries(
       selected.push({ slot_id, ordinal: Number(ordinal) });
       slots.set(id, selected);
     }
-    const found = (await readSummaries.run(deps.client, {
+    const transport =
+      subjects.length === 1
+        ? preparedStatementClient(deps.client, readSummaries['~standard'].query.text, 'semantic_single_summary_v1')
+        : deps.client;
+    const found = (await readSummaries.run(transport, {
       context_id: GLOBAL_SUBJECT_CONTEXT,
       subjects: subjects.map((key) => ({
         ...key,
@@ -1062,11 +1068,18 @@ async function readSubjectNative(
       const preflight = await withReadTransaction(
         pool,
         async (client) => {
-          const identity = await readSubjectIdentity.run(client, {
-            route,
-            subject_id: subjectId,
-            partition_no: partitionOf(route),
-          });
+          const identity = await readSubjectIdentity.run(
+            preparedStatementClient(
+              client,
+              readSubjectIdentity['~standard'].query.text,
+              'semantic_subject_identity_v1',
+            ),
+            {
+              route,
+              subject_id: subjectId,
+              partition_no: partitionOf(route),
+            },
+          );
           if (!identity || identity.visibility !== 'visible' || !(await initialAuthorize(client))) return null;
           if (identity.redirect && identity.redirect !== terminal)
             throw new SubjectRedirectError(subjectId, identity.redirect);
@@ -1157,10 +1170,10 @@ async function readSubjectNative(
           (partition && { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position });
         if (!component) return null;
         const rows = listed(
-          (await readSubjectStatement.run(client, { route, subject_id: subjectId })) as
-            | SubjectReadRow[]
-            | SubjectReadRow
-            | null,
+          (await readSubjectStatement.run(
+            preparedStatementClient(client, readSubjectStatement['~standard'].query.text, 'semantic_subject_detail_v1'),
+            { route, subject_id: subjectId },
+          )) as SubjectReadRow[] | SubjectReadRow | null,
         );
         if (!rows.length) {
           return null;

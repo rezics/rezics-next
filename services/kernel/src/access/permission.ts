@@ -1,4 +1,3 @@
-import type { QueryConfig } from 'pg';
 import { globalReadPreparation } from './global-read-preparation.ts';
 import {
   accessNativeWork,
@@ -85,7 +84,7 @@ import {
 import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { nativeSourceQuery } from '../database/native-source-query.ts';
+import { nativeSourceQuery, preparedStatementClient } from '../database/native-source-query.ts';
 import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-audience-original.ts';
 import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
 import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
@@ -109,20 +108,8 @@ export function withCompiledPermissionChecks<T>(body: () => T): T {
   return compiledPermissionChecks.run(true, body);
 }
 
-// Reylo still dispatches its schema checks through the same client. Only the
-// declared SQL is named, so current actor, resource, role and time stay per call.
-function preparedPermissionClient(client: AccessClient, text: string, name: string): AccessClient {
-  const transport = Object.create(client) as AccessClient;
-  transport.query = ((query: QueryConfig | string, values?: unknown[]) =>
-    client.query(
-      typeof query === 'object' && query.text === text ? { ...query, name } : query,
-      values,
-    )) as AccessClient['query'];
-  return transport;
-}
-
 function readFormula(client: AccessClient, input: Parameters<typeof permissionRead.run>[1]) {
-  const reader = preparedPermissionClient(client, permissionCheckFormulaStatement(), 'access_permission_formula_v1');
+  const reader = preparedStatementClient(client, permissionCheckFormulaStatement(), 'access_permission_formula_v1');
   return compiledPermissionChecks.getStore()
     ? nativeSourceQuery(reader, permissionRead, input, 'compiled')
     : permissionRead.run(reader, input);
@@ -130,7 +117,7 @@ function readFormula(client: AccessClient, input: Parameters<typeof permissionRe
 
 function readInverse(client: AccessClient, input: Parameters<typeof inverseRead.run>[1]) {
   return inverseRead.run(
-    preparedPermissionClient(client, inverseRead['~standard'].query.text, 'access_permission_inverse_v1'),
+    preparedStatementClient(client, inverseRead['~standard'].query.text, 'access_permission_inverse_v1'),
     input,
   );
 }

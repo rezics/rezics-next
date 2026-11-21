@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { withBoundedCommandConnection } from '../database/pool.ts';
+import { preparedStatementClient } from '../database/native-source-query.ts';
 import { lookupEventType } from '../events/catalogue.ts';
 import { BATCH_ENVELOPES } from '../events/log.ts';
 import { LINKS_PROJECTED, SUBJECT_PAGE_WORK_COMMITTED } from './events.ts';
@@ -130,7 +131,12 @@ export async function subjectLinksCovered(
 ): Promise<boolean> {
   const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
   observe?.('checkpoint-deadline');
-  let behind = requirements.partitions.length ? await readLinkCheckpoint.run(client, requirements) : null;
+  const transport = preparedStatementClient(
+    client,
+    readLinkCheckpoint['~standard'].query.text,
+    'semantic_subject_link_checkpoint_v1',
+  );
+  let behind = requirements.partitions.length ? await readLinkCheckpoint.run(transport, requirements) : null;
   // Only the detail reader supplies its authorized Subject home anchor. A positive link
   // checkpoint plus a complete suffix of already committed maintenance has no link work left.
   if (
@@ -148,7 +154,7 @@ export async function subjectLinksCovered(
       ),
       observeMissing,
     );
-    behind = otherRequirements.partitions.length ? await readLinkCheckpoint.run(client, otherRequirements) : null;
+    behind = otherRequirements.partitions.length ? await readLinkCheckpoint.run(transport, otherRequirements) : null;
   }
   if (behind) {
     observe?.(checkpointWaitReason(behind, subject));
