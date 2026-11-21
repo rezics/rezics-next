@@ -431,54 +431,83 @@ export async function readHeldQuietCommands(
   db: CreationReader,
   homes: readonly Readonly<{ partition: number; epoch: number; base: string; head: string }>[],
   eventLimit: number,
+  meter?: Meter,
 ) {
-  if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 32 || homes.length > 32)
+  if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 128 || homes.length > 32)
     throw new TypeError('Invalid held creation window allowance');
-  const positions: { home: number; position: string; epoch: number }[] = [];
+  const ranges = [];
   const quiet = new Map<number, string[]>();
+  let positions = 0;
   for (const home of homes) {
-    const base = BigInt(home.base),
-      head = BigInt(home.head);
-    if (head - base > BigInt(eventLimit - positions.length)) break;
+    const count = BigInt(home.head) - BigInt(home.base);
+    if (count < 0n || count > BigInt(eventLimit - positions)) break;
     quiet.set(home.partition, []);
-    for (let position = base + 1n; position <= head; position++)
-      positions.push({ home: home.partition, position: String(position), epoch: home.epoch });
+    if (count) ranges.push({ ...home, count: Number(count) });
+    positions += Number(count);
   }
-  if (!positions.length) return quiet;
-  const points = positions.length * 3;
-  const { rows } = await db.query<{
+  if (!positions) return quiet;
+
+  // Each command and write-basis index is traversed once per finite home.
+  // One extra outbox slot detects a non-singleton group or a malformed tail.
+  const points = 2 * positions + 3 * ranges.length;
+  const result = await db.query<{
     home: number;
-    position: string;
-    epoch: number;
-    id: string;
-    type: string;
-    subject: string | null;
-    digest: string;
-    basis: string | null;
+    events: [string, number, number, number, string, string, string | null, string | null][];
+    bases: [string, string, number][];
   }>(
     `/* semantic.native-keyed:${points}:${points} */
-    SELECT k.home,k.position::text,k.epoch,o.id,o.type,o.subject,
-      encode(sha256(convert_to(o.data::text,'UTF8')),'hex') AS digest,b.transaction_id AS basis
-    FROM jsonb_to_recordset($1::jsonb) k(home integer,position bigint,epoch integer)
-    CROSS JOIN LATERAL (SELECT id,type,subject,data FROM core.outbox
-      WHERE (partition_no,position,event_seq)=(k.home,k.position,0) AND epoch=k.epoch AND event_count=1 AND payload_state='present'
-      LIMIT 1) o
-    LEFT JOIN LATERAL (SELECT transaction_id FROM editorial.write_basis
-      WHERE (partition_no,position,epoch)=(k.home,k.position,k.epoch) LIMIT 1) b ON true
-    WHERE NOT EXISTS (SELECT FROM core.outbox WHERE (partition_no,position)=(k.home,k.position) AND event_seq>0)
-    ORDER BY k.home,k.position`,
-    [JSON.stringify(positions)],
+    SELECT r.partition AS home,coalesce(o.events,'[]') AS events,coalesce(b.bases,'[]') AS bases
+    FROM jsonb_to_recordset($1) r(partition integer,base bigint,head bigint,count integer)
+    CROSS JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_array(position::text,event_seq,event_count,epoch,id,type,subject,digest)
+        ORDER BY position,event_seq) AS events FROM (
+        SELECT position,event_seq,event_count,epoch,id,type,subject,
+          CASE WHEN payload_state='present' THEN encode(sha256(convert_to(data::text,'UTF8')),'hex') END AS digest
+        FROM core.outbox WHERE partition_no=r.partition AND position>r.base AND position<=r.head
+        ORDER BY position,event_seq LIMIT r.count+1
+      ) slots
+    ) o CROSS JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_array(position::text,transaction_id,epoch) ORDER BY position) AS bases
+      FROM (SELECT position,transaction_id,epoch FROM editorial.write_basis
+        WHERE partition_no=r.partition AND position>r.base AND position<=r.head ORDER BY position LIMIT r.count) keys
+    ) b ORDER BY r.partition`,
+    [JSON.stringify(ranges)],
   );
-  for (const row of rows) {
-    if (publicFilterCreationAction(row.type, false) !== null) quiet.delete(row.home);
-    else
+  let visited = 2 * ranges.length;
+  for (const [index, row] of result.rows.entries()) {
+    const home = ranges[index]!;
+    if (row.home !== home.partition) throw new CommandUnavailableError('contention', home.partition);
+    visited += row.events.length + row.bases.length;
+    const bases = new Map(
+      row.bases.filter(([, , epoch]) => epoch === home.epoch).map(([position, id]) => [position, id]),
+    );
+    if (row.events.length !== home.count) {
+      quiet.delete(row.home);
+      continue;
+    }
+    for (const [offset, [position, sequence, count, epoch, id, type, subject, digest]] of row.events.entries()) {
+      if (
+        BigInt(position) !== BigInt(home.base) + BigInt(offset + 1) ||
+        sequence !== 0 ||
+        count !== 1 ||
+        epoch !== home.epoch ||
+        digest === null ||
+        publicFilterCreationAction(type, false) !== null
+      ) {
+        quiet.delete(row.home);
+        break;
+      }
       quiet
-        .get(row.home)
-        ?.push(JSON.stringify([row.position, row.epoch, row.id, row.type, row.subject, row.digest, row.basis]));
+        .get(row.home)!
+        .push(JSON.stringify([position, epoch, id, type, subject, digest, bases.get(position) ?? null]));
+    }
   }
-  for (const home of homes) {
-    if (BigInt(quiet.get(home.partition)?.length ?? -1) !== BigInt(home.head) - BigInt(home.base))
-      quiet.delete(home.partition);
+  if (result.rows.length !== ranges.length) throw new CommandUnavailableError('contention', ranges[0]!.partition);
+  if (meter) {
+    const unused = points - visited;
+    meter.rows -= unused;
+    meter.inputKeys -= unused;
+    meter.dependencyPoints -= unused;
   }
   return quiet;
 }

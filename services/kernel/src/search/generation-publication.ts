@@ -518,6 +518,31 @@ export function createSearchGenerationPublication(
       throw new Pending('source_pending');
     return { capture, definition: resolved.definition };
   }
+  // A separately funded receiver turn can fold ready children without
+  // opening another Source observation. A miss releases the lane to repair.
+  async function prepareHeldReceiverAck(job: Job, client: PoolClient, meter: Meter) {
+    const inputLimit = 824;
+    const byteLimit = 848 * 1024;
+    meter.inputKeys += inputLimit;
+    meter.dependencyPoints += inputLimit;
+    meter[validationBytes] += byteLimit;
+    meter.resultWrites += 34;
+    meter.frontierWrites++;
+    const ack = await client.query<{
+      points: number;
+      proof_bytes: number;
+      range_writes: number;
+      result_writes: number;
+    }>('SELECT * FROM search.prepare_subject_ack_prefix_v1($1,$2,$3)', [job.job, inputLimit, byteLimit]);
+    const page = ack.rows[0]!;
+    meter.inputKeys -= inputLimit - page.points;
+    meter.dependencyPoints -= inputLimit - page.points;
+    meter[validationBytes] -= byteLimit - page.proof_bytes;
+    meter.resultWrites -= 34 - page.result_writes;
+    meter.frontierWrites -= 1 - page.range_writes;
+    return page.range_writes > 0;
+  }
+
   async function completeSource(
     job: Job,
     client: PoolClient,
@@ -916,6 +941,7 @@ export function createSearchGenerationPublication(
       enrollment?: boolean | 'sealed',
       additionalEnrollmentCosts?: readonly SearchPublicFilterCost[],
     ) => Promise<T>,
+    batchHeld = false,
   ): Promise<T> {
     const ref = structuredClone(input);
     const target = locator(ref.consumer);
@@ -1048,32 +1074,62 @@ export function createSearchGenerationPublication(
                 if (endHome <= job.next_home || inputs > available) throw new Pending('source_pending');
                 meter.inputKeys += inputs;
                 meter.dependencyPoints += inputs;
-                await reconcileHeldSubjectPage(
-                  pool,
-                  {
-                    job: job.job,
-                    bootstrap: job.held_bootstrap,
-                    birth: job.held_birth,
-                    firstHome: job.next_home,
-                    endHome,
-                    ordinal: job.next_ordinal,
-                  },
-                  context,
-                  async (obligation) => {
-                    await checkWriterTarget();
-                    await reconcile(
-                      job,
-                      obligation.partition,
-                      obligation.ids,
-                      undefined,
-                      BigInt(obligation.position),
-                      context,
-                      meter,
-                      true,
-                    );
-                  },
-                );
+                const frontier = {
+                  job: job.job,
+                  bootstrap: job.held_bootstrap,
+                  birth: job.held_birth,
+                  firstHome: job.next_home,
+                  endHome,
+                  ordinal: job.next_ordinal,
+                };
+                const step = await reconcileHeldSubjectPage(pool, frontier, context, async (obligation) => {
+                  await checkWriterTarget();
+                  await reconcile(
+                    job,
+                    obligation.partition,
+                    obligation.ids,
+                    undefined,
+                    BigInt(obligation.position),
+                    context,
+                    meter,
+                    true,
+                  );
+                });
                 meter.frontierWrites++;
+                if (
+                  batchHeld &&
+                  job.subscription_protocol === 1 &&
+                  step?.next?.phase === 'window' &&
+                  step.obligations.length === 0
+                ) {
+                  // Both owners read the committed inventory. Receiver acceptance
+                  // remains a third transaction, including after an uncertain reply.
+                  const sourceCost = cost(),
+                    receiverCost = cost();
+                  sourceCost.inputKeys = sourceCost.dependencyPoints = inputs;
+                  receiverCost.inputKeys = receiverCost.dependencyPoints = 192 + 32 * 24;
+                  const [window, receiver] = await Promise.allSettled([
+                    reconcileHeldSubjectPage(
+                      pool,
+                      { ...frontier, ordinal: frontier.ordinal + 1 },
+                      context,
+                      async () => {
+                        throw new Pending('source_pending');
+                      },
+                    ),
+                    client.query<{ homes: number }>('SELECT search.advance_subject_receiver_v1($1,32) AS homes', [
+                      job.job,
+                    ]),
+                  ]);
+                  if (receiver.status === 'rejected') throw receiver.reason;
+                  if (receiver.value.rows[0]?.homes) {
+                    await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+                    receiverCost.frontierWrites += 3;
+                  }
+                  if (window.status === 'rejected') throw window.reason;
+                  sourceCost.frontierWrites++;
+                  return work(job, client, null, undefined, true, [sourceCost, receiverCost]);
+                }
                 return work(job, client, null, undefined, true);
               }
               if (
@@ -2415,6 +2471,7 @@ export function createSearchGenerationPublication(
               ...(sourceAdvanced ? { sourceAdvanced } : {}),
             };
           },
+          options?.batchSource,
         ),
       );
     },
@@ -2464,12 +2521,18 @@ export function createSearchGenerationPublication(
                 // Resume under the same alias lock, with the same deadline and a fresh meter.
                 const additionalSourceCosts: SearchPublicFilterCost[] = [];
                 let longest = Date.now() - started;
+                let drainReceiver = job.subscription_protocol === 1;
                 while (additionalSourceCosts.length + 1 < SUBJECT_SETTLEMENT_TURNS) {
                   const nextStarted = Date.now();
                   if (nextStarted + 2 * longest >= context.deadline) break;
                   const nextMeter = cost();
-                  const next = await completeSource(job, client, context, nextMeter, capture);
                   additionalSourceCosts.push(nextMeter);
+                  if (drainReceiver) {
+                    drainReceiver = await prepareHeldReceiverAck(job, client, nextMeter);
+                    longest = Math.max(longest, Date.now() - nextStarted);
+                    continue;
+                  }
+                  const next = await completeSource(job, client, context, nextMeter, capture);
                   if (!next.sourceAdvanced || next.complete) break;
                   longest = Math.max(longest, Date.now() - nextStarted);
                 }

@@ -2235,13 +2235,30 @@ BEGIN
     IF saved.end_home IS DISTINCT FROM hi THEN RAISE EXCEPTION 'Original Subject Access interval mismatch'; END IF;
     IF semantic.subject_access_definition_v1(member_birth) IS DISTINCT FROM saved.definition_digest
       THEN RAISE EXCEPTION 'Original Subject definition or membership keys changed'; END IF;
-    original:=core.capture_subject_retention_page_v1(member_birth,lo,hi);
-    IF (SELECT count(*) FROM jsonb_array_elements(saved.cuts) WITH ORDINALITY s(cut,ordinal)
-      CROSS JOIN LATERAL semantic.subject_access_heads_v1((cut->>'home')::integer,(cut->>'epoch')::integer) a
-      WHERE cut @> (original->(ordinal::integer-1)) AND a.account_revision >= (cut->>'account')::bigint
-        AND a.claim_revision >= (cut->>'claim')::bigint AND a.enqueue_revision >= (cut->>'enqueue')::bigint
-        AND (a.enqueue_revision > (cut->>'enqueue')::bigint OR (a.account_revision,a.claim_revision)=
-          ((cut->>'account')::bigint,(cut->>'claim')::bigint)))<>hi-lo
+    -- The domain and membership are locked above. Reopen shared registration,
+    -- store and restore lineage once, then compare the two original pages
+    -- against the current native owner, privacy head and cleanup of every home.
+    SELECT c.cuts INTO STRICT original FROM core.subject_retention_page_v1 c
+      JOIN core.subject_subscription_v1 m USING(birth)
+      JOIN core.subject_retention_domain d ON d.singleton AND NOT d.fenced AND
+        (d.restore_generation,d.registration_generation)=(m.restore_generation,m.registration_generation)
+      CROSS JOIN LATERAL core.subject_retention_heads_v1(lo) anchor
+      WHERE (c.birth,c.first_home,c.end_home)=(member_birth,lo,hi) AND anchor.restore=m.restore_generation
+        AND m.opened_xid<>pg_current_xact_id();
+    IF NOT semantic.subject_access_range_current_v1(saved,lo,hi) OR
+      (SELECT count(*) FROM jsonb_array_elements(saved.cuts) WITH ORDINALITY s(cut,ordinal)
+       CROSS JOIN LATERAL (SELECT lo+ordinal::integer-1 AS home) i
+       CROSS JOIN LATERAL (SELECT epoch,position FROM core.partition WHERE partition_no=i.home AND write_state='active' LIMIT 1) h
+       CROSS JOIN LATERAL (SELECT generation FROM core.publication_authority_epoch WHERE home_no=i.home LIMIT 1) g
+       CROSS JOIN LATERAL (SELECT position FROM semantic.public_filter_privacy_head WHERE partition_no=i.home
+         AND owner_epoch=h.epoch AND NOT population_fenced LIMIT 1) n
+       LEFT JOIN core.subject_cleanup_v1 permit ON permit.home=i.home
+       WHERE cut @> (original->(ordinal::integer-1)) AND
+         (cut->>'home',cut->>'epoch',cut->>'generation')=(i.home::text,h.epoch::text,g.generation::text)
+         AND (cut->>'command')::bigint<=h.position AND (cut->>'privacy')::bigint<=n.position
+         AND (permit.home IS NULL OR ((permit.owner_epoch,permit.home_generation,permit.restore_generation)=
+           (h.epoch,g.generation,(SELECT restore_generation FROM core.subject_subscription_v1 WHERE birth=member_birth))
+           AND permit.command_through<=(cut->>'command')::bigint AND permit.privacy_through<=(cut->>'privacy')::bigint)))<>hi-lo
       THEN RAISE EXCEPTION 'Original Subject Access authority changed'; END IF;
   END IF;
   RETURN saved.cuts;
@@ -2314,6 +2331,27 @@ CREATE FUNCTION semantic.catalogue_work_valid(admitted bigint[], spent bigint[])
   WHERE admitted[n] IS NULL OR spent[n] IS NULL OR spent[n]<0 OR admitted[n]<spent[n]
    OR admitted[n]>9007199254740991)
 $$;
+
+
+--
+-- Name: change_subject_access_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.change_subject_access_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE old_home integer; new_home integer;
+BEGIN
+  IF TG_OP='TRUNCATE' THEN
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid();
+  ELSE
+    IF TG_OP<>'INSERT' THEN old_home:=OLD.partition_no/32*32; END IF;
+    IF TG_OP<>'DELETE' THEN new_home:=NEW.partition_no/32*32; END IF;
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid()
+      WHERE first_home IN (old_home,new_home);
+  END IF;
+  RETURN NULL;
+END $$;
 
 
 --
@@ -5605,6 +5643,19 @@ $$;
 
 
 --
+-- Name: stamp_subject_access_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.stamp_subject_access_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.access_revisions:=semantic.subject_access_range_revisions_v1(NEW.first_home,NEW.end_home);
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: subject_access_cut_v1(uuid, integer); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5699,6 +5750,55 @@ CREATE FUNCTION semantic.subject_access_heads_v1(wanted_home integer, wanted_epo
   WHERE a.revision>0 AND a.claim_revision>0
     AND (p.partition_no IS NULL OR (p.owner_epoch,p.native_revision,p.native_claim_revision)=
       (wanted_epoch,a.revision,a.claim_revision))
+$$;
+
+
+--
+-- Name: subject_access_page_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_access_page_v1 (
+    birth bigint NOT NULL,
+    first_home integer NOT NULL,
+    end_home integer NOT NULL,
+    cuts jsonb NOT NULL,
+    definition_digest text NOT NULL,
+    captured_xid xid8 NOT NULL,
+    access_revisions uuid[],
+    CONSTRAINT subject_access_page_v1_check CHECK (((end_home <= 4096) AND (((end_home - first_home) >= 1) AND ((end_home - first_home) <= 32)))),
+    CONSTRAINT subject_access_page_v1_check1 CHECK (((jsonb_typeof(cuts) = 'array'::text) AND (jsonb_array_length(cuts) = (end_home - first_home))))
+);
+
+
+--
+-- Name: subject_access_range_current_v1(semantic.subject_access_page_v1, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_range_current_v1(p semantic.subject_access_page_v1, lo integer, hi integer) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT CASE WHEN lo<p.first_home OR hi>p.end_home OR hi<=lo THEN false
+    WHEN p.access_revisions=semantic.subject_access_range_revisions_v1(p.first_home,p.end_home) THEN true
+    ELSE (SELECT count(*)=hi-lo FROM generate_series(lo,hi-1) i
+      CROSS JOIN LATERAL (SELECT p.cuts->(i-p.first_home) AS cut) x
+      CROSS JOIN LATERAL semantic.subject_access_heads_v1(i,(x.cut->>'epoch')::integer) a
+      WHERE a.account_revision>=(x.cut->>'account')::bigint AND a.claim_revision>=(x.cut->>'claim')::bigint
+        AND (a.enqueue_revision>(x.cut->>'enqueue')::bigint OR
+          (a.enqueue_revision,a.account_revision,a.claim_revision)=((x.cut->>'enqueue')::bigint,
+            (x.cut->>'account')::bigint,(x.cut->>'claim')::bigint))) END
+$$;
+
+
+--
+-- Name: subject_access_range_revisions_v1(integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_range_revisions_v1(lo integer, hi integer) RETURNS uuid[]
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT CASE WHEN count(*)=(hi-1)/32-lo/32+1 THEN array_agg(revision ORDER BY first_home) END
+  FROM semantic.subject_access_range_revision_v1 WHERE first_home BETWEEN lo/32*32 AND (hi-1)/32*32
+    AND lo BETWEEN 0 AND 4095 AND hi-lo BETWEEN 1 AND 32 AND hi<=4096
 $$;
 
 
@@ -10821,18 +10921,13 @@ CREATE TABLE semantic.subject (
 
 
 --
--- Name: subject_access_page_v1; Type: TABLE; Schema: semantic; Owner: -
+-- Name: subject_access_range_revision_v1; Type: TABLE; Schema: semantic; Owner: -
 --
 
-CREATE TABLE semantic.subject_access_page_v1 (
-    birth bigint NOT NULL,
+CREATE TABLE semantic.subject_access_range_revision_v1 (
     first_home integer NOT NULL,
-    end_home integer NOT NULL,
-    cuts jsonb NOT NULL,
-    definition_digest text NOT NULL,
-    captured_xid xid8 NOT NULL,
-    CONSTRAINT subject_access_page_v1_check CHECK (((end_home <= 4096) AND (((end_home - first_home) >= 1) AND ((end_home - first_home) <= 32)))),
-    CONSTRAINT subject_access_page_v1_check1 CHECK (((jsonb_typeof(cuts) = 'array'::text) AND (jsonb_array_length(cuts) = (end_home - first_home))))
+    revision uuid DEFAULT gen_random_uuid() NOT NULL,
+    CONSTRAINT subject_access_range_revision_v1_first_home_check CHECK ((((first_home >= 0) AND (first_home <= 4095)) AND ((first_home % 32) = 0)))
 );
 
 
@@ -13228,6 +13323,14 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 ALTER TABLE ONLY semantic.subject_access_page_v1
     ADD CONSTRAINT subject_access_page_v1_pkey PRIMARY KEY (birth, first_home);
+
+
+--
+-- Name: subject_access_range_revision_v1 subject_access_range_revision_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_access_range_revision_v1
+    ADD CONSTRAINT subject_access_range_revision_v1_pkey PRIMARY KEY (first_home);
 
 
 --
@@ -17334,6 +17437,15 @@ CREATE TRIGGER statement_disclosure_search_canonical_generation AFTER INSERT OR 
 
 
 --
+-- Name: subject_access_page_v1 subject_access_before_bind; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_before_bind BEFORE INSERT ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION semantic.stamp_subject_access_range_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_before_bind;
+
+
+--
 -- Name: subject_access_page_v1 subject_access_bind; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -17349,6 +17461,42 @@ ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access
 CREATE TRIGGER subject_access_immutable BEFORE DELETE OR UPDATE ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION core.retain_subject_original_v1();
 
 ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_immutable;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_change; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_change AFTER UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((((old.input_key = '["domain","accounts"]'::text) OR (new.input_key = '["domain","accounts"]'::text)) AND ((((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.input_key IS DISTINCT FROM new.input_key)) OR (old.owner_epoch IS DISTINCT FROM new.owner_epoch)) OR (old.native_revision IS DISTINCT FROM new.native_revision)) OR (old.native_claim_revision IS DISTINCT FROM new.native_claim_revision)) OR (old.enqueue_revision IS DISTINCT FROM new.enqueue_revision)))) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_change;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_insert; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_insert AFTER INSERT ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((new.input_key = '["domain","accounts"]'::text)) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_insert;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_remove; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_remove AFTER DELETE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((old.input_key = '["domain","accounts"]'::text)) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_remove;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_truncate AFTER TRUNCATE ON semantic.public_filter_privacy_pending FOR EACH STATEMENT EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_truncate;
 
 
 --

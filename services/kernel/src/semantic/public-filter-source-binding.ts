@@ -80,7 +80,7 @@ import repairWindowScan from './public-filter-source-binding-repair-window-scan.
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
-import type { Pool, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
 import { planPublicFilterEnrollment } from './public-filter-preparation-budget.ts';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
@@ -1234,6 +1234,8 @@ export function createNativePublicFilterSourceBinding(
   type RepairState = {
     owner?: 'semantic' | 'accounts';
     heldBirth?: string;
+    /** Inventory and command closure advance together on new held executions. */
+    heldPageStart?: number;
     partition: number;
     after: { route: number; id: string } | null;
     subject: string | null;
@@ -1309,7 +1311,13 @@ export function createNativePublicFilterSourceBinding(
     db: Pool,
     cost: BindingCost,
     retained?: RepairRecord,
-  ): Promise<Readonly<{ next: RepairState; receipt: NonNullable<RepairRecord['scan']> }>> {
+  ): Promise<
+    Readonly<{
+      next: RepairState;
+      receipt: NonNullable<RepairRecord['scan']>;
+      windowBatch?: RepairRecord['windowBatch'];
+    }>
+  > {
     if (
       state.phase !== 'scan' ||
       state.owner === 'accounts' ||
@@ -1319,30 +1327,86 @@ export function createNativePublicFilterSourceBinding(
       state.projection !== null
     )
       throw new BindingError('binding_mismatch');
-    const limit = Math.min(inputLimit, repairHomeBatchLimit, 4096 - state.partition);
+    const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
+    const limit = Math.min(inputLimit, repairHomeBatchLimit, pageEnd - state.partition);
     let heldHead: string | undefined;
     let heldHeads: readonly string[] | undefined;
+    let windowBatch: RepairRecord['windowBatch'];
     async function scan() {
       if (state.heldBirth !== undefined) {
         if (!retained || retained.scan?.heldHeads) {
-          const page = await readHeldRepairHomes(
-            db,
-            {
-              bootstrap,
-              birth: state.heldBirth,
-              partition: state.partition,
-              after: state.after,
-              limit: Math.min(limit, heldRepairHomes),
-              inventory: true,
-            },
-            context,
-            retained?.scan?.heldHeads
-              ? {
-                  heads: retained.scan.heldHeads,
-                  key: retained.next.subject === null ? null : retained.next.after,
-                }
-              : undefined,
-          );
+          const birth = state.heldBirth;
+          const read = (client: Pick<PoolClient, 'query'>) =>
+            readHeldRepairHomes(
+              client,
+              {
+                bootstrap,
+                birth,
+                partition: state.partition,
+                after: state.after,
+                limit: Math.min(limit, heldRepairHomes),
+                inventory: true,
+              },
+              context,
+              retained?.scan?.heldHeads
+                ? {
+                    heads: retained.scan.heldHeads,
+                    key: retained.next.subject === null ? null : retained.next.after,
+                  }
+                : undefined,
+              cost,
+            );
+          // The committed physical inventory already precedes this repair. When the
+          // fresh ordered seek is empty, its snapshot can also compare the finite
+          // command groups from the held cut. Any relevant or incomplete group
+          // leaves the remaining homes to the ordinary creation bridge.
+          const compact =
+            state.partition === state.heldPageStart &&
+            !state.after &&
+            (!retained || retained.windowBatch !== undefined);
+          const page = compact
+            ? await withReadTransaction(
+                db,
+                async (client) => {
+                  const homes = await read(client);
+                  if (homes.at(-1)?.id || state.partition + homes.length !== pageEnd) return homes;
+                  const candidates = retained?.windowBatch ? homes.slice(0, retained.windowBatch.count) : homes;
+                  const quiet = await readHeldQuietCommands(client, candidates, Math.min(96, inputLimit), cost);
+                  const count = candidates.findIndex((home) => !quiet.has(home.partition));
+                  const closed = count < 0 ? candidates : candidates.slice(0, count);
+                  if (closed.length) {
+                    windowBatch = {
+                      from: state.partition,
+                      count: closed.length,
+                      examined: closed.length,
+                      packed: packClosedCreationWindows(
+                        closed.map((h) => ({
+                          partition: h.partition,
+                          epoch: h.epoch,
+                          receipt: h.receipt,
+                          base: BigInt(h.base),
+                          through: BigInt(h.head),
+                          position: BigInt(h.base) + 1n,
+                          sequence: 0,
+                          eventCount: null,
+                        })),
+                      ),
+                      through: closed.map((h) => h.head),
+                      digest: hash(
+                        encode({
+                          input: state,
+                          inputLimit,
+                          closed,
+                          commands: closed.map((h) => quiet.get(h.partition)),
+                        }),
+                      ),
+                    };
+                  }
+                  return homes;
+                },
+                context.deadline,
+              )
+            : await read(db);
           heldHeads = page.map((row) => row.head);
           return page.map((row) => ({
             partition_no: row.partition,
@@ -1436,8 +1500,16 @@ export function createNativePublicFilterSourceBinding(
         epoch: null,
       };
     }
+    if (state.heldPageStart !== undefined && next.phase === 'scan' && next.partition === pageEnd) {
+      const through = state.heldPageStart + (windowBatch?.count ?? 0);
+      next =
+        through === pageEnd && pageEnd < 4096
+          ? { ...next, owner: 'semantic', heldPageStart: pageEnd }
+          : { ...next, partition: through, owner: 'semantic', phase: 'window' };
+    }
     return {
       next,
+      windowBatch,
       receipt: {
         kind: 'semantic',
         homes: rows.length,
@@ -1731,13 +1803,19 @@ export function createNativePublicFilterSourceBinding(
     inputLimit: number,
     db: Pool,
     context: PublicFilterConsumerContext,
+    cost: BindingCost,
     retained?: RepairRecord,
   ) {
     const batch = retained?.windowBatch;
-    // Two independent reads share the ordinary 768-input reservation. A
-    // page with command evidence admits 16 homes and at most 32 commands.
+    // Saved two-pass executions keep their original 16-home command pages.
+    // Ordered executions can consume the remainder of this held interval.
     const inspectEvents = !batch || batch.through !== undefined;
-    const limit = Math.min(inputLimit, inspectEvents ? 16 : heldRepairHomes);
+    const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
+    const limit = Math.min(
+      inputLimit,
+      state.heldPageStart === undefined && inspectEvents ? 16 : heldRepairHomes,
+      pageEnd - state.partition,
+    );
     if (
       !state.heldBirth ||
       state.owner !== 'semantic' ||
@@ -1775,8 +1853,16 @@ export function createNativePublicFilterSourceBinding(
           },
           context,
           heads ? { heads, key: null } : undefined,
+          cost,
         );
-        const quiet = inspectEvents ? await readHeldQuietCommands(client, rows, Math.min(inputLimit, 32)) : null;
+        const quiet = inspectEvents
+          ? await readHeldQuietCommands(
+              client,
+              rows,
+              Math.min(inputLimit, state.heldPageStart === undefined ? 32 : 96),
+              cost,
+            )
+          : null;
         return { rows, quiet };
       },
       context.deadline,
@@ -1811,7 +1897,9 @@ export function createNativePublicFilterSourceBinding(
     return {
       next: open
         ? { ...state, partition: open.partition, epoch: open.epoch, phase: 'bridge' as const, bridge: open }
-        : { ...state, partition: state.partition + examined },
+        : state.heldPageStart !== undefined && state.partition + examined === pageEnd && pageEnd < 4096
+          ? { ...state, heldPageStart: pageEnd, partition: pageEnd, phase: 'scan' as const }
+          : { ...state, partition: state.partition + examined },
       batch: {
         from: state.partition,
         count: closed.length,
@@ -2192,6 +2280,15 @@ export function createNativePublicFilterSourceBinding(
       },
     };
   }
+  // A single-home bridge keeps its historical window successor for ACK decoding.
+  function atHeldBridgePageEnd(state: RepairState) {
+    return (
+      state.phase === 'window' &&
+      state.heldPageStart !== undefined &&
+      state.partition < 4096 &&
+      state.partition === state.heldPageStart + heldRepairHomes
+    );
+  }
   function terminalRepairState(state: RepairState): boolean {
     return (
       state.partition === 4096 &&
@@ -2323,6 +2420,7 @@ export function createNativePublicFilterSourceBinding(
         projection: null,
         claimInputs: true,
         ...(heldBirth !== undefined && { heldBirth }),
+        ...(heldBirth !== undefined && joined.cut.row.subscription_protocol === 1 && { heldPageStart: 0 }),
       };
     if (state.heldBirth !== heldBirth) throw new BindingError('binding_mismatch');
     const mixed = 'representation' in bootstrap.definition.capture;
@@ -2422,8 +2520,18 @@ export function createNativePublicFilterSourceBinding(
           phase: 'window',
         };
       }
+    } else if (atHeldBridgePageEnd(state)) {
+      next = { ...state, heldPageStart: state.partition, phase: 'scan' };
     } else if (state.phase === 'window' && heldBirth !== undefined && (!replay || replay.windowBatch)) {
-      const scanned = await scanHeldCreationWindows(bootstrap.id, state, inputLimit, db, context, replay ?? undefined);
+      const scanned = await scanHeldCreationWindows(
+        bootstrap.id,
+        state,
+        inputLimit,
+        db,
+        context,
+        cost,
+        replay ?? undefined,
+      );
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' && heldBirth === undefined && (!replay || replay.windowBatch)) {
@@ -2482,6 +2590,7 @@ export function createNativePublicFilterSourceBinding(
         const scanned = await scanSemanticHomes(id, context, state, inputLimit, db, cost, replay ?? undefined);
         next = scanned.next;
         scan = scanned.receipt;
+        windowBatch = scanned.windowBatch;
       }
     } else {
       const owner = await readPartition(db, state.partition);
@@ -4062,6 +4171,11 @@ export function createNativePublicFilterSourceBinding(
           if (!predecessorState || encode(decode<RepairRecord>(predecessorState).next) !== encode(record.input))
             throw new BindingError('binding_mismatch');
         } else if (
+          (record.input.heldPageStart !== undefined &&
+            (!originalSubject ||
+              cut.row.subscription_protocol !== 1 ||
+              !record.input.heldBirth ||
+              record.input.heldPageStart !== 0)) ||
           record.input.partition !== 0 ||
           record.input.owner !== undefined ||
           record.input.phase !== 'scan' ||
@@ -4139,6 +4253,9 @@ export function createNativePublicFilterSourceBinding(
                   epoch: null,
                   phase: 'window',
                 };
+        } else if (atHeldBridgePageEnd(record.input)) {
+          if (record.output || record.account || receiptDigests.length) throw new BindingError('binding_mismatch');
+          expected = { ...record.input, heldPageStart: record.input.partition, phase: 'scan' };
         } else if (record.output) {
           if (
             record.input.phase !== 'project' ||
@@ -4257,6 +4374,7 @@ export function createNativePublicFilterSourceBinding(
                     row.input_limit,
                     db,
                     { deadline },
+                    cost,
                     record,
                   )
                 : record.windowBatch.through === undefined
@@ -4327,6 +4445,7 @@ export function createNativePublicFilterSourceBinding(
               );
               expected = scanned.next;
               expectedScan = scanned.receipt;
+              expectedWindowBatch = scanned.windowBatch;
             }
           } else {
             const owner = await readPartition(db, state.partition);
@@ -4426,9 +4545,7 @@ export function createNativePublicFilterSourceBinding(
         const closedWindow = closedCreationBridge(record);
         const closedHome =
           closedWindow?.partition ??
-          (record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
-            ? record.windowBatch.from
-            : undefined);
+          (record.windowBatch && record.windowBatch.count > 0 ? record.windowBatch.from : undefined);
         const page = {
           step,
           predecessor: row.predecessor,
@@ -5311,9 +5428,17 @@ export function createNativePublicFilterSourceBinding(
       }
       if (cut.row.ack_protocol === 1) {
         if (!boundSubjectPublication(cut, publication)) throw new BindingError('binding_mismatch');
-        const points = Math.min(160 + 20 * 32, preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0));
+        const held = cut.row.subscription_protocol === 1;
+        const reserve = held ? 24 : 0;
+        const points = Math.min(
+          reserve + 160 + 20 * 32,
+          preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0),
+        );
         // Leave room for this statement, its three arguments and its four scalar results.
-        const bytes = Math.min((64 + 24 * 32) * 1024, 4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0) - 1024);
+        const bytes = Math.min(
+          ((held ? 80 : 64) + 24 * 32) * 1024,
+          4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0) - 1024,
+        );
         if (points >= 180 && bytes >= 88 * 1024) {
           // A lost reply can include the home markers, their clock and one range.
           const homes = Math.min(32, Math.floor((points - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
@@ -5327,7 +5452,7 @@ export function createNativePublicFilterSourceBinding(
             result_writes: number;
           }>(
             `/* semantic.native-keyed:${points}:${points}:${writes} */
-             SELECT * FROM search.prepare_public_filter_ack_batch($1,$2,$3)`,
+             SELECT * FROM search.${held ? 'prepare_subject_ack_prefix_v1' : 'prepare_public_filter_ack_batch'}($1,$2,$3)`,
             [publication.job, points, bytes],
           );
           const batch = prepared.rows[0]!;

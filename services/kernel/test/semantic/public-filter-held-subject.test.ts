@@ -366,6 +366,21 @@ test('held repair reopens the exact ordered prefix through a real original and r
     const client = await db.admin.connect();
     try {
       await client.query('BEGIN');
+      // An interior carry changes after the page is committed. The unchanged
+      // range shortcut must give way to the original per-home comparison.
+      await client.query('SAVEPOINT before_change');
+      await client.query(
+        'UPDATE access.account_discovery_population SET claim_revision=claim_revision+1 WHERE partition_no=4',
+      );
+      const stamp = await client.query(
+        `SELECT access_revisions=semantic.subject_access_range_revisions_v1(first_home,end_home) AS current
+         FROM semantic.subject_access_page_v1 WHERE birth=$1 AND first_home=0`,
+        [birth],
+      );
+      expect(stamp.rows[0]?.current).toBe(false);
+      await expect(readHeldRepairHomes(client, input, context(), retained)).rejects.toThrow();
+      await client.query('ROLLBACK TO before_change');
+      expect(await readHeldRepairHomes(client, input, context(), retained)).toEqual(original);
       await client.query('UPDATE core.publication_authority_epoch SET generation=gen_random_uuid() WHERE home_no=4');
       await expect(readHeldRepairHomes(client, input, context(), retained)).rejects.toThrow();
     } finally {

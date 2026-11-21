@@ -112,6 +112,7 @@ export async function readHeldRepairHomes(
   }>,
   context: Readonly<{ deadline: number }>,
   retained?: Readonly<{ heads: readonly string[]; key: HeldSubjectOriginal | null }>,
+  meter?: { inputKeys: number; rows: number; dependencyPoints: number },
 ) {
   requireAccessDeadline(context.deadline);
   const { partition, limit, after, inventory } = input;
@@ -139,10 +140,12 @@ export async function readHeldRepairHomes(
   )
     throw new TypeError('Invalid held Subject page frontier');
   const width = retained?.heads.length ?? limit;
-  const points = 93 + 6 * width;
+  const points = 97 + 6 * width;
   const { rows } = await db.query<{
     home: number;
     end_home: number;
+    key_count: number;
+    access_current: boolean;
     epoch: number;
     receipt: string;
     base: string;
@@ -152,13 +155,16 @@ export async function readHeldRepairHomes(
   }>(
     `/* semantic.native-keyed:${points}:${points} */
     WITH page AS MATERIALIZED (
-      SELECT p.first_home,least(p.end_home,$2::integer+$4::integer) AS stop,p.cuts,c.cuts AS original,m.restore_generation
+      SELECT p.first_home,m.key_count,stamp.current AS access_current,least(p.end_home,$2::integer+$4::integer) AS stop,p.cuts,c.cuts AS original,m.restore_generation
       FROM semantic.subject_access_cut_v1($1,$2) anchor
       JOIN core.subject_subscription_v1 m ON m.birth=anchor.birth
       CROSS JOIN LATERAL (SELECT * FROM semantic.subject_access_page_v1 p
         WHERE p.birth=m.birth AND p.first_home<=$2 ORDER BY p.first_home DESC LIMIT 1) p
       JOIN core.subject_retention_page_v1 c ON (c.birth,c.first_home,c.end_home)=(p.birth,p.first_home,p.end_home)
+      CROSS JOIN LATERAL (SELECT p.access_revisions=semantic.subject_access_range_revisions_v1(p.first_home,p.end_home)
+        AS current OFFSET 0) stamp
       WHERE anchor.birth=$3 AND p.end_home>$2
+        AND (stamp.current OR semantic.subject_access_range_current_v1(p,$2,least(p.end_home,$2::integer+$4::integer)))
     ), frontier AS MATERIALIZED (
       SELECT page.*,k.route,k.id,coalesce(k.route/16+1,stop) AS end_home FROM page
       LEFT JOIN LATERAL (SELECT s.route,s.subject_id AS id FROM semantic.subject s
@@ -166,7 +172,7 @@ export async function readHeldRepairHomes(
         (s.route,s.subject_id) ${retained ? '=' : after ? '>' : '>='} ($6::integer,$7::uuid)
         ORDER BY s.route,s.subject_id LIMIT 1) k ON true
     )
-    SELECT i AS home,f.end_home,p.epoch,x.cut->>'receipt' AS receipt,x.cut->>'command' AS base,
+    SELECT i AS home,f.end_home,f.key_count,f.access_current,p.epoch,x.cut->>'receipt' AS receipt,x.cut->>'command' AS base,
       p.position::text AS head,CASE WHEN i=f.route/16 THEN f.id::text END AS id,
       CASE WHEN i=f.route/16 THEN f.route END AS route
     FROM frontier f CROSS JOIN LATERAL generate_series($2,f.end_home-1) i
@@ -174,15 +180,10 @@ export async function readHeldRepairHomes(
     CROSS JOIN LATERAL (SELECT epoch,position FROM core.partition WHERE partition_no=i AND write_state='active' LIMIT 1) p
     CROSS JOIN LATERAL (SELECT generation FROM core.publication_authority_epoch WHERE home_no=i LIMIT 1) g
     CROSS JOIN LATERAL (SELECT position FROM semantic.public_filter_privacy_head WHERE partition_no=i AND owner_epoch=p.epoch AND NOT population_fenced LIMIT 1) n
-    CROSS JOIN LATERAL semantic.subject_access_heads_v1(i,p.epoch) a
     LEFT JOIN LATERAL (SELECT * FROM core.subject_cleanup_v1 WHERE home=i LIMIT 1) permit ON true
     WHERE x.cut @> (f.original->(i-f.first_home))
       AND (x.cut->>'home',x.cut->>'epoch',x.cut->>'generation')=(i::text,p.epoch::text,g.generation::text)
       AND p.position >= (x.cut->>'command')::bigint AND n.position >= (x.cut->>'privacy')::bigint
-      AND a.account_revision >= (x.cut->>'account')::bigint AND a.claim_revision >= (x.cut->>'claim')::bigint
-      AND (a.enqueue_revision > (x.cut->>'enqueue')::bigint OR
-        (a.enqueue_revision,a.account_revision,a.claim_revision)=((x.cut->>'enqueue')::bigint,
-          (x.cut->>'account')::bigint,(x.cut->>'claim')::bigint))
       AND (permit.home IS NULL OR ((permit.owner_epoch,permit.home_generation,permit.restore_generation)=
         (p.epoch,g.generation,f.restore_generation) AND permit.command_through<=(x.cut->>'command')::bigint
         AND permit.privacy_through<=(x.cut->>'privacy')::bigint))
@@ -203,6 +204,14 @@ export async function readHeldRepairHomes(
     (retained && (rows.length !== width || (retained.key && rows.at(-1)?.id !== retained.key.id)))
   )
     throw new CommandUnavailableError('contention', partition);
+  if (meter) {
+    // The anchor checked the exact original key closure (maximum 64). The
+    // stamp proves that neither Account input has moved anywhere in the page.
+    const unused = 64 - rows[0]!.key_count + (rows[0]!.access_current ? 2 * width : 0);
+    meter.rows -= unused;
+    meter.inputKeys -= unused;
+    meter.dependencyPoints -= unused;
+  }
   return rows.map((row, i) => {
     const head = retained?.heads[i] ?? row.head;
     if (

@@ -177,6 +177,21 @@ each verified creation window with its own page, the original Core and Access tu
 The existing range parents, fenced repair settlement and independently committed manifest authorize Source's
 terminal ACK. The held traversal, alias readback and observation retirement use their existing fences.
 
+New held repair executions finish inventory and finite command windows in ordered intervals of 32 homes.
+An empty raw Subject seek can close the contiguous prefix whose native outbox groups contain only
+irrelevant single-slot events. Source and its independent reader compare the original positions, payload
+digests and write bases. An original key, relevant command, missing slot or multi-slot group goes through
+the existing projection or creation bridge. A saved execution resumes the ordering in its original receipt.
+
+The Access page samples the revisions of the 32-home groups it intersects. Changes to Account population,
+claims or their enqueue carry rotate the affected group revision in the writer transaction. A matching
+revision reuses the captured Access comparison. A changed revision or an older page requires the native
+home comparisons. Each reader still checks placement, store, restore generation and both stream bounds.
+
+The receiver verifies a complete leaf as its ordered window closes. It decodes each packed Source step
+once and compares its homes with independently adopted receiver pages. Final assembly reopens the current
+witnesses and rebuilds stale leaves before linking the root to the terminal settlement.
+
 A post-base captured privacy interval inserts its exact intake under the receiver registration lock. A new
 high water updates the registration generation and upserts one dirty home in the same transaction. Delivery of a
 second key already covered by that high water retains its own intake. Original ACK readback preserves later dirty

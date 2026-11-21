@@ -6769,6 +6769,42 @@ CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE 
 
 
 --
+-- Name: account_discovery_population subject_access_range_change; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_change AFTER UPDATE ON access.account_discovery_population FOR EACH ROW WHEN ((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.revision IS DISTINCT FROM new.revision)) OR (old.claim_revision IS DISTINCT FROM new.claim_revision))) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_change;
+
+
+--
+-- Name: account_discovery_population subject_access_range_insert; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_insert AFTER INSERT ON access.account_discovery_population FOR EACH ROW EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_insert;
+
+
+--
+-- Name: account_discovery_population subject_access_range_remove; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_remove AFTER DELETE ON access.account_discovery_population FOR EACH ROW EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_remove;
+
+
+--
+-- Name: account_discovery_population subject_access_range_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_truncate AFTER TRUNCATE ON access.account_discovery_population FOR EACH STATEMENT EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_truncate;
+
+
+--
 -- Name: workflow_approval workflow_approval_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
