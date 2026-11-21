@@ -58,7 +58,7 @@ test('original command and privacy evidence survives a lost page worker in two n
         await worker.query(`SELECT input_key FROM core.subject_subscription_key_v1
       WHERE birth<=(SELECT core.subject_membership_revision_v1()) ORDER BY input_key`)
       ).rows.map((row) => row.input_key),
-    ).toEqual(keys);
+    ).toEqual([...keys]);
     expect((await measured(worker, grant, [1], 0))!.command_through).toBeNull();
     await expect(worker.query(capture, [birth, 1, 2])).rejects.toThrow('Retention page gap');
     const { cuts } = (await measured(worker, capture, [birth, 0, 2], 1))!;
