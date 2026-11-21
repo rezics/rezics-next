@@ -32,7 +32,7 @@ const statement = readFileSync(new URL('./public-filter-coverage-population.sql'
 const attachedCoverage = /\/\* semantic\.attached-coverage \*\/[\s\S]*?\/\* semantic\.end-attached-coverage \*\//;
 const discoveryStatement = statement.replace(
   attachedCoverage,
-  `SELECT proof.* FROM semantic.public_filter_mixed_coverage(
+  () => `SELECT proof.* FROM semantic.public_filter_mixed_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'`,
 );

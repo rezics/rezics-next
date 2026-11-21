@@ -196,6 +196,37 @@ function populationFixture() {
   return { routeKey, startId, executionId, start, queried, request, startRequest, row };
 }
 
+test('each physical target keeps its native family predicate in the prepared population statement', async () => {
+  const { routeKey, startRequest } = populationFixture();
+  for (const [physicalTarget, proof, operator] of [
+    ['test-subjects-g1', 'published', '!~'],
+    ['test-discovery-g1', 'mixed', '~'],
+  ] as const) {
+    const request = startRequest(Date.now() + 1000);
+    const queried = { ...request.queried, consumer: { ...request.queried.consumer, physicalTarget } };
+    let dispatched = false;
+    const backend = client(
+      async (query) => {
+        dispatched = true;
+        assert.ok(query.text.includes(`SELECT proof.* FROM semantic.public_filter_${proof}_coverage(`));
+        const guard = query.text.split(') proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ')[1];
+        assert.equal(guard?.split('\n')[0], `${operator} 'discovery-g[1-9][0-9]*$'`);
+        return { rows: [] };
+      },
+      () => {},
+    );
+    const result = await readPublicFilterPopulation(
+      pool(async () => backend),
+      routeKey,
+      { ...request, queried },
+      search,
+      access,
+    );
+    assert.ok(dispatched);
+    assert.equal(result.status, 'unready');
+  }
+});
+
 test('population start/final retention bounds native custody and replays the durable result at unchanged cost', async () => {
   const { routeKey, startId, executionId, start, queried, request, startRequest, row } = populationFixture();
   const fixedCost = {
