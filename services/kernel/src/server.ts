@@ -4,6 +4,7 @@ import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/mo
 import { isEconomyBookId } from './economy/contract.ts';
 import { createNativeEconomyWallet } from './composition/economy.ts';
 import { createNativeEconomySpot } from './composition/economy-spot.ts';
+import { withCommittedSpotWake } from './composition/economy-spot-wake.ts';
 import { createNativeEconomyMarket, readEconomyMarketConfig } from './composition/economy-market.ts';
 import { createNativeEconomyTestFunding, readEconomyTestFundingConfig } from './composition/economy-test-funding.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
@@ -278,7 +279,11 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         ? {}
         : {
             economy: createNativeEconomyWallet(pool, economyConfig),
-            economySpot: createNativeEconomySpot(pool, economyConfig),
+            economySpot: withCommittedSpotWake(
+              createNativeEconomySpot(pool, economyConfig),
+              economyConfig,
+              await client,
+            ),
           }),
       ...(economyMarket === undefined ? {} : { economyMarket }),
       ...(economyTestFunding === undefined ? {} : { economyTestFunding }),

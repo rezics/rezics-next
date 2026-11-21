@@ -5,10 +5,12 @@ import { ConfigError } from '../commerce/config.ts';
 import { isEconomyBookId, type ExpiredAssetProgram } from '../economy/contract.ts';
 import { createNativeMarket } from '../economy/storage/market-runner.ts';
 import type { MarketStoreDatabase } from '../economy/storage/market-store.ts';
+import { createSpotStore } from '../economy/storage/spot-store.ts';
 import { WORK_APPLICATION } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createNativeEconomyDatabase, createNativeEconomyLedger } from './economy.ts';
 import { createNativeEconomySpotWork } from './economy-spot.ts';
+import { ECONOMY_SPOT_MATCH_WAKE, type SpotMatchWake } from './economy-spot-wake.ts';
 
 type BookBinding = Readonly<{ bookId: string; node: string }>;
 type MarketBinding = BookBinding & Readonly<{ itemHomeId: string }>;
@@ -210,6 +212,45 @@ function registerSpot(context: WorkContext, book?: BookBinding) {
   );
 }
 
+function registerSpotMatchWake(context: WorkContext, book?: BookBinding) {
+  if (!book) {
+    DBOS.registerWorkflow(async () => ({ kind: 'disabled' }), { name: ECONOMY_SPOT_MATCH_WAKE });
+    return;
+  }
+  const store = createSpotStore(createNativeEconomyDatabase(context.pool), book.bookId);
+  const advance = DBOS.registerStep(
+    async ({ instrumentId, sequence }: SpotMatchWake) => {
+      try {
+        const current = await store.readBook(instrumentId);
+        if (current.kind === 'not_found') return { kind: 'stale' };
+        if (current.kind !== 'ok') return { kind: 'deferred' };
+        if (current.value.matchingSequence?.toString() !== sequence) return { kind: 'stale' };
+        // The revision fence under the instrument lock covers concurrent sweeps and later acceptances.
+        const result = await store.match(instrumentId, current.value.revision);
+        return { kind: result.kind === 'ok' ? 'advanced' : 'deferred' };
+      } catch {
+        return { kind: 'deferred' };
+      }
+    },
+    { name: 'economy.spot.advanceAccepted' },
+  );
+  DBOS.registerWorkflow(
+    async (input?: unknown) => {
+      if (!matchesBook(input, book)) return { kind: 'disabled' };
+      if (
+        !('instrumentId' in input) ||
+        typeof input.instrumentId !== 'string' ||
+        !('sequence' in input) ||
+        typeof input.sequence !== 'string' ||
+        !/^[1-9][0-9]{0,18}$/.test(input.sequence)
+      )
+        return { kind: 'stale' };
+      return advance({ ...book, instrumentId: input.instrumentId, sequence: input.sequence });
+    },
+    { name: ECONOMY_SPOT_MATCH_WAKE },
+  );
+}
+
 function registerMarket(context: WorkContext, target?: MarketBinding) {
   if (!target) {
     DBOS.registerWorkflow(async () => ({ kind: 'disabled' }), { name: ECONOMY_MARKET_OWNER_WORK.workflow });
@@ -330,6 +371,7 @@ export const economyOwnerWorkModule: WorkModule = {
   async register(context) {
     const { book, market } = binding(context.env);
     registerSpot(context, book);
+    registerSpotMatchWake(context, book);
     registerMarket(context, market);
     registerCreditExpiry(context, book);
     await reconcileSchedule(context.client, ECONOMY_SPOT_OWNER_WORK, book);
