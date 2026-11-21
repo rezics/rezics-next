@@ -220,10 +220,10 @@ BEGIN
       AND due_at=item.due_at AND interval_key=item.interval_key;
     IF NOT FOUND THEN CONTINUE; END IF;
     anchor := greatest(anchor,item.due_at);
-    DELETE FROM access.current_resource_role_key WHERE interval_key=item.interval_key;
+    DELETE FROM access.current_resource_role_key WHERE route=item.route AND interval_key=item.interval_key;
     INSERT INTO access.current_resource_role_key
       SELECT route,resource_id,grant_role,subject_kind,subject_id,subject_role,erasure_key
-      FROM access.resource_role_grant WHERE erasure_key=item.interval_key AND valid @> anchor
+      FROM access.resource_role_grant WHERE route=item.route AND erasure_key=item.interval_key AND valid @> anchor
       ON CONFLICT DO NOTHING;
     UPDATE access.current_resource_role_frontier SET processed_at=anchor,version=version+1
       WHERE route=item.route AND resource_id=item.resource_id;
@@ -935,8 +935,8 @@ BEGIN
     ON CONFLICT DO NOTHING;
     UPDATE access.current_resource_role_frontier SET version=version+1
     WHERE route=OLD.route AND resource_id=OLD.resource_id;
-    DELETE FROM access.current_resource_role_key WHERE interval_key=OLD.erasure_key;
-    DELETE FROM access.current_resource_role_due WHERE interval_key=OLD.erasure_key;
+    DELETE FROM access.current_resource_role_key WHERE route=OLD.route AND interval_key=OLD.erasure_key;
+    DELETE FROM access.current_resource_role_due WHERE route=OLD.route AND interval_key=OLD.erasure_key;
   END IF;
   IF TG_OP <> 'DELETE' THEN PERFORM access.index_current_resource_role(NEW); END IF;
   RETURN NULL;
@@ -1935,8 +1935,8 @@ BEGIN
   ON CONFLICT DO NOTHING;
   UPDATE access.current_resource_role_frontier SET version=version+1
   WHERE route=source.route AND resource_id=source.resource_id RETURNING processed_at INTO STRICT anchor;
-  DELETE FROM access.current_resource_role_key WHERE interval_key=source.erasure_key;
-  DELETE FROM access.current_resource_role_due WHERE interval_key=source.erasure_key;
+  DELETE FROM access.current_resource_role_key WHERE route=source.route AND interval_key=source.erasure_key;
+  DELETE FROM access.current_resource_role_due WHERE route=source.route AND interval_key=source.erasure_key;
   IF source.valid @> anchor THEN
     INSERT INTO access.current_resource_role_key VALUES
       (source.route,source.resource_id,source.grant_role,source.subject_kind,source.subject_id,source.subject_role,source.erasure_key);
@@ -5105,6 +5105,14 @@ ALTER TABLE ONLY access.resource_role_grant
 
 
 --
+-- Name: resource_role_grant resource_role_grant_route_interval; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_role_grant
+    ADD CONSTRAINT resource_role_grant_route_interval UNIQUE (route, erasure_key);
+
+
+--
 -- Name: resource_role_provenance resource_role_provenance_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -5275,7 +5283,7 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 -- Name: current_resource_role_due_source; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due USING btree (interval_key);
+CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due USING btree (route, interval_key);
 
 
 --
@@ -5289,7 +5297,7 @@ CREATE INDEX current_resource_role_due_work ON access.current_resource_role_due 
 -- Name: current_resource_role_key_source; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key USING btree (interval_key);
+CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key USING btree (route, interval_key);
 
 
 --
@@ -6952,7 +6960,7 @@ ALTER TABLE ONLY access.committed_continuation
 --
 
 ALTER TABLE ONLY access.current_resource_role_due
-    ADD CONSTRAINT current_resource_role_due_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
+    ADD CONSTRAINT current_resource_role_due_interval_key_fkey FOREIGN KEY (route, interval_key) REFERENCES access.resource_role_grant(route, erasure_key) ON DELETE CASCADE;
 
 
 --
@@ -6960,7 +6968,7 @@ ALTER TABLE ONLY access.current_resource_role_due
 --
 
 ALTER TABLE ONLY access.current_resource_role_key
-    ADD CONSTRAINT current_resource_role_key_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
+    ADD CONSTRAINT current_resource_role_key_interval_key_fkey FOREIGN KEY (route, interval_key) REFERENCES access.resource_role_grant(route, erasure_key) ON DELETE CASCADE;
 
 
 --

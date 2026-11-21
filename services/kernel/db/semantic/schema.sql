@@ -1347,8 +1347,8 @@ BEGIN
  WHEN 'identity_epoch_prearm_custody' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_custody WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_prearm_claim' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_claim WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_prearm_decision' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_decision WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
- WHEN 'record_source_set' THEN SELECT true INTO v_present FROM semantic.record_source_set WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
- WHEN 'record_source_set_member' THEN SELECT true,subject_id,candidate_id INTO v_present,v_original,v_candidate FROM semantic.record_source_set_member WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'record_source_set' THEN SELECT true INTO v_present FROM semantic.record_source_set WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
+ WHEN 'record_source_set_member' THEN SELECT true,subject_id,candidate_id INTO v_present,v_original,v_candidate FROM semantic.record_source_set_member WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
  ELSE v_present:=false;
  END CASE;
  IF v_candidate IS NOT NULL AND v_original IS NOT NULL AND
@@ -14109,7 +14109,7 @@ CREATE INDEX fact_current_relation_key_seek ON semantic.fact USING btree (route,
 -- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (erasure_key, route);
+CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (route, erasure_key);
 
 
 --
@@ -14263,7 +14263,7 @@ CREATE INDEX identity_epoch_group_generation ON semantic.identity_epoch_group US
 -- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX identity_epoch_home_gate_erasure_key ON semantic.identity_epoch_home_gate USING btree (erasure_key, route);
+CREATE UNIQUE INDEX identity_epoch_home_gate_erasure_key ON semantic.identity_epoch_home_gate USING btree (route, erasure_key);
 
 
 --
@@ -14333,7 +14333,7 @@ CREATE INDEX identity_epoch_mapping_effect_source_point ON semantic.identity_epo
 -- Name: identity_epoch_mapping_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX identity_epoch_mapping_erasure_key ON semantic.identity_epoch_mapping USING btree (erasure_key, route);
+CREATE UNIQUE INDEX identity_epoch_mapping_erasure_key ON semantic.identity_epoch_mapping USING btree (route, erasure_key);
 
 
 --
@@ -15089,7 +15089,7 @@ CREATE INDEX record_retention_source ON semantic.source_candidate USING btree (r
 -- Name: record_source_set_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX record_source_set_erasure_key ON semantic.record_source_set USING btree (erasure_key, route);
+CREATE UNIQUE INDEX record_source_set_erasure_key ON semantic.record_source_set USING btree (route, erasure_key);
 
 
 --
@@ -15103,7 +15103,7 @@ CREATE INDEX record_source_set_fact_origin ON semantic.fact USING btree (route, 
 -- Name: record_source_set_member_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX record_source_set_member_erasure_key ON semantic.record_source_set_member USING btree (erasure_key, route);
+CREATE UNIQUE INDEX record_source_set_member_erasure_key ON semantic.record_source_set_member USING btree (route, erasure_key);
 
 
 --
@@ -15166,7 +15166,7 @@ CREATE UNIQUE INDEX retraction_erasure_key ON semantic.retraction USING btree (e
 -- Name: revision_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX revision_erasure_key ON semantic.revision USING btree (erasure_key, route);
+CREATE UNIQUE INDEX revision_erasure_key ON semantic.revision USING btree (route, erasure_key);
 
 
 --
@@ -15306,7 +15306,7 @@ CREATE INDEX subject_canonical_name_seek ON semantic.subject USING btree (((rout
 -- Name: subject_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (erasure_key, route);
+CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (route, erasure_key);
 
 
 --
