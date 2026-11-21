@@ -1526,7 +1526,9 @@ export function createCollectionReads(
     const capture = async () => {
       const source = await withReadableCollection(viewer, collectionId, deadline, async (client, collection) => {
         if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
-        const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.revision);
+        // Both counters are monotonic. A physical order repair can advance only the order epoch.
+        const epoch = collection.revision + collection.orderEpoch;
+        const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, epoch);
         const result = await client.query<MemberRow>(
           `WITH candidates AS MATERIALIZED (
               SELECT a.route, a.collection_id, a.member_id, a.live_ordinal
@@ -1550,7 +1552,7 @@ export function createCollectionReads(
             page.limit + 1,
           ],
         );
-        return { revision: collection.revision, rows: result.rows };
+        return { epoch, rows: result.rows };
       });
       if (!source) throw notFound();
       return source;
@@ -1567,7 +1569,7 @@ export function createCollectionReads(
     return nativeMemberPage(
       considered.filter((member) => readable.has(member.subjectId)).map(memberView),
       last && admitted.rows.length > page.limit
-        ? { epoch: admitted.revision + 1, after: [last.ordinalKey, last.id] }
+        ? { epoch: admitted.epoch + 1, after: [last.ordinalKey, last.id] }
         : null,
       (position) => encodeCursor(tokens, binding, position),
       (cursor) => decodeCursor(tokens, binding, cursor),

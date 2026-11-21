@@ -81,7 +81,7 @@ Read permission for the Collection and for both associated Subjects applies to e
 application never confers access to either Subject. Each member admits at most 32 applied Subjects. A filtered page
 uses an index keyed by Collection, applied Subject and member order, reads at most one page plus a lookahead, and
 may examine only its admitted range. A keyset cursor binds the Collection, applied Subject and current Collection
-revision. Writer and retaining lifecycle work is bounded by the affected occurrence count times the member cap.
+revision and order epoch. Writer and retaining lifecycle work is bounded by the affected occurrence count times the member cap.
 
 ## One Collection abstraction
 
