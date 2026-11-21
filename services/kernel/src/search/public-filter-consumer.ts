@@ -188,8 +188,10 @@ export function compilePublicFilterConsumerCapture(
   if (!record(input) || !Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Capture requires explicit filterDocument and parsed text');
   const copied = structuredClone(input);
-  const meaning = structuredClone(acceptedMeaning);
-  if (!hasExactPublicFilterMeaning(meaning)) throw new TypeError('Capture requires an exact accepted release');
+  const nativeMeaning = hasNativePublicFilterMeaning(acceptedMeaning);
+  const meaning = nativeMeaning ? acceptedMeaning : structuredClone(acceptedMeaning);
+  if (!nativeMeaning && !hasExactPublicFilterMeaning(meaning))
+    throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
   validateCatalogueCoverage(copied);
 

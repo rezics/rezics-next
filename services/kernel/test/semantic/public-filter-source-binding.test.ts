@@ -260,7 +260,17 @@ test('native public Source configuration and immutable meaning/read definition r
     );
     expect(reused.status).toBe('resolved');
     if (reused.status !== 'resolved') throw new Error(`Native Source reuse ${reused.reason}`);
-    expect(reused.definition.readDefinition).toBe(result.definition.readDefinition);
+    expect(reused.definition).toEqual(result.definition);
+    expect(reused.cost.resultWrites).toBe(0);
+    const forged = structuredClone(result.definition.meaning);
+    forged.release.catalogue.version += '-changed';
+    expect((await binding.resolve({ source, meaning: forged, capture }, readContext())).status).not.toBe('resolved');
+    expect(
+      await binding.resolve(
+        { source, meaning: result.definition.meaning, capture: { ...capture, size: 11 }, readOnly: true },
+        readContext(),
+      ),
+    ).toMatchObject({ status: 'unready', reason: 'definition_missing' });
     const obsoleteMeaning = { ...f.meaning, type: 'schema:Book' };
     expect(await binding.resolve({ source, meaning: obsoleteMeaning, capture }, readContext())).toMatchObject({
       status: 'unavailable',

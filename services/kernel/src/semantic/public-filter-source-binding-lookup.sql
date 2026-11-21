@@ -1,5 +1,6 @@
 /* semantic.native-keyed:3:3 */
-SELECT d.read_definition::text
+SELECT d.read_definition::text, s.source_id::text, s.configuration::text, s.owner_epoch,
+  d.release_digest, d.capture, d.dependency_keys
 FROM core.partition p
 JOIN semantic.public_filter_source s ON s.partition_no=p.partition_no AND s.owner_epoch=p.epoch
 JOIN semantic.public_filter_read_definition d

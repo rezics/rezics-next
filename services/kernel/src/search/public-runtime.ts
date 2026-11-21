@@ -17,6 +17,7 @@ import type { GenerationPublicationJob, SearchGenerationPublication } from './ge
 import type { Access } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { KernelClock } from '../clock.ts';
+import { retainNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -344,7 +345,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       clock: config.clock,
       context,
       physicalTarget,
-      meaning: { digest: meaning.digest, release: meaning.release },
+      meaning: retainNativePublicFilterMeaning(
+        { digest: meaning.digest, release: meaning.release },
+        sourcePublication.hasVerifiedReleaseDigest,
+      ),
       ...(registry === undefined ? {} : { registry, discoveryAccess: config.access }),
       ...(scope && { discoveryTarget: scope }),
       ...(preparation && { discoveryPreparation: preparation }),
