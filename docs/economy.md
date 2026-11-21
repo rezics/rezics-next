@@ -138,6 +138,11 @@ read-only repeatable-read snapshot. Treat absent books, page-limited scans and m
 incomplete audit returns diagnostic findings and a snapshot identity. External clearing reconciliation still uses
 independently verified provider statements and watermarks.
 
+The trusted market repair port resumes one named trade within the configured book and item home. It processes a
+bounded set of ready, already issued instructions using the same native claims, leases and owner receipts as the
+scheduled worker. A retained commit or abort remains authoritative. Work whose lease is still live stays with its
+current owner. A trade awaiting a decision continues through the normal decision rules.
+
 Run `bun --no-env-file services/kernel/scripts/economy-book-audit.ts --book BOOK` with a read-only database credential
 in `ECONOMY_RECONCILIATION_DATABASE_URL`. The command writes one JSON result to standard output. An optional
 `--page-limit` accepts 1–2048 pages, and `--timeout-ms` accepts 100–10000 milliseconds. Exit codes are 0 for
