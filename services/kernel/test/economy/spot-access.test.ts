@@ -165,7 +165,9 @@ test('spot instrument and order routes require a direct grant, matching client s
   const hidden = await call(app, '/v1/openapi.json', ordinaryToken);
   expect(hidden.status).toBe(200);
   const hiddenPaths = (await hidden.json()).paths;
+  expect(hiddenPaths['/v1/economy/spot']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}']).toBeUndefined();
+  expect(hiddenPaths['/v1/economy/spot/{instrumentId}/orders']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/trades']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills']).toBeUndefined();
   await grant(viewer);
@@ -583,4 +585,183 @@ test('a private order fill page merges both matching roles and exposes only the 
       deadline: Date.now() + 2000,
     }),
   ).rejects.toMatchObject({ code: 'platform_closed' });
+}, 90_000);
+
+test('private discovery returns installed instruments and seeks only the actor’s exact order history', async () => {
+  const bookId = `http:discovery-${crypto.randomUUID()}`;
+  const binding = { bookId, node: 'b' };
+  const owner = createNativeEconomySpot(db.pool, binding);
+  const native = createNativeEconomySpotWork(db.pool, binding);
+  const wallet = createNativeEconomyLedger(db.pool, bookId);
+  const discovery = mount(owner);
+  const otherBook = mount(createNativeEconomySpot(db.pool, { ...binding, bookId: `${bookId}-other` }));
+  const catalog = '/v1/economy/spot';
+  const ids = Array.from({ length: 22 }, (_, index) => `catalog-${String(index).padStart(2, '0')}`);
+  const instrumentId = ids[0]!;
+  const orders = `${catalog}/${instrumentId}/orders`;
+
+  await grant(second);
+  const empty = await call(discovery, catalog, sellerToken);
+  expect(empty.status).toBe(200);
+  expect(await empty.json()).toEqual({ instruments: [], next: null });
+  expect((await call(discovery, orders, sellerToken)).status).toBe(404);
+
+  for (const id of ['base', 'quote']) {
+    expect(await wallet.provisionAsset({ id, scale: 0, transferable: true })).toMatchObject({ kind: 'ok' });
+  }
+  for (const accountId of [seller, second]) {
+    expect(
+      await wallet.issue({
+        accountId,
+        assetId: 'base',
+        amount: '50000000000000000',
+        operationId: 'discovery-base',
+      }),
+    ).toMatchObject({ kind: 'ok' });
+  }
+  const feeAccountId = crypto.randomUUID();
+  for (const id of ids.toReversed()) {
+    const provisioned = await native.provision({
+      id,
+      ledgerBookId: bookId,
+      policyVersion: 1n,
+      baseAssetId: 'base',
+      quoteAssetId: 'quote',
+      baseUnitsPerLot: 1n,
+      quoteUnitsPerPriceTick: 1n,
+      makerFeeBps: 0n,
+      takerFeeBps: 0n,
+      feeAccountId,
+    });
+    if (provisioned.kind !== 'ok') throw new Error(`Provisioning failed: ${provisioned.kind}`);
+  }
+  const emptyOrders = await call(discovery, orders, sellerToken);
+  expect(emptyOrders.status).toBe(200);
+  expect(await emptyOrders.json()).toEqual({ orders: [], next: null });
+
+  const firstList = await call(discovery, catalog, sellerToken);
+  expect(firstList.status).toBe(200);
+  expect(firstList.headers.get('cache-control')).toBe('private, no-store');
+  const firstCatalog = await firstList.json();
+  expect(firstCatalog.instruments.map((row: { instrumentId: string }) => row.instrumentId)).toEqual(ids.slice(0, 20));
+  expect(firstCatalog.instruments[0]).toEqual(
+    await (await call(discovery, `${catalog}/${instrumentId}`, sellerToken)).json(),
+  );
+  const catalogCursor = `?limit=20&cursor=${firstCatalog.next}`;
+  const lastCatalog = await call(discovery, `${catalog}${catalogCursor}`, sellerToken);
+  expect(lastCatalog.status).toBe(200);
+  const last = await lastCatalog.json();
+  expect(last.instruments.map((row: { instrumentId: string }) => row.instrumentId)).toEqual(ids.slice(20));
+  expect(last.next).toBeNull();
+  expect((await call(discovery, `${catalog}?limit=101`, sellerToken)).status).toBe(400);
+  expect((await call(discovery, `${orders}?limit=101`, sellerToken)).status).toBe(400);
+
+  // The first two own orders straddle a decimal digit boundary above Number.MAX_SAFE_INTEGER.
+  const earlier = 9_999_999_999_999_999n;
+  await db.admin.query('UPDATE economy.spot_instrument SET revision = $3 WHERE book_id = $1 AND instrument_id = $2', [
+    bookId,
+    instrumentId,
+    (earlier - 1n).toString(),
+  ]);
+  const amount = 9_007_199_254_740_993n;
+  async function accept(accountId: string, orderId: string, rest: boolean, terms = { price: amount, lots: 1n }) {
+    const accepted = await owner.place({
+      accountId,
+      instrumentId,
+      orderId,
+      deadline: Date.now() + 2000,
+      side: 'sell',
+      ...terms,
+    });
+    if (accepted.kind !== 'ok') throw new Error(`Order rejected: ${accepted.kind}`);
+    if (rest)
+      expect(await native.match(instrumentId, accepted.value.sequence)).toMatchObject({
+        kind: 'ok',
+        value: { status: 'resting' },
+      });
+    return accepted.value.sequence.toString();
+  }
+  expect(await accept(seller, 'old-own', true, { price: 1n, lots: amount })).toBe(earlier.toString());
+  const foreignSequence = await accept(second, 'foreign', true);
+  const newer = await accept(seller, 'new-own', true);
+  const firstOrder = await call(discovery, `${orders}?limit=1`, sellerToken);
+  expect(firstOrder.status).toBe(200);
+  expect(firstOrder.headers.get('cache-control')).toBe('private, no-store');
+  const orderPage = await firstOrder.json();
+  expect(orderPage).toEqual({
+    orders: [
+      {
+        instrumentId,
+        policyVersion: '1',
+        orderId: 'new-own',
+        sequence: newer,
+        price: amount.toString(),
+        lots: '1',
+        remainingLots: '1',
+        side: 'sell',
+        status: 'resting',
+      },
+    ],
+    next: expect.stringMatching(/^[A-Za-z0-9_-]+$/),
+  });
+  expect(orderPage.orders[0]).toEqual(await (await call(discovery, `${orders}/new-own`, sellerToken)).json());
+
+  const late = await accept(seller, 'late-own', false);
+  const orderCursor = `?limit=1&cursor=${orderPage.next}`;
+  const continued = await call(discovery, `${orders}${orderCursor}`, sellerToken);
+  expect(continued.status).toBe(200);
+  expect(await continued.json()).toEqual({
+    orders: [
+      expect.objectContaining({
+        orderId: 'old-own',
+        sequence: earlier.toString(),
+        price: '1',
+        lots: amount.toString(),
+        remainingLots: amount.toString(),
+      }),
+    ],
+    next: null,
+  });
+  const restarted = await (await call(discovery, `${orders}?limit=100`, sellerToken)).json();
+  expect(restarted.orders.map((row: { orderId: string; sequence: string }) => [row.orderId, row.sequence])).toEqual([
+    ['late-own', late],
+    ['new-own', newer],
+    ['old-own', earlier.toString()],
+  ]);
+  expect(restarted.next).toBeNull();
+  expect(await (await call(discovery, orders, secondToken)).json()).toEqual({
+    orders: [expect.objectContaining({ orderId: 'foreign', sequence: foreignSequence })],
+    next: null,
+  });
+  expect(await (await call(discovery, orders, viewerToken)).json()).toEqual({ orders: [], next: null });
+
+  for (const failure of [
+    await call(discovery, `${catalog}${catalogCursor}`, secondToken),
+    await call(otherBook, `${catalog}${catalogCursor}`, sellerToken),
+    await call(discovery, `${catalog}?limit=1&cursor=${firstCatalog.next}`, sellerToken),
+    await call(discovery, `${orders}${catalogCursor}`, sellerToken),
+    await call(discovery, `${orders}${orderCursor}`, secondToken),
+    await call(otherBook, `${orders}${orderCursor}`, sellerToken),
+    await call(discovery, `${catalog}/${ids[1]}/orders${orderCursor}`, sellerToken),
+    await call(discovery, `${orders}?limit=2&cursor=${orderPage.next}`, sellerToken),
+  ]) {
+    expect(failure.status).toBe(400);
+    expect(await failure.json()).toMatchObject({ code: 'invalid_cursor' });
+  }
+
+  for (const path of [catalog, orders]) {
+    expect((await call(discovery, path, placeOnlyToken)).status).toBe(403);
+    expect((await call(discovery, path, ordinaryToken)).status).toBe(403);
+    expect((await call(closed, path)).status).toBe(403);
+    expect((await call(closed, path, sellerToken)).status).toBe(503);
+  }
+  await db.admin.query(
+    `DELETE FROM access.resource_grant WHERE route = 0 AND resource_id = $1 AND subject_id = $2 AND action = 'gate:economy'`,
+    [GLOBAL_CONTEXT.id, seller],
+  );
+  expect((await call(discovery, `${catalog}${catalogCursor}`, sellerToken)).status).toBe(403);
+  expect((await call(discovery, `${orders}${orderCursor}`, sellerToken)).status).toBe(403);
+  const pageScope = { accountId: seller, deadline: Date.now() + 2000, limit: 1, after: null };
+  await expect(owner.listInstruments(pageScope)).rejects.toMatchObject({ code: 'platform_closed' });
+  await expect(owner.listOwnOrders({ ...pageScope, instrumentId })).rejects.toMatchObject({ code: 'platform_closed' });
 }, 90_000);
