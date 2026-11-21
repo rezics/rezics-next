@@ -218,7 +218,7 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
     },
   });
   let ready = stopped.ready;
-  registerPublicPreparationWork(() => ready());
+  registerPublicPreparationWork(() => ready(), work);
   await work.registerQueue('workflows', WORK_QUEUES.workflows);
   const launch = async () => {
     DBOS.setConfig({
@@ -232,7 +232,7 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
   };
   try {
     await launch();
-    await expect(DBOS.getResult(originalId, { timeoutSeconds: 8 })).rejects.toThrow(
+    await expect(DBOS.getResult(originalId, { pollingIntervalMs: 10 })).rejects.toThrow(
       'Search preparation service is not running',
     );
     await DBOS.shutdown();
@@ -250,7 +250,7 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
 
     ready = live.ready;
     await launch();
-    await DBOS.getResult(renewedId, { timeoutSeconds: 8 });
+    await DBOS.getResult(renewedId, { pollingIntervalMs: 10 });
     expect(claimed).toMatchObject({ id, locator: frontier });
     expect((await work.getWorkflow(renewedId))?.status).toBe('SUCCESS');
     expect((await work.getWorkflow(originalId))?.status).toBe('ERROR');
@@ -259,6 +259,94 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
     await DBOS.shutdown({ deregister: true });
   }
 }, 25_000);
+
+test('preparation recovers both legacy first checkpoints and keeps delayed deliveries deterministic', async () => {
+  const calls: string[] = [];
+  const run = async (id: string) => {
+    calls.push(id);
+  };
+  const originalStep = DBOS.registerStep(run, { name: 'search.publicPreparationStep' });
+  const legacy = DBOS.registerWorkflow(
+    async (input: { id: string; revision: string; notBefore: number }) => {
+      const delay = input.notBefore - Date.now();
+      if (delay > 0) await DBOS.sleep(delay);
+      await originalStep(input.id);
+    },
+    { name: PUBLIC_PREPARATION_WORKFLOW },
+  );
+  const launch = async () => {
+    DBOS.setConfig({
+      name: WORK_APPLICATION,
+      systemDatabaseUrl: databaseUrl,
+      systemDatabaseSchemaName: DBOS_SCHEMA,
+      runMigrations: false,
+      logLevel: 'error',
+    });
+    await DBOS.launch();
+  };
+  const id = () => identity(track(crypto.randomUUID()), '1');
+  const early = id(),
+    late = id();
+  try {
+    await launch();
+    const earlyDue = Date.now() + 500;
+    const original = await DBOS.startWorkflow(legacy, { workflowID: early })({
+      id: 'early',
+      revision: '1',
+      notBefore: earlyDue,
+    });
+    await original.getResult();
+    await (
+      await DBOS.startWorkflow(legacy, { workflowID: late })({
+        id: 'late',
+        revision: '1',
+        notBefore: Date.now() - 1000,
+      })
+    ).getResult();
+    const steps = async (wf: string) => (await work.listWorkflowSteps(wf))?.map((step) => step.name);
+    expect(await steps(early)).toEqual(['DBOS.sleep', 'search.publicPreparationStep']);
+    expect(await steps(late)).toEqual(['search.publicPreparationStep']);
+    await DBOS.shutdown({ deregister: true });
+    const current = registerPublicPreparationWork(async () => ({ run }), work);
+    await launch();
+    // Fork through the SDK with the original step zero intact. The original
+    // delayed timer has elapsed and the immediate preparation already ran.
+    for (const source of [early, late]) {
+      const replay = await DBOS.forkWorkflow(source, 1, {
+        newWorkflowID: id(),
+        applicationVersion: DBOS.applicationVersion,
+      });
+      await replay.getResult({ pollingIntervalMs: 10 });
+      expect(await steps(replay.workflowID)).toEqual(await steps(source));
+    }
+    expect(calls).toEqual(['early', 'late', 'early']);
+    const due = Date.now() + 300;
+    const delayed = await DBOS.startWorkflow(current, { workflowID: id() })({
+      id: 'new-delay',
+      revision: '1',
+      notBefore: due,
+    });
+    await delayed.getResult();
+    expect(Date.now()).toBeGreaterThanOrEqual(due);
+    expect(await steps(delayed.workflowID)).toEqual([
+      'DBOS.patch-search.publicPreparation.due',
+      'DBOS.sleep',
+      'search.publicPreparationStep',
+    ]);
+    const replay = await DBOS.forkWorkflow(delayed.workflowID, 2, { newWorkflowID: id() });
+    await replay.getResult({ pollingIntervalMs: 10 });
+    expect(await steps(replay.workflowID)).toEqual(await steps(delayed.workflowID));
+    const immediate = await DBOS.startWorkflow(current, { workflowID: id() })({
+      id: 'new-ready',
+      revision: '1',
+      notBefore: 0,
+    });
+    await immediate.getResult();
+    expect(await steps(immediate.workflowID)).toEqual(['search.publicPreparationStep']);
+  } finally {
+    await DBOS.shutdown({ deregister: true });
+  }
+}, 30_000);
 
 test('expired claims recover once and a stale claimed revision cannot overwrite the newer frontier', async () => {
   const owner = prefix();

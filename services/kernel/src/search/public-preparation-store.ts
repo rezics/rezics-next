@@ -43,7 +43,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     locator.kind === 'repair' && locator.job.consumer.physicalTarget.startsWith(`${prefix}discovery-g`)
       ? 'discovery'
       : locator.kind;
-  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = Date.now()) => {
+  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = 0) => {
     const maintenance = kind === 'repair';
     return {
       queue: maintenance ? ('maintenance' as const) : ('workflows' as const),
@@ -191,7 +191,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
           await enqueueWorkIntent(
             work,
             client,
-            intent(record.id, next.revision, schedule(locator), Date.now() + delayMs),
+            intent(record.id, next.revision, schedule(locator), delayMs > 0 ? Date.now() + delayMs : 0),
           );
         // If the caller or a competing delivery cannot claim this ready
         // successor, due() can still discover the committed revision.

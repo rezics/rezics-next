@@ -3,6 +3,7 @@ import { collectionPublicationScopeRuntimes } from './scope-runtime.ts';
 import { readSearchConfig } from './config.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import type { WorkClient } from '../work/client.ts';
 import { runCommand, noEffect } from '../command/command.ts';
 import { readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
@@ -72,17 +73,31 @@ export function createSearchServiceGate<T>(unavailable: () => Error) {
   };
 }
 
-export function registerPublicPreparationWork(ready: () => Promise<Pick<PublicPreparation, 'run'>>) {
+export function registerPublicPreparationWork(
+  ready: () => Promise<Pick<PublicPreparation, 'run'>>,
+  client: Pick<WorkClient, 'listWorkflowSteps'>,
+) {
   const step = DBOS.registerStep(
     async (id: string, revision: string) => {
       await (await ready()).run(id, revision);
     },
     { name: 'search.publicPreparationStep', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
   );
-  DBOS.registerWorkflow(
+  return DBOS.registerWorkflow(
     async (input: { id: string; revision: string; notBefore: number }) => {
-      const delay = input.notBefore - Date.now();
-      if (delay > 0) await DBOS.sleep(delay);
+      if (input.notBefore > 0) {
+        // A positive due time always occupies the same sleep slot, including
+        // when the worker recovers after that time. Ready deliveries use zero.
+        let sleep = await DBOS.patch('search.publicPreparation.due');
+        if (!sleep) {
+          // The pre-patch workflow sometimes started with the preparation step.
+          // The client reads its immutable first checkpoint outside the workflow sequence.
+          const first = (await client.listWorkflowSteps(DBOS.workflowID!, { limit: 1 }))?.[0];
+          if (!first || first.functionID !== 0) throw new Error('Missing Search preparation checkpoint');
+          sleep = first.name === 'DBOS.sleep';
+        }
+        if (sleep) await DBOS.sleep(Math.max(1, input.notBefore - Date.now()));
+      }
       await step(input.id, input.revision);
     },
     { name: PUBLIC_PREPARATION_WORKFLOW },
@@ -387,7 +402,7 @@ export function createSearchWorkModule(
         },
         { name: SCOPE_PREPARATION_WORKFLOW },
       );
-      registerPublicPreparationWork(preparationGate.ready);
+      registerPublicPreparationWork(preparationGate.ready, context.client);
       context.addService(async () => {
         const defaults = composeRuntimeDefaults({
           env: { ...context.env },
