@@ -419,7 +419,13 @@ export const erasureWorkModule: WorkModule = {
     );
     DBOS.registerWorkflow(
       async (accountId: string) => {
-        while (!(await advance(accountId))) await DBOS.sleep(1);
+        // Participant ACKs and locator delivery can take minutes. Back off while waiting
+        // so each pending observation does not immediately schedule another durable poll.
+        let intervalMs = 1;
+        while (!(await advance(accountId))) {
+          await DBOS.sleep(intervalMs);
+          intervalMs = Math.min(intervalMs * 2, 1000);
+        }
       },
       { name: 'access.erasure' },
     );
