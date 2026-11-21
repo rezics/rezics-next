@@ -1290,7 +1290,14 @@ BEGIN
   -- trigger independently rereads them, locks their FKs, and binds adjacency.
   <<funded>> LOOP
     first_no:=0; span:=4096; direct:=false;
-    WHILE span>leaf_limit LOOP
+    LOOP
+      IF span<=leaf_limit THEN
+        -- A stale compact interval can spend part of this offer on stamp checks.
+        -- Compare only a funded aligned leaf. The same descent joins its current children on replay.
+        leaf_limit:=least(leaf_limit,(key_limit-points-40)/20,(byte_limit-proof_bytes-65536)/24576);
+        EXIT WHEN span<=leaf_limit;
+        EXIT funded WHEN range_writes>0 OR leaf_limit<1 OR first_no+span>available;
+      END IF;
       IF span BETWEEN 64 AND 512 AND first_no+span<=available THEN
         EXIT funded WHEN points+1>key_limit;
         points:=points+1;

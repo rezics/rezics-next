@@ -1,9 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
-import { anchorRoute, partitionOf, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
-import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
+import {
+  createSearchGenerationPublication,
+  type SearchGenerationPublicationConfig,
+} from '../../src/search/generation-publication.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createSubjectIndex, subjectIndexName, subjectGenerations } from '../../src/search/indices.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
@@ -18,6 +21,7 @@ import {
 } from '../../src/semantic/public-filter-source-binding.ts';
 import { retainNativePublicFilterMeaning } from '../../src/search/public-filter-meaning.ts';
 import { hasVerifiedReleaseDigest, readRelease } from '../../src/semantic/definition-release-read.ts';
+import { createIdentityRegistrar } from '../support/identity-registration.ts';
 import { identityEpochDatabase } from './support/identity-epoch.ts';
 import { fixture, nativeProducer } from './support/public-filter-source.ts';
 
@@ -65,7 +69,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
     }));
   let proofReads: number | undefined;
-  const publication = createSearchGenerationPublication({
+  const publicationConfig: SearchGenerationPublicationConfig = {
     subjectSubscriptionProtocol: 1,
     pool,
     search,
@@ -82,7 +86,8 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
     clock: f.config.clock,
     meaning: retainNativePublicFilterMeaning({ digest: f.meaning.digest, release }, hasVerifiedReleaseDigest),
     writerGuard: writer,
-  });
+  };
+  let publication = createSearchGenerationPublication(publicationConfig);
   const context = () => ({ deadline: Date.now() + 10000 });
   const book = async (partition: number) => {
     let key: string;
@@ -148,6 +153,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       await search.request('POST', '/' + target + '/_refresh');
       let reconciled = false;
       let cleanLeaf: string | undefined;
+      let splitLeaf = false;
       const readAckPrefix = () =>
         pool.query<{ first_home: number; width: number; revision: string }>(
           `WITH basis AS MATERIALIZED (SELECT search.public_filter_ack_basis_v1(true) AS value)
@@ -177,6 +183,30 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
             expect((await readAckPrefix()).rows).toEqual([rows[0]!]);
           }
         }
+        if (!splitLeaf) {
+          // A registration behind the verified frontier invalidates a compact ACK and its ancestors.
+          const compact = await pool.query(
+            'SELECT 1 FROM search.public_filter_ack_range WHERE job=$1 AND first_home=512 AND width=512 AND left_child IS NULL',
+            [prepared.job.job],
+          );
+          if (compact.rowCount) {
+            await createIdentityRegistrar(pool, f.config.routeKey).registerActor('late-member', newId(512 * 16));
+            const offer = await pool.query('SELECT * FROM search.prepare_subject_ack_prefix_v1($1,824,868352)', [
+              prepared.job.job,
+            ]);
+            expect(offer.rows[0].range_writes).toBeGreaterThan(0);
+            expect(offer.rows[0].points).toBeLessThanOrEqual(824);
+            expect(offer.rows[0].proof_bytes).toBeLessThanOrEqual(868352);
+            const leaf = await pool.query(
+              'SELECT width FROM search.public_filter_ack_range WHERE job=$1 AND first_home=512 AND width<32',
+              [prepared.job.job],
+            );
+            expect(leaf.rows).toContainEqual({ width: 16 });
+            await publication.close();
+            publication = createSearchGenerationPublication(publicationConfig);
+            splitLeaf = true;
+          }
+        }
         const proof = (
           await pool.query(
             `SELECT r.width,r.first_home,m.root_digest=r.digest AS matched,t.ack_after,m.ordinal::integer AS steps,
@@ -194,6 +224,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
           )
         ).rows[0];
         if (!proof) continue;
+        expect(splitLeaf).toBe(true);
         expect(proof).toMatchObject({ first_home: 0, width: 4096, matched: true, independent: true, ack_after: 4096 });
         expect(proof.compact_nodes).toBeGreaterThan(0);
         expect(proof.compact_width).toBeGreaterThan(32);

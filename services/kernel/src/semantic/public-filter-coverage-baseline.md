@@ -220,9 +220,11 @@ adopted receiver pages and the verified Source step. It binds their adjacent roo
 witness. After tree descent, a compact comparison reserves 201 + 8N keyed inputs and 88 + 8N KiB.
 This includes reopening the verified step and at most 64 captured command ends.
 Folding two children reserves 64 inputs and 64 KiB. Other leaves use the original per-home comparison
-as their ordered window closes. It decodes each packed Source step
-once and compares its homes with independently adopted receiver pages. Final assembly reopens the current
-witnesses and rebuilds stale leaves before linking the root to the terminal settlement.
+as their ordered window closes. After a stale stamp, the receiver sizes the aligned leaf from the remaining
+key and byte allowances. A later offer can join its committed children under their current witnesses. The
+comparison decodes each packed Source step once and compares its homes with independently adopted receiver
+pages. Final assembly reopens the current witnesses and rebuilds stale leaves before linking the root to the
+terminal settlement.
 
 A post-base captured privacy interval inserts its exact intake under the receiver registration lock. A new
 high water updates the registration generation and upserts one dirty home in the same transaction. Delivery of a
