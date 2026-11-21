@@ -245,8 +245,8 @@ export async function correctTerms(
       );
       const delta = facts.length - oldRows.length;
       const sourceSet = await beginSemanticRecordSourceSet(tx);
-      if (!(await changeCurrentFacts.run(tx, { ...parameters, delta })))
-        throw new SubjectInputError([{ pointer: '', code: 'out_of_range' }]);
+      const updated = await changeCurrentFacts.run(tx, { ...parameters, delta });
+      if (updated.length === 0) throw new SubjectInputError([{ pointer: '', code: 'out_of_range' }]);
       const support = listed(await readSupport.run(tx, { ...parameters, entries: heads }));
       await insertRevision.run(tx, {
         ...parameters,
