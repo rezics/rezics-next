@@ -55,7 +55,7 @@ import {
   withReadTransaction,
 } from './native-bindings.ts';
 import gateSql from './writer-guard-gate.sql';
-import repairWriter from './public-filter-custody-repair-writer.sql';
+import repairWriters from './public-filter-custody-repair-writers.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions, validateIndexObservation, type IndexAction, type SubjectDocument } from './document.ts';
@@ -132,7 +132,7 @@ export function isDiscoveryRepairWriterReceipt(
 export const repairWriterPosition = (receipt: PublicFilterRepairWriterReceipt): bigint =>
   isDiscoveryRepairWriterReceipt(receipt) ? receipt.sourcePosition : receipt.action.version;
 
-export type RetainedSearchRepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>>;
+export type RetainedSearchRepairWriter = Awaited<ReturnType<typeof repairWriters.run>>[number];
 
 function sameRepairWriter(original: SearchRepairWriterReceipt, receipt: SearchRepairWriterReceipt) {
   return (
@@ -348,7 +348,7 @@ type RepairGate = Readonly<{
   closed_token: string | null;
 }>;
 type RepairOwner = Readonly<{ write_state: string; epoch: number; position: bigint | string }>;
-type RepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>> & { repair_account?: string | null };
+type RepairWriter = Omit<RetainedSearchRepairWriter, 'original_id'>;
 
 function changedRepairFence(): never {
   throw unavailable('Native repair receipt or final writer fence changed');
@@ -1321,11 +1321,10 @@ export function createSearchWriterGuard(options: {
         Date.now() >= context.deadline ||
         classifyUnavailability(error) === 'deadline' ||
         (error instanceof PublicationPending && error.message === 'deadline');
-      return {
-        status: expired || error instanceof PublicationPending ? 'unready' : 'unavailable',
-        reason: expired ? 'deadline' : 'source_pending',
-        cost,
-      };
+      // Only an actual negative ownership or Source check can invalidate the held pass.
+      if (!expired && !(error instanceof PublicationPending))
+        return { status: 'unavailable', reason: 'dependency_unavailable', cost };
+      return { status: 'unready', reason: expired ? 'deadline' : 'source_pending', cost };
     }
   }
   async function publicationAdmission(tx: CommandTransaction, fenceError?: IdentityEpochStoreError) {
@@ -1375,6 +1374,8 @@ export function createSearchWriterGuard(options: {
       publicationDeadline(context);
       if (completion.status !== 'complete') {
         if ('reason' in completion && completion.reason === 'deadline') throw new PublicationPending('deadline');
+        if (completion.status === 'unavailable')
+          throw unavailable('Native publication Source completion is unavailable');
         return pendingPublication();
       }
       return completion.publication;
@@ -2430,10 +2431,10 @@ export function createSearchWriterGuard(options: {
           if (target.closed_token) throw generationClosed;
           if (renewal) {
             const { receipt: original, writer } = renewal.input;
-            const current = await repairWriter.run(tx, {
-              partition_no: partition,
+            // Re-read the same locked row projection that raised the original settlement challenge.
+            const [current] = await repairWriters.run(tx, {
+              subjects: [{ partition_no: partition, original_id: original.subject }],
               physical_target: options.index,
-              original_id: original.subject,
             });
             if (
               !isDeepStrictEqual(current, writer) ||

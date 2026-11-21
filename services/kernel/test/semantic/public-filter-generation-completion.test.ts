@@ -27,7 +27,51 @@ test('generation restart keeps the original Source proof through lost observatio
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `source-publish-${crypto.randomUUID().slice(0, 8)}-`;
   const target = subjectIndexName(prefix, 2);
+  const workerContext = () => ({ deadline: Date.now() + PUBLIC_PREPARATION_BUDGET_MS });
   const custody = createPublicFilterCustody(f.db.pool);
+  type HeldCopy = {
+    phase: string;
+    pass: string;
+    fence: string;
+    frontier: string;
+    bootstrap: string;
+    execution: string;
+  };
+  const heldCopy = async (job: string): Promise<HeldCopy> =>
+    (
+      await f.db.admin.query<HeldCopy>(
+        `SELECT j.phase,j.pass::text,j.fence,j.bootstrap,j.execution,g.publication_revision::text AS frontier
+         FROM search.generation_publication j JOIN search.identity_writer_gate g
+           ON (g.partition_no,g.physical_target,g.publication_fence)=(j.partition_no,j.physical_target,j.fence::uuid)
+         WHERE j.partition_no=0 AND j.job=$1`,
+        [job],
+      )
+    ).rows[0]!;
+  let unavailableDrains = 0;
+  let confirmedOutages = 0;
+  let beforeOutage: HeldCopy | undefined;
+  let failInventory = false;
+  let rejectedInventoryReads = 0;
+  const observedClients = new WeakSet<PoolClient>();
+  f.db.pool.on('acquire', (client) => {
+    if (observedClients.has(client)) return;
+    observedClients.add(client);
+    const query = client.query.bind(client);
+    client.query = ((sql: unknown, ...args: unknown[]) => {
+      // Keep the fixture's real transaction/parameters. PostgreSQL must reject the inventory read.
+      const statement = typeof sql === 'object' && sql !== null && 'text' in sql ? sql.text : sql;
+      if (
+        failInventory &&
+        typeof statement === 'string' &&
+        statement.includes('WITH RECURSIVE occupied(home, ordinal)')
+      ) {
+        rejectedInventoryReads++;
+        const text = statement.replace('FROM search.identity_writer', 'FROM pg_temp.unavailable_writer');
+        sql = typeof sql === 'string' ? text : { ...Object(sql), text, name: undefined };
+      }
+      return Reflect.apply(query, undefined, [sql, ...args]);
+    }) as typeof client.query;
+  });
   let readerBlocked = false;
   let reader: { observation: string; token: string } | undefined;
   let readerPayload: string | null;
@@ -43,21 +87,15 @@ test('generation restart keeps the original Source proof through lost observatio
         { status: 'pending' | 'complete' }
       >['publication']
     | undefined;
-  const bindingPool = new Proxy(f.db.pool, {
-    get(pool, key) {
-      if (key === 'query')
-        return async (sql: string, values?: unknown[]) => {
-          const result = await pool.query(sql, values);
-          if (!observationLost && sql.includes('SET publication_job=')) {
-            observationLost = true;
-            throw new Error('Lost generation Source association reply');
-          }
-          return result;
-        };
-      const value = Reflect.get(pool, key, pool);
-      return typeof value === 'function' ? value.bind(pool) : value;
-    },
-  });
+  const nativeQuery = f.db.pool.query.bind(f.db.pool);
+  f.db.pool.query = ((sql: unknown, ...args: unknown[]) => {
+    const result = Reflect.apply(nativeQuery, undefined, [sql, ...args]);
+    if (observationLost || typeof sql !== 'string' || !sql.includes('SET publication_job=')) return result;
+    return Promise.resolve(result).then(() => {
+      observationLost = true;
+      throw new Error('Lost generation Source association reply');
+    });
+  }) as typeof f.db.pool.query;
   const transport: typeof search = {
     request: search.request.bind(search),
     async bulk<T = unknown>(lines: readonly unknown[], options?: Parameters<typeof search.bulk>[1]) {
@@ -73,15 +111,27 @@ test('generation restart keeps the original Source proof through lost observatio
       return result;
     },
   };
-  const open = () => {
-    const writer = createSearchWriterGuard({
+  const nativeWriter = (searchTransport: typeof search) =>
+    createSearchWriterGuard({
       pool: f.db.pool,
-      search: transport,
+      search: searchTransport,
       index: target,
       consumer: subjectConsumer(prefix, 2),
       source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
       listing: subjectListingSource(f.db.pool),
     });
+  const project = async (id: string) => {
+    const partition = partitionOf(routeOf(id)!);
+    const head = await f.db.pool.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no=$1',
+      [partition],
+    );
+    await nativeWriter(search).write(partition, [id], BigInt(head.rows[0]!.position));
+  };
+  let changedUnderFence: { id: string; fence: string; pass: string } | undefined;
+  let releasedForSourceChange = false;
+  const open = () => {
+    const writer = nativeWriter(transport);
     const fence = writer.fencePublication.bind(writer);
     Object.assign(writer, {
       async fencePublication(...args: Parameters<typeof fence>) {
@@ -109,6 +159,18 @@ test('generation restart keeps the original Source proof through lost observatio
     const drain = writer.drainPublication.bind(writer);
     Object.assign(writer, {
       async drainPublication(...args: Parameters<typeof drain>) {
+        if (unavailableDrains < 2) {
+          beforeOutage ??= await heldCopy(args[0].job);
+          expect(beforeOutage.fence).toBe(args[0].fence);
+          failInventory = true;
+          try {
+            const unavailable = await drain(...args);
+            unavailableDrains++;
+            return unavailable;
+          } finally {
+            failInventory = false;
+          }
+        }
         const result = await drain(...args);
         if (reader) {
           expect(result.status).toBe('draining');
@@ -134,13 +196,15 @@ test('generation restart keeps the original Source proof through lost observatio
         }
         if (result.status === 'drained' && !drainLost) {
           drainLost = true;
-          await f.propose(book, await f.create());
+          const id = await f.create();
+          await f.propose(book, id);
+          changedUnderFence = { id, fence: args[0].fence, pass: (await heldCopy(args[0].job)).pass };
           throw new SearchUnavailableError('Lost completed native drain reply');
         }
         return result;
       },
     });
-    const binding = createPublicFilterSourceBinding(bindingPool, f.config.routeKey, f.config.access);
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     return createSearchGenerationPublication({
       pool: f.db.pool,
       search: transport,
@@ -161,9 +225,23 @@ test('generation restart keeps the original Source proof through lost observatio
     await search.request('POST', '/_aliases', {
       actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
     });
+    // The normal relay owns the first settled projection before publication can inspect this home.
+    await project(book);
+    await search.request('POST', `/${target}/_refresh`);
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
     const resolved = await binding.resolve(
-      { source, meaning: f.meaning, capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined } },
+      {
+        source,
+        meaning: f.meaning,
+        capture: {
+          sort: 'id',
+          size: 1,
+          filterDocument: undefined,
+          text: undefined,
+          catalogueCoverage: true,
+          catalogueNameSort: true,
+        },
+      },
       readContext(),
     );
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
@@ -179,17 +257,40 @@ test('generation restart keeps the original Source proof through lost observatio
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
     let publication = open();
-    const prepared = await publication.prepare(registered.consumer, readContext());
+    const prepared = await publication.prepare(registered.consumer, workerContext());
     if (prepared.status !== 'preparing') throw new Error(prepared.reason);
     const job = prepared.job;
     let activated = false;
     for (let step = 0; step < 40000; step++) {
-      const progress = await publication.step(job, readContext());
+      const progress = await publication.step(job, workerContext());
       if (progress.status === 'reconciled') {
-        const result = await publication.activate(job, readContext());
+        const result = await publication.activate(job, workerContext());
+        if (unavailableDrains > confirmedOutages) {
+          expect(rejectedInventoryReads).toBe(unavailableDrains);
+          expect(result).toMatchObject({ status: 'unavailable', reason: 'dependency_unavailable' });
+          expect(await heldCopy(job.job)).toEqual(beforeOutage!);
+          expect((await subjectGenerations(search, prefix)).active).toBe(1);
+          confirmedOutages++;
+        }
         if (result.status === 'activated') {
           activated = true;
           break;
+        }
+      }
+      if (changedUnderFence && !releasedForSourceChange) {
+        const released = await f.db.admin.query<{ pass: string }>(
+          `SELECT j.pass::text FROM search.generation_publication j JOIN search.identity_writer_gate g
+             USING(partition_no,physical_target) WHERE j.job=$1 AND g.publication_released_fence=$2
+             AND g.publication_fence IS NULL`,
+          [job.job, changedUnderFence.fence],
+        );
+        if (released.rowCount) {
+          expect(BigInt(released.rows[0]!.pass)).toBeGreaterThan(BigInt(changedUnderFence.pass));
+          expect((await subjectGenerations(search, prefix)).active).toBe(1);
+          // The real source changed while the prior fence held. Its waiting ordinary projections can now settle.
+          await project(changedUnderFence.id);
+          await project(book);
+          releasedForSourceChange = true;
         }
       }
       if (observationLost && !original) {
@@ -207,7 +308,15 @@ test('generation restart keeps the original Source proof through lost observatio
       // Reopen native factories after every bounded call, including all three lost replies.
       await publication.close();
       publication = open();
-      expect((await subjectGenerations(search, prefix)).active).toBe(1);
+      const active = (await subjectGenerations(search, prefix)).active;
+      if (active === 2) {
+        // OpenSearch commits the alias under the original intent before the next turn confirms metadata.
+        expect(await heldCopy(job.job)).toMatchObject({
+          phase: 'intent',
+          bootstrap: original!.bootstrap,
+          execution: original!.execution,
+        });
+      } else expect(active).toBe(1);
     }
     await publication.close();
     expect({ activated, observationLost, dispatchLost, drainLost }).toEqual({
@@ -219,12 +328,15 @@ test('generation restart keeps the original Source proof through lost observatio
     const completed = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, readContext());
     expect(completed.status).toBe('complete');
     if (completed.status !== 'complete') throw new Error(completed.reason);
+    expect(confirmedOutages).toBe(2);
+    expect(releasedForSourceChange).toBe(true);
     expect(readerBlocked).toBe(true);
     expect(completed.publication).toEqual(original!);
-    expect(completed.observation.changed.length).toBeGreaterThan(0);
+    expect(completed.observation.routingComplete).toBe(true);
+    expect(completed.observation.unacknowledged).toEqual([]);
     const proof = (
       await f.db.pool.query(
-        `SELECT o.consumer_work,o.expires_at::text FROM search.public_filter_observation o
+        `SELECT o.consumer_work,o.prepared_rows,o.expires_at::text FROM search.public_filter_observation o
          JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
          WHERE r.physical_target=$1`,
         [target],
@@ -232,7 +344,13 @@ test('generation restart keeps the original Source proof through lost observatio
     ).rows;
     // Temporary materialization has retired; only payload-free original proof custody remains.
     expect(proof).toHaveLength(1);
-    expect(decodePublicFilterNativeState(proof[0].consumer_work)).toMatchObject({ prepared: [], preparedRows: [] });
+    expect(decodePublicFilterNativeState(proof[0].prepared_rows)).toEqual([]);
+    expect(decodePublicFilterNativeState(proof[0].consumer_work)).toMatchObject({
+      execution: job.job,
+      materializing: null,
+      dispatch: null,
+      queried: original!.queried,
+    });
     expect(proof[0].expires_at).toBe(String(Number.MAX_SAFE_INTEGER));
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
     expect((await custody.acquire(completed.publication.queried, readContext())).status).not.toBe('acquired');
