@@ -1282,6 +1282,13 @@ CREATE UNIQUE INDEX market_one_active_item_listing ON economy.market_item_listin
 
 
 --
+-- Name: market_trade_buyer_history_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_trade_buyer_history_idx ON economy.market_trade USING btree (book_id, ((payload #>> '{terms,item,homeId}'::text[])), ((payload #>> '{buyer,buyerId}'::text[])), (((payload #>> '{buyer,startedAt,$marketInteger}'::text[]))::bigint) DESC, trade_id DESC);
+
+
+--
 -- Name: market_trade_pending_decision; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -1293,6 +1300,13 @@ CREATE INDEX market_trade_pending_decision ON economy.market_trade USING btree (
 --
 
 CREATE INDEX market_trade_prepared_decision ON economy.market_trade USING btree (book_id, prepare_until, trade_id) WHERE (decision_pending AND prepared);
+
+
+--
+-- Name: market_trade_seller_history_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_trade_seller_history_idx ON economy.market_trade USING btree (book_id, ((payload #>> '{terms,item,homeId}'::text[])), ((payload #>> '{terms,item,holderId}'::text[])), (((payload #>> '{buyer,startedAt,$marketInteger}'::text[]))::bigint) DESC, trade_id DESC);
 
 
 --

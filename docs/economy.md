@@ -100,6 +100,10 @@ Commerce financial policy. There is no HTTP operation for this port.
 Unique items transfer by generation at their item home. A trade protects both its item and its funding reservation
 before recording a durable commit or abort. After commit, reconcile ownership delivery and then release clearing
 funds to seller and fee accounts. Same-book fungible delivery can settle as a balanced multi-asset journal group.
+Under `market:read`, `GET /v1/economy/market/listings` lists open, unexpired published offers in the configured book
+and item home. Return the terms a buyer can see on the individual listing, ordered by earliest expiry with a stable
+listing-ID tie break. Bind the bounded continuation to the requesting account and market. A purchase rechecks the
+seller's current grant and the offer's revision, item and funding eligibility.
 Under `market:read`, `GET /v1/economy/market/trades` lists receipts for the current account as buyer or seller in
 the configured book and item home. Return the same private receipt fields as the individual trade view, with the
 purchase start time for ordering. Include preparing, committing, aborting, completed and aborted trades. Order newest
