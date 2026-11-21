@@ -2228,10 +2228,13 @@ certify reconciliation. A native repair invalidates the affected home's witness 
 Subject engine page interrupted by a changed home re-enumerates that home's native keys from the beginning
 and resumes the retained engine page. An unfenced turn can finish that replay inline when a complete current
 Source home page matches the engine group exactly and the settled writer versions and bodies are visible.
-That check uses one lookahead key and charges the existing page meter. Interrupted pages repeat their actual
-work before committing the frontier. An owner move or pending identity invalidates the affected home, and
-physical recreation invalidates the entire old job. An unfenced Subject reconciliation turn can advance that
-candidate's retained Source enrollment with the remaining input budget. It records only native home receipts.
+That check uses one lookahead key and charges the existing page meter. The shared first pass records the
+complete Source page's own position. A later same-epoch command still owes validation at its new position.
+If a subsequent home needs replay, Search can retain the verified prefix by reopening the same PIT and
+matching its ordered keys and multiplicities through an engine-issued composite cursor. An owner move or
+pending identity invalidates the affected home, and physical recreation invalidates the entire old job. An
+unfenced Subject reconciliation turn can advance that candidate's retained Source enrollment with the
+remaining input budget. It records only native home receipts.
 Physical observation, materialization, and original repair still begin after reconciliation in activation.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled

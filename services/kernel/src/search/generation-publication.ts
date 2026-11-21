@@ -1503,7 +1503,14 @@ export function createSearchGenerationPublication(
                   if (result.status === 'rejected' && !(result.reason instanceof Pending)) throw result.reason;
                 return work(job, client, current, capture, true, additionalEnrollmentCosts);
               }
-              return await work(job, client, current, adopted?.capture);
+              const sealed =
+                batchHeld &&
+                job.subscription_protocol === 1 &&
+                job.pass === '1' &&
+                job.phase === 'validate' &&
+                job.next_home === 4096 &&
+                job.coverage_after === 4096;
+              return await work(job, client, current, adopted?.capture, sealed ? 'sealed' : undefined);
             } finally {
               if (laneLocked) {
                 const released = await client.query<{ unlocked: boolean }>(
@@ -1619,7 +1626,7 @@ export function createSearchGenerationPublication(
     before: Home,
     client: PoolClient,
     meter: Meter,
-    verifyChanged?: () => Promise<boolean>,
+    verifyChanged?: () => Promise<Home | undefined>,
   ) {
     const {
       rows: [old],
@@ -1639,15 +1646,13 @@ export function createSearchGenerationPublication(
     const sameOwnerAdvance = old && advancedUnderSubjectFence(job, old, before.epoch, BigInt(before.position));
     const startsSubjectHome =
       job.family === 'subjects' && job.phase === 'subject' && !job.after_id && (!job.fenced_pass || sameOwnerAdvance);
-    const replayed =
-      changed &&
-      verifyChanged !== undefined &&
-      old.epoch === before.epoch &&
-      BigInt(old.position) < BigInt(before.position) &&
-      (await verifyChanged());
+    const verified =
+      changed && verifyChanged && old.epoch === before.epoch && BigInt(old.position) < BigInt(before.position)
+        ? await verifyChanged()
+        : undefined;
     const missingCursorWitness =
       !old && job.family === 'subjects' && job.phase === 'subject' && !job.fenced_pass && job.after_id !== null;
-    if (missingCursorWitness || (changed && !startsSubjectHome && !replayed)) {
+    if (missingCursorWitness || (changed && !startsSubjectHome && !verified)) {
       if (sameOwnerAdvance) {
         await rewindSubjectHome(job, before.partition, client, meter);
         return 'rewound';
@@ -1664,24 +1669,25 @@ export function createSearchGenerationPublication(
       throw new Pending('source_pending');
     }
     if (!old || changed) {
+      const witness = verified ?? before;
       const stored = await client.query(
         `INSERT INTO search.generation_publication_home
       (partition_no,job,epoch,position,account_revision,claim_revision,pass) VALUES($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
         account_revision=EXCLUDED.account_revision,claim_revision=EXCLUDED.claim_revision,pass=EXCLUDED.pass`,
         [
-          before.partition,
+          witness.partition,
           job.job,
-          before.epoch,
-          before.position,
-          before.account_revision,
-          before.claim_revision,
+          witness.epoch,
+          witness.position,
+          witness.account_revision,
+          witness.claim_revision,
           job.pass,
         ],
       );
       meter.frontierWrites += stored.rowCount ?? 0;
     }
-    return replayed === true ? 'verified' : 'retained';
+    return verified ? 'verified' : 'retained';
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -1740,26 +1746,33 @@ export function createSearchGenerationPublication(
     ids: readonly string[],
     context: PublicFilterConsumerContext,
     meter: Meter,
-  ): Promise<boolean> {
+  ): Promise<Home | undefined> {
     // A complete Source page can fit in this turn only if there is room for a lookahead
     // key, the exact writer comparison and the remaining turn's ordinary engine keys.
     const inputLimit = ids.length + 1;
-    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return false;
+    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return;
     const page = await sourceKeys.read({ partition: before.partition, after: null, inputLimit }, context);
     add(meter, page.cost);
+    const originalPass = job.subscription_protocol === 1 && job.pass === '1' && !job.fenced_pass;
     if (
       page.status !== 'eligible' ||
       !page.complete ||
       page.partition !== before.partition ||
       page.epoch !== before.epoch ||
-      page.position !== BigInt(before.position) ||
+      (originalPass ? page.position < BigInt(before.position) : page.position !== BigInt(before.position)) ||
       !same([...page.ids].sort(), [...ids].sort())
     ) {
-      return false;
+      return;
     }
     check(context);
     const verified = await verifySubjectKeys(job, before.partition, ids, page.position, meter);
-    return verified === 'matched' && same(before, await head(before.partition, context));
+    if (verified !== 'matched') return;
+    const witness = { ...before, position: page.position.toString() };
+    const after = await head(before.partition, context);
+    // Validation reopens every original home. Preserve exactly the verified Source
+    // position so any concurrent command still owes that later comparison.
+    if (originalPass && after.epoch === witness.epoch && BigInt(after.position) >= page.position) return witness;
+    return same(witness, after) ? witness : undefined;
   }
   async function reconcile(
     job: Job,
@@ -2346,46 +2359,52 @@ export function createSearchGenerationPublication(
       const sources = (job.family === 'discovery' ? ['id', 'owner', 'kind'] : ['id']).map((field) => ({
         [field]: { terms: { field, missing_bucket: true } },
       }));
-      let response: { status: number; body: unknown };
-      try {
-        response = await engine<unknown>(context, meter, 'POST', '/_search', {
-          // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
-          // Keep one metadata-only hit and use only the composite buckets for reconciliation.
-          size: 1,
-          _source: false,
-          track_total_hits: false,
-          pit: { id: job.pit, keep_alive: '5m' },
-          aggs: {
-            keys: {
-              composite: { size: PAGE, sources, ...(job.engine_after ? { after: job.engine_after } : {}) },
-              aggs: { row: { top_hits: { size: 1, version: true } } },
+      const readPage = async (size: number, withHits: boolean) => {
+        let response: { status: number; body: unknown };
+        try {
+          response = await engine<unknown>(context, meter, 'POST', '/_search', {
+            // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
+            // Keep one metadata-only hit and use only the composite buckets for reconciliation.
+            size: 1,
+            _source: false,
+            track_total_hits: false,
+            pit: { id: job.pit, keep_alive: '5m' },
+            aggs: {
+              keys: {
+                composite: { size, sources, ...(job.engine_after ? { after: job.engine_after } : {}) },
+                ...(withHits && { aggs: { row: { top_hits: { size: 1, version: true } } } }),
+              },
             },
-          },
-        });
-      } catch (error) {
-        if (error instanceof OpenSearchError && error.status === 404) {
-          // An expired enumeration PIT restarts this finite pass, never skips to its old frontier.
-          job.pit = null;
-          job.engine_after = null;
-          await save(client, job, meter);
-          throw new Pending('observation_lost');
+          });
+        } catch (error) {
+          if (error instanceof OpenSearchError && error.status === 404) {
+            // An expired enumeration PIT restarts this finite pass, never skips to its old frontier.
+            job.pit = null;
+            job.engine_after = null;
+            await save(client, job, meter);
+            throw new Pending('observation_lost');
+          }
+          throw error;
         }
-        throw error;
-      }
-      assertCompleteSearch(response.body);
-      if (object(response.body) && response.body.pit_id !== undefined) {
-        if (typeof response.body.pit_id !== 'string' || !response.body.pit_id) throw new Pending('source_pending');
-        job.pit = response.body.pit_id;
-      }
-      if (!object(response.body) || !object(response.body.aggregations) || !object(response.body.aggregations.keys))
-        throw new Pending('source_pending');
-      const page = response.body.aggregations.keys;
-      if (!Array.isArray(page.buckets) || page.buckets.length > PAGE) throw new Pending('source_pending');
-      // Composite after_key is native enumeration state. No returned hit length or total certifies exhaustion.
-      const next = page.after_key;
-      if (next !== undefined && (!object(next) || same(next, job.engine_after))) throw new Pending('source_pending');
-      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryUnionKey[] }>();
-      for (const bucket of page.buckets) {
+        assertCompleteSearch(response.body);
+        if (object(response.body) && response.body.pit_id !== undefined) {
+          if (typeof response.body.pit_id !== 'string' || !response.body.pit_id) throw new Pending('source_pending');
+          job.pit = response.body.pit_id;
+        }
+        if (!object(response.body) || !object(response.body.aggregations) || !object(response.body.aggregations.keys))
+          throw new Pending('source_pending');
+        const page = response.body.aggregations.keys;
+        if (!Array.isArray(page.buckets) || page.buckets.length > size) throw new Pending('source_pending');
+        // Composite after_key is native enumeration state. No returned hit length or total certifies exhaustion.
+        const next = page.after_key;
+        if (next !== undefined && (!object(next) || same(next, job.engine_after))) throw new Pending('source_pending');
+        meter.inputKeys += page.buckets.length;
+        meter.engineIteratorSteps++;
+        return { buckets: page.buckets, after: next };
+      };
+      const page = await readPage(PAGE, true);
+      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryUnionKey[]; first: number }>();
+      for (const [index, bucket] of page.buckets.entries()) {
         if (
           !object(bucket) ||
           bucket.doc_count !== 1 ||
@@ -2418,13 +2437,11 @@ export function createSearchGenerationPublication(
           if (hit._source.partition !== partition) throw new Pending('source_pending');
         }
         const groupKey = `${partition}:${key?.owner ?? 'semantic'}`;
-        const group = grouped.get(groupKey) ?? { partition, ids: [], keys: [] };
+        const group = grouped.get(groupKey) ?? { partition, ids: [], keys: [], first: index };
         group.ids.push(id);
         if (key) group.keys.push(key);
         grouped.set(groupKey, group);
       }
-      meter.inputKeys += page.buckets.length;
-      meter.engineIteratorSteps++;
       for (const group of grouped.values()) {
         const coverage = classifyGenerationCoverage(
           job.family === 'discovery' ? group.keys.map((key) => key.id) : group.ids,
@@ -2432,9 +2449,37 @@ export function createSearchGenerationPublication(
         );
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
-        const verifyChanged =
-          job.family === 'subjects' ? () => verifyChangedEngineHome(job, before, group.ids, context, meter) : undefined;
-        const remembered = await remember(job, before, client, meter, verifyChanged);
+        const verifyChanged = async () => {
+          const witness = await verifyChangedEngineHome(job, before, group.ids, context, meter);
+          if (
+            !witness &&
+            job.subscription_protocol === 1 &&
+            job.pass === '1' &&
+            group.first > 0 &&
+            meter.inputKeys + group.first <= PUBLIC_FILTER_PREPARATION_INPUT_LIMIT
+          ) {
+            // Earlier groups passed their complete writer comparisons on this PIT.
+            // Ask the engine for the cursor of their contiguous prefix before rewinding.
+            const prefix = await readPage(group.first, false);
+            if (
+              prefix.after &&
+              prefix.buckets.length === group.first &&
+              prefix.buckets.every(
+                (bucket, i) => object(bucket) && bucket.doc_count === 1 && same(bucket.key, page.buckets[i].key),
+              )
+            ) {
+              job.engine_after = prefix.after;
+            }
+          }
+          return witness;
+        };
+        const remembered = await remember(
+          job,
+          before,
+          client,
+          meter,
+          job.family === 'subjects' ? verifyChanged : undefined,
+        );
         if (remembered === 'rewound') return;
         if (remembered === 'verified') continue;
         const discoveryKeys =
@@ -2445,8 +2490,8 @@ export function createSearchGenerationPublication(
         await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
         if (!same(before, await head(group.partition, context))) throw new Pending('source_pending');
       }
-      job.engine_after = (next as Record<string, unknown> | undefined) ?? null;
-      if (next === undefined) {
+      job.engine_after = page.after ?? null;
+      if (page.after === undefined) {
         await discardPit(job, context, meter);
         job.phase = 'validate';
         job.home = 0;

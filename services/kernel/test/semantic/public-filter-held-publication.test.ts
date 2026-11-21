@@ -69,6 +69,8 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
     }));
   let proofReads: number | undefined;
+  let raceFirstPage = false;
+  let verifiedPosition: bigint | undefined;
   const publicationConfig: SearchGenerationPublicationConfig = {
     subjectSubscriptionProtocol: 1,
     pool,
@@ -77,7 +79,14 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
     binding,
     sourceKeys: {
       async read(request, context) {
+        const racing = request.partition === 0 && raceFirstPage;
+        if (racing) await quietCommand(0);
         const page = await sourceKeys.read(request, context);
+        if (racing && page.status === 'eligible') {
+          raceFirstPage = false;
+          verifiedPosition = page.position;
+          await book(0);
+        }
         if (request.partition === 47 && proofReads !== undefined && ++proofReads === 1) await quietCommand(47);
         return page;
       },
@@ -464,6 +473,46 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       query: { match_all: {} },
     });
     expect(body.hits.hits.map((hit) => hit._id)).toEqual([resident]);
+    const last = await book(4000);
+    await writer.write(4000, [last], await position(4000));
+    await search.request('POST', '/' + target + '/_refresh');
+    // The receiver was sealed before the last writer settled. Finish that
+    // original inventory, then advance the live home on both sides of its key read.
+    while ((await frontier()).next_home < 4096) expect(await lane('source', 16)).toMatchObject({ status: 'progress' });
+    const physical = () => publication.step(prepared.job, context(), { enrollSource: true, batchSource: true });
+    expect(await physical()).toMatchObject({ status: 'progress' });
+    const physicalJob = async () =>
+      (
+        await pool.query(
+          'SELECT phase,home,pit IS NOT NULL AS pit,engine_after AS cursor FROM search.generation_publication WHERE job=$1',
+          [prepared.job.job],
+        )
+      ).rows[0];
+    expect(await physicalJob()).toMatchObject({ phase: 'engine', pit: true, cursor: null });
+    await f.post('/v1/subjects/' + last + ':hide', { reason: 'Withdrawn after opening the physical PIT' });
+    await writer.write(4000, [last], await position(4000));
+    await search.request('POST', '/' + target + '/_refresh');
+    await quietCommand(0);
+    raceFirstPage = true;
+    expect(await physical()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await physicalJob()).toMatchObject({ phase: 'subject', home: 4000, pit: true, cursor: { id: resident } });
+    const witness = await pool.query(
+      'SELECT position FROM search.generation_publication_home WHERE (partition_no,job,pass)=(0,$1,1)',
+      [prepared.job.job],
+    );
+    expect(verifiedPosition).toBeDefined();
+    expect(witness.rows).toEqual([{ position: String(verifiedPosition) }]);
+    expect(await position(0)).toBeGreaterThan(verifiedPosition!);
+    expect(await physical()).toMatchObject({ status: 'progress' });
+    expect(await physicalJob()).toMatchObject({ phase: 'engine', cursor: { id: resident } });
+    expect(await physical()).toMatchObject({ status: 'progress' });
+    expect(await physicalJob()).toMatchObject({ phase: 'engine', cursor: { id: last } });
+    expect(await physical()).toMatchObject({ status: 'progress' });
+    expect(await physicalJob()).toMatchObject({ phase: 'validate', home: 0 });
+    // The new original has no settled writer. Its later position was never
+    // certified by the earlier page, even though the PIT group itself matched.
+    expect(await physical()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await physicalJob()).toMatchObject({ phase: 'subject', home: 0 });
     expect((await subjectGenerations(search, prefix)).active).toBeNull();
   } finally {
     await publication.close();
