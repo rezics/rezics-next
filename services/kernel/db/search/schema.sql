@@ -612,6 +612,47 @@ $$;
 
 
 --
+-- Name: maintain_freshness_home(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.maintain_freshness_home() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'TRUNCATE' THEN
+    -- Truncating core.partition also requires truncating its referencing checkpoints.
+    TRUNCATE search.freshness_home;
+    RETURN NULL;
+  END IF;
+  IF TG_OP = 'UPDATE' AND (OLD.partition_no, OLD.position) = (NEW.partition_no, NEW.position) THEN RETURN NULL; END IF;
+
+  IF TG_TABLE_NAME = 'consumer_checkpoint' THEN
+    -- All native consumers count, including those read via the generic fallback.
+    -- An observed ceiling never decreases, so a covered checkpoint needs no row lock.
+    IF NEW.position > 0 THEN
+      INSERT INTO search.freshness_home AS h(partition_no, checkpoint_ceiling)
+      SELECT NEW.partition_no, NEW.position WHERE NOT EXISTS (
+        SELECT 1 FROM search.freshness_home prior
+        WHERE prior.partition_no = NEW.partition_no AND prior.checkpoint_ceiling >= NEW.position
+      )
+      ON CONFLICT (partition_no) DO UPDATE SET checkpoint_ceiling = EXCLUDED.checkpoint_ceiling
+        WHERE h.checkpoint_ceiling < EXCLUDED.checkpoint_ceiling;
+    END IF;
+  ELSE
+    IF TG_OP <> 'INSERT' AND (TG_OP = 'DELETE' OR OLD.partition_no <> NEW.partition_no) THEN
+      UPDATE search.freshness_home SET head = 0 WHERE partition_no = OLD.partition_no AND head <> 0;
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+      INSERT INTO search.freshness_home AS h(partition_no, head) VALUES (NEW.partition_no, NEW.position)
+      ON CONFLICT (partition_no) DO UPDATE SET head = EXCLUDED.head WHERE h.head <> EXCLUDED.head;
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: mark_public_filter_repair_allocation(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1629,6 +1670,25 @@ CREATE TABLE search.facet_value (
     contributor_terminal text NOT NULL,
     target_original text,
     target_terminal text
+);
+
+
+--
+-- Name: freshness_home; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.freshness_home (
+    partition_no integer NOT NULL,
+    head bigint DEFAULT 0 NOT NULL,
+    checkpoint_ceiling bigint DEFAULT 0 NOT NULL,
+    "position" bigint GENERATED ALWAYS AS (
+CASE
+    WHEN (head > checkpoint_ceiling) THEN (checkpoint_ceiling + 1)
+    ELSE head
+END) STORED,
+    CONSTRAINT freshness_home_checkpoint_ceiling_check CHECK ((checkpoint_ceiling >= 0)),
+    CONSTRAINT freshness_home_head_check CHECK ((head >= 0)),
+    CONSTRAINT freshness_home_partition_no_check CHECK ((partition_no >= 0))
 );
 
 
@@ -2989,6 +3049,14 @@ ALTER TABLE ONLY search.facet_value
 
 
 --
+-- Name: freshness_home freshness_home_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.freshness_home
+    ADD CONSTRAINT freshness_home_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: freshness_positions freshness_positions_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -3962,6 +4030,15 @@ CREATE TRIGGER erasure_enroll_prepared AFTER INSERT ON search.public_filter_prep
 --
 
 CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_registration FOR EACH ROW EXECUTE FUNCTION search.enroll_retained_copy();
+
+
+--
+-- Name: freshness_home freshness_position; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER freshness_position AFTER INSERT OR UPDATE OF head, checkpoint_ceiling ON search.freshness_home FOR EACH ROW EXECUTE FUNCTION search.capture_freshness_position();
+
+ALTER TABLE search.freshness_home ENABLE ALWAYS TRIGGER freshness_position;
 
 
 --

@@ -9,6 +9,11 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   const [up, down] = (
     await Bun.file(new URL('../../db/search/migrations/20261119015031_freshness_positions.sql', import.meta.url)).text()
   ).split('-- migrate:down');
+  const [bound, restore] = (
+    await Bun.file(
+      new URL('../../db/search/migrations/20261122012700_bound_shared_freshness_writes.sql', import.meta.url),
+    ).text()
+  ).split('-- migrate:down');
   const first = subjectConsumer('positions-', 1);
   const next = subjectConsumer('positions-', 2);
   const generic = 'other_freshness_reader';
@@ -34,7 +39,10 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   await db.connect();
   try {
     await db.query('BEGIN');
+    await db.query(restore!);
     await db.query(down!);
+    const homes = (await db.query('SELECT count(*)::int AS homes FROM core.partition')).rows[0]!.homes;
+    expect(homes).toBeGreaterThanOrEqual(4096);
     await db.query('UPDATE core.partition SET position = $1', [cut]);
     await db.query(
       `INSERT INTO core.consumer_checkpoint(partition_no, consumer, epoch, position)
@@ -42,6 +50,8 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       [[first, next, generic]],
     );
     await db.query(up!);
+    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    await db.query(bound!);
     await db.query('ANALYZE search.freshness_positions');
     const before = await tuples();
     expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
@@ -61,8 +71,49 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
     const behindRows = (await tuples()) - lagBefore;
     expect(behindRows).toBeLessThan(512);
-    console.info(JSON.stringify({ homes: 4096, caughtUpRows, twoBehindRows: behindRows }));
+    console.info(JSON.stringify({ homes, caughtUpRows, twoBehindRows: behindRows }));
     expect(await read(generic)).toMatchObject({ behind: 2, oldest: earlier });
+
+    const sharedUpdates = async () =>
+      Number(
+        (
+          await db.query(
+            "SELECT n_tup_upd FROM pg_stat_xact_user_tables WHERE relid='search.freshness_positions'::regclass",
+          )
+        ).rows[0]!.n_tup_upd,
+      );
+    const groupBefore = await sharedUpdates();
+    await db.query('UPDATE core.partition SET position=position+100 WHERE partition_no=0');
+    expect(await sharedUpdates()).toBe(groupBefore);
+    expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
+    await db.query('SAVEPOINT late_checkpoint');
+    await db.query('UPDATE core.consumer_checkpoint SET position=position+50 WHERE partition_no=0 AND consumer=$1', [
+      generic,
+    ]);
+    expect(await read(generic)).toMatchObject({ behind: 2, oldest: earlier });
+    expect(
+      (
+        await db.query(
+          'SELECT head,checkpoint_ceiling,position AS published FROM search.freshness_home WHERE partition_no=0',
+        )
+      ).rows,
+    ).toEqual([
+      {
+        head: String(BigInt(cut) + 101n),
+        checkpoint_ceiling: String(BigInt(cut) + 50n),
+        published: String(BigInt(cut) + 51n),
+      },
+    ]);
+    await db.query('UPDATE core.partition SET position=9223372036854775807 WHERE partition_no=0');
+    await db.query(
+      'UPDATE core.consumer_checkpoint SET position=9223372036854775807 WHERE partition_no=0 AND consumer=$1',
+      [generic],
+    );
+    expect(
+      (await db.query('SELECT position AS published FROM search.freshness_home WHERE partition_no=0')).rows[0]!
+        .published,
+    ).toBe('9223372036854775807');
+    await db.query('ROLLBACK TO late_checkpoint');
 
     await db.query('SAVEPOINT advances');
     await db.query('SET LOCAL session_replication_role = replica');
@@ -79,16 +130,160 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     expect((await db.query('SELECT shard FROM search.freshness_positions WHERE consumer = $1', [first])).rows).toEqual(
       [],
     );
-    // The next envelope after a missing checkpoint is position one, absent from this history.
-    expect(await read(first)).toMatchObject({ behind: 4096, oldest: null });
+    // A missing checkpoint starts at zero; other native fixtures may already retain a first envelope.
+    const firstEnvelope = (
+      await db.query('SELECT min(recorded_at) AS oldest FROM core.outbox WHERE position=1 AND event_seq=0')
+    ).rows[0]!.oldest;
+    expect(await read(first)).toMatchObject({ behind: homes, oldest: firstEnvelope });
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
     await db.query('TRUNCATE core.consumer_checkpoint');
-    expect(await read(next)).toMatchObject({ behind: 4096, oldest: null });
+    expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
+    await db.query(restore!);
+    const exact = await db.query(
+      "SELECT (positions->>'0')::bigint AS head FROM search.freshness_positions WHERE consumer='' AND shard=0",
+    );
+    expect(exact.rows[0]!.head).toBe(String(BigInt(cut) + 101n));
+    await db.query('UPDATE core.partition SET position=position+1 WHERE partition_no=0');
+    expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
+    await db.query(bound!);
+    expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
   } finally {
     try {
       await db.query('ROLLBACK');
     } finally {
       await db.end();
+    }
+  }
+}, 30_000);
+
+test('a concurrent head and checkpoint preserve the same committed freshness comparison', async () => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
+  const head = await pool.connect();
+  const checkpoint = await pool.connect();
+  // This fenced fixture home cannot accept a routed application command.
+  const home = 16_384 + (crypto.getRandomValues(new Uint32Array(1))[0]! % 32_768);
+  const consumer = 'search_concurrent_freshness';
+  const writerPid = (await head.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+  const checkpointPid = (await checkpoint.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+  const waitForLock = async (blocker: number, waiter: number) => {
+    const deadline = Date.now() + 5000;
+    while (
+      !(await pool.query('SELECT $1::int=ANY(pg_blocking_pids($2::int)) AS blocked', [blocker, waiter])).rows[0]!
+        .blocked
+    ) {
+      if (Date.now() >= deadline) throw new Error('Expected native freshness lock was not observed');
+      await Bun.sleep(5);
+    }
+  };
+  let created = false;
+  const observe = () =>
+    pool.query(
+      `SELECT h.head,h.checkpoint_ceiling,h.position AS published,
+        (p.positions->>h.partition_no::text)::bigint AS group_head,
+        (c.positions->>h.partition_no::text)::bigint AS group_checkpoint
+      FROM search.freshness_home h
+      JOIN search.freshness_positions p ON p.consumer='' AND p.shard=h.partition_no/64
+      JOIN search.freshness_positions c ON c.consumer=$2 AND c.shard=h.partition_no/64
+      WHERE h.partition_no=$1`,
+      [home, consumer],
+    );
+  try {
+    await head.query(
+      "INSERT INTO core.partition(partition_no,node,write_state,position) VALUES($1,'freshness-test','fenced',10)",
+      [home],
+    );
+    created = true;
+    await checkpoint.query(
+      'INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES($1,$2,1,1)',
+      [home, consumer],
+    );
+    await head.query('BEGIN');
+    await head.query('UPDATE core.partition SET position=20 WHERE partition_no=$1', [home]);
+    await checkpoint.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await checkpoint.query('SELECT position FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2', [
+      home,
+      consumer,
+    ]);
+    const advance = () =>
+      checkpoint.query('UPDATE core.consumer_checkpoint SET position=12 WHERE partition_no=$1 AND consumer=$2', [
+        home,
+        consumer,
+      ]);
+    const concurrent = advance().then(
+      () => undefined,
+      (error: { code?: string }) => error.code,
+    );
+    try {
+      await waitForLock(writerPid, checkpointPid);
+    } finally {
+      await head.query('COMMIT');
+    }
+    expect(await concurrent).toBe('40001');
+    await checkpoint.query('ROLLBACK');
+    await advance();
+    expect((await observe()).rows).toEqual([
+      { head: '20', checkpoint_ceiling: '12', published: '13', group_head: '13', group_checkpoint: '12' },
+    ]);
+
+    await checkpoint.query('BEGIN');
+    await checkpoint.query('UPDATE core.consumer_checkpoint SET position=25 WHERE partition_no=$1 AND consumer=$2', [
+      home,
+      consumer,
+    ]);
+    await head.query('BEGIN');
+    const waitingHead = head.query('UPDATE core.partition SET position=30 WHERE partition_no=$1', [home]);
+    try {
+      await waitForLock(checkpointPid, writerPid);
+    } finally {
+      await checkpoint.query('COMMIT');
+      await waitingHead;
+    }
+    await head.query('COMMIT');
+    expect((await observe()).rows).toEqual([
+      { head: '30', checkpoint_ceiling: '25', published: '26', group_head: '26', group_checkpoint: '25' },
+    ]);
+
+    const [, restore] = (
+      await Bun.file(
+        new URL('../../db/search/migrations/20261122012700_bound_shared_freshness_writes.sql', import.meta.url),
+      ).text()
+    ).split('-- migrate:down');
+    await head.query('BEGIN');
+    await head.query('UPDATE core.partition SET position=60 WHERE partition_no=$1', [home]);
+    await checkpoint.query('BEGIN');
+    const restoring = checkpoint.query(restore!);
+    try {
+      await waitForLock(writerPid, checkpointPid);
+    } finally {
+      await head.query('COMMIT');
+      await restoring;
+    }
+    expect(
+      (
+        await checkpoint.query(
+          "SELECT (positions->>$1::text)::bigint AS value FROM search.freshness_positions WHERE consumer='' AND shard=$2",
+          [String(home), Math.floor(home / 64)],
+        )
+      ).rows,
+    ).toEqual([{ value: '60' }]);
+    await checkpoint.query('ROLLBACK');
+    expect((await observe()).rows[0]!.group_head).toBe('26');
+  } finally {
+    try {
+      await Promise.all([head.query('ROLLBACK'), checkpoint.query('ROLLBACK')]);
+      if (created) {
+        await head.query('DELETE FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2', [
+          home,
+          consumer,
+        ]);
+        await head.query('DELETE FROM core.partition WHERE partition_no=$1', [home]);
+        await head.query('DELETE FROM search.freshness_home WHERE partition_no=$1 AND head=0', [home]);
+      }
+    } finally {
+      head.release();
+      checkpoint.release();
+      await pool.end();
     }
   }
 }, 30_000);
