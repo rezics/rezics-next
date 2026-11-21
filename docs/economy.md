@@ -120,6 +120,9 @@ Shared spot price and volume derive from completed settlements and remain behind
 `GET /v1/economy/spot/:instrumentId/orders` lists only the current account's accepted orders by descending native
 sequence. Both use bounded continuations scoped to the requesting account and book, and report the same permitted
 fields as the corresponding individual views.
+`GET /v1/economy/spot/:instrumentId/quote` reports the best resting bid and ask prices and the latest settled trade
+under `spot:read`. Read them with the instrument revision in one native snapshot. Use null for an empty side or
+missing settled history. Keep order and counterparty identities private.
 `GET /v1/economy/spot/:instrumentId/trades` reports price, lots, base units, quote units and settlement time for one
 instrument. It carries no participant, order, reservation or settlement authority identifiers. Sort newest settlement
 first, break ties by stable native fill identity, and continue with a bounded opaque cursor scoped to the requesting
