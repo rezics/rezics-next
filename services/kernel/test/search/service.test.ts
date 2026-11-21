@@ -15,6 +15,7 @@ import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { epochFixture } from '../semantic/support/identity-epoch.ts';
 
 const missingFigure: PublicFigureView = {
   questionId: STANDARD_QUESTION_ID,
@@ -357,13 +358,48 @@ test('an unreachable node, a missing alias or a missing template is index_not_re
   const down = await problem(unreachable.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
   expect(down.headers?.['retry-after']).toMatch(/^\d+$/);
   await problem(unreachable.suggest('Koko'), 'index_not_ready');
-  const missing = createSearchService({ pool, client, prefix: freshPrefix(), source: createFakeSource(), cursors });
+  const calls: string[] = [];
+  let queriedScript: string | undefined;
+  const observed: OpenSearch = {
+    ...client,
+    request: (...args) => {
+      calls.push(args[0] + ' ' + args[1]);
+      if (args[1].endsWith('/_search/template')) queriedScript = (args[2] as { id: string }).id;
+      return client.request(...args);
+    },
+  };
+  const prefixWithoutAlias = freshPrefix();
+  const missing = createSearchService({
+    pool,
+    client: observed,
+    prefix: prefixWithoutAlias,
+    source: createFakeSource(),
+    cursors,
+  });
+  await Promise.all(
+    Array.from({ length: 4 }, () => problem(missing.search('anonymous', { text: 'kokoro' }), 'index_not_ready')),
+  );
+  const writes = calls.filter((call) => call.startsWith('PUT /_scripts/'));
+  expect(writes.length).toBeGreaterThan(0);
+  expect(writes.length).toBe(new Set(writes).size);
+  calls.length = 0;
   await problem(missing.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
-  const { prefix, service } = await deployment([kokoro]);
-  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
-  await client.request('DELETE', `/_scripts/${prefix}${SEARCH_TEMPLATE}`);
-  await problem(service.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
-  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
+  expect(calls).toEqual([`GET /_resolve/index/${prefixWithoutAlias}subjects*`]);
+
+  const native = await epochFixture(databaseUrl, { pool });
+  try {
+    const person = await native.create('Kokoro');
+    const { prefix, service } = await deployment([{ ...kokoro, id: person.id, type: 'schema:Person' }], {
+      client: observed,
+    });
+    expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([person.id]);
+    expect(queriedScript?.startsWith(prefix)).toBe(true);
+    await client.request('DELETE', `/_scripts/${queriedScript}`);
+    await problem(service.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
+    expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([person.id]);
+  } finally {
+    await native.close();
+  }
 });
 
 test('each request makes at most three index requests and reads only the partitions of examined hits', async () => {

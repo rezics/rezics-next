@@ -377,29 +377,38 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
 
   let templatesInstalled = false;
+  let installing: { deadline: number; done: Promise<void> } | undefined;
   function requestIndex() {
     return createSearchIndexRequest({
       async install() {
         if (templatesInstalled) return;
-        await installTemplates(client, prefix);
-        templatesInstalled = true;
+        const deadline = requestDeadline();
+        // A caller with a shorter lifetime must keep its own transport deadline.
+        if (installing && installing.deadline <= deadline) return installing.done;
+        const done = installTemplates(client, prefix);
+        installing = { deadline, done };
+        try {
+          await done;
+          templatesInstalled = true;
+        } finally {
+          if (installing?.done === done) installing = undefined;
+        }
       },
       unavailable(error) {
         if (!(error instanceof OpenSearchError)) return false;
         const body = error.body as { error?: unknown } | null;
-        return error.type === 'index_not_found_exception' || missingTemplate(body?.error);
+        if (missingTemplate(body?.error)) {
+          templatesInstalled = false;
+          return true;
+        }
+        return error.type === 'index_not_found_exception';
       },
     });
   }
 
   async function indexRequest<T>(operation: () => Promise<T>): Promise<T> {
     const deadline = requestDeadline();
-    try {
-      return await (requests.getStore()?.indexRequest ?? requestIndex())(() => requestStep(operation, deadline));
-    } catch (error) {
-      templatesInstalled = false;
-      throw error;
-    }
+    return (requests.getStore()?.indexRequest ?? requestIndex())(() => requestStep(operation, deadline));
   }
 
   async function executeRequest<T, Context extends { deadline: number; scope?: LeafOptions }>(
