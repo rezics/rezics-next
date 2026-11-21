@@ -13,6 +13,7 @@ import {
   discoveryFailureObservation,
   discoveryFinalizationTrace,
 } from '../../src/search/discovery-finalization-trace.ts';
+import { requestDiscoveryRebuild } from '../../src/search/discovery-rebuild.ts';
 import { resolveDiscoveryOwnerAdapters } from '../../src/search/discovery-owner-registry.ts';
 import {
   admitSearchTurn,
@@ -89,6 +90,26 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       ownerAdapters: resolved.ownerAdapters,
       accounts: entry.accounts,
     });
+    const request = { pool, prefix, routeKey, producers: entry };
+    // Withhold the actual Space source: an adapter alone cannot allocate the missing producer's home rows.
+    const { space: _space, ...withoutSpace } = entry.metadataProducers;
+    await expect(
+      requestDiscoveryRebuild({ ...request, producers: { ...entry, metadataProducers: withoutSpace } }),
+    ).rejects.toMatchObject({
+      missingKinds: ['space'],
+    });
+    expect(await discoveryGenerations(pool, prefix)).toEqual([]);
+    const allocation = await requestDiscoveryRebuild(request);
+    expect(allocation).toEqual({ previous: null, generation });
+    expect(await requestDiscoveryRebuild(request)).toEqual(allocation);
+    expect(
+      (
+        await pool.query<{ owner: string; homes: number }>(
+          'SELECT owner,count(*)::int AS homes FROM search.discovery_population WHERE prefix=$1 AND generation=$2 GROUP BY owner ORDER BY owner',
+          [prefix, generation],
+        )
+      ).rows,
+    ).toEqual(['accounts', 'collection', 'review', 'semantic', 'space'].map((owner) => ({ owner, homes: 4096 })));
     const options = {
       pool,
       search,

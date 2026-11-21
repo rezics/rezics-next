@@ -178,7 +178,7 @@ async function rebuild(): Promise<void> {
   const { readSearchConfig } = await import('../src/search/work.ts');
   const config = readSearchConfig(process.env);
   if (!config) throw new ConfigError('OPENSEARCH_URL');
-  const { composeSearchNativePorts } = await import('../src/composition/search-native.ts');
+  const { composeSearchNativeAccess, composeSearchNativePorts } = await import('../src/composition/search-native.ts');
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
   const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
@@ -186,7 +186,8 @@ async function rebuild(): Promise<void> {
   const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {
-    const { source } = createRatedSubjectSource(pool, routeKey, undefined, composeSearchNativePorts());
+    const searchNativePorts = composeSearchNativePorts();
+    const { source } = createRatedSubjectSource(pool, routeKey, undefined, searchNativePorts);
     const search = createOpenSearch(config.url);
     const result = await rebuildSubjects({
       publication: 'native',
@@ -198,15 +199,32 @@ async function rebuild(): Promise<void> {
       runner: { async refresh() {} },
     });
     const { subjectListingSource } = await import('../src/library/listing-counts.ts');
-    const discovery = await rebuildDiscovery({
-      pool,
-      search,
-      source,
-      listing: subjectListingSource(pool),
-      prefix: config.prefix,
-      routeKey,
-    });
-    console.log(JSON.stringify({ ...result, discovery }));
+    const { createKernelRuntimeDefaults } = await import('../src/composition/runtime-defaults.ts');
+    const { createDiscoveryProducerEntry } = await import('../src/composition/discovery.ts');
+    const { createWorkClient } = await import('../src/work/client.ts');
+    const defaults = createKernelRuntimeDefaults({ env: process.env, searchNativePorts });
+    const workClient = await createWorkClient(databaseUrl, pool);
+    try {
+      const access = composeSearchNativeAccess({ pool, routeKey, defaults, workClient });
+      const producers = createDiscoveryProducerEntry({
+        pool,
+        routeKey,
+        access,
+        clock: defaults.clock,
+        tokens: defaults.tokens,
+      });
+      const discovery = await rebuildDiscovery({
+        pool,
+        search,
+        producers,
+        listing: subjectListingSource(pool),
+        prefix: config.prefix,
+        routeKey,
+      });
+      console.log(JSON.stringify({ ...result, discovery }));
+    } finally {
+      await workClient.close();
+    }
   } catch (error) {
     if (error instanceof RebuildError) {
       console.error(
