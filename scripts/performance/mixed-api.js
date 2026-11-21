@@ -34,6 +34,9 @@ const target = __ENV.MIXED_MIN_RPS ? positiveInteger('MIXED_MIN_RPS') : undefine
 const timeout = positiveInteger('MIXED_TIMEOUT_MS', 5000);
 const probeLimit = positiveInteger('MIXED_FRESHNESS_MS', 30000);
 const setupLimit = positiveInteger('MIXED_READY_MS', probeLimit);
+const replayFallback = __ENV.MIXED_REPLAY_FALLBACK ?? 'per-actor';
+if (!['per-actor', 'shared'].includes(replayFallback)) throw new Error('Invalid MIXED_REPLAY_FALLBACK');
+const seedBatchSize = 4;
 
 // One dispatch per slot. Count the occurrence of each operation in this cycle once, outside the measured loop.
 const mix =
@@ -54,6 +57,8 @@ const operations = Object.fromEntries(
 );
 const started = new Counter('mixed_started');
 const settled = new Counter('mixed_settled');
+const seedReplays = new Counter('mixed_seed_replays');
+const previousCreateReplays = new Counter('mixed_previous_create_replays');
 const visible = new Counter('index_visible_samples');
 const completedInWindow = new Counter('mixed_success_in_window');
 const valid = new Rate('mixed_valid');
@@ -88,7 +93,7 @@ export const options = {
       exec: 'indexVisibility',
     },
   },
-  setupTimeout: `${setupLimit + timeout + 15000}ms`,
+  setupTimeout: `${setupLimit + (1 + Math.ceil(accounts.length / seedBatchSize)) * timeout + 15000}ms`,
   summaryTrendStats: ['med', 'p(95)', 'p(99)', 'max'],
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response', 'error_code'],
   thresholds: {
@@ -101,17 +106,26 @@ export const options = {
   },
 };
 
-function request(name, path, method, account, body, key, limit = timeout) {
+function requestArgs(name, path, method, account, body, key, limit = timeout) {
   const headers = {};
   if (account) headers.Authorization = `Bearer ${account.bearer}`;
   if (body) headers['Content-Type'] = 'application/json';
   if (key) headers['Idempotency-Key'] = JSON.stringify(key);
-  return http.request(method, origin + path, body ? JSON.stringify(body) : null, {
-    headers,
-    tags: { name },
-    redirects: 0,
-    timeout: `${limit}ms`,
-  });
+  return [
+    method,
+    origin + path,
+    body ? JSON.stringify(body) : null,
+    {
+      headers,
+      tags: { name },
+      redirects: 0,
+      timeout: `${limit}ms`,
+    },
+  ];
+}
+
+function request(...args) {
+  return http.request(...requestArgs(...args));
 }
 
 function value(response) {
@@ -122,8 +136,8 @@ function value(response) {
   }
 }
 
-function create(account, key) {
-  const response = request(
+function createArgs(account, key) {
+  return requestArgs(
     'subject.create',
     '/v1/subjects',
     'POST',
@@ -134,6 +148,9 @@ function create(account, key) {
     },
     key,
   );
+}
+
+function created(response, key) {
   const item = value(response)?.subject;
   const id =
     response.status === 201 &&
@@ -145,6 +162,28 @@ function create(account, key) {
       ? item.id
       : null;
   return { response, id };
+}
+
+function create(account, key) {
+  return created(http.request(...createArgs(account, key)), key);
+}
+
+function prepareReplayReceipts() {
+  const receipts = [];
+  for (let first = 0; first < accounts.length; first += seedBatchSize) {
+    const seeds = Array.from({ length: Math.min(seedBatchSize, accounts.length - first) }, (_, offset) => {
+      const account = first + offset;
+      const key = `qreplay${sha256(accounts[account].id, 'hex').slice(0, 32)}`;
+      return { account, key };
+    });
+    const replies = http.batch(seeds.map(({ account, key }) => createArgs(accounts[account], key)));
+    for (const [i, { account, key }] of seeds.entries()) {
+      const { response, id } = created(replies[i], key);
+      if (!id) throw new Error(`Setup replay receipt for actor ${account} failed (HTTP ${response.status})`);
+      receipts.push({ account, key, id });
+    }
+  }
+  return receipts;
 }
 
 function search(account, book, limit = timeout) {
@@ -190,6 +229,7 @@ function observeIndex(account, book, measured, observationLimit = probeLimit) {
 }
 
 export function setup() {
+  const receipts = prepareReplayReceipts();
   const run = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   const key = `q${run}seed`;
   const { id, response } = create(accounts[0], key);
@@ -199,11 +239,11 @@ export function setup() {
     );
   const result = observeIndex(accounts[0], { id, text: key }, false, setupLimit);
   if (result.ms === null) throw new Error(`Setup subject never became searchable (last HTTP ${result.status})`);
-  return { run, seed: { account: 0, id, key } };
+  return { run, seed: { id, key }, receipts };
 }
 
 let lastReceipt;
-export function mixed({ run, seed }) {
+export function mixed({ run, seed, receipts }) {
   const index = execution.scenario.iterationInTest;
   const { name, offset } = slots[index % slots.length];
   // Rotate each operation independently, including actor/book counts divisible by the length of the mix.
@@ -240,7 +280,8 @@ export function mixed({ run, seed }) {
     ok = made.id !== null;
     if (ok) lastReceipt = { account: actor, id: made.id, key };
   } else {
-    const receipt = lastReceipt ?? seed;
+    (lastReceipt ? previousCreateReplays : seedReplays).add(1);
+    const receipt = lastReceipt ?? receipts[replayFallback === 'shared' ? 0 : actor];
     const replay = create(accounts[receipt.account], receipt.key);
     response = replay.response;
     ok = replay.id === receipt.id;
@@ -319,6 +360,9 @@ export function handleSummary({ metrics }) {
     successfulRps: inWindow / seconds,
     latencyMs: values('mixed_ms'),
     operations: Object.fromEntries(Object.keys(operations).map((n) => [n, operation(n)])),
+    replayFallback,
+    setupReceiptReplays: values('mixed_seed_replays').count ?? 0,
+    previousCreateReceiptReplays: values('mixed_previous_create_replays').count ?? 0,
     plannedReceiptReplays: (values('mixed_replay_valid').passes ?? 0) + (values('mixed_replay_valid').fails ?? 0),
     clientFailureRetries: 0,
     failures: Object.fromEntries(Object.keys(errors).map((n) => [n, values(`mixed_error_${n}`).count ?? 0])),
