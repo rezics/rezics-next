@@ -8,9 +8,9 @@ import { newId } from '../../src/route/route.ts';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 afterAll(() => pool.end());
 const route = 0x4567;
-async function input(client: AccessClient = pool) {
+async function input(client: AccessClient = pool, resourceRoute = route) {
   return {
-    resource: { route, id: newId(route) },
+    resource: { route: resourceRoute, id: newId(resourceRoute) },
     role: 'semantic.context.owner',
     accountId: newId(0xabcd),
     at: await mintReadTime(client),
@@ -145,7 +145,8 @@ test("the read sees the caller's transaction snapshot and opens no connection", 
       [route, value.resource.id, authoritativeTimeValue(value.at)],
     );
     expect(await resourceRoleHeld(reader, value)).toBe(true);
-    const uncommitted = await input(reader);
+    // The external writer already advanced its home publication epoch beyond this snapshot.
+    const uncommitted = await input(reader, 0x6543);
     await grant(reader, uncommitted);
     expect(await resourceRoleHeld(reader, uncommitted)).toBe(true);
     await reader.query('COMMIT');
