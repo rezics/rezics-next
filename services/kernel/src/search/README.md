@@ -396,7 +396,7 @@ disclosure. Search neither starts a second restore clock nor preserves hidden da
 Search's account-erasure inventory follows the actual stores and producers:
 The version-1 `search` account-erasure wakeup is registered in the existing work module before the optional
 indexing-config return. It validates native envelopes, rereads the exact Access obligation, persists Search's
-account-home progress and enqueues the stable maintenance workflow. Missing configuration stays pending even
+account-home progress and enqueues the participant on the effects queue. Missing configuration stays pending even
 when indexing is disabled. This is not final participant closure. The
 [implementation contract](../../../../docs/search-index-erasure-plan.md#brief-actual-account-erasure-participation-and-all-copy-closure)
 requires owner inventory with source-disposition and receiving receipts, plus the existing identity

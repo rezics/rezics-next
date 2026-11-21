@@ -2,19 +2,24 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import { ERASURE_PARTICIPANTS, acknowledgeErasure } from '../access/erasure.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import { runCommand } from '../command/command.ts';
+import { noEffect, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection, withQueryAccounting } from '../database/pool.ts';
 import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
+  advanceSubjectErasureSourceProof,
   createSubjectErasureSource,
   verifySubjectErasureSourcePage,
   readSubjectErasureSourceProof,
   verifySubjectErasureSourceProof,
 } from '../semantic/account-erasure-source.ts';
-import type { SubjectErasureSourceRecord, SubjectErasureSource } from '../semantic/account-erasure-source-contract.ts';
+import type {
+  SubjectErasureSourceRecord,
+  SubjectErasureSource,
+  SubjectErasureSourcePage,
+} from '../semantic/account-erasure-source-contract.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/index.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
@@ -28,6 +33,8 @@ import { createRatedSubjectSource } from './rated-source.ts';
 import type { DiscoveryRegistry } from './discovery.ts';
 import type { PublicFilterSourceFactory } from '../semantic/index.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
+import { SEARCH_ERASURE_PROGRESS } from './query-events.ts';
+import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import { subjectConsumer } from './runner.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
@@ -335,28 +342,33 @@ async function advanceSearchErasure(
     turn.check();
     return result;
   }
-  const root = await query<{ version: number; at: string }>(
-    'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
-    [route, accountId],
-  );
-  const obligation = root.rows[0];
-  if (!obligation || obligation.version !== 1 || !ERASURE_PARTICIPANTS[1].includes('search'))
+  // Read the committed obligation and its bound cursor in one account-home snapshot.
+  // Only the first turn needs to initialize a header.
+  const readHeader = async () =>
+    (
+      await query<Header & { matches: boolean | null }>(
+        `SELECT e.version,e.at::text,p.version=e.version AND p.at=e.at AS matches,
+        p.frontier,p.source_complete,p.personal_complete,p.ever_applied,p.phase,p.revision::text
+     FROM access.erasure e LEFT JOIN search.erasure_progress p ON (p.partition_no,p.account_id)=($3,e.account_id)
+     WHERE (e.route,e.account_id)=($1,$2)`,
+        [route, accountId, home],
+      )
+    ).rows[0];
+  let observed = await readHeader();
+  if (!observed || observed.version !== 1 || !ERASURE_PARTICIPANTS[1].includes('search'))
     throw new TypeError('Missing supported Search erasure obligation');
-  const barrier: HistoryBarrier = { accountId, accountRoute: route, version: obligation.version, at: obligation.at };
-  await query(
-    `INSERT INTO search.erasure_progress(partition_no,account_id,version,at,protocol,phase)
-    VALUES($1,$2,$3,$4,1,'sealing') ON CONFLICT DO NOTHING`,
-    [...keys, barrier.version, barrier.at],
-  );
-  const header = (
-    await query<Header>(
-      `SELECT version,at::text,frontier,source_complete,personal_complete,
-    ever_applied,phase,revision::text FROM search.erasure_progress WHERE (partition_no,account_id)=($1,$2)`,
-      keys,
-    )
-  ).rows[0];
-  if (!header || header.version !== barrier.version || header.at !== barrier.at)
+  const barrier: HistoryBarrier = { accountId, accountRoute: route, version: observed.version, at: observed.at };
+  if (observed.matches === null) {
+    await query(
+      `INSERT INTO search.erasure_progress(partition_no,account_id,version,at,protocol,phase)
+       VALUES($1,$2,$3,$4,1,'sealing') ON CONFLICT DO NOTHING`,
+      [...keys, barrier.version, barrier.at],
+    );
+    observed = await readHeader();
+  }
+  if (!observed?.matches || observed.version !== barrier.version || observed.at !== barrier.at)
     throw new TypeError('Conflicting Search erasure obligation');
+  const header = observed;
   const progress = (
     state: SearchErasureProgress['state'],
     phase: SearchErasureProgress['phase'],
@@ -437,12 +449,33 @@ async function advanceSearchErasure(
         );
       return progress('more', 'copies');
     }
+    // An empty, sealed nonterminal page has no writer effects. Transfer its real receipt
+    // while Semantic advances the independent terminal chain. Physical cleanup and final ACK
+    // still require that terminal proof and the live target inventory.
+    if (runtime.prefix && !isAdmittedSearchPrefix(runtime.prefix)) throw new TypeError('Invalid Search erasure prefix');
+    const source = runtime.source;
+    const page =
+      search && runtime.prefix && source
+        ? await receive(() => source.readPage({ barrier, frontier: header.frontier, inputLimit: 100, context }))
+        : undefined;
+    if (page && (page.status === 'progress' || page.status === 'complete')) {
+      if (
+        page.records.length > 1 ||
+        (page.frontier !== null && (Buffer.byteLength(page.frontier) > 2048 || page.frontier === header.frontier))
+      )
+        throw new TypeError('Invalid bounded Subject erasure page');
+      if (page.status === 'progress' && page.records.length === 0)
+        return (await acceptPage(page, header.revision))
+          ? progress('more', 'source')
+          : pending('source-changed', 'source');
+    }
     // Terminal Source custody is a separate all-home native chain. Advance it even when
     // Search is disabled; no configuration, local EOF or page receipt supplies this proof.
     turn.check();
-    const sourceProof = await readSubjectErasureSourceProof({ pool }, barrier, context);
+    const terminal = await advanceSubjectErasureSourceProof({ pool }, barrier, context);
     turn.check();
-    if (!sourceProof) return pending('source-unavailable', 'source');
+    if (terminal.status === 'progress') return progress('more', 'source');
+    if (terminal.status !== 'complete') return pending('source-unavailable', 'source');
     if (!search || !runtime.prefix) return pending('configuration-unavailable', 'sealing');
     const accountCopy = await query(
       `SELECT 1 FROM search.discovery_copy WHERE route=$1 AND source_id=$2
@@ -462,18 +495,10 @@ async function advanceSearchErasure(
       await query(`UPDATE search.erasure_progress SET ever_applied=true WHERE (partition_no,account_id)=($1,$2)`, keys);
       return progress('more', 'copies');
     }
-    const source = runtime.source;
-    if (!source) return pending('source-unavailable', 'source');
-    if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(runtime.prefix)) throw new TypeError('Invalid Search erasure prefix');
+    if (!page || (page.status !== 'progress' && page.status !== 'complete'))
+      return pending('source-unavailable', 'source');
     const targets = await population();
     if (!targets) return pending('population-unknown', 'sealing');
-    const page = await receive(() => source.readPage({ barrier, frontier: header.frontier, inputLimit: 100, context }));
-    if (page.status !== 'progress' && page.status !== 'complete') return pending('source-unavailable', 'source');
-    if (
-      page.records.length > 1 ||
-      (page.frontier !== null && (Buffer.byteLength(page.frontier) > 2048 || page.frontier === header.frontier))
-    )
-      throw new TypeError('Invalid bounded Subject erasure page');
     const record = page.records[0];
     if (
       record &&
@@ -644,28 +669,7 @@ async function advanceSearchErasure(
     // The producer validates its native barrier again after effects. A changed source never advances
     // the raw frontier, and no page receipt/record body is stored in DBOS history or Search SQL.
     turn.check();
-    const advanced = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
-      turn.check();
-      if (!(await verifySubjectErasureSourcePage(tx, barrier, page.receipt))) return { value: false, events: [] };
-      turn.check();
-      const updated = await tx.query(
-        `UPDATE search.erasure_progress SET frontier=$4,source_complete=$5,
-        ever_applied=ever_applied OR $6,revision=revision+1,phase=$7,pending_reason=NULL
-        WHERE (partition_no,account_id)=($1,$2) AND revision=$3`,
-        [
-          ...keys,
-          header.revision,
-          page.status === 'complete' ? page.receipt.id : page.frontier,
-          page.status === 'complete',
-          !!record,
-          page.status === 'complete' ? 'finalize' : 'source',
-        ],
-      );
-      turn.check();
-      return { value: updated.rowCount === 1, events: [] };
-    });
-    turn.check();
-    if (!advanced.value) return pending('source-changed', 'source');
+    if (!(await acceptPage(page, header.revision))) return pending('source-changed', 'source');
     if (page.status !== 'complete') return progress('more', 'source');
     if (!header.personal_complete) return pending('personal-pending', 'finalize');
     // The Account discovery owner has separate native late-item/physical cleanup. Its current witness
@@ -700,7 +704,7 @@ async function advanceSearchErasure(
     turn.check();
     const finalized = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
       turn.check();
-      if (!(await verifySubjectErasureSourceProof(tx, barrier, sourceProof))) return { value: false, events: [] };
+      if (!(await verifySubjectErasureSourceProof(tx, barrier, terminal.proof))) return noEffect(false);
       turn.check();
       const updated = await tx.query(
         `UPDATE search.erasure_progress SET phase='done',pending_reason=NULL
@@ -708,7 +712,9 @@ async function advanceSearchErasure(
         keys,
       );
       turn.check();
-      return { value: updated.rowCount === 1, events: [] };
+      return updated.rowCount === 1
+        ? { value: true, events: [{ type: SEARCH_ERASURE_PROGRESS, data: {} }] }
+        : noEffect(false);
     });
     turn.check();
     return finalized.value ? progress('complete', 'done') : pending('source-changed', 'finalize');
@@ -719,6 +725,40 @@ async function advanceSearchErasure(
     return pending('native-ambiguous', header.phase);
   }
 
+  async function acceptPage(
+    page: Extract<SubjectErasureSourcePage, { status: 'complete' | 'progress' }>,
+    revision: string,
+  ) {
+    const advanced = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
+      turn.check();
+      const current = await tx.query(
+        'SELECT 1 FROM search.erasure_progress WHERE (partition_no,account_id,revision)=($1,$2,$3) FOR UPDATE',
+        [...keys, revision],
+      );
+      if (!current.rowCount || !(await verifySubjectErasureSourcePage(tx, barrier, page.receipt)))
+        return noEffect(false);
+      turn.check();
+      const updated = await tx.query(
+        `UPDATE search.erasure_progress SET frontier=$4,source_complete=$5,
+        ever_applied=ever_applied OR $6,revision=revision+1,phase=$7,pending_reason=NULL
+        WHERE (partition_no,account_id)=($1,$2) AND revision=$3`,
+        [
+          ...keys,
+          revision,
+          page.status === 'complete' ? page.receipt.id : page.frontier,
+          page.status === 'complete',
+          page.records.length > 0,
+          page.status === 'complete' ? 'finalize' : 'source',
+        ],
+      );
+      turn.check();
+      return updated.rowCount === 1
+        ? { value: true, events: [{ type: SEARCH_ERASURE_PROGRESS, data: {} }] }
+        : noEffect(false);
+    });
+    turn.check();
+    return advanced.value;
+  }
   async function engine(
     method: Parameters<OpenSearch['request']>[0],
     path: string,
@@ -819,7 +859,7 @@ async function acknowledgeSearchErasureTurn(pool: Pool, accountId: string, turn:
     turn.check();
     const value = await verifySubjectErasureSourceProof(tx, barrier, proof);
     turn.check();
-    return { value, events: [] };
+    return noEffect(value);
   });
   turn.check();
   if (!verified.value) throw new Error('Search erasure Source proof changed');
@@ -881,27 +921,33 @@ export function registerSearchErasure(
       });
     },
   };
-  const step = DBOS.registerStep((accountId: string) => stepSearchErasure(context.pool, accountId, runtime), {
-    name: 'search.erasure.step',
-    retriesAllowed: true,
-    maxAttempts: 10,
-  });
+  const step = DBOS.registerStep(
+    async (accountId: string) => {
+      const { state, reason } = await stepSearchErasure(context.pool, accountId, runtime);
+      return { state, reason };
+    },
+    { name: 'search.erasure.step', retriesAllowed: true, maxAttempts: 10 },
+  );
   const acknowledge = DBOS.registerStep((accountId: string) => acknowledgeSearchErasure(context.pool, accountId), {
     name: 'search.erasure.acknowledge',
     retriesAllowed: true,
     maxAttempts: 10,
   });
-  const enqueue = async (accountId: string, segment: number) =>
-    context.client.enqueue(
+  const enqueue = async (accountId: string, segment: number, delaySeconds = 0) => {
+    await context.client.enqueue(
       {
         workflowName,
         workflowID: `search:erasure:1:${accountId}:${segment}`,
         workflowIDReusePolicy: 'return-existing',
-        queueName: 'maintenance',
+        // Participant work must remain runnable while maintenance coordinators await its ACK.
+        queueName: 'effects',
+        delaySeconds,
+        queuePartitionKey: `search_erasure:${partitionOf(routeOf(accountId)!)}`,
       },
       accountId,
       segment,
     );
+  };
   const continuation = DBOS.registerStep(enqueue, {
     name: 'search.erasure.continue',
     retriesAllowed: true,
@@ -909,25 +955,32 @@ export function registerSearchErasure(
   });
   DBOS.registerWorkflow(
     async (accountId: string, segment: number) => {
-      for (let n = 0; n < 16; n++) {
+      // Each persisted step owns one bounded native turn. Yield between segments and
+      // release the shared effects slot immediately when a prerequisite is still pending.
+      const yieldPending = await DBOS.patch('search-erasure-yield-pending');
+      let delaySeconds = 0;
+      for (let n = 0; n < (yieldPending ? 256 : 16); n++) {
         const result = await step(accountId);
         if (result.state === 'complete') {
           await acknowledge(accountId);
           return;
         }
         if (result.state === 'pending') {
-          const wait =
+          delaySeconds =
             result.reason === 'source-unavailable' ||
             result.reason === 'population-unknown' ||
             result.reason === 'configuration-unavailable' ||
             result.reason === 'copies-pending' ||
             result.reason === 'personal-pending'
-              ? 1_000
-              : 30_000;
-          await DBOS.sleep(wait);
+              ? 1
+              : 30;
+          if (yieldPending) break;
+          // Workflows started by the previous version may already have persisted this sleep.
+          await DBOS.sleep(delaySeconds * 1000);
+          delaySeconds = 0;
         }
       }
-      await continuation(accountId, segment + 1);
+      await continuation(accountId, segment + 1, delaySeconds);
     },
     { name: workflowName },
   );
