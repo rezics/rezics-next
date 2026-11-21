@@ -84,7 +84,12 @@ Matching follows price-time priority with stable fill identities and protected a
 step can resume before crossing subsequent instructions. A canceled order frees only its unallocated remainder.
 The native worker schedules bounded spot work for the configured book and node. Market settlement also requires the
 configured item home. An old queued job advances work only if its owner binding still matches.
-Public price and volume derive from completed settlements and remain behind Economy admission.
+Shared spot price and volume derive from completed settlements and remain behind Economy admission and `spot:read`.
+`GET /v1/economy/spot/:instrumentId/trades` reports price, lots, base units, quote units and settlement time for one
+instrument. It carries no participant, order, reservation or settlement authority identifiers. Sort newest settlement
+first, break ties by stable native fill identity, and continue with a bounded opaque cursor scoped to the requesting
+account and instrument. Fills awaiting ledger settlement remain visible through their own order lifecycle and do not
+enter the shared feed.
 
 ## Book reconciliation and restore
 
@@ -92,6 +97,13 @@ A native audit reconstructs journal totals, positions, holds, reserved creator p
 read-only repeatable-read snapshot. Treat absent books, page-limited scans and mismatches as separate outcomes. An
 incomplete audit returns diagnostic findings and a snapshot identity. External clearing reconciliation still uses
 independently verified provider statements and watermarks.
+
+Run `bun --no-env-file services/kernel/scripts/economy-book-audit.ts --book BOOK` with a read-only database credential
+in `ECONOMY_RECONCILIATION_DATABASE_URL`. The command writes one JSON result to standard output. An optional
+`--page-limit` accepts 1–2048 pages, and `--timeout-ms` accepts 100–10000 milliseconds. Exit codes are 0 for
+consistent or help, 2 for invalid invocation, 3 for absent, 4 for incomplete, 5 for divergent and 6 for unavailable.
+Use an explicit PostgreSQL URI. TLS validates the server by default, and disposable local fixtures can use
+`sslmode=disable`.
 
 Run `bun services/kernel/scripts/economy-book-restore.ts` to exercise a PostgreSQL custom dump and restore in disposable
 databases. The exercise restores an uncertain synthetic withdrawal and an escrowed fixed-price trade. It fences the
