@@ -1310,10 +1310,24 @@ CREATE INDEX market_work_ready ON economy.market_work USING btree (book_id, owne
 
 
 --
+-- Name: pending_deposit_wallet_asset_page; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX pending_deposit_wallet_asset_page ON economy.pending_deposit USING btree (book_id, wallet_id, asset_id) WHERE (units > (0)::numeric);
+
+
+--
 -- Name: position_expirable_credit_idx; Type: INDEX; Schema: economy; Owner: -
 --
 
 CREATE INDEX position_expirable_credit_idx ON economy."position" USING btree (book_id, asset_id, account_id) WHERE ((account_role = 'wallet'::text) AND (posted > 0));
+
+
+--
+-- Name: position_wallet_asset_page; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX position_wallet_asset_page ON economy."position" USING btree (book_id, account_id, asset_id) WHERE (account_role = 'wallet'::text);
 
 
 --
