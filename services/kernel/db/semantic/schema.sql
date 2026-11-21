@@ -3828,6 +3828,9 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 CREATE FUNCTION semantic.public_filter_ack_origin(registration_id text, original uuid) RETURNS TABLE(job uuid, observation text, execution text, settlement text, terminal uuid, ack_after integer)
     LANGUAGE sql STABLE ROWS 1
+    SET plan_cache_mode TO 'force_generic_plan'
+    SET join_collapse_limit TO '1'
+    SET enable_seqscan TO 'off'
     AS $$
   -- Each equality group verifies one witness against the retained manifest. Keep the
   -- lookups separate so planning does not enumerate joins across independent proofs.
@@ -4179,7 +4182,10 @@ $$;
 --
 
 CREATE FUNCTION semantic.public_filter_published_coverage(physical_target text, incarnation text, child_definition uuid, publication_job uuid, text_keys text[]) RETURNS TABLE(job uuid, bootstrap uuid, registration text, definition uuid, consumer text, generation bigint, covered_generation bigint, coverage_root text, coverage_keys text[])
-    LANGUAGE sql STABLE
+    LANGUAGE sql STABLE ROWS 1
+    SET plan_cache_mode TO 'force_generic_plan'
+    SET join_collapse_limit TO '1'
+    SET enable_seqscan TO 'off'
     AS $_$
 WITH candidates AS MATERIALIZED (
   SELECT j.* FROM search.generation_publication j

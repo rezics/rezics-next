@@ -1,9 +1,11 @@
 /* semantic.privacy-role */
-WITH width AS (SELECT $5::integer AS plans), input AS MATERIALIZED (
+WITH width AS (SELECT $5::integer AS plans,$1::jsonb AS members), input AS MATERIALIZED (
   SELECT m.*,$2::bigint AS now,$3::text AS route_digest,$4::text[] AS catalogue_text_keys
-  FROM jsonb_to_recordset($1::jsonb) m(slot integer,observation text,queried text,consumer text,
+  -- Composed Book pages have their own statement. This role binds exactly one observation.
+  FROM width w CROSS JOIN LATERAL jsonb_to_record(w.members->0) m(slot integer,observation text,queried text,consumer text,
     physical_target text,incarnation text,execution_id text,start_id uuid,deadline bigint,page_id uuid,
-    publication_job uuid,publication_bootstrap uuid,terminal_step uuid,terminal_root text) LIMIT (SELECT plans FROM width)
+    publication_job uuid,publication_bootstrap uuid,terminal_step uuid,terminal_root text)
+  WHERE w.plans=1 AND jsonb_array_length(w.members)=1
 ),
 binding AS MATERIALIZED (
   SELECT i.slot,i.execution_id,i.start_id AS requested_start,i.deadline,o.partition_no,o.observation,o.registration,o.queried,o.covered,
@@ -34,14 +36,14 @@ binding AS MATERIALIZED (
     SELECT proof.* FROM semantic.public_filter_published_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,i.catalogue_text_keys
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target !~ 'discovery-g[1-9][0-9]*$'
-    UNION ALL
-    SELECT proof.* FROM semantic.public_filter_mixed_coverage(
-      r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
-    ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'
     /* semantic.end-attached-coverage */
   ) attached ON true
-  JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=
-    (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
+  JOIN LATERAL (
+    SELECT * FROM search.public_filter_coverage_preparation c
+    WHERE (c.partition_no,c.registration,c.bootstrap)=
+      (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
+    LIMIT 1
+  ) c ON true
   JOIN search.public_filter_coverage_baseline last_home ON
     (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=
     (c.partition_no,c.registration,c.bootstrap,4095) AND last_home.root=c.root
@@ -218,16 +220,26 @@ binding AS MATERIALIZED (
       SELECT h.source_home,n.owner_epoch,n.population_fenced,base.source_epoch,
         base.native_revision,base.native_claim_revision,base.source_position
       FROM home_keys h CROSS JOIN budgeted b
-      LEFT JOIN search.public_filter_coverage_baseline base ON
-        (base.partition_no,base.registration,base.bootstrap,base.source_home)=
-        (h.partition_no,h.registration,h.bootstrap,h.source_home)
-      LEFT JOIN semantic.public_filter_privacy_head n ON n.partition_no=h.source_home
+      -- Drive all three point reads from the deduplicated window, including missing keys.
+      LEFT JOIN LATERAL (
+        SELECT source_epoch,native_revision,native_claim_revision,source_position
+        FROM search.public_filter_coverage_baseline base
+        WHERE (base.partition_no,base.registration,base.bootstrap,base.source_home)=
+          (h.partition_no,h.registration,h.bootstrap,h.source_home)
+        OFFSET 0
+      ) base ON true
+      LEFT JOIN LATERAL (
+        SELECT owner_epoch,population_fenced FROM semantic.public_filter_privacy_head n
+        WHERE n.partition_no=h.source_home OFFSET 0
+      ) n ON true
     ), subject_control AS MATERIALIZED (
       SELECT k.id,k.source_home,v.route,v.position,v.owner_epoch AS subject_epoch,h.source_epoch,h.source_position,
         b.book_withdrawals @> jsonb_build_array(jsonb_build_object('id',k.id)) AS withdrawn
       FROM own_keys k CROSS JOIN budgeted b JOIN home_control h ON h.source_home=k.source_home
-      LEFT JOIN semantic.public_filter_privacy_subject v ON
-        (v.partition_no,v.subject_id)=(k.source_home,k.id::uuid)
+      LEFT JOIN LATERAL (
+        SELECT route,position,owner_epoch FROM semantic.public_filter_privacy_subject v
+        WHERE (v.partition_no,v.subject_id)=(k.source_home,k.id::uuid) OFFSET 0
+      ) v ON true
       WHERE NOT k.account
     ), admitted AS MATERIALIZED (
       SELECT b.* FROM member b WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)

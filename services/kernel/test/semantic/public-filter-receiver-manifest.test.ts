@@ -194,6 +194,20 @@ test('original Subject receiver manifest survives lost commits and leaves a late
     try {
       await probe.query('BEGIN');
       const m = original[0];
+      const readOrigin = async (registration: string) =>
+        (
+          await probe.query({
+            name: 'test_retained_receiver_origin',
+            text: 'SELECT job,observation,execution,terminal,ack_after FROM semantic.public_filter_ack_origin($1,$2)',
+            values: [registration, m.bootstrap],
+          })
+        ).rows;
+      const expectedOrigin = [
+        { job: m.job, observation: m.observation, execution: m.execution, terminal: m.terminal, ack_after: 0 },
+      ];
+      expect(await readOrigin(m.registration)).toEqual(expectedOrigin);
+      expect(await readOrigin(crypto.randomUUID())).toEqual([]);
+      await probe.query('SAVEPOINT retained_page');
       const removed = await probe.query(
         `DELETE FROM search.public_filter_repair_page p WHERE (p.partition_no,p.observation,p.execution,p.ordinal)=(
           SELECT partition_no,observation,execution,ordinal FROM search.public_filter_repair_page
@@ -215,6 +229,9 @@ test('original Subject receiver manifest survives lost commits and leaves a late
         behind: true,
         acknowledged_settlement: null,
       });
+      expect(await readOrigin(m.registration)).toEqual([]);
+      await probe.query('ROLLBACK TO retained_page');
+      expect(await readOrigin(m.registration)).toEqual(expectedOrigin);
     } finally {
       await probe.query('ROLLBACK');
       probe.release();

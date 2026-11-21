@@ -27,6 +27,15 @@ import type {
 import { readBookRole } from './public-filter-book-role.ts';
 
 const statement = readFileSync(new URL('./public-filter-coverage-population.sql', import.meta.url), 'utf8');
+// The native registration must match the bound physical target. Plan only its
+// proof family, while keeping the family predicate inside each native statement.
+const attachedCoverage = /\/\* semantic\.attached-coverage \*\/[\s\S]*?\/\* semantic\.end-attached-coverage \*\//;
+const discoveryStatement = statement.replace(
+  attachedCoverage,
+  `SELECT proof.* FROM semantic.public_filter_mixed_coverage(
+      r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
+    ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'`,
+);
 // A sealed publication owns its coverage. The bootstrap constraint excludes a
 // serving attachment when publication_job is set, and prepared cuts have no
 // PIT withdrawals or own window. Keep the common binding and current probes.
@@ -34,7 +43,7 @@ const publicationStatement =
   statement
     .split('/* semantic.own-window */')[0]!
     .replace(
-      /\/\* semantic\.attached-coverage \*\/[\s\S]*?\/\* semantic\.end-attached-coverage \*\//,
+      attachedCoverage,
       `SELECT NULL::uuid AS job,NULL::uuid AS bootstrap,NULL::text AS registration,
         NULL::uuid AS definition,NULL::text AS consumer,NULL::bigint AS generation,
         NULL::bigint AS covered_generation,NULL::text AS coverage_root,NULL::text[] AS coverage_keys
@@ -505,7 +514,8 @@ async function readPopulations(
     }
     // The publication seal binds one prepared execution with no page or window.
     // validBindings still decodes it and demands the exact start and empty own rows.
-    const sql = (publication ? publicationStatement : statement).replace(
+    const discovery = /discovery-g[1-9][0-9]*$/.test(members[0]!.physical_target);
+    const sql = (publication ? publicationStatement : discovery ? discoveryStatement : statement).replace(
       'semantic.privacy-role',
       final ? 'semantic.privacy-final' : 'semantic.privacy-start',
     );
@@ -530,10 +540,8 @@ async function readPopulations(
           // the current clock, observation and native start or final witnesses at a fresh snapshot.
           const query = {
             name: publication
-              ? 'semantic_privacy_publication_final_v1'
-              : final
-                ? 'semantic_privacy_final_v1'
-                : 'semantic_privacy_start_v1',
+              ? 'semantic_privacy_publication_final_v2'
+              : `semantic_privacy_${discovery ? 'discovery' : 'subjects'}_${final ? 'final' : 'start'}_v2`,
             text: sql,
             values,
             query_timeout: Math.max(1, deadline - Date.now()),
