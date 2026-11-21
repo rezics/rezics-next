@@ -86,6 +86,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
   try {
     await createSubjectIndex(search, prefix, 1);
     const resident = await book(0);
+    const second = verifyCompactWindow ? await book(47) : undefined;
     const resolved = await binding.resolve(
       {
         source,
@@ -126,8 +127,19 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         0,
       );
       await writer.write(0, [resident], await position(0));
+      await writer.write(47, [second!], await position(47));
       await search.request('POST', '/' + target + '/_refresh');
       let reconciled = false;
+      let cleanLeaf: string | undefined;
+      const prefix = () =>
+        pool.query<{ first_home: number; width: number; revision: string }>(
+          `WITH basis AS MATERIALIZED (SELECT search.public_filter_ack_basis_v1(true) AS value)
+         SELECT n.first_home,n.width,n.revision FROM search.public_filter_ack_range n,basis
+         WHERE n.job=$1 AND (n.first_home,n.width) IN ((0,32),(32,32),(0,64))
+           AND n.witness=search.public_filter_ack_range_witness(n.bootstrap,n.first_home,n.width,basis.value)
+         ORDER BY n.width,n.first_home`,
+          [prepared.job.job],
+        );
       for (let turn = 0; turn < 512; turn++) {
         if (!reconciled) {
           const result = await publication.step(prepared.job, context(), { enrollSource: true, batchSource: true });
@@ -138,6 +150,15 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         const activation = await publication.activate(prepared.job, context(), { batchSource: true });
         if (activation.status !== 'preparing' && activation.status !== 'activated')
           throw new Error('reason' in activation ? activation.reason : activation.status);
+        if (!cleanLeaf) {
+          const { rows } = await prefix();
+          if (rows.length === 3) {
+            cleanLeaf = rows[0]!.revision;
+            // An interior cleanup changes this page and its parents in the original binding.
+            await pool.query('SELECT core.advance_subject_cleanup_v1(45)');
+            expect((await prefix()).rows).toEqual([rows[0]!]);
+          }
+        }
         const proof = (
           await pool.query(
             `SELECT r.width,r.first_home,m.root_digest=r.digest AS matched,t.ack_after,m.ordinal::integer AS steps,
@@ -158,6 +179,10 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         expect(proof).toMatchObject({ first_home: 0, width: 4096, matched: true, independent: true, ack_after: 4096 });
         expect(proof.compact_nodes).toBeGreaterThan(0);
         expect(proof.compact_width).toBeGreaterThan(32);
+        expect(cleanLeaf).toBeDefined();
+        const extended = (await prefix()).rows;
+        expect(extended).toHaveLength(3);
+        expect(extended[0]!.revision).toBe(cleanLeaf);
         return;
       }
       throw new Error('Original publication did not acknowledge all 4096 homes');

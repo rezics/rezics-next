@@ -2535,8 +2535,8 @@ export function createNativePublicFilterSourceBinding(
           const root = await db.query(
             `/* semantic.native-keyed:21:24 */
              SELECT 1 FROM search.public_filter_ack_range WHERE (partition_no,job,binding,first_home,width,witness)=
-               (0,$1,$2,0,4096,search.public_filter_ack_range_witness($3,0,4096,search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source'])))`,
-            [request.execution, chain.binding, chain.bootstrap],
+               (0,$1,$2,0,4096,search.public_filter_ack_range_witness($3,0,4096,search.public_filter_ack_basis_v1($4)))`,
+            [request.execution, chain.binding, chain.bootstrap, joined.cut.row.subscription_protocol === 1],
           );
           if (!root.rowCount) throw new BindingError('owner_unavailable');
         }

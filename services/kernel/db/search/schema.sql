@@ -24,6 +24,16 @@ CREATE SCHEMA search;
 
 
 --
+-- Name: public_filter_ack_basis_v1; Type: TYPE; Schema: search; Owner: -
+--
+
+CREATE TYPE search.public_filter_ack_basis_v1 AS (
+	authority bytea,
+	pages bytea
+);
+
+
+--
 -- Name: adopt_subject_receiver_page_v1(bigint, integer); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -212,7 +222,7 @@ BEGIN
     WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.complete
       AND s.verified_binding IS NOT NULL AND s.verified_root IS NOT NULL AND s.verified_next IS NULL AND s.ack_after=0 FOR SHARE;
   current_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,
-    search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']));
+    search.public_filter_ack_basis_v1(search.shared_subject_job_v1(a.job)));
   SELECT * INTO STRICT root FROM search.public_filter_ack_range
     WHERE (partition_no,job,binding,first_home,width,witness)=(0,a.job,t.verified_binding,0,4096,current_cut)
       AND registration=a.registration AND bootstrap=a.bootstrap AND enrollment_root=a.enrollment_root AND identity_digest=a.identity_digest;
@@ -338,12 +348,20 @@ $$;
 CREATE FUNCTION search.change_subject_ack_stamp_v1() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE old_home integer; new_home integer; home integer;
 BEGIN
   IF TG_OP='TRUNCATE' THEN
-    PERFORM search.advance_public_filter_repair_authority('@source',0);
+    UPDATE search.public_filter_repair_authority SET revision=revision+1,
+      subject_pages=decode(repeat(replace(gen_random_uuid()::text,'-',''),32),'hex') WHERE physical_target='@source';
   ELSE
-    PERFORM search.advance_public_filter_repair_authority('@source',
-      CASE WHEN TG_OP='DELETE' THEN OLD.first_home ELSE NEW.first_home END /32);
+    IF TG_OP<>'INSERT' THEN old_home:=OLD.first_home; END IF;
+    IF TG_OP<>'DELETE' THEN new_home:=NEW.first_home; END IF;
+    FOR home IN SELECT DISTINCT h FROM unnest(ARRAY[old_home,new_home]) h WHERE h IS NOT NULL ORDER BY h LOOP
+      UPDATE search.public_filter_repair_authority SET revision=revision+1,
+        subject_pages=overlay(subject_pages placing uuid_send(gen_random_uuid()) from 1+16*((home/32)%32) for 16)
+        WHERE (physical_target,lane)=('@source',home/1024);
+      IF NOT FOUND THEN RAISE EXCEPTION 'Missing Subject ACK page clock' USING ERRCODE='40001'; END IF;
+    END LOOP;
   END IF;
   RETURN NULL;
 END $$;
@@ -425,7 +443,7 @@ DECLARE
   r search.public_filter_ack_range%ROWTYPE;
   homes integer;
   chain_ok boolean;
-  foreign_cut bytea;
+  foreign_cut search.public_filter_ack_basis_v1;
   child_cut bytea;
   previous_node search.public_filter_ack_range%ROWTYPE;
 BEGIN
@@ -447,7 +465,7 @@ BEGIN
   INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
     VALUES(0,a.registration,a.bootstrap,NEW.first_home/greatest(NEW.width,16)*greatest(NEW.width,16),greatest(NEW.width,16))
     ON CONFLICT DO NOTHING;
-  foreign_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  foreign_cut := search.public_filter_ack_basis_v1(search.shared_subject_job_v1(a.job));
   NEW.witness := search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,foreign_cut);
   IF NEW.width<=32 AND NEW.left_child IS NULL AND NEW.right_child IS NULL THEN
     WITH steps AS MATERIALIZED (
@@ -557,7 +575,7 @@ BEGIN
   INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
     VALUES(0,a.registration,a.bootstrap,NEW.first_home,NEW.width) ON CONFLICT DO NOTHING;
   NEW.witness:=search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,
-    search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']));
+    search.public_filter_ack_basis_v1(true));
   NEW.bootstrap:=a.bootstrap; NEW.registration:=a.registration; NEW.identity_digest:=a.identity_digest;
   NEW.revision:=gen_random_uuid();
   WITH originals AS (
@@ -606,7 +624,7 @@ BEGIN
     VALUES(0,a.registration,a.bootstrap,NEW.first_home/greatest(NEW.width,16)*greatest(NEW.width,16),greatest(NEW.width,16))
     ON CONFLICT DO NOTHING;
   NEW.witness:=search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,
-    search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']));
+    search.public_filter_ack_basis_v1(true));
   WITH member AS MATERIALIZED (
     SELECT m.birth,m.restore_generation,semantic.subject_access_definition_v1(m.birth) AS definition_digest
     FROM core.subject_subscription_v1 m JOIN core.subject_retention_domain d ON d.singleton AND NOT d.fenced
@@ -1020,7 +1038,7 @@ DECLARE
   a search.public_filter_ack_authority%ROWTYPE;
   chain text;
   available integer;
-  witness_cut bytea;
+  witness_cut search.public_filter_ack_basis_v1;
   local_cut bytea;
   span integer := 4096;
   first integer := 0;
@@ -1039,7 +1057,7 @@ BEGIN
     WHERE (s.partition_no,s.bootstrap,s.execution)=(0,a.bootstrap,a.execution) AND s.verified_home IS NOT NULL
     ORDER BY s.verified_home DESC LIMIT 1;
   IF NOT FOUND THEN RETURN 0; END IF;
-  witness_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  witness_cut := search.public_filter_ack_basis_v1(search.shared_subject_job_v1(a.job));
   local_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,witness_cut);
   IF local_cut IS NULL OR EXISTS (SELECT FROM search.public_filter_ack_range n WHERE
     (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,0,4096,local_cut)) THEN RETURN -2; END IF;
@@ -1077,7 +1095,7 @@ DECLARE
   a search.public_filter_ack_authority%ROWTYPE;
   chain text;
   available integer;
-  foreign_cut bytea;
+  foreign_cut search.public_filter_ack_basis_v1;
   local_cut bytea;
   span integer := 4096;
   first_no integer := 0;
@@ -1105,7 +1123,7 @@ BEGIN
   END IF;
   IF chain IS NOT NULL THEN
     points := points+28;
-    foreign_cut := search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+    foreign_cut := search.public_filter_ack_basis_v1(search.shared_subject_job_v1(a.job));
     local_cut := search.public_filter_ack_range_witness(a.bootstrap,0,4096,foreign_cut);
     IF local_cut IS NOT NULL AND NOT EXISTS (SELECT FROM search.public_filter_ack_range n WHERE
       (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=(0,job_id,chain,0,4096,local_cut)) THEN
@@ -1175,7 +1193,7 @@ END $$;
 CREATE FUNCTION search.prepare_subject_ack_prefix_v1(job_id uuid, key_limit integer, byte_limit integer) RETURNS TABLE(points integer, proof_bytes integer, range_writes integer, result_writes integer)
     LANGUAGE plpgsql
     AS $$
-DECLARE a search.public_filter_ack_authority; chain text; available integer; foreign_cut bytea; local_cut bytea;
+DECLARE a search.public_filter_ack_authority; chain text; available integer; foreign_cut search.public_filter_ack_basis_v1; local_cut bytea;
   first_no integer; span integer; half integer; left_id uuid; right_id uuid; changed integer;
   member bigint; compact_stop integer; direct boolean; stamps boolean; pages integer;
   leaf_limit integer; comparison_points integer; comparison_bytes integer;
@@ -1199,7 +1217,7 @@ BEGIN
   IF leaf_limit<1 OR available<leaf_limit THEN RETURN NEXT; RETURN; END IF;
   SELECT m.birth INTO STRICT member FROM core.subject_subscription_v1 m WHERE (m.job,m.bootstrap)=(a.job,a.bootstrap);
   points:=points+21;
-  foreign_cut:=search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  foreign_cut:=search.public_filter_ack_basis_v1(true);
   local_cut:=search.public_filter_ack_range_witness(a.bootstrap,0,4096,foreign_cut);
   IF EXISTS (SELECT FROM search.public_filter_ack_range n WHERE
     (n.partition_no,n.job,n.binding,n.first_home,n.width,n.witness)=
@@ -1286,6 +1304,28 @@ BEGIN RAISE EXCEPTION 'Native receiving plans are immutable'; END; $$;
 
 
 --
+-- Name: public_filter_ack_basis_v1(boolean); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_basis_v1(shared boolean) RETURNS search.public_filter_ack_basis_v1
+    LANGUAGE plpgsql STRICT
+    AS $$
+DECLARE basis search.public_filter_ack_basis_v1;
+BEGIN
+  IF shared THEN
+    basis.authority:=search.public_filter_ack_witness(ARRAY['','@ack-retention']);
+    SELECT CASE WHEN count(subject_pages)=4 THEN string_agg(subject_pages,''::bytea ORDER BY lane) END INTO basis.pages FROM
+      (SELECT lane,subject_pages FROM search.public_filter_repair_authority
+       WHERE physical_target='@source' ORDER BY lane FOR SHARE) locked;
+    IF basis.pages IS NULL THEN RAISE EXCEPTION 'Missing Subject ACK page clocks' USING ERRCODE='40001'; END IF;
+  ELSE
+    basis.authority:=search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source']);
+  END IF;
+  RETURN basis;
+END $$;
+
+
+--
 -- Name: public_filter_ack_checkpoint_loss(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1331,6 +1371,19 @@ BEGIN
     WHERE (bootstrap,first_home,width)=(cut,first_no/greatest(span,16)*greatest(span,16),greatest(span,16));
   RETURN sha256(foreign_cut||uuid_send(gate_id)||int8send(lifetime)||local_cut);
 END $$;
+
+
+--
+-- Name: public_filter_ack_range_witness(uuid, integer, integer, search.public_filter_ack_basis_v1); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_ack_range_witness(cut uuid, first_no integer, span integer, basis search.public_filter_ack_basis_v1) RETURNS bytea
+    LANGUAGE sql STRICT
+    AS $$
+  SELECT search.public_filter_ack_range_witness(cut,first_no,span,
+    CASE WHEN basis.pages IS NULL THEN basis.authority ELSE sha256(basis.authority ||
+      substring(basis.pages FROM 1+16*(first_no/32) FOR 16*((first_no+span-1)/32-first_no/32+1))) END)
+$$;
 
 
 --
@@ -3200,8 +3253,10 @@ CREATE TABLE search.public_filter_repair_authority (
     physical_target text NOT NULL COLLATE pg_catalog."C",
     lane integer NOT NULL,
     revision bigint DEFAULT 0 NOT NULL,
+    subject_pages bytea,
     CONSTRAINT public_filter_repair_authority_lane_check CHECK (((lane >= 0) AND (lane <= 3))),
-    CONSTRAINT public_filter_repair_authority_revision_check CHECK ((revision >= 0))
+    CONSTRAINT public_filter_repair_authority_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT subject_ack_page_clock CHECK (((subject_pages IS NULL) OR ((physical_target = '@source'::text) AND (octet_length(subject_pages) = 512))))
 );
 
 
