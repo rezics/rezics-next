@@ -3,6 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
 import { isEconomyBookId, type ExpiredAssetProgram } from '../economy/contract.ts';
+import { createMarketRepairQueue, runMarketRepairWindow } from '../economy/storage/market-repair.ts';
 import { createNativeMarket } from '../economy/storage/market-runner.ts';
 import type { MarketStoreDatabase } from '../economy/storage/market-store.ts';
 import { createSpotStore } from '../economy/storage/spot-store.ts';
@@ -256,8 +257,20 @@ function registerMarket(context: WorkContext, target?: MarketBinding) {
     DBOS.registerWorkflow(async () => ({ kind: 'disabled' }), { name: ECONOMY_MARKET_OWNER_WORK.workflow });
     return;
   }
-  const market = createNativeMarket(marketDatabase(context.pool), target);
-  const sweep = DBOS.registerStep(() => market.sweep(marketWindow), { name: 'economy.market.advanceOwners' });
+  const database = marketDatabase(context.pool);
+  const market = createNativeMarket(database, target);
+  const queue = createMarketRepairQueue(database, target);
+  const sweep = DBOS.registerStep(
+    async () => {
+      try {
+        await runMarketRepairWindow(queue, market.resumeTrade);
+      } catch {
+        // Unsettled requests become due when their leases expire; the ordinary sweep still runs.
+      }
+      return market.sweep(marketWindow);
+    },
+    { name: 'economy.market.advanceOwners' },
+  );
   DBOS.registerWorkflow(
     async (_fire?: Date, scheduledBook?: unknown) => {
       if (!matchesMarket(scheduledBook, target)) return { kind: 'disabled' };
