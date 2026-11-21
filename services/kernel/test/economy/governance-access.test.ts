@@ -33,7 +33,10 @@ const wallet = `${wallets}/${assetId}`;
 const statement = `${wallet}/statement?limit=1`;
 const publicWallet = `${wallets}/{assetId}`;
 const spot = '/v1/economy/spot/pair';
-const market = `/v1/economy/market/trades/${'a'.repeat(64)}`;
+const spotFills = `${spot}/orders/order-id/fills`;
+const marketTrades = '/v1/economy/market/trades';
+const market = `${marketTrades}/${'a'.repeat(64)}`;
+const unboundEconomyReads = [spot, spotFills, marketTrades, market];
 const authName = `economy_auth_${crypto.randomUUID().replaceAll('-', '')}`;
 
 let database: Awaited<ReturnType<typeof openIsolatedEconomyDatabase>>;
@@ -182,7 +185,9 @@ async function economyDiscovery(bearer: string | undefined, visible: boolean) {
       [`${publicWallet}/statement`, readScope],
       ['/v1/economy/spot/{instrumentId}', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/trades', 'spot:read'],
-      ['/v1/economy/market/trades/{tradeId}', 'market:read'],
+      ['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills', 'spot:read'],
+      [marketTrades, 'market:read'],
+      [`${marketTrades}/{tradeId}`, 'market:read'],
     ] as const)
       expect(paths[path]).toMatchObject({ get: { 'x-exposure': gate, 'x-action': action } });
   } else {
@@ -193,7 +198,7 @@ async function economyDiscovery(bearer: string | undefined, visible: boolean) {
 }
 
 async function expectClosed(bearer?: string) {
-  for (const path of [wallets, wallet, statement, spot, market]) {
+  for (const path of [wallets, wallet, statement, ...unboundEconomyReads]) {
     const response = await call(path, bearer);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: 'platform_closed' });
@@ -254,7 +259,7 @@ test('Global governance grants Economy access individually and cannot open its r
 
   await economyDiscovery(member.bearer, true);
   await expectOwnWallet(member.bearer, amount);
-  for (const path of [spot, market]) {
+  for (const path of unboundEconomyReads) {
     const unbound = await call(path, member.bearer);
     expect(unbound.status).toBe(503);
     expect(await unbound.json()).toMatchObject({ code: 'dependency_unavailable' });

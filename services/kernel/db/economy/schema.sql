@@ -1359,6 +1359,13 @@ CREATE INDEX spot_bid_priority ON economy.spot_order USING btree (book_id, instr
 
 
 --
+-- Name: spot_fill_maker_order; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_fill_maker_order ON economy.spot_fill USING btree (book_id, instrument_id, maker_order_id, fill_id DESC);
+
+
+--
 -- Name: spot_fill_ready; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -1370,6 +1377,13 @@ CREATE INDEX spot_fill_ready ON economy.spot_fill USING btree (book_id, due_at, 
 --
 
 CREATE INDEX spot_fill_settled_feed ON economy.spot_fill USING btree (book_id, instrument_id, settled_at DESC, fill_id DESC) WHERE (settled_at IS NOT NULL);
+
+
+--
+-- Name: spot_fill_taker_order; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_fill_taker_order ON economy.spot_fill USING btree (book_id, instrument_id, taker_order_id, fill_id DESC);
 
 
 --
