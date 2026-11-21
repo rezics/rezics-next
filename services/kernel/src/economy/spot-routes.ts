@@ -16,9 +16,12 @@ import {
 } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
+  isSpotFillId,
   isSpotTradePosition,
+  SPOT_ORDER_FILL_PAGE_LIMIT,
   SPOT_TRADE_PAGE_LIMIT,
   type EconomyFailure,
+  type SpotOrderFillsPage,
   type SpotTradePage,
   type SpotTradePosition,
 } from './contract.ts';
@@ -38,6 +41,9 @@ export interface SpotAccessPort {
     input: RequestScope & Readonly<{ limit: number; after: SpotTradePosition | null }>,
   ): Promise<SpotAccessResult<SpotTradePage>>;
   readOrder(input: OrderScope): Promise<SpotAccessResult<SpotOrder>>;
+  readOrderFills(
+    input: OrderScope & Readonly<{ limit: number; after: string | null }>,
+  ): Promise<SpotAccessResult<SpotOrderFillsPage>>;
   place(input: OrderScope & SpotOrderTerms): Promise<SpotAccessResult<OrderReceipt>>;
   cancel(input: OrderScope): Promise<SpotAccessResult<OrderReceipt>>;
 }
@@ -72,6 +78,7 @@ const instrumentSchema = t.Object(
   closed,
 );
 const tradesPath = '/v1/economy/spot/:instrumentId/trades';
+const orderFillsPath = '/v1/economy/spot/:instrumentId/orders/:orderId/fills';
 const receiptSchema = t.Object({ orderId: key, sequence: positive }, closed);
 const orderSchema = t.Object(
   {
@@ -216,6 +223,30 @@ export function economySpotRoutes(
     closed,
   );
 
+  const fillAmounts = {
+    price: positive,
+    lots: positive,
+    baseUnits: positive,
+    quoteUnits: positive,
+    quoteFeeUnits: unsigned,
+  };
+  const orderFillsSchema = t.Object(
+    {
+      fills: t.Array(
+        t.Union([
+          t.Object({ ...fillAmounts, status: t.Literal('pending') }, closed),
+          t.Object(
+            { ...fillAmounts, status: t.Literal('settled'), settledAt: t.String({ format: 'date-time' }) },
+            closed,
+          ),
+        ]),
+        { maxItems: SPOT_ORDER_FILL_PAGE_LIMIT },
+      ),
+      next: t.Union([cursor, t.Null()]),
+    },
+    closed,
+  );
+
   async function privateCall<T>(
     ctx: ActorContext,
     instrumentId: string,
@@ -296,6 +327,51 @@ export function economySpotRoutes(
         return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) =>
           orderView(valueOf(await spot.readOrder({ ...scope, orderId: ctx.params.orderId }))),
         );
+      },
+    )
+    .get(
+      orderFillsPath,
+      {
+        params: orderParams,
+        query: t.Object(
+          {
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: SPOT_ORDER_FILL_PAGE_LIMIT, multipleOf: 1 })),
+            cursor: t.Optional(cursor),
+          },
+          closed,
+        ),
+        response: { 200: orderFillsSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('spot.read_order_fills', 'spot:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
+          const { orderId } = ctx.params;
+          const limit = ctx.query.limit ?? 20;
+          const at = deps.clock();
+          const binding: ListCursorBinding = {
+            route: `GET ${orderFillsPath}`,
+            viewer: scope.accountId.toLowerCase(),
+            query: { bookId: spot.bookId, instrumentId: scope.instrumentId, orderId, limit },
+          };
+          let after: string | null = null;
+          if (ctx.query.cursor !== undefined) {
+            const decoded = await decodeListCursor(deps.cursorKeys, binding, ctx.query.cursor, at);
+            if (!decoded.ok || decoded.epoch !== 1 || decoded.after.length !== 1)
+              throw new ProblemError('invalid_cursor');
+            const [fillId] = decoded.after;
+            if (typeof fillId !== 'string' || !isSpotFillId(fillId)) throw new ProblemError('invalid_cursor');
+            after = fillId;
+          }
+          const page = valueOf(await spot.readOrderFills({ ...scope, orderId, limit, after }));
+          return {
+            fills: page.fills,
+            next:
+              page.after === null
+                ? null
+                : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: [page.after] }, at),
+          };
+        });
       },
     )
     .post(

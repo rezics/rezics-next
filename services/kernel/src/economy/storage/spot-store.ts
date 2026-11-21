@@ -4,10 +4,13 @@ import {
   isEconomyBookId,
   isSpotFillId,
   isSpotTradePosition,
+  SPOT_ORDER_FILL_PAGE_LIMIT,
   SPOT_TRADE_PAGE_LIMIT,
   type EconomyFailure,
   type EconomyLedger,
   type SpotFillSettlement,
+  type SpotOrderFill,
+  type SpotOrderFillsPage,
   type SpotTrade,
   type SpotTradePage,
   type SpotTradePosition,
@@ -348,6 +351,61 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
         const instrument = await readInstrument(tx, bookId, instrumentId);
         const order = instrument && (await readOrder(tx, instrument.book, orderId));
         return order && order.accountId === ownerId ? ok(order) : failure('not_found');
+      });
+    },
+
+    readOrderFills(
+      instrumentId: string,
+      orderId: string,
+      owner: string,
+      limit: number,
+      after: string | null,
+    ): Promise<Result<SpotOrderFillsPage>> {
+      const ownerId = accountId(owner);
+      if (!ownerId || !key.test(instrumentId) || !key.test(orderId)) return Promise.resolve(failure('not_found'));
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > SPOT_ORDER_FILL_PAGE_LIMIT ||
+        (after !== null && !isSpotFillId(after))
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return run('read', async (tx) => {
+        const {
+          rows: [order],
+        } = await tx.query<{ side: SpotOrder['side'] }>(
+          `SELECT side FROM economy.spot_order
+           WHERE book_id = $1 AND instrument_id = $2 AND order_id = $3 AND account_id = $4`,
+          [bookId, instrumentId, orderId, ownerId],
+        );
+        if (!order) return failure('not_found');
+
+        // The owned order's immutable side determines the fee in either matching role.
+        const fee = order.side === 'buy' ? 'buyer_fee_units' : 'seller_fee_units';
+        const columns = `fill_id, price::text, lots::text, base_units::text AS "baseUnits", quote_units::text AS "quoteUnits",
+          ${fee}::text AS "quoteFeeUnits",
+          to_char(settled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "settledAt"`;
+        const range = after === null ? '' : 'AND fill_id < $5::text';
+        const { rows } = await tx.query<
+          Omit<SpotTrade, 'settledAt'> & { fill_id: string; quoteFeeUnits: string; settledAt: string | null }
+        >(
+          `(SELECT ${columns} FROM economy.spot_fill
+             WHERE book_id = $1 AND instrument_id = $2 AND maker_order_id = $3 ${range}
+             ORDER BY fill_id DESC LIMIT $4)
+           UNION ALL
+           (SELECT ${columns} FROM economy.spot_fill
+             WHERE book_id = $1 AND instrument_id = $2 AND taker_order_id = $3 ${range}
+             ORDER BY fill_id DESC LIMIT $4)
+           ORDER BY fill_id DESC LIMIT $4`,
+          [bookId, instrumentId, orderId, limit + 1, ...(after === null ? [] : [after])],
+        );
+        const shown = rows.slice(0, limit);
+        return ok({
+          fills: shown.map(({ fill_id, settledAt, ...fill }): SpotOrderFill =>
+            settledAt === null ? { ...fill, status: 'pending' } : { ...fill, status: 'settled', settledAt },
+          ),
+          after: rows.length > limit ? shown.at(-1)!.fill_id : null,
+        });
       });
     },
 

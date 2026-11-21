@@ -109,7 +109,16 @@ export type SpotTrade = Readonly<{
 export type SpotTradePosition = readonly [settledAt: string, fillId: string];
 export type SpotTradePage = Readonly<{ trades: SpotTrade[]; after: SpotTradePosition | null }>;
 
+export type SpotOrderFill = Readonly<
+  Omit<SpotTrade, 'settledAt'> & { quoteFeeUnits: string } & (
+      | { status: 'pending' }
+      | { status: 'settled'; settledAt: string }
+    )
+>;
+export type SpotOrderFillsPage = Readonly<{ fills: SpotOrderFill[]; after: string | null }>;
+
 export const SPOT_TRADE_PAGE_LIMIT = 100;
+export const SPOT_ORDER_FILL_PAGE_LIMIT = 100;
 
 export function isSpotFillId(value: string): boolean {
   return /^[a-zA-Z0-9_/-]{1,255}$/.test(value);

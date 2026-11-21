@@ -6,6 +6,7 @@ import { createNativeEconomyLedger } from '../../src/composition/economy.ts';
 import { createNativeEconomySpot, createNativeEconomySpotWork } from '../../src/composition/economy-spot.ts';
 import type { SpotAccessPort } from '../../src/economy/spot-routes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { openBroadEconomyAdmission } from './fixtures/broad-admission.ts';
@@ -166,6 +167,7 @@ test('spot instrument and order routes require a direct grant, matching client s
   const hiddenPaths = (await hidden.json()).paths;
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/trades']).toBeUndefined();
+  expect(hiddenPaths['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills']).toBeUndefined();
   await grant(viewer);
   const unbound = await call(closed, marketPath, viewerToken);
   expect(unbound.status).toBe(503);
@@ -210,6 +212,9 @@ test('native order identity, private reads, and cancellation remain exact throug
     status: 'matching',
     remainingLots: '2',
   });
+  const emptyFills = await call(app, `${orderPath}/fills`, sellerToken);
+  expect(emptyFills.status).toBe(200);
+  expect(await emptyFills.json()).toEqual({ fills: [], next: null });
   const wrongOwner = await call(app, orderPath, secondToken);
   expect(wrongOwner.status).toBe(404);
   expect(await wrongOwner.json()).toMatchObject({ code: 'not_found' });
@@ -297,6 +302,14 @@ test('the signed trade feed only exposes settled amounts and seeks across native
   if (matched.kind !== 'ok') throw new Error(`Matching failed: ${matched.kind}`);
   expect(matched.value.status).toBe('filled');
   expect(matched.value.fillIds).toHaveLength(23);
+  const fillsPath = `/v1/economy/spot/${instrumentId}/orders/bid/fills`;
+  const ownFirst = await call(app, fillsPath, secondToken);
+  expect(ownFirst.status).toBe(200);
+  expect(ownFirst.headers.get('cache-control')).toBe('private, no-store');
+  const ownPage = await ownFirst.json();
+  expect(ownPage.fills).toHaveLength(20);
+  expect(ownPage.fills.every((fill: { status: string }) => fill.status === 'pending')).toBe(true);
+  expect(ownPage.next).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]+$/));
 
   const pending = await call(app, path, readOnlyToken);
   expect(pending.status).toBe(200);
@@ -363,6 +376,20 @@ test('the signed trade feed only exposes settled amounts and seeks across native
   expect(two.status).toBe(200);
   expect((await two.json()).trades).toEqual([expect.objectContaining({ lots: newer[1]!.lots, settledAt: high })]);
 
+  const ownerAfter = await call(app, `${fillsPath}?limit=20&cursor=${ownPage.next}`, secondToken);
+  expect(ownerAfter.status).toBe(200);
+  const remaining = await ownerAfter.json();
+  const allOwner = await call(app, `${fillsPath}?limit=100`, secondToken);
+  expect(allOwner.status).toBe(200);
+  const allFills = await allOwner.json();
+  expect(allFills.fills).toHaveLength(23);
+  expect(allFills.next).toBeNull();
+  expect(remaining).toEqual({ fills: allFills.fills.slice(20), next: null });
+  expect(ownPage.fills.map((fill: { lots: string }) => fill.lots)).toEqual(
+    allFills.fills.slice(0, 20).map((fill: { lots: string }) => fill.lots),
+  );
+  expect((await call(app, `${fillsPath}?limit=101`, secondToken)).status).toBe(400);
+
   const cursor = `?cursor=${page.next}`;
   const otherBook = mount(createNativeEconomySpot(db.pool, { bookId: `${bookId}-other`, node: 'b' }));
   for (const response of [
@@ -390,4 +417,170 @@ test('the signed trade feed only exposes settled amounts and seeks across native
   await expect(spot.readTrades({ ...scope(viewer), limit: 20, after: null })).rejects.toMatchObject({
     code: 'platform_closed',
   });
+}, 90_000);
+
+test('a private order fill page merges both matching roles and exposes only the owner’s settlement and fee', async () => {
+  const instrumentId = 'owner-fill-pair';
+  const { bookId } = spot;
+  const price = 9_007_199_254_740_993n;
+  const bidPrice = price + 10n;
+  const unitsPerLot = 10_000_000_000_000_000n;
+  const makerFeeBps = 1250n;
+  const takerFeeBps = 2500n;
+  const expectedFee = (p: bigint, bps: bigint, lots: bigint) => (((p * bps + 9999n) / 10_000n) * lots).toString();
+
+  expect(
+    await work.provision({
+      id: instrumentId,
+      ledgerBookId: bookId,
+      policyVersion: 1n,
+      baseAssetId: 'base',
+      quoteAssetId: 'quote',
+      baseUnitsPerLot: unitsPerLot,
+      quoteUnitsPerPriceTick: 1n,
+      makerFeeBps,
+      takerFeeBps,
+      feeAccountId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ kind: 'ok' });
+  for (const [accountId, assetId, amount] of [
+    [seller, 'base', '200000000000000000'],
+    [second, 'quote', '500000000000000000'],
+  ] as const) {
+    expect(await ledger.issue({ accountId, assetId, amount, operationId: 'owner-fills-opening' })).toMatchObject({
+      kind: 'ok',
+    });
+  }
+  async function matchOrder(accountId: string, orderId: string, side: 'buy' | 'sell', p: bigint, lots: bigint) {
+    const order = await spot.place({
+      accountId,
+      instrumentId,
+      orderId,
+      side,
+      price: p,
+      lots,
+      deadline: Date.now() + 2000,
+    });
+    if (order.kind !== 'ok') throw new Error(`Placement failed: ${order.kind}`);
+    const step = await work.match(instrumentId, order.value.sequence);
+    if (step.kind !== 'ok') throw new Error(`Matching failed: ${step.kind}`);
+    return step.value;
+  }
+
+  expect(await matchOrder(seller, 'early-ask', 'sell', price, 7n)).toMatchObject({ status: 'resting', fillIds: [] });
+  const taker = await matchOrder(second, 'one-bid', 'buy', bidPrice, 12n);
+  expect(taker).toMatchObject({ status: 'resting', fillIds: [expect.any(String)] });
+  const maker = await matchOrder(seller, 'later-ask', 'sell', price, 5n);
+  expect(maker).toMatchObject({ status: 'filled', fillIds: [expect.any(String)] });
+  const takerFill = taker.fillIds[0]!;
+  const makerFill = maker.fillIds[0]!;
+  const claim = await work.claimFill(takerFill);
+  if (claim.kind !== 'ok') throw new Error(`Claim failed: ${claim.kind}`);
+  expect(await work.settleFill(takerFill, claim.value.token)).toEqual({
+    kind: 'ok',
+    value: { operationId: takerFill },
+  });
+
+  const settledAt = '2026-11-21T00:00:00.123457Z';
+  await db.admin.query('UPDATE economy.spot_fill SET settled_at = $3 WHERE book_id = $1 AND fill_id = $2', [
+    bookId,
+    takerFill,
+    settledAt,
+  ]);
+  const path = (orderId: string, instrument = instrumentId) => `/v1/economy/spot/${instrument}/orders/${orderId}/fills`;
+  const bid = path('one-bid');
+  const pending = {
+    price: bidPrice.toString(),
+    lots: '5',
+    baseUnits: (unitsPerLot * 5n).toString(),
+    quoteUnits: (bidPrice * 5n).toString(),
+    quoteFeeUnits: expectedFee(bidPrice, makerFeeBps, 5n),
+    status: 'pending',
+  };
+  const settled = {
+    price: price.toString(),
+    lots: '7',
+    baseUnits: (unitsPerLot * 7n).toString(),
+    quoteUnits: (price * 7n).toString(),
+    quoteFeeUnits: expectedFee(price, takerFeeBps, 7n),
+    status: 'settled',
+    settledAt,
+  };
+  const response = await call(app, bid, secondToken);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ fills: [pending, settled], next: null });
+  expect(await (await call(app, path('early-ask'), sellerToken)).json()).toEqual({
+    fills: [{ ...settled, quoteFeeUnits: expectedFee(price, makerFeeBps, 7n) }],
+    next: null,
+  });
+  expect(await (await call(app, path('later-ask'), sellerToken)).json()).toEqual({
+    fills: [{ ...pending, quoteFeeUnits: expectedFee(bidPrice, takerFeeBps, 5n) }],
+    next: null,
+  });
+  expect((await call(app, bid, sellerToken)).status).toBe(404);
+  expect((await call(app, path('absent'), secondToken)).status).toBe(404);
+
+  const start = await call(app, `${bid}?limit=1`, secondToken);
+  const first = await start.json();
+  expect(start.status).toBe(200);
+  expect(first).toEqual({ fills: [pending], next: expect.stringMatching(/^[A-Za-z0-9_-]+$/) });
+  expect(Buffer.from(first.next, 'base64url').includes(Buffer.from(makerFill))).toBe(false);
+  const follow = `?limit=1&cursor=${first.next}`;
+  const laterClaim = await work.claimFill(makerFill);
+  if (laterClaim.kind !== 'ok') throw new Error(`Claim failed: ${laterClaim.kind}`);
+  expect(await work.settleFill(makerFill, laterClaim.value.token)).toMatchObject({ kind: 'ok' });
+  await db.admin.query('UPDATE economy.spot_fill SET settled_at = $3 WHERE book_id = $1 AND fill_id = $2', [
+    bookId,
+    makerFill,
+    settledAt,
+  ]);
+  expect(await (await call(app, `${bid}${follow}`, secondToken)).json()).toEqual({ fills: [settled], next: null });
+  expect(await (await call(app, bid, secondToken)).json()).toEqual({
+    fills: [{ ...pending, status: 'settled', settledAt }, settled],
+    next: null,
+  });
+
+  const differentBook = mount(createNativeEconomySpot(db.pool, { bookId: `${bookId}-other`, node: 'b' }));
+  for (const mismatch of [
+    await call(app, `${bid}${follow}`, sellerToken),
+    await call(app, `${path('early-ask')}${follow}`, secondToken),
+    await call(app, `${path('one-bid', 'pair')}${follow}`, secondToken),
+    await call(differentBook, `${bid}${follow}`, secondToken),
+    await call(app, `${bid}?limit=2&cursor=${first.next}`, secondToken),
+    await call(app, `${bid}?cursor=invalid`, secondToken),
+  ]) {
+    expect(mismatch.status).toBe(400);
+    expect(await mismatch.json()).toMatchObject({ code: 'invalid_cursor' });
+  }
+
+  await grant(viewer);
+  expect((await call(app, bid, placeOnlyToken)).status).toBe(403);
+  expect((await call(app, bid, ordinaryToken)).status).toBe(403);
+  expect((await call(closed, bid)).status).toBe(403);
+  expect((await call(closed, bid, secondToken)).status).toBe(503);
+  const metadata = openApiDocument(app).paths['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills']?.get;
+  expect(metadata).toMatchObject({
+    operationId: 'spot.read_order_fills',
+    'x-exposure': 'gate:economy',
+    'x-action': 'spot:read',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': ['access.account'],
+    security: [{ bearerAuth: [] }],
+  });
+
+  await db.admin.query(
+    `DELETE FROM access.resource_grant WHERE route = 0 AND resource_id = $1 AND subject_id = $2 AND action = 'gate:economy'`,
+    [GLOBAL_CONTEXT.id, second],
+  );
+  expect((await call(app, `${bid}${follow}`, secondToken)).status).toBe(403);
+  await expect(
+    spot.readOrderFills({
+      accountId: second,
+      instrumentId,
+      orderId: 'one-bid',
+      limit: 1,
+      after: null,
+      deadline: Date.now() + 2000,
+    }),
+  ).rejects.toMatchObject({ code: 'platform_closed' });
 }, 90_000);
