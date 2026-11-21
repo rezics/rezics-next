@@ -65,7 +65,8 @@ export { writeFacts } from './write-facts.ts';
 const BATCH_LIMIT = 256;
 
 export const CREATE_SUBJECT = 'subject.create';
-const createSerializationRetries = Symbol(CREATE_SUBJECT);
+// Coordinate retries within each home parity while allowing two distinct homes to retry concurrently.
+const createSerializationRetries = [Symbol(CREATE_SUBJECT), Symbol(CREATE_SUBJECT)] as const;
 // Permanent Semantic owner-assigned receipt codec ID.
 // Literal identity so this module can finish while definitions.ts is still evaluating.
 const CONTEXT = '00000000-0000-8000-8000-000000000000';
@@ -112,7 +113,7 @@ export async function createSubject(
     pool,
     {
       partition,
-      serializationRetryGroup: createSerializationRetries,
+      serializationRetryGroup: createSerializationRetries[partition % createSerializationRetries.length]!,
       ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
       receipt: {
         actorAccountId: options.actor.accountId,
