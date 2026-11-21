@@ -54,7 +54,11 @@ export async function readRelease(
 }
 
 /** Observe each base digest on the caller's snapshot. Only uncached immutable bodies cross the wire. */
-export async function readBaseReleases(db: Db, digests: readonly string[]): Promise<Map<string, Release | null>> {
+export async function readBaseReleases(
+  db: Db,
+  digests: readonly string[],
+  requireActiveHome = false,
+): Promise<Map<string, Release | null>> {
   const requested = [...new Set(digests)].filter((digest) => DIGEST.exec(digest)?.[0] === digest);
   const result = new Map<string, Release | null>();
   if (!requested.length) return result;
@@ -62,6 +66,7 @@ export async function readBaseReleases(db: Db, digests: readonly string[]): Prom
   return definitionRead(db, async (client) => {
     const rows = await nativeSourceQuery(client, releaseBodies, {
       digests: requested,
+      require_active_home: requireActiveHome,
       missing: requested.filter((digest) => !cached.get(digest)),
     });
     for (const { digest, body } of rows) {

@@ -5,6 +5,7 @@ import { facetProperties } from '@rezics/filter';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import { prepareReadDecisions } from '../request/access.ts';
+import { withCompiledPermissionChecks } from '../access/permission.ts';
 import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
@@ -48,13 +49,18 @@ import type {
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
+import {
+  facetsByType,
+  projectionCurrentSql,
+  projectionWindowSql,
+  startProjectionWithHeads,
+} from './public-filter-projection-window.ts';
 import readIdentityFloors from './public-filter-identity-floors.sql';
 import readIdentityPointsQuery from './public-filter-identity-points.sql';
 import readSubjects from './search-source-subjects.sql';
 import readPrivacyHead from './public-filter-projection-head-read.sql';
 import readBuild from './public-filter-projection-build-read.sql';
 import startBuild from './public-filter-projection-build-start.sql';
-import retireBuildHeads from './public-filter-projection-build-retire.sql';
 import readPage from './public-filter-projection-page.sql';
 import readRetainedHeadPage from './public-filter-projection-head-page.sql';
 import readCurrentRetainedHead from './public-filter-projection-head-current.sql';
@@ -461,12 +467,22 @@ async function inSnapshot<T>(pool: Pool, deadline: number, work: (client: PoolCl
   );
 }
 
+function readPoint<T>(pool: Pool, deadline: number, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  return withBoundedReadConnection(pool, deadline, work, boundedProjectionReadOptions(deadline));
+}
+
 async function storedMeaningRelease(client: PoolClient, digest: string): Promise<Release | null> {
   const owner = await readPartition(client, 0);
   if (!owner || owner.writeState !== 'active') return null;
   const found = await readBaseReleases(client, [digest]);
   // Binding also accepts persisted composite digests through the release owner.
   return found.has(digest) ? (found.get(digest) ?? null) : readRelease(client, digest);
+}
+
+async function projectionMeaningRelease(pool: Pool, deadline: number, digest: string) {
+  const found = await readPoint(pool, deadline, (client) => readBaseReleases(client, [digest], true));
+  if (found.has(digest)) return found.get(digest);
+  return inSnapshot(pool, deadline, (client) => storedMeaningRelease(client, digest));
 }
 
 function sourceObservation(
@@ -594,7 +610,6 @@ type IdentityState = { row: SubjectRow; allowed: boolean };
 type IdentityRead = {
   states: Map<string, IdentityState>;
   heads: Map<number, PrivacyReductionHead>;
-  epochs: Map<number, number>;
   complete: boolean;
 };
 
@@ -609,16 +624,25 @@ async function readPublicIdentities(
   root?: Readonly<{ state: IdentityState; head: PrivacyReductionHead }>,
   inputLimit?: number,
 ): Promise<IdentityRead> {
+  if (!identitySourceSupportJob() && !root && config.access.prepareReadDecisions && inputLimit === undefined) {
+    // Each original has at most one successor at each of the eight redirect depths.
+    const window = identityWindow(ids, 8 * ids.length);
+    const ready = await withCompiledPermissionChecks(() =>
+      readIdentityWindows(config, accessPort, [window], time, deadline),
+    );
+    cost.accessPoints += window.cost.accessPoints;
+    cost.dependencyPoints += window.cost.dependencyPoints;
+    if (!ready) window.observed.complete = false;
+    return window.observed;
+  }
   const states = new Map<string, IdentityState>();
   const heads = new Map<number, PrivacyReductionHead>();
-  const epochs = new Map<number, number>();
   let complete = true;
   let pending = [...new Set(ids)];
   if (root) {
     const { state, head } = root;
     states.set(state.row.id, state);
     heads.set(head.partition, head);
-    epochs.set(head.partition, head.epoch);
     if (state.row.redirect && !pending.includes(state.row.redirect)) pending.push(state.row.redirect);
   }
   for (let depth = 0; pending.length > 0 && depth < 8; depth++) {
@@ -637,7 +661,7 @@ async function readPublicIdentities(
     pending = [];
     for (const [partition, group] of groups) {
       if (inputLimit !== undefined) {
-        if (cost.inputKeys + group.length > inputLimit) return { states, heads, epochs, complete: false };
+        if (cost.inputKeys + group.length > inputLimit) return { states, heads, complete: false };
         cost.inputKeys += group.length;
       }
       accessPort.requireDeadline(deadline);
@@ -684,7 +708,6 @@ async function readPublicIdentities(
         complete = false;
         continue;
       }
-      epochs.set(partition, result.owner.epoch);
       const currentHead = { partition, epoch: result.owner.epoch, position: BigInt(result.privacy.position) };
       const priorHead = heads.get(partition);
       if (priorHead && (priorHead.epoch !== currentHead.epoch || priorHead.position !== currentHead.position)) {
@@ -705,11 +728,11 @@ async function readPublicIdentities(
     }
   }
   if (pending.some((id) => !states.has(id))) complete = false;
-  return { states, heads, epochs, complete };
+  return { states, heads, complete };
 }
 
 function identityWindow(ids: readonly string[], inputLimit: number) {
-  const observed: Pick<IdentityRead, 'states' | 'heads' | 'complete'> = {
+  const observed: IdentityRead = {
     states: new Map(),
     heads: new Map(),
     complete: true,
@@ -724,19 +747,27 @@ type IdentityPoint = SubjectRow & { epoch: number; privacy_position: string };
 async function readIdentityPoints(
   config: Configuration,
   keys: { id: string; route: number }[],
-  readTime: (client: PoolClient) => Promise<AuthoritativeTime | null>,
+  readTime: AuthoritativeTime | ((client: PoolClient) => Promise<AuthoritativeTime | null>),
   deadline: number,
 ) {
   const context = { pool: config.pool, deadline };
   const actor = { kind: 'anonymous' } as const;
   const input = { ids: keys.map(({ id }) => id), routes: keys.map(({ route }) => route) };
   // Small catalogues can otherwise scan every Subject once per supplied key.
-  const first = await inSnapshot(config.pool, deadline, async (client) => {
-    const time = await readTime(client);
-    if (!time) return null;
-    await client.query('SET LOCAL enable_seqscan = off');
-    return { time, floors: await nativeSourceQuery(client, readIdentityFloors, input) };
-  });
+  const first =
+    typeof readTime === 'function'
+      ? await inSnapshot(config.pool, deadline, async (client) => {
+          const time = await readTime(client);
+          if (!time) return null;
+          await client.query('SET LOCAL enable_seqscan = off');
+          return { time, floors: await nativeSourceQuery(client, readIdentityFloors, input) };
+        })
+      : {
+          time: readTime,
+          floors: await readPoint(config.pool, deadline, (client) =>
+            nativeSourceQuery(client, readIdentityFloors, input),
+          ),
+        };
   if (!first) return null;
   const { time, floors } = first;
   const prepared = new Map(floors.map((row) => [row.id, row]));
@@ -746,36 +777,43 @@ async function readIdentityPoints(
     context,
     time,
   });
-  return inSnapshot(config.pool, deadline, async (client) => {
-    await client.query('SET LOCAL enable_seqscan = off');
-    const points = (await nativeSourceQuery(client, readIdentityPointsQuery, input)) as IdentityPoint[];
-    const result = new Map<string, { row: IdentityPoint; allowed: boolean }>();
-    const eligible = new Map<string, IdentityPoint>();
-    for (const row of points) {
-      const floor = prepared.get(row.id);
-      if (!floor) continue;
-      if (floor.visible && row.visibility === 'visible' && floor.revision === row.securityRevision)
-        eligible.set(row.id, row);
-      else result.set(row.id, { row, allowed: false });
-    }
-    if (eligible.size) {
-      const decided = await decisions.decide(
-        client,
-        {
-          action: 'subject:read',
-          resourceType: 'semantic.subject',
-          ids: [...eligible.keys()],
-          eligibility: async (_client, ids) => Object.fromEntries(ids.map((id) => [id, eligible.has(id)])),
-        },
-        time,
-      );
-      for (const [id, row] of eligible) {
-        const allowed = decided[id]?.allowed;
-        if (typeof allowed === 'boolean') result.set(id, { row, allowed });
+  return withBoundedReadOnlyTransaction(
+    config.pool,
+    deadline,
+    async (client) => {
+      await client.query("SELECT set_config('statement_timeout',$1,true), set_config('enable_seqscan','off',true)", [
+        String(Math.max(1, Math.floor(deadline - Date.now()))),
+      ]);
+      const points = (await nativeSourceQuery(client, readIdentityPointsQuery, input)) as IdentityPoint[];
+      const result = new Map<string, { row: IdentityPoint; allowed: boolean }>();
+      const eligible = new Map<string, IdentityPoint>();
+      for (const row of points) {
+        const floor = prepared.get(row.id);
+        if (!floor) continue;
+        if (floor.visible && row.visibility === 'visible' && floor.revision === row.securityRevision)
+          eligible.set(row.id, row);
+        else result.set(row.id, { row, allowed: false });
       }
-    }
-    return result;
-  });
+      if (eligible.size) {
+        const decided = await decisions.decide(
+          client,
+          {
+            action: 'subject:read',
+            resourceType: 'semantic.subject',
+            ids: [...eligible.keys()],
+            eligibility: async (_client, ids) => Object.fromEntries(ids.map((id) => [id, eligible.has(id)])),
+          },
+          time,
+        );
+        for (const [id, row] of eligible) {
+          const allowed = decided[id]?.allowed;
+          if (typeof allowed === 'boolean') result.set(id, { row, allowed });
+        }
+      }
+      return result;
+    },
+    boundedProjectionReadOptions(deadline),
+  );
 }
 
 /** Admit each logical window independently. Shared exact points are charged once and every
@@ -784,7 +822,7 @@ async function readIdentityWindows(
   config: Configuration,
   port: PublicFilterAccessBindingPort,
   windows: IdentityWindow[],
-  readTime: (client: PoolClient) => Promise<AuthoritativeTime | null>,
+  readTime: AuthoritativeTime | ((client: PoolClient) => Promise<AuthoritativeTime | null>),
   deadline: number,
 ) {
   for (let depth = 0; depth < 8; depth++) {
@@ -1100,34 +1138,28 @@ async function saveBuild(
   async function attempt(client: PoolClient) {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-    const owner = await readPartition(client, observation.partition);
-    const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: observation.partition });
-    const current = rows(
-      await nativeSourceQuery(client, readSubjects, {
-        partition_no: observation.partition,
-        routes: [route],
-        subject_ids: [subject],
-      }),
-    )[0] as SubjectRow | undefined;
-    if (
-      !owner ||
-      owner.writeState !== 'active' ||
-      owner.epoch !== observation.epoch ||
-      owner.position < observation.position ||
-      !privacy ||
-      BigInt(privacy.position) !== privacyPosition ||
-      !sameSource(expected, current)
-    ) {
-      await client.query('ROLLBACK');
-      return null;
-    }
-    if (identitySourceSupportJob()) {
-      const retirement = await retireIdentityProjectionHead(client, observation.partition, subject);
-      if (retirement) {
-        await client.query('COMMIT');
-        return { retirement };
+    const nativeJob = identitySourceSupportJob();
+    const headInput = JSON.stringify(
+      [...heads.values()].map((head) => ({
+        partition_no: head.partition,
+        owner_epoch: head.epoch,
+        position: head.position.toString(),
+      })),
+    );
+    if (!nativeJob) {
+      const current = (
+        await client.query<{ position: string; subject: SubjectRow }>(projectionCurrentSql(), [
+          observation.partition,
+          route,
+          subject,
+          observation.epoch,
+          headInput,
+        ])
+      ).rows[0];
+      if (!current || BigInt(current.position) < observation.position || !sameSource(expected, current.subject)) {
+        await client.query('ROLLBACK');
+        return null;
       }
-    } else {
       const {
         rows: [prior],
       } = await client.query<{ identity_pending: boolean }>(lockReleasedProjectionBuildForRetirementSql, [
@@ -1138,26 +1170,53 @@ async function saveBuild(
         await client.query('ROLLBACK');
         return 'identity_pending' as const;
       }
-      await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
+    } else {
+      const owner = await readPartition(client, observation.partition);
+      const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: observation.partition });
+      const current = rows(
+        await nativeSourceQuery(client, readSubjects, {
+          partition_no: observation.partition,
+          routes: [route],
+          subject_ids: [subject],
+        }),
+      )[0] as SubjectRow | undefined;
+      if (
+        !owner ||
+        owner.writeState !== 'active' ||
+        owner.epoch !== observation.epoch ||
+        owner.position < observation.position ||
+        !privacy ||
+        BigInt(privacy.position) !== privacyPosition ||
+        !sameSource(expected, current)
+      ) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const retirement = await retireIdentityProjectionHead(client, observation.partition, subject);
+      if (retirement) {
+        await client.query('COMMIT');
+        return { retirement };
+      }
     }
-    const created = rows(
-      await nativeSourceQuery(client, startBuild, {
-        partition_no: observation.partition,
-        route,
-        subject_id: subject,
-        meaning_digest: meaning.digest,
-        build_id: build,
-        owner_epoch: observation.epoch,
-        source_position: observation.position.toString(),
-        privacy_position: privacyPosition.toString(),
-        terminal_id: observation.terminal,
-        subject_revision: observation.revision,
-        security_revision: observation.securityRevision,
-        current_release: observation.currentRelease,
-      }),
-    )[0] as BuildRow | undefined;
+    const buildInput = {
+      partition_no: observation.partition,
+      route,
+      subject_id: subject,
+      meaning_digest: meaning.digest,
+      build_id: build,
+      owner_epoch: observation.epoch,
+      source_position: observation.position.toString(),
+      privacy_position: privacyPosition.toString(),
+      terminal_id: observation.terminal,
+      subject_revision: observation.revision,
+      security_revision: observation.securityRevision,
+      current_release: observation.currentRelease,
+    };
+    const created = nativeJob
+      ? rows(await nativeSourceQuery(client, startBuild, buildInput))[0]
+      : await startProjectionWithHeads(client, buildInput, headInput);
     if (!created) throw new Error('Native projection build was not retained');
-    if (!(await ensureBuildHeads(client, created, heads))) {
+    if (nativeJob && !(await ensureBuildHeads(client, created, heads))) {
       await client.query('ROLLBACK');
       return null;
     }
@@ -1220,6 +1279,15 @@ function makeDependencies(
   return [...new Map(values.map((value) => [JSON.stringify(value), value])).values()];
 }
 
+type SourceWindow = {
+  owner: NonNullable<Awaited<ReturnType<typeof readPartition>>>;
+  subject: SubjectRow;
+  privacyPosition: string;
+  time: AuthoritativeTime;
+  build: BuildRow | null;
+  rows: SelectedRow[];
+};
+
 /** Native selected-key source. No history fold, subject hydration, or sampled relation witness is used. */
 export async function readPublicFilterProjectionPage(
   config: Configuration,
@@ -1249,38 +1317,69 @@ export async function readPublicFilterProjectionPage(
   const supportRoot = identitySourceSupportRoot();
   if (supportRoot && supportRoot.original !== request.subject) return unavailable('missing_owner', cost);
 
-  type SourceWindow = {
-    owner: NonNullable<Awaited<ReturnType<typeof readPartition>>>;
-    subject: SubjectRow;
-    privacyPosition: string;
-    time: AuthoritativeTime;
-    build: BuildRow | null;
-    rows: SelectedRow[];
-  };
-
   try {
-    const pinnedRelease = identitySourceSupportJob()
+    const nativeJob = identitySourceSupportJob();
+    const pinnedRelease = nativeJob
       ? await readRelease(config.pool, request.meaning.digest)
-      : await inSnapshot(config.pool, deadline, (client) => storedMeaningRelease(client, request.meaning.digest));
+      : await projectionMeaningRelease(config.pool, deadline, request.meaning.digest);
     if (!pinnedRelease) return unready('metadata_missing', cost);
     const meaning = { ...request.meaning, release: pinnedRelease };
-    const snapshot = await inSnapshot(
+    // Identity support checks its original on the caller's metered snapshot. Ordinary reads
+    // obtain the same owner, subject, build and selection in one statement on the local backend.
+    const readWindow = nativeJob ? inSnapshot : readPoint;
+    const snapshot = await readWindow(
       config.pool,
       deadline,
       async (client): Promise<SourceWindow | PublicFilterProjectionPage> => {
-        const owner = await readPartition(client, partition);
+        const selectionPhase = cursor?.phase !== 'dependencies';
+        const afterCursor = cursor?.phase === 'selection' ? cursor : null;
+        const input = {
+          partition_no: partition,
+          route,
+          subject_id: request.subject,
+          after_property: afterCursor?.property ?? '',
+          after_slot: afterCursor?.slot ?? ZERO_UUID,
+          after_candidate: afterCursor?.candidate ?? ZERO_UUID,
+          input_limit: selectionPhase ? request.inputLimit : 0,
+        };
+        const window = nativeJob
+          ? undefined
+          : (
+              await client.query<{
+                owner: Omit<SourceWindow['owner'], 'position'> & { position: string };
+                subject: SubjectRow | null;
+                privacy: string | null;
+                build: BuildRow | null;
+                selected: SelectedRow[];
+              }>(projectionWindowSql(), [
+                partition,
+                route,
+                request.subject,
+                meaning.digest,
+                facetsByType(meaning.release),
+                input.after_property,
+                input.after_slot,
+                input.after_candidate,
+                input.input_limit,
+                request.frontier !== null,
+              ])
+            ).rows[0];
+        const owner = nativeJob
+          ? await readPartition(client, partition)
+          : window && { ...window.owner, position: BigInt(window.owner.position) };
         if (!owner) return unavailable('missing_owner', cost);
         if (owner.writeState === 'moved') return unavailable('moved', cost);
         if (owner.writeState !== 'active') return unready('owner_pending', cost);
 
-        const sourceRows = rows(
-          await nativeSourceQuery(client, readSubjects, {
-            partition_no: partition,
-            routes: [route],
-            subject_ids: [request.subject],
-          }),
-        ) as SubjectRow[];
-        const subject = sourceRows[0];
+        const subject = window
+          ? window.subject
+          : (rows(
+              await nativeSourceQuery(client, readSubjects, {
+                partition_no: partition,
+                routes: [route],
+                subject_ids: [request.subject],
+              }),
+            )[0] as SubjectRow | undefined);
         if (!subject) return unavailable('missing_owner', cost);
         const rootTime =
           supportRoot && subject.visibility === 'visible'
@@ -1289,20 +1388,23 @@ export async function readPublicFilterProjectionPage(
         await supportRoot?.check(client, owner, subject.visibility, rootTime);
         if (!subject.selection_ready) return unready('owner_pending', cost);
         if (!subject.current_revision || !subject.currentRelease) return unready('metadata_missing', cost);
-        const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
-        if (!privacy) return unready('metadata_missing', cost);
+        const privacy = window
+          ? window.privacy
+          : (await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition }))?.position;
+        if (privacy == null) return unready('metadata_missing', cost);
         const time = rootTime ?? (await mintReadTime(client, config.clock, config.pool));
-        const buildRows = request.frontier
-          ? rows(
-              await nativeSourceQuery(client, readBuild, {
-                partition_no: partition,
-                route,
-                subject_id: request.subject,
-                meaning_digest: meaning.digest,
-              }),
-            )
-          : [];
-        const build = (buildRows[0] as BuildRow | undefined) ?? null;
+        const build = window
+          ? window.build
+          : request.frontier
+            ? ((rows(
+                await nativeSourceQuery(client, readBuild, {
+                  partition_no: partition,
+                  route,
+                  subject_id: request.subject,
+                  meaning_digest: meaning.digest,
+                }),
+              )[0] as BuildRow | undefined) ?? null)
+            : null;
         if (
           request.frontier &&
           (!build ||
@@ -1310,32 +1412,22 @@ export async function readPublicFilterProjectionPage(
             BigInt(build.generation) !== request.frontier.generation)
         )
           return { status: 'changed', frontier: request.frontier, cost };
-        if (
-          build &&
-          (!observationMatches(build, subject, owner.epoch, privacy.position) || build.terminal_id.length === 0)
-        )
+        if (build && (!observationMatches(build, subject, owner.epoch, privacy) || build.terminal_id.length === 0))
           return { status: 'changed', frontier: request.frontier!, cost };
 
-        const selectionPhase = cursor?.phase !== 'dependencies';
-        const afterCursor = cursor?.phase === 'selection' ? cursor : null;
-        const properties = facetProperties(meaning.release, [subject.type]);
-        const selected = selectionPhase
-          ? (rows(
-              await nativeSourceQuery(client, readPage, {
-                partition_no: partition,
-                route,
-                subject_id: request.subject,
-                properties,
-                after_property: afterCursor?.property ?? '',
-                after_slot: afterCursor?.slot ?? ZERO_UUID,
-                after_candidate: afterCursor?.candidate ?? ZERO_UUID,
-                input_limit: request.inputLimit,
-              }),
-            ) as SelectedRow[])
-          : [];
+        const selected = window
+          ? window.selected
+          : selectionPhase
+            ? (rows(
+                await nativeSourceQuery(client, readPage, {
+                  ...input,
+                  properties: facetProperties(meaning.release, [subject.type]),
+                }),
+              ) as SelectedRow[])
+            : [];
         cost.inputKeys = Math.max(1, selected.length);
         cost.candidates = selected.length;
-        return { owner, subject, privacyPosition: privacy.position, time, build, rows: selected };
+        return { owner, subject, privacyPosition: privacy, time, build, rows: selected };
       },
     );
     if ('status' in snapshot) return snapshot;
@@ -1591,7 +1683,6 @@ export async function readPublicFilterProjectionPage(
           ? { status: 'changed', frontier: request.frontier, cost }
           : unready('dependency_pending', cost);
       identities.heads.set(home, currentHead);
-      identities.epochs.set(home, result.owner.epoch);
       cost.dependencyPoints += values.length;
       for (const fence of result.fences)
         fenceResults.set(
@@ -1648,7 +1739,7 @@ export async function readPublicFilterProjectionPage(
     cost.outputSlots = records.length;
     cost.resultWrites = records.length;
 
-    if (request.frontier || !supportRoot) {
+    if (request.frontier || (nativeJob && !supportRoot)) {
       const currentSource = await inSnapshot(config.pool, deadline, async (client) => {
         const owner = await readPartition(client, partition);
         const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: partition });
@@ -1744,14 +1835,25 @@ export async function readPublicFilterProjectionPage(
     if (nextCursor.phase === 'selection' || identitySourceSupportJob()) {
       return { status: 'progress', source: observation, records, repairLocators, frontier, cost };
     }
-    const page = await readProjectionDependencyHeads(
-      config.pool,
-      retained.build_id,
-      nextCursor.partition,
-      request.inputLimit,
-      deadline,
-      cost,
-    );
+    // The establishing transaction checked every new head. Reuse that bounded page when it fits.
+    const established =
+      !request.frontier && !nativeJob && heads.size < request.inputLimit
+        ? [...heads.values()].sort((a, b) => a.partition - b.partition)
+        : null;
+    const page = established
+      ? { heads: established, after: established.at(-1)!.partition, complete: true }
+      : await readProjectionDependencyHeads(
+          config.pool,
+          retained.build_id,
+          nextCursor.partition,
+          request.inputLimit,
+          deadline,
+          cost,
+        );
+    if (established) {
+      cost.inputKeys = Math.max(cost.inputKeys, established.length);
+      cost.dependencyPoints += established.length;
+    }
     if (!page)
       return request.frontier
         ? { status: 'changed', frontier: request.frontier, cost }
