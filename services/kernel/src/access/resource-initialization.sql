@@ -14,8 +14,7 @@ WITH input AS NOT MATERIALIZED (
   CROSS JOIN jsonb_to_recordset(:grants::jsonb) AS r(subject_kind text, subject_id uuid, grant_role text)
   RETURNING route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id
 ), role_provenance AS (
-  -- The native grant trigger shares this statement's snapshot and cannot see the
-  -- sibling initialization CTE. Carry the exact inserted rows forward instead.
+  -- The creator occurrence depends only on the marker, including when the template grants no roles.
   INSERT INTO access.resource_role_provenance
     (route, resource_id, resource_type, original_creator, account_id, grant_role, valid,
      side, grant_transaction, source_transaction)
@@ -25,6 +24,10 @@ WITH input AS NOT MATERIALIZED (
   JOIN initialized n ON n.route = i.route AND n.resource_id = i.resource_id
   JOIN installed_grants g ON g.route = n.route AND g.resource_id = n.resource_id
   WHERE g.subject_kind = 'identity' AND g.subject_role = ''
+  UNION ALL
+  SELECT n.route, n.resource_id, i.resource_type, i.creator_id, i.creator_id, '', NULL,
+         'creator', NULL, i.transaction_id
+  FROM initialized n JOIN input i USING (route, resource_id)
   RETURNING occurrence
 )
 SELECT grant_role FROM installed_grants;

@@ -39,6 +39,7 @@ import {
   SUBJECT_PAGE_REPAIR_QUEUED,
 } from './events.ts';
 import readPointStatement from './subject-page-publication-read.sql';
+import insertInitialPoint from './subject-page-publication-initial.sql';
 import lockPointStatement from './subject-page-publication-lock.sql';
 import publishPointStatement from './subject-page-publication-publish.sql';
 import insertChangeStatement from './subject-page-publication-change.sql';
@@ -246,8 +247,37 @@ export function publicState(value: unknown): PublicState {
 }
 
 /** Native creation proves an empty baseline without inventing a public time. */
-export async function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<void> {
+export async function initializeSubjectPagePublication(
+  tx: CommandTransaction,
+  subject: SubjectKey,
+  initial?: {
+    changeId: string;
+    components: { component: ComponentKey; state: PublicState; dependencies: OwnerKey[] }[];
+    outbox: CommandEvent[];
+  },
+): Promise<void> {
   home(tx, subject.route);
+  const components = initial?.components ?? [];
+  bounded(components.length, 512);
+  if (components.every((component) => !component.dependencies.length)) {
+    const shown = components.filter((component) => component.state.shown);
+    const inserted = await insertInitialPoint.run(tx, {
+      route: subject.route,
+      subject_id: subject.id,
+      at: authoritativeTimeValue(commandTime(tx)!),
+      witnesses: shown
+        .map((entry) => entry.component)
+        .filter((component) => component.kind !== 'label')
+        .slice(-8),
+      change_id: initial?.changeId ?? currentCommand(tx).transactionId,
+      components: shown.map(({ component, state }, index) => ({
+        ...component,
+        position: index + 1,
+        digest: state.digest,
+      })),
+    });
+    if (listed(inserted).length) return;
+  }
   const point = (await lockPoint.run(tx, { route: subject.route, subject_id: subject.id }))[0]! as Point;
   await publishPoint.run(tx, {
     route: subject.route,
@@ -259,6 +289,18 @@ export async function initializeSubjectPagePublication(tx: CommandTransaction, s
     effective_at: null,
     witnesses: jsonParameter(point.witnesses),
   });
+  if (initial)
+    await recordSubjectPageTransition(tx, {
+      subject,
+      changeId: initial.changeId,
+      components: components.map(({ component, state, dependencies }) => ({
+        component,
+        before: absent,
+        after: state,
+        dependencies,
+      })),
+      outbox: initial.outbox,
+    });
 }
 
 /** Persist only actual affected identities; this never discovers a subject's degree. */

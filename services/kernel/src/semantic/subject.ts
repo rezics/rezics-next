@@ -331,20 +331,21 @@ export async function writeSubject(
       source: options.source,
       routeKey: options.routeKey,
     });
-  await initializeSubjectPagePublication(tx, { route, id: subjectId });
-  await recordSubjectPageDiff(
+  const initialPage = await subjectPageFacts(
     tx,
     subjectId,
-    transactionId,
-    new Map(),
-    await subjectPageFacts(
-      tx,
-      subjectId,
-      facts.filter((fact) => !privateAccounts.has(fact.statement_id!)),
-      options.release.release,
-      options.routeKey,
-    ),
-    events,
+    facts.filter((fact) => !privateAccounts.has(fact.statement_id!)),
+    options.release.release,
+    options.routeKey,
+  );
+  await initializeSubjectPagePublication(
+    tx,
+    { route, id: subjectId },
+    {
+      changeId: transactionId,
+      components: [...initialPage.values()],
+      outbox: events,
+    },
   );
   await sealSemanticRecordSourceSet(tx, sourceSet);
   // A create command has the submitted facts but not the bounded, current
