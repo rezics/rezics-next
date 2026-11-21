@@ -30,6 +30,9 @@ export type WalletBalance = Readonly<{
   available: string;
 }>;
 
+export type WalletBalancePage = Readonly<{ balances: WalletBalance[]; next: string | null }>;
+export const WALLET_BALANCE_PAGE_LIMIT = 100;
+
 export type WalletEntry = Readonly<{
   position: string;
   operationId: string;
@@ -143,6 +146,9 @@ export type SpotFillSettlement = Readonly<{
 }>;
 
 export interface EconomyWalletPort {
+  listBalances(
+    input: Readonly<{ accountId: string; after?: string; limit: number }>,
+  ): Promise<EconomyResult<WalletBalancePage>>;
   readBalance(input: WalletKey): Promise<EconomyResult<WalletBalance>>;
   readStatement(
     input: WalletKey & Readonly<{ before?: string; limit: number }>,
