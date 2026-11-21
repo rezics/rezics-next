@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
+import '../support/native-history-composition.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { startRelays } from '../../src/events/relays.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, actorOf } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { itemFacts, relationSlotId, resolveItem as resolve, SubjectInputError } from '../../src/semantic/item.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -22,29 +23,24 @@ import {
   SubjectAccessDeniedError,
   subjectTarget,
 } from '../../src/semantic/subject.ts';
+import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const projection = linkProjection(pool);
-const relays = startRelays(pool, [projection], { intervalMs: 50 });
-beforeAll(() => bootstrapRelease(pool, bundledRelease));
 afterAll(async () => {
-  await relays.stop();
   await pool.end();
   await admin.end();
 });
 
 const routeKey = new Uint8Array(32).fill(7);
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-beef00000001',
-  clientId: 'web',
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const accountId = newId(0xbeef);
+const action = 'subject:create';
+const globalContext = { route: 0, id: GLOBAL_CONTEXT };
+const realAccess = await createRealAccess(admin, { writer: accountId }, [action]);
+const access = realAccess.access({ actions: new Map([[action, { anonymous: false }]]) });
 const allow = async () => true;
 const digest = (text: string) => createHash('sha256').update(text).digest();
 const UUID_V8 = /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -88,19 +84,43 @@ async function partitionPosition(partition: number): Promise<bigint> {
   const { rows } = await admin.query('SELECT position FROM core.partition WHERE partition_no = $1', [partition]);
   return BigInt(rows[0].position);
 }
-function create(
+async function create(
   item: unknown,
-  key = randomUUID(),
+  key: string = randomUUID(),
   options: { digest?: Uint8Array; authorize?: () => Promise<boolean> } = {},
+  target = subjectTarget(routeKey, accountId, key),
 ) {
+  const context = { pool, deadline: Date.now() + 20_000 };
+  const actor = await actorOf(
+    access,
+    new Request('https://kernel.test', { headers: { authorization: `Bearer ${realAccess.bearer('writer')}` } }),
+    context,
+  );
+  if (actor.kind !== 'account') throw new Error('The Subject fixture writer must authenticate as an account');
+  const gate = options.authorize;
+  const writeAccess = gate
+    ? deriveAccess(access, {
+        async authorize(...args) {
+          return (await access.authorize(...args)) && (await gate());
+        },
+      })
+    : access;
   return createSubject(pool, {
     actor,
-    target: subjectTarget(routeKey, actor.accountId, key),
+    target,
     idempotencyKey: key,
     digest: options.digest ?? digest(JSON.stringify(item)),
     item,
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: options.authorize ?? allow,
+    authorization: await accessCommandAuthorization(
+      writeAccess,
+      actor,
+      action,
+      globalContext,
+      context,
+      () => new SubjectAccessDeniedError(),
+    ),
+    deadline: context.deadline,
   });
 }
 
@@ -116,24 +136,21 @@ async function catchUpLinks(partition: number): Promise<void> {
   throw new Error('Semantic link projection did not catch up');
 }
 
-async function seedAuthor(): Promise<void> {
-  const id = soseki;
-  await createSubject(pool, {
-    actor,
-    target: { route: routeOf(id)!, id },
-    idempotencyKey: `seed-${id}`,
-    digest: digest(id),
-    item: { type: 'schema:Person', labels: { en: 'Natsume Sōseki' } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: allow,
-  });
-}
+beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  await realAccess.grant(globalContext, 'writer', action);
+  await create(
+    { type: 'schema:Person', labels: { en: 'Natsume Sōseki' } },
+    `seed-${soseki}`,
+    { digest: digest(soseki) },
+    { route: routeOf(soseki)!, id: soseki },
+  );
+});
 
 test('a created book is anchored by its idempotency key and reads back as a Wikibase item', async () => {
   const key = randomUUID();
-  await seedAuthor();
   const created = await create(book, key);
-  const route = anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`);
+  const route = anchorRoute(routeKey, `${accountId}\nsubject.create\n${key}`);
   const { subject } = created;
   expect(routeOf(subject.id)).toBe(route);
   expect(created.component).toEqual({
@@ -192,7 +209,6 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
 });
 
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {
-  await seedAuthor();
   const { subject, component } = await create(book);
   const translatorStatement = subject.statements['schema:translator']!.find(
     (statement) => statement.value.type === 'value' && statement.value.content === soseki,
@@ -231,7 +247,7 @@ test('each value is one compact fact row in its slot log, written under the comm
     [component.partition, String(component.position)],
   );
   expect(basis).toEqual([
-    { transaction_id: [...transactions][0], actor_account_id: actor.accountId, client_id: 'web', requested_by: null },
+    { transaction_id: [...transactions][0], actor_account_id: accountId, client_id: 'web', requested_by: null },
   ]);
   const { rows: subjects } = await admin.query(
     'SELECT type, recorded_transaction_id FROM semantic.subject WHERE route = $1 AND subject_id = $2',
@@ -239,13 +255,13 @@ test('each value is one compact fact row in its slot log, written under the comm
   );
   expect(subjects).toEqual([{ type: 'bf:Instance', recorded_transaction_id: [...transactions][0] }]);
   const { rows: events } = await admin.query(
-    'SELECT event_count, type, subject, data FROM core.outbox WHERE partition_no = $1 AND position = $2',
+    'SELECT event_count, type, subject, data FROM core.outbox WHERE partition_no = $1 AND position = $2 ORDER BY event_seq',
     [component.partition, String(component.position)],
   );
   expect(events).toEqual([
-    { event_count: 2, type: 'com.rezics.subject.created.v1', subject: subject.id, data: { id: subject.id } },
+    { event_count: 3, type: 'com.rezics.subject.created.v1', subject: subject.id, data: { id: subject.id } },
     {
-      event_count: 2,
+      event_count: 3,
       type: 'com.rezics.semantic.links.changed.v1',
       subject: subject.id,
       data: {
@@ -288,12 +304,26 @@ test('each value is one compact fact row in its slot log, written under the comm
         ].toSorted((left, right) => (left.statement < right.statement ? -1 : left.statement > right.statement ? 1 : 0)),
       },
     },
+    {
+      event_count: 3,
+      type: 'com.rezics.semantic.subject_page.dependencies_changed.v1',
+      subject: subject.id,
+      data: {
+        deltas: [
+          expect.objectContaining({
+            component: { kind: 'relation', key: translatorStatement.id },
+            owner: { kind: 'subject', key: soseki, route: routeOf(soseki) },
+            subject: { id: subject.id, route },
+            present: true,
+          }),
+        ],
+      },
+    },
   ]);
 });
 
 test('a retried create returns the same subject and a changed request under the same key is refused', async () => {
   const key = randomUUID();
-  await seedAuthor();
   const first = await create(book, key);
   const before = await partitionPosition(first.component.partition);
   const again = await create(book, key);
@@ -305,7 +335,7 @@ test('a retried create returns the same subject and a changed request under the 
 
 test('invalid input is refused before anything is written', async () => {
   const key = randomUUID();
-  const partition = partitionOf(anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`));
+  const partition = partitionOf(anchorRoute(routeKey, `${accountId}\nsubject.create\n${key}`));
   const before = await partitionPosition(partition);
   let checks = 0;
   const error = await create(
@@ -329,7 +359,7 @@ test('invalid input is refused before anything is written', async () => {
 
 test('a denied create writes nothing, so the same key may be used once it is allowed', async () => {
   const key = randomUUID();
-  const partition = partitionOf(anchorRoute(routeKey, `${actor.accountId}\nsubject.create\n${key}`));
+  const partition = partitionOf(anchorRoute(routeKey, `${accountId}\nsubject.create\n${key}`));
   const before = await partitionPosition(partition);
   let checks = 0;
   const deny = async () => {

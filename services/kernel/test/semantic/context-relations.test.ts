@@ -10,6 +10,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection, listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { createRealAccess } from './real-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -39,6 +40,7 @@ const kernel = createKernel({
   writeRate: access.writeRate,
   routeKey: new Uint8Array(32).fill(48),
   tokens: ring,
+  receiptKeys: testReceiptKeys(),
 });
 const projection = linkProjection(pool);
 const itemProperty = (id: string, group: 'appearance' | 'credit' | 'classification') => ({
@@ -58,7 +60,7 @@ const typeDefinition = (iri: string, label: string, properties: string[]) => ({
   mappings: [],
   bases: [],
   facets: [],
-  properties,
+  properties: properties.toSorted(),
 });
 const release: Release = {
   format: 'https://rezics.com/definitions/release/1',
