@@ -88,6 +88,15 @@ Creator accruals recognize an independent payable and expense. A payout reserves
 confirmed movement against the named reservation, and releases a refused reservation. Returns are separate journaled
 events capped by their original payout. Wallet funding and creator payout use one provider movement identity guard.
 
+The development Commerce evidence port registers a named balance transaction only after Commerce confirms a known,
+matching provider observation and the corresponding immutable creator attribution. Read the transaction on the buyer's
+route and the attribution on the creator's route. Admit the configured test provider namespace and exact known unit.
+Unresolved reads can be retried. Use one evidence identity per test provider namespace and movement, with the retained
+order and attribution references, book and an economic digest as compared terms. Refunds, disputes and reversals have
+their own provider identities and signed economics. This evidence registration leaves wallets, reserves, creator
+payables and the provider movement consumption guard unchanged. Recognition and payout use separately adopted
+Commerce financial policy. There is no HTTP operation for this port.
+
 Unique items transfer by generation at their item home. A trade protects both its item and its funding reservation
 before recording a durable commit or abort. After commit, reconcile ownership delivery and then release clearing
 funds to seller and fee accounts. Same-book fungible delivery can settle as a balanced multi-asset journal group.
