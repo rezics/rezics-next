@@ -657,10 +657,11 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     ...(dependencies.economyMarket === undefined ? {} : { market: dependencies.economyMarket }),
   });
-  economyTestFundingRoutes(app as unknown as ReturnType<typeof createApp>, {
-    pool: dependencies.pool,
-    ...(dependencies.economyTestFunding === undefined ? {} : { testFunding: dependencies.economyTestFunding }),
-  });
+  if (dependencies.economyTestFunding !== undefined)
+    economyTestFundingRoutes(app as unknown as ReturnType<typeof createApp>, {
+      pool: dependencies.pool,
+      testFunding: dependencies.economyTestFunding,
+    });
   let progress: ReturnType<typeof progressRoutes>;
   progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,

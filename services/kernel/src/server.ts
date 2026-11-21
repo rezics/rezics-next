@@ -270,7 +270,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         ? undefined
         : createNativeEconomyMarket(pool, { ...config.economyMarket, ...economyConfig }).port;
     const economyTestFunding =
-      process.env.NODE_ENV === 'production' || economyConfig === undefined || config.economyTestFunding === undefined
+      process.env.NODE_ENV !== 'development' || economyConfig === undefined || config.economyTestFunding === undefined
         ? undefined
         : createNativeEconomyTestFunding(pool, { ...config.economyTestFunding, ...economyConfig }).port;
     app = createKernel({

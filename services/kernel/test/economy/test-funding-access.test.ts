@@ -117,6 +117,7 @@ test('signed test funding is private, exact on replay, and becomes spendable onl
   const amount = '9007199254740993';
   const deposit = command('deposit-one', 'deposit', amount);
   const paths = Object.entries(openApiDocument(app).paths).filter(([name]) => name.startsWith(path));
+  expect(Object.keys(openApiDocument(closedApp).paths).filter((name) => name.startsWith(path))).toEqual([]);
   expect(paths).toHaveLength(2);
   for (const [, item] of paths)
     for (const operation of Object.values(item)) {
@@ -129,7 +130,7 @@ test('signed test funding is private, exact on replay, and becomes spendable onl
   expect((await request(path, undefined, deposit)).status).toBe(403);
   expect((await request(path, ordinaryToken, deposit)).status).toBe(403);
   expect((await request(path, walletOnly, deposit)).status).toBe(403);
-  expect((await request(path, ownerToken, deposit, closedApp)).status).toBe(503);
+  expect((await request(path, ownerToken, deposit, closedApp)).status).toBe(404);
   expect((await request(path, ownerToken, { ...deposit, body: { ...deposit.body, mode: 'live' } })).status).toBe(400);
 
   const [first, second] = await Promise.all([request(path, ownerToken, deposit), request(path, ownerToken, deposit)]);
@@ -137,6 +138,7 @@ test('signed test funding is private, exact on replay, and becomes spendable onl
   const { intentId } = (await first.json()) as { intentId: string };
   expect(await second.json()).toEqual({ intentId });
   const receiptPath = `${path}/${intentId}`;
+  expect((await request(receiptPath, ownerToken, undefined, closedApp)).status).toBe(404);
   expect((await request(path, ownerToken, command(deposit.key, 'withdrawal', amount))).status).toBe(422);
   expect((await request(receiptPath, otherToken)).status).toBe(404);
   expect((await request(receiptPath, ordinaryToken)).status).toBe(403);
@@ -239,17 +241,22 @@ test('the deterministic runtime neither exposes nor claims live work', async () 
   expect(await ledger.readBalance({ accountId: other, assetId })).toMatchObject({ kind: 'ok', value: { posted: '0' } });
 });
 
-test('test intake has no default and cannot bind in production or with a live mode flag', () => {
+test('test intake requires development and a complete test rail binding', () => {
   const settings = {
     KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID: assetId,
     KERNEL_ECONOMY_TEST_FUNDING_NAMESPACE: namespace,
     KERNEL_ECONOMY_TEST_FUNDING_MODE: 'test',
   };
+  const development = { ...settings, NODE_ENV: 'development' };
   expect(readEconomyTestFundingConfig({})).toBeUndefined();
+  expect(readEconomyTestFundingConfig(settings)).toBeUndefined();
+  expect(readEconomyTestFundingConfig({ ...settings, NODE_ENV: 'test' })).toBeUndefined();
   expect(readEconomyTestFundingConfig({ ...settings, NODE_ENV: 'production' })).toBeUndefined();
-  expect(() => readEconomyTestFundingConfig({ ...settings, KERNEL_ECONOMY_TEST_FUNDING_MODE: 'live' })).toThrow();
-  expect(() => readEconomyTestFundingConfig({ KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID: assetId })).toThrow();
-  expect(readEconomyTestFundingConfig(settings)).toEqual({ assetId, namespace, mode: 'test' });
+  expect(() => readEconomyTestFundingConfig({ ...development, KERNEL_ECONOMY_TEST_FUNDING_MODE: 'live' })).toThrow();
+  expect(() =>
+    readEconomyTestFundingConfig({ NODE_ENV: 'development', KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID: assetId }),
+  ).toThrow();
+  expect(readEconomyTestFundingConfig(development)).toEqual({ assetId, namespace, mode: 'test' });
   const boot = {
     ...settings,
     DATABASE_URL: db.url,
@@ -259,6 +266,7 @@ test('test intake has no default and cannot bind in production or with a live mo
     KERNEL_ECONOMY_BOOK_ID: bookId,
     KERNEL_ECONOMY_NODE: config.node,
   };
+  expect(readConfig(boot).economyTestFunding).toBeUndefined();
   expect(readConfig({ ...boot, NODE_ENV: 'production' }).economyTestFunding).toBeUndefined();
   expect(readConfig({ ...boot, NODE_ENV: 'development' }).economyTestFunding).toEqual({
     assetId,

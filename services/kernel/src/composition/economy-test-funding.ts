@@ -19,7 +19,7 @@ type TestFundingConfig = Readonly<{ namespace: string; assetId: string; mode: 't
 const workBudget = 2_000;
 
 export function readEconomyTestFundingConfig(env: NodeJS.ProcessEnv): TestFundingConfig | undefined {
-  if (env.NODE_ENV === 'production') return;
+  if (env.NODE_ENV !== 'development') return;
   const assetId = env.KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID;
   const namespace = env.KERNEL_ECONOMY_TEST_FUNDING_NAMESPACE;
   const mode = env.KERNEL_ECONOMY_TEST_FUNDING_MODE;
@@ -56,8 +56,9 @@ export function createNativeEconomyTestFunding(
   config: TestFundingConfig & { bookId: string; node: string },
 ) {
   const { assetId, bookId, namespace, node } = config;
+  const environment = process.env.NODE_ENV;
   if (
-    process.env.NODE_ENV === 'production' ||
+    (environment !== 'development' && environment !== 'test') ||
     config.mode !== 'test' ||
     ![assetId, bookId, namespace].every(isEconomyBookId) ||
     !node.trim() ||

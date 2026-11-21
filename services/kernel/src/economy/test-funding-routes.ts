@@ -87,7 +87,7 @@ function failures() {
 
 export function economyTestFundingRoutes(
   app: ReturnType<typeof createApp>,
-  deps: { pool: Pool; testFunding?: EconomyTestFundingPort },
+  deps: { pool: Pool; testFunding: EconomyTestFundingPort },
 ) {
   async function run<Value>(
     ctx: FundingScope,
@@ -101,7 +101,6 @@ export function economyTestFundingRoutes(
       const check = await authorize({ route, id: actor.accountId });
       return await admission.run('normal', job, async () => {
         if (!(await withBoundedReadConnection(deps.pool, job.deadline, check))) throw new ProblemError('forbidden');
-        if (!deps.testFunding) throw new ProblemError('dependency_unavailable');
         return work(deps.testFunding, { accountId: actor.accountId, deadline: job.deadline });
       });
     } catch (error) {
@@ -117,7 +116,7 @@ export function economyTestFundingRoutes(
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }),
         body: t.Object({ direction, amount: positiveAmount }, closed),
         response: { 200: t.Object({ intentId }, closed), ...failures() },
-        detail: detail('wallet.test_funding.begin'),
+        detail: detail('wallet_test_funding.begin'),
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
@@ -135,7 +134,7 @@ export function economyTestFundingRoutes(
       {
         params: t.Object({ intentId }, closed),
         response: { 200: intentView, ...failures() },
-        detail: detail('wallet.test_funding.read'),
+        detail: detail('wallet_test_funding.read'),
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
