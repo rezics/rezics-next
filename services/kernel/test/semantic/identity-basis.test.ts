@@ -118,6 +118,11 @@ test('forward migration captures retained redirects and off-page claims and foll
           new URL('../../db/semantic/migrations/20261119004704_identity_basis.sql', import.meta.url),
         ).text()
       ).split('-- migrate:down');
+      const [birthUp, birthDown] = (
+        await Bun.file(
+          new URL('../../db/semantic/migrations/20261121030000_identity_basis_birth.sql', import.meta.url),
+        ).text()
+      ).split('-- migrate:down');
       const page = (await f.create('Selected original', 0x3410)).id;
       const alias = (await f.create('Retained redirect', 0x5210)).id;
       const oldBasis = await ready(db.pool);
@@ -128,19 +133,32 @@ test('forward migration captures retained redirects and off-page claims and foll
         await held.query('SELECT shard FROM semantic.identity_basis_shard WHERE shard=$1 FOR UPDATE', [
           home(alias) % 64,
         ]);
-        target = (await f.create('Retained terminal', 0x5220)).id;
+        // Another home in the same shard can commit a new Subject while the shard row is held.
+        target = (await f.create('Retained terminal', 0x5610)).id;
       } finally {
         await held.query('ROLLBACK');
         held.release();
       }
+      expect(await ready(db.pool)).toBe(oldBasis);
+      // Reinstalling the same singleton over an existing Subject changes structural evidence.
+      const removed = await db.admin.query(
+        'DELETE FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=$2 RETURNING to_jsonb(identity_epoch_group) AS header',
+        [home(target), target],
+      );
+      const missing = await ready(db.pool);
+      expect(missing).not.toBe(oldBasis);
+      await db.admin.query(
+        'INSERT INTO semantic.identity_epoch_group SELECT * FROM jsonb_populate_record(NULL::semantic.identity_epoch_group,$1)',
+        [removed.rows[0]!.header],
+      );
       const groupBasis = await ready(db.pool);
-      expect(groupBasis).not.toBe(oldBasis);
+      expect(groupBasis).not.toBe(missing);
       const token = await encodeSearchCursor(ring, binding(groupBasis), { generation: 1, after: [page] });
       await appendEdge(db, alias, target);
       const committed = await ready(db.pool);
       expect(committed).not.toBe(groupBasis);
       expect((await decodeSearchCursor(ring, binding(committed), token)).ok).toBe(false);
-      await db.admin.query(down!);
+      await db.admin.query(`BEGIN;\n${birthDown}\n${down}\nCOMMIT;`);
       const {
         job,
         survivor,
@@ -159,7 +177,7 @@ test('forward migration captures retained redirects and off-page claims and foll
       ).rows;
       expect(expected.some((row) => BigInt(row.pending) > 0n)).toBe(true);
       expect(await f.nativeDirectRedirect(alias)).toBe(target);
-      await db.admin.query(`BEGIN;\n${up}\nCOMMIT;`);
+      await db.admin.query(`BEGIN;\n${up}\n${birthUp}\nCOMMIT;`);
       expect(
         (
           await db.admin.query(

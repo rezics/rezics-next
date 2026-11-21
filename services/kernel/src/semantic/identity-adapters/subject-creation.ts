@@ -62,23 +62,27 @@ export function createIdentitySubjectInitializer(
         return;
       throw new TypeError('Identity self mapping already exists outside this exact creation transaction');
     }
-    const header = (await tx.query(storeInsertGroup.sql, [command.partition, original, owner.epoch])).rows[0];
-    if (!header) throw unavailable();
+    const publishedEpoch = 1;
+    const generation = crypto.randomUUID();
     await tx.query(storeInsertMapping.sql, [
       originalRoute,
       original,
       owner.epoch,
       source.recorded_transaction_id,
       command.partition,
-      header.published_epoch,
+      publishedEpoch,
     ]);
-    await tx.query(storeInsertHomeGate.sql, [
-      originalRoute,
+    await tx.query(storeInsertHomeGate.sql, [originalRoute, original, publishedEpoch, source.recorded_transaction_id]);
+    await tx.query(storeInsertOriginal.sql, [command.partition, generation, original]);
+    // Install the header after its exact native self evidence is visible to the basis trigger.
+    const header = await tx.query(storeInsertGroup.sql, [
+      command.partition,
       original,
-      header.published_epoch,
-      source.recorded_transaction_id,
+      generation,
+      owner.epoch,
+      publishedEpoch,
     ]);
-    await tx.query(storeInsertOriginal.sql, [command.partition, header.generation, original]);
+    if (header.rowCount !== 1) throw unavailable();
     await tx.query(storeUpdateDirty.sql, [originalRoute, original]);
     cmd().registerCommandCallback(tx, async (transactionId) => {
       if (transactionId !== source.recorded_transaction_id)
