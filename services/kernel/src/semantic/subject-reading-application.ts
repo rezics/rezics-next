@@ -51,7 +51,7 @@ import {
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readSourceRecords } from './source-records.ts';
-import { waitForSubjectLinks } from './link-freshness.ts';
+import { linksCaughtUp, subjectLinksCovered, subjectLinkWaitDeadline } from './link-freshness.ts';
 import readSubjectIdentity from './read-subject-identity.sql';
 import readSubjectStatement from './read-subject.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
@@ -1057,30 +1057,77 @@ async function readSubjectNative(
           : summaries.prepareAuthorization
             ? summaries.prepareAuthorization()
             : Promise.resolve(authorize);
+      if (!summaries.readAs) await refreshStatementReaderAuthorization();
       const initialAuthorize = await prepare();
-      const preflight = await withReadTransaction(pool, async (client) => {
-        const identity = await readSubjectIdentity.run(client, {
-          route,
-          subject_id: subjectId,
-          partition_no: partitionOf(route),
-        });
-        if (!identity || identity.visibility !== 'visible' || !(await initialAuthorize(client))) return null;
-        if (identity.redirect && identity.redirect !== terminal)
-          throw new SubjectRedirectError(subjectId, identity.redirect);
-        return {
-          component: { partition: identity.partitionNo, epoch: identity.epoch, position: BigInt(identity.position) },
-          revision: identity.revision,
-          securityRevision: BigInt(identity.securityRevision),
-        };
-      });
+      const preflight = await withReadTransaction(
+        pool,
+        async (client) => {
+          const identity = await readSubjectIdentity.run(client, {
+            route,
+            subject_id: subjectId,
+            partition_no: partitionOf(route),
+          });
+          if (!identity || identity.visibility !== 'visible' || !(await initialAuthorize(client))) return null;
+          if (identity.redirect && identity.redirect !== terminal)
+            throw new SubjectRedirectError(subjectId, identity.redirect);
+          const component = {
+            partition: identity.partitionNo,
+            epoch: identity.epoch,
+            position: BigInt(identity.position),
+          };
+          const securityRevision = BigInt(identity.securityRevision);
+          const waitUntil = subjectLinkWaitDeadline(deadline);
+          let reason: SubjectLinkWaitReason = 'checkpoint-deadline';
+          let covered: boolean;
+          try {
+            covered = await withReadTransaction(
+              pool,
+              (bounded) =>
+                subjectLinksCovered(
+                  bounded,
+                  summaries.seen ?? [],
+                  subjectId,
+                  summaries.observeMissingCheckpoint,
+                  component,
+                  (observed) => {
+                    reason = observed;
+                  },
+                ),
+              waitUntil,
+            );
+          } catch (error) {
+            if (!(error instanceof AccessUnavailableError && error.reason === 'deadline')) throw error;
+            requireAccessDeadline(deadline);
+            throw new SubjectProjectionPreparingError(terminal ? 'merged-member' : 'subject', 'initial', reason);
+          }
+          // Identity, permission, coverage and body all belong to this one native snapshot.
+          if (covered) {
+            const snapshot = await readCurrentOn(
+              client,
+              initialAuthorize,
+              identity.revision,
+              securityRevision,
+              component,
+            );
+            if (!snapshot?.freshnessRetry) return { covered: true as const, snapshot };
+          }
+          return { covered: false as const, component, revision: identity.revision, securityRevision, waitUntil };
+        },
+        deadline,
+      );
       if (!preflight) return null;
-      const requireProjection = async (component: SubjectComponent, stage: 'initial' | 'revision-recheck') => {
+      if (preflight.covered) return preflight.snapshot;
+      const requireProjection = async (
+        component: SubjectComponent,
+        stage: 'initial' | 'revision-recheck',
+        waitUntil = subjectLinkWaitDeadline(deadline),
+      ) => {
         let reason: SubjectLinkWaitReason = 'deadline';
-        const ready = await waitForSubjectLinks(
+        const ready = await linksCaughtUp(
           pool,
           summaries.seen ?? [],
           subjectId,
-          deadline,
+          waitUntil,
           [],
           summaries.yieldAdmission,
           (observed) => {
@@ -1092,175 +1139,189 @@ async function readSubjectNative(
         requireAccessDeadline(deadline);
         if (!ready) throw new SubjectProjectionPreparingError(terminal ? 'merged-member' : 'subject', stage, reason);
       };
-      await requireProjection(preflight.component, 'initial');
+      await requireProjection(preflight.component, 'initial', preflight.waitUntil);
       await refreshStatementReaderAuthorization();
       let check = await prepare();
       let expectedRevision = preflight.revision;
       let expectedSecurityRevision = preflight.securityRevision;
-      const readCurrent = () =>
-        withReadTransaction(pool, async (client) => {
-          const partition = await readPartition(client, partitionOf(route));
-          if (!partition) return null;
-          const rows = listed(
-            (await readSubjectStatement.run(client, { route, subject_id: subjectId })) as
-              | SubjectReadRow[]
-              | SubjectReadRow
-              | null,
+      async function readCurrentOn(
+        client: PoolClient,
+        check: (client: PoolClient) => Promise<boolean>,
+        expectedRevision: number | null,
+        expectedSecurityRevision: bigint,
+        coveredComponent?: SubjectComponent,
+      ) {
+        const partition = coveredComponent ? undefined : await readPartition(client, partitionOf(route));
+        const component =
+          coveredComponent ??
+          (partition && { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position });
+        if (!component) return null;
+        const rows = listed(
+          (await readSubjectStatement.run(client, { route, subject_id: subjectId })) as
+            | SubjectReadRow[]
+            | SubjectReadRow
+            | null,
+        );
+        if (!rows.length) {
+          return null;
+        }
+        const allowed = coveredComponent !== undefined || (await check(client));
+        if (!allowed) return null;
+        if (rows[0]!.redirect && rows[0]!.redirect !== terminal)
+          throw new SubjectRedirectError(subjectId, rows[0]!.redirect);
+        const securityRevision = BigInt(rows[0]!.security_revision);
+        if (rows[0]!.revision !== expectedRevision || securityRevision !== expectedSecurityRevision)
+          return {
+            freshnessRetry: true as const,
+            component,
+            revision: rows[0]!.revision,
+            securityRevision,
+          };
+        const stored = await ports.readRelease(client, rows[0]!.release);
+        if (!stored) throw new Error('Subject revision release is missing');
+        // The Context's own relation types show with the subject's release; reads never register the digest.
+        const layer = await ports.layerRelease(client, { digest: rows[0]!.release, release: stored }, context);
+        const release = layer.release;
+        let statementFacts: FactRow[] = [];
+        const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
+        const relationCounts: Record<string, number> = {};
+        if (allowed) {
+          const properties = release.types[rows[0]!.type]!.properties;
+          const relations = properties.filter((property) => isRelationProperty(release, property));
+          const scalarViews = await propertySlotViews(
+            client,
+            subjectId,
+            properties.filter((property) => !isRelationProperty(release, property)),
+            context,
+            defaults,
           );
-          if (!rows.length) {
-            return null;
-          }
-          const allowed = await check(client);
-          if (!allowed) return null;
-          if (rows[0]!.redirect && rows[0]!.redirect !== terminal)
-            throw new SubjectRedirectError(subjectId, rows[0]!.redirect);
-          const securityRevision = BigInt(rows[0]!.security_revision);
-          if (rows[0]!.revision !== expectedRevision || securityRevision !== expectedSecurityRevision)
-            return {
-              freshnessRetry: true as const,
-              component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-              revision: rows[0]!.revision,
-              securityRevision,
-            };
-          const stored = await ports.readRelease(client, rows[0]!.release);
-          if (!stored) throw new Error('Subject revision release is missing');
-          // The Context's own relation types show with the subject's release; reads never register the digest.
-          const layer = await ports.layerRelease(client, { digest: rows[0]!.release, release: stored }, context);
-          const release = layer.release;
-          let statementFacts: FactRow[] = [];
-          const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
-          const relationCounts: Record<string, number> = {};
-          if (allowed) {
-            const properties = release.types[rows[0]!.type]!.properties;
-            const relations = properties.filter((property) => isRelationProperty(release, property));
-            const scalarViews = await propertySlotViews(
-              client,
-              subjectId,
-              properties.filter((property) => !isRelationProperty(release, property)),
-              context,
-              defaults,
-            );
-            const globalRows = relations.length
-              ? await globalLinkPreviews.run(client, {
-                  route,
-                  subject_id: subjectId,
-                  properties: relations,
-                  page_limit: context === GLOBAL_SUBJECT_CONTEXT ? 13 : 12,
-                })
-              : [];
-            const globalPages = Map.groupBy(globalRows, (entry) => entry.property);
-            for (const property of properties) {
-              const view = scalarViews.get(property);
-              if (view) {
-                statementFacts.push(...view.facts);
+          const globalRows = relations.length
+            ? await globalLinkPreviews.run(client, {
+                route,
+                subject_id: subjectId,
+                properties: relations,
+                page_limit: context === GLOBAL_SUBJECT_CONTEXT ? 13 : 12,
+              })
+            : [];
+          const globalPages = Map.groupBy(globalRows, (entry) => entry.property);
+          for (const property of properties) {
+            const view = scalarViews.get(property);
+            if (view) {
+              statementFacts.push(...view.facts);
+              if (view.resolution) resolution[property] = view.resolution;
+              continue;
+            }
+            const globalPreview = globalPages.get(property) ?? [];
+            const preview =
+              context === GLOBAL_SUBJECT_CONTEXT
+                ? globalPreview
+                : ((await listOutboundLinks.run(client, {
+                    context_id: context,
+                    route,
+                    subject_id: subjectId,
+                    property,
+                    filter_value: NIL_UUID,
+                    after_order: '',
+                    after_target: NIL_UUID,
+                    after_statement: NIL_UUID,
+                    page_limit: 13,
+                  })) as {
+                    slot: string;
+                    statement: string;
+                    target: string | null;
+                    external: string | null;
+                    value: 'value' | 'somevalue' | 'novalue';
+                    order_key: string;
+                  }[]);
+            // Resolution describes omitted Global slots too. Keep that diagnostic at
+            // the same bounded Global preview it used before Context projection rows.
+            if (context !== GLOBAL_SUBJECT_CONTEXT) {
+              for (const entry of globalPreview) {
+                const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
                 if (view.resolution) resolution[property] = view.resolution;
-                continue;
               }
-              const globalPreview = globalPages.get(property) ?? [];
-              const preview =
-                context === GLOBAL_SUBJECT_CONTEXT
-                  ? globalPreview
-                  : ((await listOutboundLinks.run(client, {
-                      context_id: context,
-                      route,
-                      subject_id: subjectId,
-                      property,
-                      filter_value: NIL_UUID,
-                      after_order: '',
-                      after_target: NIL_UUID,
-                      after_statement: NIL_UUID,
-                      page_limit: 13,
-                    })) as {
-                      slot: string;
-                      statement: string;
-                      target: string | null;
-                      external: string | null;
-                      value: 'value' | 'somevalue' | 'novalue';
-                      order_key: string;
-                    }[]);
-              // Resolution describes omitted Global slots too. Keep that diagnostic at
-              // the same bounded Global preview it used before Context projection rows.
-              if (context !== GLOBAL_SUBJECT_CONTEXT) {
-                for (const entry of globalPreview) {
-                  const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
-                  if (view.resolution) resolution[property] = view.resolution;
-                }
-              }
-              const privatePage = await privateLinks(client, { subject: subjectId, property, limit: 13 });
-              const privatePreview = privatePage.entries.map((row) => ({
-                slot: row.slot_id,
-                statement: row.candidate_id,
-                target: row.target_id,
-                external: null,
-                value: 'value' as const,
-                order_key: row.order_key,
-              }));
-              const combined = [...preview, ...privatePreview].sort((a, b) =>
-                a.order_key < b.order_key
-                  ? -1
-                  : a.order_key > b.order_key
-                    ? 1
-                    : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
-                      ? -1
-                      : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
-                        ? 1
-                        : a.statement.localeCompare(b.statement),
+            }
+            const privatePage = await privateLinks(client, { subject: subjectId, property, limit: 13 });
+            const privatePreview = privatePage.entries.map((row) => ({
+              slot: row.slot_id,
+              statement: row.candidate_id,
+              target: row.target_id,
+              external: null,
+              value: 'value' as const,
+              order_key: row.order_key,
+            }));
+            const combined = [...preview, ...privatePreview].sort((a, b) =>
+              a.order_key < b.order_key
+                ? -1
+                : a.order_key > b.order_key
+                  ? 1
+                  : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+                    ? -1
+                    : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                      ? 1
+                      : a.statement.localeCompare(b.statement),
+            );
+            const selected = combined.slice(0, 12);
+            const filterProperties = release.properties[property]?.relation?.filter;
+            const current = await currentRelationFacts(
+              client,
+              routeKey,
+              selected.map((entry) => ({
+                subject: subjectId,
+                property,
+                candidate: entry.statement,
+                target: entry.target,
+                external: entry.external,
+                value: entry.value,
+                context,
+                defaults,
+                slot: entry.slot,
+                ...(filterProperties === undefined
+                  ? {}
+                  : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+                requireRelation: true,
+              })),
+            );
+            for (const entry of selected) {
+              const fact = current.get(
+                currentRelationKey({ subject: subjectId, property, candidate: entry.statement }),
               );
-              const selected = combined.slice(0, 12);
-              const filterProperties = release.properties[property]?.relation?.filter;
-              const current = await currentRelationFacts(
-                client,
-                routeKey,
-                selected.map((entry) => ({
-                  subject: subjectId,
-                  property,
-                  candidate: entry.statement,
-                  target: entry.target,
-                  external: entry.external,
-                  value: entry.value,
-                  context,
-                  defaults,
-                  slot: entry.slot,
-                  ...(filterProperties === undefined
-                    ? {}
-                    : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
-                  requireRelation: true,
-                })),
-              );
-              for (const entry of selected) {
-                const fact = current.get(
-                  currentRelationKey({ subject: subjectId, property, candidate: entry.statement }),
-                );
-                if (fact) statementFacts.push(fact);
-                else {
-                  const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
-                  if (view.resolution) resolution[property] = view.resolution;
-                }
+              if (fact) statementFacts.push(fact);
+              else {
+                const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
+                if (view.resolution) resolution[property] = view.resolution;
               }
             }
           }
-          if (!allowed) return null;
-          return {
-            freshnessRetry: false as const,
-            reviewedIdentity:
-              summaries.reviewIdentity && subjectId === id && !terminal
-                ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
-                : null,
-            rows,
-            supported: await supportedFacts(client, routeKey, subjectId, [
-              ...currentTerms(asFacts(rows)),
-              ...statementFacts,
-            ]),
-            members: terminal
-              ? []
-              : (await readSourceMembers.run(client, { route, subject_id: subjectId })).map((row) => row.member_id),
-            release,
-            layerDigest: layer.digest,
-            component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-            resolution,
-            relationCounts,
-          };
-        });
+        }
+        if (!allowed) return null;
+        return {
+          freshnessRetry: false as const,
+          reviewedIdentity:
+            summaries.reviewIdentity && subjectId === id && !terminal
+              ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
+              : null,
+          rows,
+          supported: await supportedFacts(client, routeKey, subjectId, [
+            ...currentTerms(asFacts(rows)),
+            ...statementFacts,
+          ]),
+          members: terminal
+            ? []
+            : (await readSourceMembers.run(client, { route, subject_id: subjectId })).map((row) => row.member_id),
+          release,
+          layerDigest: layer.digest,
+          component,
+          resolution,
+          relationCounts,
+        };
+      }
+      const readCurrent = () =>
+        withReadTransaction(
+          pool,
+          (client) => readCurrentOn(client, check, expectedRevision, expectedSecurityRevision),
+          deadline,
+        );
       let snapshot = await readCurrent();
       while (snapshot?.freshnessRetry) {
         expectedRevision = snapshot.revision;

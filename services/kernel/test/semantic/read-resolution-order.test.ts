@@ -417,6 +417,31 @@ test('authorized Subject GET advances its causal homes while the native relay dr
   }
 }, 10_000);
 
+test('a covered Subject reads its authorized identity, checkpoints, pending merge and detail in one snapshot', async () => {
+  const partition = freshPartition();
+  const book = await createFixed(partition, 'schema:Book', 'Covered Book');
+  await realAccess.grant({ route: book.route, id: book.id }, 'reader', 'subject:read');
+  await catchUpLinks(partition);
+  const observer = observeSql(pool);
+  try {
+    const result = await call('GET', `/v1/subjects/${book.id}`, { token: 'reader' });
+    expect(result.response.status).toBe(200);
+    expect(result.body.subject.id).toBe(book.id);
+    const records = observer.records;
+    const positions = [identitySql, checkpointSql, pendingMemberSql, subjectSql].map((sql) =>
+      records.findIndex(({ statement }) => statement === sql),
+    );
+    expect(positions[0]).toBeGreaterThanOrEqual(0);
+    for (let index = 1; index < positions.length; index++)
+      expect(positions[index]).toBeGreaterThan(positions[index - 1]!);
+    const span = records.slice(positions[0], positions.at(-1)! + 1);
+    expect(new Set(span.map(({ connectionId }) => connectionId)).size).toBe(1);
+    expect(span.some(({ statement }) => /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(statement))).toBe(false);
+  } finally {
+    await observer.close();
+  }
+});
+
 test('Subject GET sees the applied relation while the link checkpoint trails its own completion events', async () => {
   const partition = freshPartition();
   const author = await createFixed(partition, 'schema:Person', 'Projected author');
