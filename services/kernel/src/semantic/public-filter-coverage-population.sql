@@ -22,15 +22,38 @@ binding AS MATERIALIZED (
     e.execution,e.consumer_window,st.id AS start_id,st.start_generation,st.deadline AS start_deadline,
     pg.id AS page_id,pg.state AS page_state,pg.rounds AS page_rounds,pg.boundary,pg.boundary_consumed,pg.boundary_window,
     pg.charged AS page_charged,pg.ceiling AS page_ceiling,pg.tail AS page_tail,pg.tail_consumed
-  FROM input i JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,i.observation)
-  JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-  JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
-  JOIN semantic.public_filter_bootstrap b ON b.partition_no=0 AND b.bootstrap=
-    CASE WHEN o.consumer_bootstrap ~ '^0:[0-9a-f-]{36}$' THEN substr(o.consumer_bootstrap,3)::uuid END
-  JOIN semantic.public_filter_read_definition d ON (d.partition_no,d.read_definition)=(b.partition_no,b.read_definition)
-  JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration)=
-    (d.partition_no,d.source_id,d.configuration)
-  JOIN core.partition p ON p.partition_no=s.partition_no AND p.epoch=s.owner_epoch AND p.write_state='active'
+  -- Each observation names one row at every hop. Resolve those primary keys before evaluating
+  -- the independent publication, lease and window witnesses on a fresh backend.
+  FROM input i
+  JOIN LATERAL (
+    SELECT o.* FROM search.public_filter_observation o
+    WHERE (o.partition_no,o.observation)=(0,i.observation) LIMIT 1
+  ) o ON true
+  JOIN LATERAL (
+    SELECT r.* FROM search.public_filter_registration r
+    WHERE (r.partition_no,r.id)=(o.partition_no,o.registration) LIMIT 1
+  ) r ON true
+  JOIN LATERAL (
+    SELECT t.* FROM search.public_filter_target t
+    WHERE (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target) LIMIT 1
+  ) t ON true
+  JOIN LATERAL (
+    SELECT b.* FROM semantic.public_filter_bootstrap b
+    WHERE b.partition_no=0 AND b.bootstrap=
+      CASE WHEN o.consumer_bootstrap ~ '^0:[0-9a-f-]{36}$' THEN substr(o.consumer_bootstrap,3)::uuid END LIMIT 1
+  ) b ON true
+  JOIN LATERAL (
+    SELECT d.* FROM semantic.public_filter_read_definition d
+    WHERE (d.partition_no,d.read_definition)=(b.partition_no,b.read_definition) LIMIT 1
+  ) d ON true
+  JOIN LATERAL (
+    SELECT s.* FROM semantic.public_filter_source s
+    WHERE (s.partition_no,s.source_id,s.configuration)=(d.partition_no,d.source_id,d.configuration) LIMIT 1
+  ) s ON true
+  JOIN LATERAL (
+    SELECT p.* FROM core.partition p
+    WHERE p.partition_no=s.partition_no AND p.epoch=s.owner_epoch AND p.write_state='active' LIMIT 1
+  ) p ON true
   LEFT JOIN LATERAL (
     /* semantic.attached-coverage */
     SELECT proof.* FROM semantic.public_filter_published_coverage(
@@ -44,16 +67,27 @@ binding AS MATERIALIZED (
       (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))
     LIMIT 1
   ) c ON true
-  JOIN search.public_filter_coverage_baseline last_home ON
-    (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=
-    (c.partition_no,c.registration,c.bootstrap,4095) AND last_home.root=c.root
-  LEFT JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=
-    (o.partition_no,o.observation,i.execution_id)
-  LEFT JOIN semantic.public_filter_population_start st ON st.partition_no=o.partition_no AND st.id=i.start_id
-  LEFT JOIN search.public_filter_coverage_page pg ON (pg.partition_no,pg.id)=
-    (o.partition_no,coalesce(i.page_id,e.page_id))
-  LEFT JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=
-    (pg.partition_no,pg.observation,pg.reference_token) AND f.expires_at>i.now
+  JOIN LATERAL (
+    SELECT last_home.* FROM search.public_filter_coverage_baseline last_home
+    WHERE (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=
+      (c.partition_no,c.registration,c.bootstrap,4095) AND last_home.root=c.root LIMIT 1
+  ) last_home ON true
+  LEFT JOIN LATERAL (
+    SELECT e.* FROM search.public_filter_execution e
+    WHERE (e.partition_no,e.observation,e.id)=(o.partition_no,o.observation,i.execution_id) LIMIT 1
+  ) e ON true
+  LEFT JOIN LATERAL (
+    SELECT st.* FROM semantic.public_filter_population_start st
+    WHERE st.partition_no=o.partition_no AND st.id=i.start_id LIMIT 1
+  ) st ON true
+  LEFT JOIN LATERAL (
+    SELECT pg.* FROM search.public_filter_coverage_page pg
+    WHERE (pg.partition_no,pg.id)=(o.partition_no,coalesce(i.page_id,e.page_id)) LIMIT 1
+  ) pg ON true
+  LEFT JOIN LATERAL (
+    SELECT f.* FROM search.public_filter_reference f
+    WHERE (f.partition_no,f.observation,f.token)=(pg.partition_no,pg.observation,pg.reference_token) AND f.expires_at>i.now LIMIT 1
+  ) f ON true
   WHERE ((SELECT plans FROM width)=1 OR (pg.id IS NOT NULL AND pg.deadline=i.deadline AND pg.deadline>i.now
       AND b.snapshot_kind='pit' AND b.coverage_publication IS NOT NULL
       AND semantic.public_filter_native_json(d.capture::jsonb)->'bookTypeList'='true'::jsonb))
@@ -266,7 +300,9 @@ binding AS MATERIALIZED (
       (SELECT count(*)::integer FROM subject_control) AS own_subjects,
       (SELECT count(*)::integer FROM subject_control WHERE b.book_withdrawals IS NOT NULL AND position>source_position) AS own_births
   ) checks WHERE EXISTS (SELECT 1 FROM population)
-), inserted AS (
+)
+/* semantic.end-own-window */
+, inserted AS (
   INSERT INTO semantic.public_filter_population_start
     (partition_no,id,registration,observation,bootstrap,read_definition,consumer,
      covered_generation,start_generation,owner_epoch,deadline)

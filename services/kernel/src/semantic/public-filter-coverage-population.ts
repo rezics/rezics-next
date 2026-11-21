@@ -36,6 +36,22 @@ const discoveryStatement = statement.replace(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'`,
 );
+// A START has no execution or retained children. Its current population checks and
+// original durable enrollment still run together in the same statement.
+function populationRoles(statement: string) {
+  const start = statement.replace(
+    /\/\* semantic\.own-window \*\/[\s\S]*?\/\* semantic\.end-own-window \*\//,
+    `, checked AS MATERIALIZED (
+       SELECT b.*,NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
+         AND NOT EXISTS(SELECT 1 FROM heads) AS admitted,'[]'::jsonb AS page_children,
+         0 AS own_homes,0 AS own_subjects,0 AS own_births
+       FROM binding b WHERE b.execution_id IS NULL AND EXISTS(SELECT 1 FROM population)
+     )`,
+  );
+  return { start, final: statement };
+}
+const subjectRoles = populationRoles(statement);
+const discoveryRoles = populationRoles(discoveryStatement);
 // A sealed publication owns its coverage. The bootstrap constraint excludes a
 // serving attachment when publication_job is set, and prepared cuts have no
 // PIT withdrawals or own window. Keep the common binding and current probes.
@@ -515,9 +531,10 @@ async function readPopulations(
     // The publication seal binds one prepared execution with no page or window.
     // validBindings still decodes it and demands the exact start and empty own rows.
     const discovery = /discovery-g[1-9][0-9]*$/.test(members[0]!.physical_target);
-    const sql = (publication ? publicationStatement : discovery ? discoveryStatement : statement).replace(
+    const role = final ? 'final' : 'start';
+    const sql = (publication ? publicationStatement : (discovery ? discoveryRoles : subjectRoles)[role]).replace(
       'semantic.privacy-role',
-      final ? 'semantic.privacy-final' : 'semantic.privacy-start',
+      `semantic.privacy-${role}`,
     );
     const values = [
       JSON.stringify(members),
@@ -540,8 +557,8 @@ async function readPopulations(
           // the current clock, observation and native start or final witnesses at a fresh snapshot.
           const query = {
             name: publication
-              ? 'semantic_privacy_publication_final_v2'
-              : `semantic_privacy_${discovery ? 'discovery' : 'subjects'}_${final ? 'final' : 'start'}_v2`,
+              ? 'semantic_privacy_publication_final_v3'
+              : `semantic_privacy_${discovery ? 'discovery' : 'subjects'}_${role}_v3`,
             text: sql,
             values,
             query_timeout: Math.max(1, deadline - Date.now()),
