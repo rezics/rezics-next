@@ -412,6 +412,7 @@
       ],
       "publicEntries": [
         "services/kernel/src/economy/ledger.ts",
+        "services/kernel/src/economy/storage/commerce-evidence.ts",
         "services/kernel/src/economy/storage/funding-store.ts",
         "services/kernel/src/economy/storage/funding-ledger.ts",
         "services/kernel/src/economy/storage/funding-test-rail.ts",
@@ -433,6 +434,7 @@
       "publicEntries": [
         "services/kernel/src/commerce/catalogue.ts",
         "services/kernel/src/commerce/config.ts",
+        "services/kernel/src/commerce/financial-evidence.ts",
         "services/kernel/src/commerce/work-module.ts"
       ],
       "allowedDependencies": [

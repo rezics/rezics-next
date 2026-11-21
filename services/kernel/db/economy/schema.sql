@@ -208,6 +208,40 @@ CREATE TABLE economy.command_receipt (
 
 
 --
+-- Name: commerce_evidence_receipt; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.commerce_evidence_receipt (
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    movement_id text NOT NULL,
+    book_id text NOT NULL,
+    order_id uuid NOT NULL,
+    creator_id uuid NOT NULL,
+    offer_id uuid NOT NULL,
+    statement_id uuid NOT NULL,
+    source_id text NOT NULL,
+    movement_kind text NOT NULL,
+    currency text NOT NULL,
+    unit jsonb NOT NULL,
+    amount_minor bigint NOT NULL,
+    fee_minor bigint NOT NULL,
+    net_minor bigint NOT NULL,
+    economic_digest text NOT NULL,
+    registered_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT commerce_evidence_receipt_book_id_check CHECK ((book_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'::text)),
+    CONSTRAINT commerce_evidence_receipt_check CHECK (((net_minor)::numeric = ((amount_minor)::numeric - (fee_minor)::numeric))),
+    CONSTRAINT commerce_evidence_receipt_currency_check CHECK ((currency ~ '^[a-z]{3}$'::text)),
+    CONSTRAINT commerce_evidence_receipt_economic_digest_check CHECK ((economic_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT commerce_evidence_receipt_movement_id_check CHECK ((movement_id ~ '^txn_[A-Za-z0-9]{1,250}$'::text)),
+    CONSTRAINT commerce_evidence_receipt_movement_kind_check CHECK ((movement_kind = ANY (ARRAY['charge'::text, 'refund'::text, 'refund_reversal'::text, 'dispute'::text, 'dispute_reversal'::text]))),
+    CONSTRAINT commerce_evidence_receipt_provider_mode_check CHECK ((provider_mode = 'test'::text)),
+    CONSTRAINT commerce_evidence_receipt_provider_namespace_check CHECK ((provider_namespace ~ '^[A-Za-z0-9_-]{1,64}$'::text)),
+    CONSTRAINT commerce_evidence_receipt_source_id_check CHECK (((char_length(source_id) >= 1) AND (char_length(source_id) <= 255)))
+);
+
+
+--
 -- Name: creator_payout; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -895,6 +929,14 @@ ALTER TABLE ONLY economy.command_receipt
 
 
 --
+-- Name: commerce_evidence_receipt commerce_evidence_receipt_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.commerce_evidence_receipt
+    ADD CONSTRAINT commerce_evidence_receipt_pkey PRIMARY KEY (provider_namespace, provider_mode, movement_id);
+
+
+--
 -- Name: creator_payout creator_payout_book_id_asset_id_reserve_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1275,6 +1317,13 @@ CREATE INDEX hold_due_idx ON economy.hold USING btree (book_id, expires_at, asse
 
 
 --
+-- Name: market_listing_open_expiry_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_listing_open_expiry_idx ON economy.market_listing USING btree (book_id, item_home_id, (((payload #>> '{expiresAt,$marketInteger}'::text[]))::bigint), listing_id) WHERE ((payload ->> 'status'::text) = 'open'::text);
+
+
+--
 -- Name: market_one_active_item_listing; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -1401,6 +1450,13 @@ CREATE UNIQUE INDEX spot_one_matching_order ON economy.spot_order USING btree (b
 
 
 --
+-- Name: spot_order_owner_sequence; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_order_owner_sequence ON economy.spot_order USING btree (book_id, account_id, instrument_id, sequence DESC);
+
+
+--
 -- Name: asset asset_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -1426,6 +1482,13 @@ CREATE TRIGGER asset_program_immutable BEFORE DELETE OR UPDATE ON economy.asset_
 --
 
 CREATE TRIGGER asset_program_source_immutable BEFORE DELETE OR UPDATE ON economy.asset_program_source FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: commerce_evidence_receipt commerce_evidence_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER commerce_evidence_immutable BEFORE DELETE OR UPDATE ON economy.commerce_evidence_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --

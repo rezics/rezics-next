@@ -32,11 +32,14 @@ const wallets = '/v1/economy/wallets';
 const wallet = `${wallets}/${assetId}`;
 const statement = `${wallet}/statement?limit=1`;
 const publicWallet = `${wallets}/{assetId}`;
-const spot = '/v1/economy/spot/pair';
-const spotFills = `${spot}/orders/order-id/fills`;
+const spotInstruments = '/v1/economy/spot';
+const spot = `${spotInstruments}/pair`;
+const spotOrders = `${spot}/orders`;
+const spotFills = `${spotOrders}/order-id/fills`;
+const marketListings = '/v1/economy/market/listings';
 const marketTrades = '/v1/economy/market/trades';
 const market = `${marketTrades}/${'a'.repeat(64)}`;
-const unboundEconomyReads = [spot, spotFills, marketTrades, market];
+const unboundEconomyReads = [spotInstruments, spot, spotOrders, spotFills, marketListings, marketTrades, market];
 const authName = `economy_auth_${crypto.randomUUID().replaceAll('-', '')}`;
 
 let database: Awaited<ReturnType<typeof openIsolatedEconomyDatabase>>;
@@ -183,13 +186,18 @@ async function economyDiscovery(bearer: string | undefined, visible: boolean) {
       [wallets, readScope],
       [publicWallet, readScope],
       [`${publicWallet}/statement`, readScope],
+      [spotInstruments, 'spot:read'],
       ['/v1/economy/spot/{instrumentId}', 'spot:read'],
+      ['/v1/economy/spot/{instrumentId}/orders', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/trades', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills', 'spot:read'],
+      [marketListings, 'market:read'],
       [marketTrades, 'market:read'],
       [`${marketTrades}/{tradeId}`, 'market:read'],
     ] as const)
       expect(paths[path]).toMatchObject({ get: { 'x-exposure': gate, 'x-action': action } });
+    for (const path of [marketListings, '/v1/economy/spot/{instrumentId}/orders'])
+      expect(paths[path]).not.toHaveProperty('post');
   } else {
     expect(Object.keys(paths).some((path) => path.startsWith('/v1/economy/'))).toBe(false);
   }
