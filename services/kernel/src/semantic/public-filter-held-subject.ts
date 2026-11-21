@@ -202,7 +202,7 @@ async function produce(
       eventCount: null,
     }));
     let windows = evidence.windows.filter((w) => w.base !== w.through);
-    if (windows.length > 1) {
+    if (windows.length) {
       const quiet = await quietWindowCommands(db, windows);
       if (quiet.size) {
         evidence.quiet = [...quiet];

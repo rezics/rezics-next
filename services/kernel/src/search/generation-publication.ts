@@ -787,7 +787,7 @@ export function createSearchGenerationPublication(
          AND NOT c.ack_retired AND (b.coverage_after,b.coverage_root)=(c.after_home,c.root)
          AND b.coverage_after>0 AND ($3::boolean OR b.coverage_after=(SELECT end_home FROM semantic.subject_access_page_v1
            WHERE birth=m.birth ORDER BY first_home DESC LIMIT 1))
-         AND (b.coverage_after<4096 OR (s.next_home<4096 AND s.next_ordinal=0))`,
+         AND (b.coverage_after<4096 OR s.next_home<4096)`,
       [ref.job, ref.consumer, lane === 'source'],
     );
     if (

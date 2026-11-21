@@ -178,8 +178,9 @@ writer holds the Source cursor. Adjacent Core and Access pages commit together b
 Each receiver page commits before Source accepts it. Acceptance and adoption of the following page
 can share a transaction. Source inventories committed intervals together, compares occupied homes
 through the ordinary writer, then reopens each page to advance the ordered prefix and save finite ends.
-A window can close unrelated singleton commands across homes with their original event and write-basis
-evidence. Other groups continue through the saved event cursor.
+A window can close unrelated singleton commands in one or more homes with their original event and write-basis
+evidence. Other groups continue through the saved event cursor. After the receiver seals, the Source lane
+can finish any retained inventory or event ordinal against that same committed page.
 
 After the original inventory and creation bridge finish, the first engine traversal uses the original command
 position for untouched homes. A changed position still requires the existing writer comparison. Search compares

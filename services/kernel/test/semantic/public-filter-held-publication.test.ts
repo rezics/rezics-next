@@ -137,8 +137,8 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
     const prepared = await publication.prepare(registration.consumer, context());
     if (prepared.status !== 'preparing') throw new Error(prepared.reason);
     const step = () => publication.step(prepared.job, context(), { enrollSource: true });
-    const { birth } = (
-      await pool.query('SELECT birth FROM core.subject_subscription_v1 WHERE job=$1', [prepared.job.job])
+    const { birth, bootstrap: preparedBootstrap } = (
+      await pool.query('SELECT birth,bootstrap FROM core.subject_subscription_v1 WHERE job=$1', [prepared.job.job])
     ).rows[0];
 
     if (verifyCompactWindow) {
@@ -427,6 +427,39 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       { first_home: 100, ordinal: 0, complete: true, windows: 32 },
       { first_home: 132, ordinal: 0, complete: true, windows: 32 },
     ]);
+    // Finish the receiver while Source is behind, then move two captured pages.
+    const lane = (heldLane: 'capture' | 'source', heldOffers: number) =>
+      publication.step(prepared.job, context(), { enrollSource: true, batchSource: true, heldLane, heldOffers });
+    const sealed = async () =>
+      (
+        await pool.query('SELECT coverage_sealed FROM semantic.public_filter_bootstrap WHERE bootstrap=$1', [
+          preparedBootstrap,
+        ])
+      ).rows[0].coverage_sealed;
+    while (!(await sealed())) expect(await lane('capture', 16)).toMatchObject({ status: 'progress' });
+    const withdrawn = await book(170);
+    await f.post('/v1/subjects/' + withdrawn + ':hide', { reason: 'Withdrawn after receiver seal' });
+    await writer.write(170, [withdrawn], await position(170));
+    await search.request('POST', '/' + target + '/_refresh');
+    await quietCommand(199);
+
+    expect(await lane('source', 5)).toMatchObject({ status: 'progress' });
+    expect(await frontier()).toEqual({ next_home: 164, next_ordinal: 2 });
+    // The retained create/withdrawal group still needs its ordinary writer at ordinal two.
+    expect(await lane('source', 5)).toMatchObject({ status: 'progress' });
+    expect(await frontier()).toEqual({ next_home: 196, next_ordinal: 0 });
+    expect(await lane('source', 5)).toMatchObject({ status: 'progress' });
+    const moved = await pool.query(
+      `SELECT first_home,ordinal,evidence FROM semantic.subject_source_step_v1
+       WHERE birth=$1 AND first_home IN (164,196) ORDER BY first_home,ordinal`,
+      [birth],
+    );
+    const events = moved.rows.find((row) => row.first_home === 164 && row.ordinal === 2)!.evidence;
+    expect(events.obligations.flatMap((row: { ids: string[] }) => row.ids)).toEqual([withdrawn]);
+    const singleton = moved.rows.filter((row) => row.first_home === 196).map((row) => row.evidence);
+    expect(singleton).toHaveLength(2);
+    expect(singleton[1]).toMatchObject({ complete: true, phase: 'window', obligations: [] });
+    expect(singleton[1].evidence.quiet.map(([home]: [number]) => home)).toEqual([199]);
     const { body } = await search.request<{ hits: { hits: { _id: string }[] } }>('POST', '/' + target + '/_search', {
       query: { match_all: {} },
     });
