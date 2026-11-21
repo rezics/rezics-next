@@ -14,11 +14,18 @@ API responses, private receipts and mutations use the same decision. Recheck aut
 owner workflows authenticate their source and complete only named, previously admitted obligations. Use test assets and
 deterministic provider adapters for development. The deployed system starts closed and real-money execution requires a
 separately authorized instrument, provider and operating policy.
+
+Grant `gate:economy` directly to the active account on the Global Context through the existing access controls. Register
+only the required client actions with Auth. Wallet access uses `wallet:read` and `wallet:transfer`. Spot uses
+`spot:read`, `spot:place` and `spot:cancel`. The fixed-price market uses `market:read`, `market:list`, `market:buy`
+and `market:cancel`.
+
 `KERNEL_ECONOMY_BOOK_ID` selects the installed book and `KERNEL_ECONOMY_NODE` selects the local native owner. Both
-settings are required to bind the wallet adapter. Wallet requests lock current account and direct grant evidence from
-the active local owner in the ledger transaction before loading a wallet fact or receipt. The source and recipient of a
-transfer both require that evidence. Provision assets and balances through trusted owner operations in the configured
-test environment.
+settings are required to bind the wallet and spot adapters. Fixed-price market requests also require
+`KERNEL_ECONOMY_MARKET_ITEM_HOME_ID`, `KERNEL_ECONOMY_MARKET_FEE_ACCOUNT_ID`, `KERNEL_ECONOMY_MARKET_FEE_BPS`
+and `KERNEL_ECONOMY_MARKET_POLICY_VERSION`. Native requests lock the current account and direct grant in the same
+transaction as protected reads and writes. Both sides of a wallet transfer and of a new market purchase require the
+current grant. Provision assets and balances through trusted owner operations in the configured test environment.
 
 ## Book and wallet
 
@@ -70,6 +77,18 @@ funds to seller and fee accounts. Same-book fungible delivery can settle as a ba
 Matching follows price-time priority with stable fill identities and protected allocations for partial fills. A bounded
 step can resume before crossing subsequent instructions. A canceled order frees only its unallocated remainder.
 Public price and volume derive from completed settlements and remain behind Economy admission.
+
+## Book reconciliation and restore
+
+A native audit reconstructs journal totals, positions, holds, reserved creator payables and pending deposits on one
+read-only repeatable-read snapshot. Treat absent books, page-limited scans and mismatches as separate outcomes. An
+incomplete audit returns diagnostic findings and a snapshot identity. External clearing reconciliation still uses
+independently verified provider statements and watermarks.
+
+Run `bun services/kernel/scripts/economy-book-restore.ts` to exercise a PostgreSQL custom dump and restore in disposable
+databases. The exercise restores an uncertain synthetic withdrawal and an escrowed fixed-price trade. It fences the
+source before resuming the previously accepted operations, then verifies the original withdrawal identity, item
+delivery, seller proceeds and fee posting.
 
 The [engine and implementation research](research/economy-system-design-codex.md) records the alternatives and pinned
 reference source. Engine replacement or deployment separation must preserve the ledger and operating contract.
