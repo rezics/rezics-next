@@ -129,6 +129,29 @@ test('the installed name normalizer recovers after a typed transient breaker res
   }
 });
 
+test('native integer receipts stay exact at both safe-number boundaries', async () => {
+  const index = `test-transport-long-${crypto.randomUUID()}`;
+  await native.request('PUT', `/${index}`, { mappings: { dynamic: false } });
+  try {
+    const response = await fetch(new URL(`/${index}/_doc/bounds`, url), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: '{"high":9007199254740993,"low":-9007199254740993,"safe":9007199254740991,"quoted":"\\"9007199254740993\\""}',
+    });
+    expect(response.status).toBe(201);
+    await response.arrayBuffer();
+    const result = await native.request<{ _source: Record<string, unknown> }>('GET', `/${index}/_doc/bounds`);
+    expect(result.body._source).toEqual({
+      high: '9007199254740993',
+      low: '-9007199254740993',
+      safe: Number.MAX_SAFE_INTEGER,
+      quoted: '"9007199254740993"',
+    });
+  } finally {
+    await native.request('DELETE', `/${index}`);
+  }
+});
+
 test('actual UTF-8 bytes are counted across HTTP chunks, including split multibyte characters and exact boundaries', async () => {
   // Native document data gives the positive payload multibyte content without a fake success engine.
   const index = `test-transport-utf8-${crypto.randomUUID()}`;

@@ -182,11 +182,13 @@ export function createOpenSearch(
     let responseBody: unknown;
     if (responseText) {
       try {
-        // Preserve native long receipts outside JavaScript's integer domain. Match strings first so
-        // digits in text/escaped JSON cannot be rewritten. Existing safe-number contracts are unchanged.
-        const exact = responseText.replace(/"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, (token) =>
-          /^-?\d+$/.test(token) && !Number.isSafeInteger(Number(token)) ? JSON.stringify(token) : token,
-        );
+        // An integer outside the safe range has at least sixteen consecutive digits.
+        // When one is possible, tokenize strings first to preserve quoted and escaped digits.
+        const exact = /\d{16}/.test(responseText)
+          ? responseText.replace(/"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, (token) =>
+              /^-?\d+$/.test(token) && !Number.isSafeInteger(Number(token)) ? JSON.stringify(token) : token,
+            )
+          : responseText;
         responseBody = JSON.parse(exact) as unknown;
       } catch {
         if (response.status < 400) throw new SearchUnavailableError();
