@@ -1613,6 +1613,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 context,
                 plan: capturePlan,
                 ...(capture ? { capture } : {}),
+                ...(runtime && { releaseExhausted: runtime.releaseExhausted }),
                 ...(preparePublic ? { prepare: preparePublic } : {}),
                 ...(retained ? { continuation: retained } : {}),
                 check: checkCandidates,

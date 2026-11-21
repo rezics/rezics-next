@@ -14,7 +14,9 @@ import type { DiscoveryTarget } from './account-discovery.ts';
 import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
+  claimDuePublicClose,
   createPublicPreparationStore,
+  readPublicClose,
   PUBLIC_PREPARATION_BUDGET_MS,
   type PopulationFrontier,
   type PreparationLocator,
@@ -89,8 +91,9 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   const running = new Set<Promise<unknown>>();
   type PublicationPhase = 'prepare' | 'step' | 'activate';
   const unavailable = new Map<PublicationPhase, string>();
-  const failures = new Map<PreparationLocator['kind'], string>();
-  const reportFailure = (kind: PreparationLocator['kind'], error: unknown) => {
+  let recoveringClose = false;
+  const failures = new Map<PreparationLocator['kind'] | 'close', string>();
+  const reportFailure = (kind: PreparationLocator['kind'] | 'close', error: unknown) => {
     const name = error instanceof Error ? error.name : 'Error';
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 1000);
     const state = `${name}:${message}`;
@@ -359,7 +362,29 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       });
     },
     discover(deadline = deadlineFor(30_000)) {
-      return paused || stopped ? Promise.resolve() : track(deadline, () => store.due(deadline));
+      if (paused || stopped) return Promise.resolve();
+      return track(deadline, async () => {
+        await store.due(deadline);
+        if (paused || stopped || recoveringClose) return;
+        // Closing can wait for a live reference. Keep that wait off the generation
+        // discovery turn, but drain the worker-owned task on pause and shutdown.
+        recoveringClose = true;
+        const closeDeadline = Date.now() + PUBLIC_PREPARATION_BUDGET_MS;
+        void track(closeDeadline, async () => {
+          while (!paused && !stopped && Date.now() < closeDeadline) {
+            const receipt = await claimDuePublicClose(options.pool, options.prefix, closeDeadline);
+            if (!receipt) break;
+            const queried = await readPublicClose(options.pool, receipt.locator, closeDeadline);
+            if (queried) await options.runtime.closeRetainedObservation(queried, { deadline: closeDeadline });
+            await receipt.complete();
+            failures.delete('close');
+          }
+        })
+          .catch((error) => reportFailure('close', error))
+          .finally(() => {
+            recoveringClose = false;
+          });
+      });
     },
     async pause() {
       paused = true;

@@ -45,7 +45,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;
-        snapshot: 'pit' | 'prepared';
+        snapshot: 'pit' | 'prepared' | 'bounded-relevance';
     }>, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<BoundPublicRequest>;
     /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
     resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<PublicFilterConsumerOperations>;
@@ -54,6 +54,8 @@ export type DefaultPublicFilterRuntime = Readonly<{
         capture: PublicFilterConsumerCapture;
     }>>;
     repair(job: PublicFilterConsumerJob, context: PublicFilterConsumerContext): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+    releaseExhausted(operations: PublicFilterConsumerOperations, queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, dispose: () => Promise<void>): Promise<void>;
+    closeRetainedObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
     /** Typed currentness and aggregate proofs over retained capture/query/repair. */
     privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
     /** Trusted native facet composition; omitted generation or meaning stays closed. */
@@ -85,6 +87,7 @@ export declare function readPublicSearchPage<T>(options: {
     capture?: PublicFilterConsumerCapture;
     /** Existing durable preparation delivery, when installed by the host. */
     prepare?: (job: PublicFilterConsumerJob) => Promise<void>;
+    releaseExhausted?: DefaultPublicFilterRuntime['releaseExhausted'];
     /** A trusted planner choice. Prepared is the conservative default, not a claim of readiness. */
     snapshot?: 'pit' | 'prepared';
     check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;

@@ -142,6 +142,31 @@ test('host-bound capture is used without recapture or a second root reservation'
   await read.finalize();
 });
 
+test('an exhausted response requires final disclosure and successful ownership of the exact close', async () => {
+  const native = operations();
+  const ctx = context();
+  const attempts: PublicFilterQueriedObservation[] = [];
+  const read = await readPublicSearchPage({
+    operations: native,
+    plan,
+    context: ctx,
+    check,
+    canonicalId: (id) => id,
+    async releaseExhausted(owner, located, frame, dispose) {
+      expect(owner).toBe(native);
+      expect(frame).toBe(ctx);
+      attempts.push(located);
+      await dispose();
+      throw new Error('Close receipt unavailable');
+    },
+  });
+  await expect(read.release()).rejects.toMatchObject({ code: 'index_not_ready' });
+  expect(attempts).toEqual([]);
+  await read.finalize();
+  await expect(read.release()).rejects.toThrow('Close receipt unavailable');
+  expect(attempts).toEqual([queried]);
+});
+
 test('preparing host capture delivers only its actual durable locator without a foreground repair', async () => {
   const delivered: unknown[] = [];
   const native = operations({

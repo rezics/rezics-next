@@ -1,3 +1,4 @@
+import { retainPublicClose } from './public-preparation-store.ts';
 import { bookRelevanceBound } from './book-relevance-bound.ts';
 import { bookPageRelease } from './book-page-publication.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -116,6 +117,16 @@ export type DefaultPublicFilterRuntime = Readonly<{
     job: PublicFilterConsumerJob,
     context: PublicFilterConsumerContext,
   ): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+  releaseExhausted(
+    operations: PublicFilterConsumerOperations,
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    dispose: () => Promise<void>,
+  ): Promise<void>;
+  closeRetainedObservation(
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+  ): Promise<void>;
   /** Typed currentness and aggregate proofs over retained capture/query/repair. */
   privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
   /** Trusted native facet composition; omitted generation or meaning stays closed. */
@@ -215,6 +226,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   // Subject factories use the same native close contract. The runtime retains one current
   // factory so request cleanup cannot drain a continuation or a bounded repair.
   const subjects = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
+  const closingObservations = new Set<Promise<void>>();
   let closed = false;
   let closing: Promise<void> | undefined;
   let cleanupFailure: { error: unknown } | undefined;
@@ -681,6 +693,46 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         return requestHandle(await subjectOperations(queried.consumer.physicalTarget, release, context));
       });
     },
+    releaseExhausted(operations, queried, context, dispose) {
+      return track(async () => {
+        const receipt = await retainPublicClose(config.pool, config.prefix, queried, context.deadline);
+        await dispose();
+        // A changed tuple gets the native stale-observation result with its original deadline.
+        if (receipt.status === 'changed') return operations.closeObservation(queried, context);
+        if (receipt.status === 'retained') return;
+        // Use the factory that holds this observation in memory. Its durable lease
+        // funds cleanup only. Final disclosure and lease disposal retain the request deadline.
+        const backpressure = closingObservations.size >= (config.pool.options.max ?? 10);
+        const deadline = backpressure ? Math.min(receipt.deadline, context.deadline) : receipt.deadline;
+        const close = operations
+          .closeObservation(queried, { deadline })
+          .then(() => receipt.complete())
+          .catch(() => {
+            /* The preparation worker reclaims this exact observation after lease expiry. */
+          });
+        closingObservations.add(close);
+        void close.finally(() => closingObservations.delete(close));
+        if (backpressure) await close;
+      });
+    },
+    closeRetainedObservation(queried, context) {
+      return track(async () => {
+        const target = queried.consumer.physicalTarget;
+        const generation = Number(/subjects-g([1-9][0-9]*)$/.exec(target)?.[1]);
+        const digest = queried.consumer.meaningDigest;
+        if (!digest || !Number.isSafeInteger(generation) || target !== subjectIndexName(config.prefix, generation))
+          notReady();
+        const meaning = await requestMeaning(context, digest);
+        if (!meaning) notReady();
+        // Cleanup follows the retained meaning and physical allocation across alias switches.
+        const operations = await create(target, meaning, context);
+        try {
+          await operations.closeObservation(queried, context);
+        } finally {
+          await operations.close(context);
+        }
+      });
+    },
     bindSuggestion(request, context) {
       return track(async () => {
         checkDeadline(context);
@@ -824,6 +876,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       const retirement = { deadline: context?.deadline ?? deadlineFor(10_000) };
       closing = (async () => {
         await Promise.allSettled([...pending]);
+        await Promise.allSettled([...closingObservations]);
         const results = await Promise.allSettled([
           ...pending,
           ...[...owned].map((operations) => operations.close(retirement)),
@@ -887,6 +940,7 @@ export async function readPublicSearchPage<T>(options: {
   capture?: PublicFilterConsumerCapture;
   /** Existing durable preparation delivery, when installed by the host. */
   prepare?: (job: PublicFilterConsumerJob) => Promise<void>;
+  releaseExhausted?: DefaultPublicFilterRuntime['releaseExhausted'];
   /** A trusted planner choice. Prepared is the conservative default, not a claim of readiness. */
   snapshot?: 'pit' | 'prepared';
   check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;
@@ -1040,6 +1094,14 @@ export async function readPublicSearchPage<T>(options: {
       },
       async release() {
         if (!finalized) throw readiness();
+        if (page.status === 'exhausted' && options.releaseExhausted) {
+          try {
+            await options.releaseExhausted(operations, queried, context, dispose);
+          } catch (error) {
+            return unavailable(coverage.failure(error), options.continuation !== undefined);
+          }
+          return;
+        }
         await dispose();
         if (page.status === 'exhausted') {
           try {

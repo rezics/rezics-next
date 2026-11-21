@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import { claimDuePublicClose, readPublicClose, retainPublicClose } from '../../src/search/public-preparation-store.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
   createPublicFilterCustody,
@@ -113,6 +114,57 @@ async function append(
   }
   return execution;
 }
+
+test('close recovery fences the serving lease and deletes only the retained native PIT', async () => {
+  const { queried } = await setup();
+  if (queried.snapshot.kind !== 'pit') throw new Error('Expected native PIT');
+  const { observation, pit } = queried.snapshot;
+  const enginePits = async () =>
+    (await search.request<{ pits: { pit_id: string }[] }>('GET', '/_search/point_in_time/_all')).body.pits.map(
+      (row) => row.pit_id,
+    );
+  try {
+    const serving = await retainPublicClose(pool, prefix, queried, context().deadline);
+    if (serving.status !== 'claimed') throw new Error('Expected first close lease');
+    expect((await retainPublicClose(pool, prefix, queried, context().deadline)).status).toBe('retained');
+    expect(await claimDuePublicClose(pool, prefix, context().deadline)).toBeUndefined();
+    const expired = await pool.query(
+      `UPDATE search.public_preparation SET due_at=0,lease_until=0
+       WHERE partition_no=0 AND kind='close' AND locator->>'observation'=$1 RETURNING prefix,id`,
+      [observation],
+    );
+    expect(expired.rows[0].prefix).not.toBe(prefix);
+    const winners = (
+      await Promise.all([
+        claimDuePublicClose(pool, prefix, context().deadline),
+        claimDuePublicClose(pool, prefix, context().deadline),
+      ])
+    ).filter((receipt) => receipt !== undefined);
+    expect(winners).toHaveLength(1);
+    await serving.complete();
+    const row = await pool.query('SELECT revision FROM search.public_preparation WHERE partition_no=0 AND id=$1', [
+      expired.rows[0].id,
+    ]);
+    expect(row.rows[0]?.revision).toBe('2');
+    const receipt = winners[0]!;
+    const original = await readPublicClose(pool, receipt.locator, context().deadline);
+    expect(original).toEqual(queried);
+    expect(await enginePits()).toContain(pit);
+    expect((await registry.closeObservation(original!, search, context())).status).toBe('closed');
+    await receipt.complete();
+    expect(await enginePits()).not.toContain(pit);
+    expect(
+      (await pool.query('SELECT 1 FROM search.public_preparation WHERE partition_no=0 AND id=$1', [expired.rows[0].id]))
+        .rowCount,
+    ).toBe(0);
+  } finally {
+    await registry.closeObservation(queried, search, context());
+    await pool.query(
+      "DELETE FROM search.public_preparation WHERE partition_no=0 AND kind='close' AND locator->>'observation'=$1",
+      [observation],
+    );
+  }
+}, 60_000);
 
 test('PIT retention recovers the original searchable observation after a lost commit reply', async () => {
   const n = await setup();

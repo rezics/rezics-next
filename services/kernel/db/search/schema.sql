@@ -3425,7 +3425,7 @@ CREATE TABLE search.public_preparation (
     due_at bigint NOT NULL,
     lease_until bigint DEFAULT 0 NOT NULL,
     expires_at bigint NOT NULL,
-    CONSTRAINT public_preparation_kind_check CHECK ((kind = ANY (ARRAY['population'::text, 'repair'::text]))),
+    CONSTRAINT public_preparation_kind_check CHECK (((kind = ANY (ARRAY['population'::text, 'repair'::text])) OR ((kind = 'close'::text) AND starts_with(prefix, 'close:'::text)))),
     CONSTRAINT public_preparation_locator_check CHECK ((octet_length((locator)::text) <= 131072)),
     CONSTRAINT public_preparation_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT public_preparation_revision_check CHECK ((revision > 0))
