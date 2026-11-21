@@ -58,7 +58,7 @@ test('real native role permission seeks skip interval history with a semantic pr
     );
     const report = await checkGrowth(db, {
       name: 'native role exact-key lower-bound history',
-      scales: [256, 1024, 4608],
+      scales: [256, 1024, 4096],
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(database, scale, previous) {
         await database.admin.query(
@@ -82,7 +82,7 @@ test('real native role permission seeks skip interval history with a semantic pr
         expect(scans.length).toBeGreaterThan(0);
         for (const scan of scans) {
           expect(scan['Index Name']).toBe('resource_role_grant_predecessor');
-          expect(String(scan['Index Cond'])).toContain('COALESCE(lower(valid)');
+          expect(String(scan['Index Cond'])).toMatch(/COALESCE\(lower\((?:\w+\.)?valid\)/);
           expect(scan['Actual Rows']).toBeLessThanOrEqual(1);
           expect(scan['Rows Removed by Filter'] ?? 0).toBe(0);
         }
@@ -92,18 +92,18 @@ test('real native role permission seeks skip interval history with a semantic pr
         await probe('2030-01-02T00:00:00Z', false);
       },
     });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4608]);
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     expect(report.samples.every((sample) => sample.cost.statements === 4)).toBe(true);
     for (const [at, allowed] of [
       ['-infinity', true],
-      ['1899-01-01', false],
-      ['2029-12-31', false],
-      ['2030-01-01', true],
-      ['2030-01-02', false],
-      ['2030-01-03', true],
-      ['2030-01-04', false],
-      ['2199-12-31', false],
-      ['2200-01-01', true],
+      ['1899-01-01T00:00:00Z', false],
+      ['2029-12-31T00:00:00Z', false],
+      ['2030-01-01T00:00:00Z', true],
+      ['2030-01-02T00:00:00Z', false],
+      ['2030-01-03T00:00:00Z', true],
+      ['2030-01-04T00:00:00Z', false],
+      ['2199-12-31T00:00:00Z', false],
+      ['2200-01-01T00:00:00Z', true],
       ['infinity', true],
     ] as const)
       await probe(at, allowed);

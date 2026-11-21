@@ -8,7 +8,9 @@
 -- policy_core is true only for an exact registered action/type profile. SQL booleans remain the fallback when a
 -- point type is absent/ambiguous or a batch supplies an unregistered type.
 -- One deadlineLive alias of deadline_live; policy-core maps PolicyFacts.deadlineLive from the live column.
-WITH input AS NOT MATERIALIZED (
+-- Bind one operand row for the entire formula. Its ID and grant-role arrays can
+-- vary on each execution while the backend reuses the same bounded probe plan.
+WITH input AS MATERIALIZED (
   SELECT :route::integer AS route, :action::text AS action,
          :resource_ids::uuid[] AS resource_ids, COALESCE(:batch::nullable(boolean), false) AS batch, :include_global::boolean AS include_global,
          NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id,
@@ -19,7 +21,7 @@ WITH input AS NOT MATERIALIZED (
          :authenticated_buyer_ids::nullable(uuid[]) AS authenticated_buyer_ids,
          :anonymous::boolean AS anonymous, COALESCE(:own_account::nullable(boolean), false) AS own_account,
          COALESCE(:floor::nullable(boolean), false) AS floor, COALESCE(:policy_core::nullable(boolean), false) AS policy_core,
-         :deadline::timestamptz AS deadline
+         :deadline::timestamptz AS deadline, :grant_roles::nullable(text[]) AS grant_roles
 ), branches AS MATERIALIZED (
   SELECT false AS explicit, false AS public
   UNION ALL
@@ -97,7 +99,7 @@ WITH input AS NOT MATERIALIZED (
                  g.subject_role DESC, g.action DESC, g.valid DESC LIMIT 1
       ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
     END AS action_granted,
-    (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
+    (SELECT count(*) FROM unnest(i.grant_roles) role(grant_role)
       WHERE (SELECT count(*) FROM (
         SELECT g.valid FROM access.resource_role_grant g
         WHERE ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role,

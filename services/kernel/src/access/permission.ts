@@ -1,3 +1,4 @@
+import type { QueryConfig } from 'pg';
 import { globalReadPreparation } from './global-read-preparation.ts';
 import {
   accessNativeWork,
@@ -106,6 +107,32 @@ const compiledPermissionChecks = new AsyncLocalStorage<true>();
  * text and codecs, and leave schema freshness verification to the compiler. */
 export function withCompiledPermissionChecks<T>(body: () => T): T {
   return compiledPermissionChecks.run(true, body);
+}
+
+// Reylo still dispatches its schema checks through the same client. Only the
+// declared SQL is named, so current actor, resource, role and time stay per call.
+function preparedPermissionClient(client: AccessClient, text: string, name: string): AccessClient {
+  const transport = Object.create(client) as AccessClient;
+  transport.query = ((query: QueryConfig | string, values?: unknown[]) =>
+    client.query(
+      typeof query === 'object' && query.text === text ? { ...query, name } : query,
+      values,
+    )) as AccessClient['query'];
+  return transport;
+}
+
+function readFormula(client: AccessClient, input: Parameters<typeof permissionRead.run>[1]) {
+  const reader = preparedPermissionClient(client, permissionCheckFormulaStatement(), 'access_permission_formula_v1');
+  return compiledPermissionChecks.getStore()
+    ? nativeSourceQuery(reader, permissionRead, input, 'compiled')
+    : permissionRead.run(reader, input);
+}
+
+function readInverse(client: AccessClient, input: Parameters<typeof inverseRead.run>[1]) {
+  return inverseRead.run(
+    preparedPermissionClient(client, inverseRead['~standard'].query.text, 'access_permission_inverse_v1'),
+    input,
+  );
 }
 
 function permissionCheckTimeStatement(): string {
@@ -515,9 +542,7 @@ async function checkPreparedPermission(
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
-      compiledPermissionChecks.getStore()
-        ? nativeSourceQuery(client, permissionRead, formula.input, 'compiled')
-        : permissionRead.run(client, formula.input),
+      readFormula(client, formula.input),
     );
     if (
       !stillValid() ||
@@ -891,7 +916,7 @@ export function createAccess(config: PermissionConfig): Access {
           const rows = await accessCheckout(context.work, () =>
             withPermissionReadConnection(context.pool, deadline, (client) =>
               accessNativeWork(context.work, 'inverse', inverseInput, { members: 1, groups: MEMBERSHIP_LIMIT }, () =>
-                inverseRead.run(client, inverseInput),
+                readInverse(client, inverseInput),
               ),
             ),
           );
@@ -1180,7 +1205,7 @@ export function createAccess(config: PermissionConfig): Access {
             'inverse',
             inverseInput,
             { members: members.length, groups: MEMBERSHIP_LIMIT },
-            () => inverseRead.run(source, inverseInput),
+            () => readInverse(source, inverseInput),
           );
           for (const member of members) {
             const entries = inverse.filter((row) => row.accountId === member.account_id);
@@ -1364,10 +1389,7 @@ export function createAccess(config: PermissionConfig): Access {
                   global: formulaInput.include_global,
                   assignment: assignmentRequestId !== null,
                 },
-                () =>
-                  compiledPermissionChecks.getStore()
-                    ? nativeSourceQuery(bounded, permissionRead, formulaInput, 'compiled')
-                    : permissionRead.run(bounded, formulaInput),
+                () => readFormula(bounded, formulaInput),
               );
               requireAccessDeadline(deadline);
               if (
