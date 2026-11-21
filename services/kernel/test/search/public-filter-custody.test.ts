@@ -758,27 +758,34 @@ test('native close revalidates a held obsolete maximum after another factory rel
   let held = false;
   let referenceReads = 0;
   const db = await openGrowthDatabase();
-  const heldPool = new Proxy(db.pool, {
-    get(target, key) {
-      if (key === 'query')
-        return async (query: string, values?: unknown[]) => {
-          // Execute the real statement first. The pool has returned its checkout before delivery is held.
-          const result = await target.query(query, values);
-          if (query.includes('SELECT expires_at FROM search.public_filter_reference')) {
-            referenceReads++;
-            if (!held) {
-              held = true;
-              expect(Number(result.rows[0].expires_at)).toBe(leaseDeadline);
-              reached();
-              await delivery;
-            }
-          }
-          return result;
-        };
-      const value = Reflect.get(target, key);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
+  const heldPool: typeof db.pool = Object.create(db.pool);
+  heldPool.connect = (async () => {
+    const client = await db.pool.connect();
+    const observed: typeof client = Object.create(client);
+    let returned = false;
+    observed.release = (error) => {
+      if (!returned) {
+        returned = true;
+        client.release(error);
+      }
+    };
+    observed.query = (async (query: import('pg').QueryConfig) => {
+      const result = await client.query(query);
+      if (query.text.includes('SELECT expires_at FROM search.public_filter_reference')) {
+        referenceReads++;
+        if (!held) {
+          held = true;
+          expect(Number(result.rows[0].expires_at)).toBe(leaseDeadline);
+          // Delay the completed standalone read after giving back its real checkout.
+          observed.release();
+          reached();
+          await delivery;
+        }
+      }
+      return result;
+    }) as typeof client.query;
+    return observed;
+  }) as typeof db.pool.connect;
   const closer = createPublicFilterCustody(heldPool);
   const deleted: unknown[] = [];
   const observedSearch: typeof search = {
@@ -799,7 +806,12 @@ test('native close revalidates a held obsolete maximum after another factory rel
   });
   const closing = measuredClose.then((measured) => measured.value);
   try {
-    await maximumRead;
+    await Promise.race([
+      maximumRead,
+      closing.then(() => {
+        throw new Error('Close did not read the live reference');
+      }),
+    ]);
     expect((await registry.acquire(n.queried, context())).status).toBe('unready');
     expect((await releaser.release(acquired.use, context())).status).toBe('released');
     expect(
