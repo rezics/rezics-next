@@ -125,6 +125,150 @@ async function passNativeTime(instant: bigint) {
   );
 }
 
+async function acceptAnotherTrade(f: Awaited<ReturnType<typeof fixture>>, tradeId: string, itemHomeId: string) {
+  const runtime = createNativeMarket(f.database, { bookId: f.bookId, itemHomeId });
+  const item = {
+    itemId: `item-${tradeId}`,
+    homeId: itemHomeId,
+    holderId: f.sellerId,
+    generation: 1n,
+    reservationId: `hold-${tradeId}`,
+  };
+  const listingId = `listing-${tradeId}`;
+  const expiresAt = BigInt(Date.now() + 60_000);
+  value(await runtime.item.register({ itemId: item.itemId, holderId: f.sellerId, marketable: true }));
+  value(await runtime.item.reserveListing({ ...item, bookId: f.bookId, listingId, protectedUntil: expiresAt }));
+  value(
+    await runtime.market.open({
+      item,
+      listingId,
+      expiresAt,
+      price: {
+        ledgerBookId: f.bookId,
+        assetId: f.assetId,
+        units: 50n,
+        feeAccountId: f.feeId,
+        policyVersion: 1n,
+        feeBps: 2500n,
+      },
+    }),
+  );
+  value(await runtime.market.purchase(listingId, 0n, { tradeId, buyerId: f.buyerId, prepareUntil: expiresAt - 100n }));
+  return { runtime, tradeId, bookId: f.bookId };
+}
+
+const idle = { decisions: [], acknowledged: [], retry: [] };
+
+test('named repair keeps the retained commit and recovers a lost proceeds acknowledgment without another effect', async () => {
+  const f = await fixture(3000);
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    acknowledged: ['market:prepare_item:trade', 'market:prepare_funds:trade'],
+  });
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    decisions: [{ tradeId: f.tradeId, kind: 'commit' }],
+    acknowledged: ['market:escrow_funds:trade'],
+  });
+  const commitment = (await f.runtime.market.readTrade(f.tradeId))!.decision;
+  const foreignBook = await fixture();
+  const foreignHome = `home:${crypto.randomUUID()}`;
+  const neighbors = [
+    await acceptAnotherTrade(f, 'same-market', f.itemHomeId),
+    await acceptAnotherTrade(f, 'other-home', foreignHome),
+    await acceptAnotherTrade(foreignBook, 'other-book', f.itemHomeId),
+  ];
+  const repair = createNativeMarket(f.database, { bookId: f.bookId, itemHomeId: f.itemHomeId });
+  for (const tradeId of ['missing', 'other-home', 'other-book']) {
+    expect(await repair.resumeTrade(tradeId)).toEqual({ kind: 'not_found' });
+  }
+  const wrongHome = createNativeMarket(f.database, { bookId: f.bookId, itemHomeId: foreignHome });
+  expect(await wrongHome.resumeTrade(f.tradeId)).toEqual({ kind: 'not_found' });
+
+  await passNativeTime(f.prepareUntil);
+  expect(value(await repair.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    acknowledged: ['market:deliver_item:trade'],
+  });
+  const id = 'market:release_proceeds:trade';
+  const claimId = crypto.randomUUID();
+  const initial = value(await repair.market.claim(f.moneyOwner, id, claimId));
+  const receipt = value(await repair.funds.execute({ bookId: f.bookId, instructionId: id, claimId }));
+  expect(value(await repair.resumeTrade(f.tradeId))).toEqual(idle);
+  expect(await repair.market.findIssuedWork(f.moneyOwner, id, claimId)).toEqual(initial.work);
+  expect(marketTradeStatus((await repair.market.readTrade(f.tradeId))!)).toBe('committing');
+  await f.balance(f.sellerId, '38', '0');
+  await f.balance(f.feeId, '12', '0');
+
+  await f.expireLease(id);
+  const afterCrash = createNativeMarket(f.database, { bookId: f.bookId, itemHomeId: f.itemHomeId });
+  const attempts = await Promise.all([afterCrash.resumeTrade(f.tradeId), afterCrash.resumeTrade(f.tradeId)]);
+  expect(attempts.flatMap((attempt) => value(attempt).acknowledged)).toEqual([id]);
+  expect(attempts.flatMap((attempt) => value(attempt).retry)).toEqual([]);
+  expect(await afterCrash.funds.findReceipt(initial.work, receipt.receiptId)).toEqual(receipt);
+  expect(await repair.market.acknowledge(f.moneyOwner, id, claimId, receipt.receiptId)).toEqual({
+    kind: 'stale_claim',
+  });
+  const completed = (await repair.market.readTrade(f.tradeId))!;
+  expect(completed.decision).toEqual(commitment);
+  expect(marketTradeStatus(completed)).toBe('completed');
+  expect(await repair.item.readItem(f.item.itemId)).toMatchObject({ holderId: f.buyerId, generation: 2n });
+  const { escrowId } = await f.escrow();
+  await f.balance(f.buyerId, '50', '0');
+  await f.balance(escrowId, '0', '0');
+  await f.balance(f.sellerId, '38', '0');
+  await f.balance(f.feeId, '12', '0');
+  expect(value(await repair.resumeTrade(f.tradeId))).toEqual(idle);
+  expect(await repair.market.readTrade(f.tradeId)).toEqual(completed);
+
+  for (const neighbor of neighbors) {
+    expect(await neighbor.runtime.market.readTrade(neighbor.tradeId)).toMatchObject({
+      revision: 0n,
+      decision: null,
+      receipts: {},
+    });
+    const work = await pool.query(
+      'SELECT status, claim_id FROM economy.market_work WHERE book_id = $1 AND trade_id = $2 ORDER BY instruction_id',
+      [neighbor.bookId, neighbor.tradeId],
+    );
+    expect(work.rows).toEqual([
+      { status: 'pending', claim_id: null },
+      { status: 'pending', claim_id: null },
+    ]);
+  }
+}, 20_000);
+
+test('named repair waits for preparation until native expiry then aborts and fences a previously admitted prepare', async () => {
+  const f = await fixture(2000);
+  const instructionId = 'market:prepare_funds:trade';
+  const claimId = crypto.randomUUID();
+  value(await f.runtime.market.claim(f.moneyOwner, instructionId, claimId));
+  const issued = await f.runtime.market.findIssuedWork(f.moneyOwner, instructionId, claimId);
+  const delayed = createMarketFunds(f.database, f.bookId, { findIssuedWork: async () => issued });
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    acknowledged: ['market:prepare_item:trade'],
+  });
+  expect(await f.runtime.market.findIssuedWork(f.moneyOwner, instructionId, claimId)).toEqual(issued);
+  expect((await f.runtime.market.readTrade(f.tradeId))!.decision).toBeNull();
+  await passNativeTime(f.prepareUntil);
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    decisions: [{ tradeId: f.tradeId, kind: 'abort' }],
+    acknowledged: ['market:fence_item_abort:trade', 'market:fence_funds_abort:trade'],
+  });
+  expect(await f.runtime.market.findIssuedWork(f.moneyOwner, instructionId, claimId)).toBeNull();
+  expect(await delayed.execute({ bookId: f.bookId, instructionId, claimId })).toEqual({ kind: 'out_of_order' });
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual({
+    ...idle,
+    acknowledged: ['market:release_item:trade', 'market:release_funds:trade'],
+  });
+  await f.balance(f.buyerId, '100', '0');
+  expect(await f.runtime.item.readItem(f.item.itemId)).toMatchObject({ holderId: f.sellerId, generation: 1n });
+  expect(marketTradeStatus((await f.runtime.market.readTrade(f.tradeId))!)).toBe('aborted');
+  expect(value(await f.runtime.resumeTrade(f.tradeId))).toEqual(idle);
+}, 20_000);
+
 test('a fixed-price sale recovers actual escrow, delivery, fee failure and lost acknowledgment across expiry', async () => {
   const f = await fixture(2000);
   const prepared = await f.runtime.sweep(10);
