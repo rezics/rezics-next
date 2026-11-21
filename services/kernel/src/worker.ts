@@ -1,6 +1,7 @@
 import { composeRatingDependencies } from './composition/rating.ts';
 import { initializeEventTypes } from './events/catalogue.ts';
 import pg from 'pg';
+import { accountPoolQueries } from './database/pool.ts';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
@@ -156,7 +157,7 @@ export async function startWorker(
   try {
     pool = config.kernelPool
       ? await config.kernelPool(config.databaseUrl)
-      : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+      : accountPoolQueries(new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize }));
   } catch (error) {
     content.stop();
     throw error;

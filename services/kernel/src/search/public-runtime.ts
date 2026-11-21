@@ -293,9 +293,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             result = await native.step(job, context, options);
             longest = Math.max(longest, Date.now() - started);
           }
-          if (previous.length && (result.status === 'progress' || result.status === 'reconciled'))
-            return { ...result, additionalEnrollmentCosts: [...previous, ...(result.additionalEnrollmentCosts ?? [])] };
-          return result;
+          if (!previous.length) return result;
+          const additional = 'additionalEnrollmentCosts' in result ? result.additionalEnrollmentCosts : undefined;
+          return { ...result, additionalEnrollmentCosts: [...previous, ...(additional ?? [])] };
         } finally {
           await native.close();
         }

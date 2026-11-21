@@ -72,6 +72,11 @@ export function createPool(
     }
     return callback ? connect(callback) : connect();
   }) as Connect;
+  return accountPoolQueries(pool);
+}
+
+/** Direct pool queries and checked-out commands charge the same active owner meter. */
+export function accountPoolQueries(pool: Pool): Pool {
   const originalQuery = pool.query;
   pool.query = ((...args: unknown[]) => {
     const accounting = queryAccounting.getStore();
