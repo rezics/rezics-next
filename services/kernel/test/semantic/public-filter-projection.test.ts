@@ -7,6 +7,7 @@ import { newId } from '../../src/route/route.ts';
 import { lockReleasedProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
+import { readRelease } from '../../src/semantic/definition-release-read.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { retainedPublicFilterProjectionDependenciesCurrent } from '../../src/semantic/public-filter-projection.ts';
 import {
@@ -26,11 +27,11 @@ test('native public Subject identity batches retain the same anchors without cre
   try {
     const subjects = [await f.create('schema:Book'), await f.create('schema:Person')];
     const source = publicFilterSource(f.config);
-    const read = (ids: readonly string[]) =>
+    const read = (ids: readonly string[], meaning = f.meaning) =>
       source.readPublicFilterSubjectIdentities!({
         subjects: ids,
         context: readContext(),
-        meaning: f.meaning,
+        meaning,
         inputLimit: 16,
       });
     const identities = await read(subjects);
@@ -38,6 +39,17 @@ test('native public Subject identity batches retain the same anchors without cre
     if (identities.status !== 'observed') throw new Error('Subject identities were unavailable');
     expect(identities.cost.frontierWrites).toBe(0);
     expect(identities.cost.inputKeys).toBe(2);
+    const digest = f.meaning.digest;
+    const retained = await readRelease(f.db.pool, digest);
+    if (!retained) throw new Error('The installed projection release is missing');
+    expect((await read(subjects, { digest, release: retained })).status).toBe('observed');
+    const copied = structuredClone(retained);
+    expect((await read(subjects, { digest, release: copied })).status).toBe('observed');
+    delete copied.types['schema:Book'];
+    await expect(read(subjects, { digest, release: copied })).rejects.toThrow('Invalid native public identity request');
+    await expect(read(subjects, { digest: 'sha256:' + '0'.repeat(64), release: retained })).rejects.toThrow(
+      'Invalid native public identity request',
+    );
     const builds = await f.db.pool.query(
       'SELECT 1 FROM semantic.public_filter_projection_build WHERE subject_id=ANY($1::uuid[])',
       [subjects],

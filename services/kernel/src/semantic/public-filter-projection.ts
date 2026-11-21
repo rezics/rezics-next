@@ -29,7 +29,7 @@ import { sourceTuple } from './fences.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
-import { readBaseReleases, readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readBaseReleases, readRelease } from './definition-release-read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
@@ -373,7 +373,7 @@ function validMeaning(meaning: PublicFilterProjectionMeaning): boolean {
   return (
     hasPublicFilterMeaningShape(meaning) &&
     typeof meaning.digest === 'string' &&
-    releaseDigest(meaning.release) === meaning.digest &&
+    (hasVerifiedReleaseDigest(meaning.release, meaning.digest) || releaseDigest(meaning.release) === meaning.digest) &&
     Object.keys(meaning.release.types).length > 0
   );
 }
