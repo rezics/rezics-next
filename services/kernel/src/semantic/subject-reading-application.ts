@@ -49,7 +49,7 @@ import {
   type ReviewedPersonEndpoint,
   type ReviewedPersonSource,
 } from './reviewed-person-identity.ts';
-import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
+import { privateLinks, readsPrivateStatements, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readSourceRecords } from './source-records.ts';
 import { linksCaughtUp, subjectLinksCovered, subjectLinkWaitDeadline } from './link-freshness.ts';
@@ -58,6 +58,7 @@ import readSubjectStatement from './read-subject.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import globalLinkPreviews from './subject-global-link-previews.sql';
+import globalPropertyData from './subject-global-property-data.sql';
 import readSourceMembers from './source-records-members.sql';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
 export type { RelatedState } from './related-subject-read.ts';
@@ -1198,8 +1199,13 @@ async function readSubjectNative(
         let statementFacts: FactRow[] = [];
         const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
         const relationCounts: Record<string, number> = {};
-        if (allowed) {
-          const properties = release.types[rows[0]!.type]!.properties;
+        const properties = release.types[rows[0]!.type]!.properties;
+        if (
+          properties.length > 0 &&
+          (context !== GLOBAL_SUBJECT_CONTEXT ||
+            readsPrivateStatements() ||
+            (await globalPropertyData.run(client, { route, subject_id: subjectId }))!.present)
+        ) {
           const relations = properties.filter((property) => isRelationProperty(release, property));
           const scalarViews = await propertySlotViews(
             client,

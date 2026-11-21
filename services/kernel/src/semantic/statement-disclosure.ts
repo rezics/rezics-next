@@ -165,6 +165,11 @@ export type PrivateLink = {
   target_type: string;
   order_key: string;
 };
+export function readsPrivateStatements(): boolean {
+  const reader = readers.getStore();
+  return reader !== undefined && reader !== PUBLIC_READER;
+}
+
 export async function privateLinks(
   client: PoolClient,
   input: {
