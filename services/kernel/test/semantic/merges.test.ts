@@ -904,7 +904,7 @@ test('a held subject lock queues the merge and leaves no effect until release', 
   const people = [await person('Lock A'), await person('Lock B')].sort(byId);
   const subjects = people.map(({ id }) => id as string);
   const [survivor, redirected] = subjects as [string, string];
-  const before = await Promise.all(subjects.map(revisions));
+  const before = await Promise.all([revisions(survivor), revisions(redirected)]);
   const request = { subjects };
   const token = key();
   const held = await admin.connect();
