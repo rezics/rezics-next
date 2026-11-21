@@ -33,6 +33,7 @@ import readSubjectStatement from '../../src/semantic/read-subject.sql';
 import readDetailSources from '../../src/semantic/read-subject-detail-sources.sql';
 import readPropertySources from '../../src/semantic/read-subject-property-sources.sql';
 import readSummaries from '../../src/semantic/summaries-read.sql';
+import readPermissionTimeEmptyInverse from '../../src/access/permission-time-empty-inverse.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
 
 const checkpointSql = readLinkCheckpoint['~standard'].query.text;
@@ -40,6 +41,7 @@ const pendingMemberSql = readPendingMember['~standard'].query.text;
 const identitySql = readSubjectIdentity['~standard'].query.text;
 const subjectSql = readSubjectStatement['~standard'].query.text;
 const permissionTimeSql = readPermissionTime['~standard'].query.text;
+const detailTimeStatements = new Set([permissionTimeSql, readPermissionTimeEmptyInverse.sql]);
 const partitionBatchSql = readPartitionBatch['~standard'].query.text;
 const referenceSql = readSubjectReference['~standard'].query.text;
 const summarySql = readSummaries['~standard'].query.text;
@@ -516,6 +518,56 @@ test('a term-only Book summary reuses its original labels and checks final Acces
       readPropertySources['~standard'].query.text,
     );
 
+    expect(observer.records.filter(({ statement }) => statement.includes('one permission formula'))).toHaveLength(1);
+    expect(current.response.headers.get('etag')).toBe('"1"');
+    expect(current.response.headers.get(SESSION_HEADER)).toBeTruthy();
+
+    try {
+      const moved = await changeAfterDetail(async () => {
+        await admin.query("UPDATE core.partition SET write_state='moved',moved_to='other-home' WHERE partition_no=$1", [
+          partition,
+        ]);
+      });
+      expect(moved.response.status).toBe(503);
+      expect(moved.body.code).toBe('partition_unavailable');
+      expect(moved.body).not.toHaveProperty('subject');
+    } finally {
+      await admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [
+        partition,
+      ]);
+    }
+
+    try {
+      const incomplete = await changeAfterDetail(async () => {
+        await admin.query(
+          'UPDATE access.account SET membership_inverse_complete=false WHERE route=$1 AND account_id=$2',
+          [routeOf(accounts.reader), accounts.reader],
+        );
+      });
+      expect(incomplete.response.status).toBe(503);
+      expect(incomplete.body.code).toBe('overloaded');
+    } finally {
+      await admin.query('UPDATE access.account SET membership_inverse_complete=true WHERE route=$1 AND account_id=$2', [
+        routeOf(accounts.reader),
+        accounts.reader,
+      ]);
+    }
+
+    await realAccess.grant(book, 'writer', 'subject:read');
+    const revised = await changeAfterDetail(async () => {
+      const write = await call('PATCH', `/v1/subjects/${book.id}/terms`, {
+        token: 'writer',
+        key: `"${randomUUID()}"`,
+        ifMatch: '"1"',
+        body: { labels: { en: 'Revised Book' } },
+      });
+      expect(write.response.status).toBe(200);
+    });
+    expect(revised.response.status).toBe(200);
+    expect(revised.body.subject.labels.en).toBe('A term-only Book');
+    expect(revised.body.summary.label.value).toBe('Revised Book');
+    await catchUpLinks(partition);
+
     const denied = await changeAfterDetail(async () => {
       await admin.query(
         `INSERT INTO access.resource_denial
@@ -719,7 +771,7 @@ test('live subject authorization is freshly prepared after an actual projection 
       const identityRead = observer.records.findIndex(({ statement }) => statement === identitySql);
       const initial = observer.records
         .slice(0, identityRead)
-        .findLast(({ statement }) => statement === permissionTimeSql);
+        .findLast(({ statement }) => detailTimeStatements.has(statement));
       expect(initial).toBeDefined();
       await catchUpLinks(partition);
       await Bun.sleep(Math.max(0, accessExpiryWitness(initial!.executedAt) - Date.now()));
@@ -740,7 +792,7 @@ test('live subject authorization is freshly prepared after an actual projection 
     expect(detail).toBeGreaterThan(checkpoint);
     expect(checkpoint).toBeGreaterThan(0);
     expect(
-      observer.records.slice(checkpoint + 1, detail).filter(({ statement }) => statement === permissionTimeSql),
+      observer.records.slice(checkpoint + 1, detail).filter(({ statement }) => detailTimeStatements.has(statement)),
     ).toHaveLength(2);
   } finally {
     await observer.close();

@@ -75,6 +75,7 @@ import candidatesRead from './permission-candidates.sql';
 import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
+import timeEmptyInverse from './permission-time-empty-inverse.sql';
 import permissionRead from './permission-check.sql';
 import governanceReachCandidatesRead from './governance-reach-candidates.sql';
 import {
@@ -104,12 +105,11 @@ import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contract/index.ts'
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
 
-const compiledPermissionChecks = new AsyncLocalStorage<true>();
+const compiledPermissionChecks = new AsyncLocalStorage<'compiled' | 'subject-detail'>();
 
-/** The enclosing native ledger funds these exact checks. Keep the compiled wire
- * text and codecs, and leave schema freshness verification to the compiler. */
-export function withCompiledPermissionChecks<T>(body: () => T): T {
-  return compiledPermissionChecks.run(true, body);
+/** Use compiled wire text and codecs. The signed detail reader also prepares its repeated point statement. */
+export function withCompiledPermissionChecks<T>(body: () => T, plan?: 'subject-detail'): T {
+  return compiledPermissionChecks.run(plan ?? 'compiled', body);
 }
 
 function permissionCheckTimeStatement(): string {
@@ -329,11 +329,22 @@ async function readPermissionTime(
   client: AccessClient,
   clock?: () => Date,
   work?: AccessWorkAccounting,
-): Promise<{ at: string; databaseAt: string | undefined; observedAt: number } | undefined> {
+  inverseAccount?: string,
+): Promise<{ at: string; databaseAt: string | undefined; observedAt: number; emptyInverse?: boolean } | undefined> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
   const observedAt = Date.now();
   const input = { at: configured?.toISOString() ?? '' };
+  if (inverseAccount && !work) {
+    const row = await nativeSourceQuery(client, timeEmptyInverse, {
+      ...input,
+      route: routeOf(inverseAccount),
+      account_id: inverseAccount,
+    });
+    return row?.at
+      ? { at: row.at, databaseAt: row.databaseAt, observedAt, emptyInverse: row.emptyInverse === true }
+      : undefined;
+  }
   const row = await accessNativeWork(work, 'time', input, {}, () =>
     compiledPermissionChecks.getStore()
       ? nativeSourceQuery(client, timeRead, input, 'compiled')
@@ -521,9 +532,24 @@ async function checkPreparedPermission(
     // Without a candidate lookup this is the first ACL read. Preserve source
     // unavailability on this same checkout when the ACL query cannot run.
     const source = !facts.anonymous && !facts.roles.length ? permissionReadTransport(client) : client;
+    // Repeated singleton Subject reads share PostgreSQL's parsed statement on the physical
+    // connection. Parameters and result evidence still belong to this authorization attempt.
+    const subjectPlan =
+      compiledPermissionChecks.getStore() === 'subject-detail' &&
+      action === 'subject:read' &&
+      !time &&
+      !page &&
+      !facts.work &&
+      !includeExplicit;
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
       compiledPermissionChecks.getStore()
-        ? nativeSourceQuery(source, permissionRead, formula.input, 'compiled')
+        ? nativeSourceQuery(
+            source,
+            permissionRead,
+            formula.input,
+            'compiled',
+            subjectPlan ? 'subject-read-permission' : undefined,
+          )
         : permissionRead.run(source, formula.input),
     );
     if (
@@ -789,7 +815,20 @@ export function createAccess(config: PermissionConfig): Access {
       );
       // Every source query has its own bounded checkout before resource checkout.
       // None holds a connection while another partition is consulted.
-      const recorded = shared?.clock ?? (await readPermissionTime(source, config.clock, context.work));
+      const inverseAccount =
+        compiledPermissionChecks.getStore() === 'subject-detail' &&
+        action === 'subject:read' &&
+        !page &&
+        !context.work &&
+        !time &&
+        !attempt &&
+        actor.kind === 'account' &&
+        actor.requestedBy === null &&
+        account?.operatorAccountId === null
+          ? actor.accountId
+          : undefined;
+      const recorded: Awaited<ReturnType<typeof readPermissionTime>> =
+        shared?.clock ?? (await readPermissionTime(source, config.clock, context.work, inverseAccount));
       if (!recorded?.databaseAt) return evidence;
       if (shared) shared.clock = recorded;
       // Commands prepare after their executor mints T. Negative membership
@@ -893,7 +932,7 @@ export function createAccess(config: PermissionConfig): Access {
         // The inverse is admission evidence only. Never derive identities from
         // resource ACLs or treat a stale inverse row as a membership role.
         for (const member of members) {
-          if (member.automated) continue;
+          if (member.automated || (member.accountId === inverseAccount && recorded.emptyInverse)) continue;
           const inverseInput = { route: routeOf(member.accountId), account_id: member.accountId };
           const rows = await accessCheckout(context.work, () =>
             withPermissionReadConnection(context.pool, deadline, (client) =>

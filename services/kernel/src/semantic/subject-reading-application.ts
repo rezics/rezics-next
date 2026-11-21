@@ -1,3 +1,4 @@
+import type { TermDetailWitness, termSummaryDisclosure } from './term-summary-disclosure.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { readSummaryWitness, summaryPositionRegion } from './summary-currentness.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
@@ -25,7 +26,7 @@ import { partitionReadClient, partitionReadClientObservation, partitionReadClien
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
-import { relatedReadEligibility } from './eligibility.ts';
+import { readAuthorizedSubjectIdentity, relatedReadEligibility, type SubjectDetailCheck } from './eligibility.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
 import { slotId, slotView } from './slots.ts';
 import { chooseLabel } from './language.ts';
@@ -122,6 +123,9 @@ export type SubjectReadingPorts = SubjectReadingNativePort<
 type SubjectFenceTuple = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup };
 type SubjectFence = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup } & SubjectReadingFence;
 
+type DetailCheck = ((client: PoolClient) => Promise<boolean>) & { termCandidate?: boolean };
+class StatementReaderRequired extends Error {}
+
 type YieldAdmission = <T>(wait: () => Promise<T>) => Promise<T>;
 export type SubjectReadOptions = {
   reviewIdentity?: ReviewedPersonSource;
@@ -133,7 +137,8 @@ export type SubjectReadOptions = {
   observeMissingCheckpoint?: boolean;
   deadline?: number;
   prepareAuthorization?: () => Promise<AccessCheck>;
-  prepareAuthorize?: (id: string) => Promise<AccessCheck>;
+  prepareAuthorize?: (id: string) => Promise<DetailCheck>;
+  termDisclosure?: (witness: TermDetailWitness) => ReturnType<typeof termSummaryDisclosure>;
   readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   yieldAdmission?: YieldAdmission;
 };
@@ -155,8 +160,9 @@ export type SubjectReadingPageRequest = {
   subject: string;
   context: string;
   languages: readonly string[];
-  authorization: SubjectReadingAuthorizationPort<AccessCheck, YieldAdmission> & {
+  authorization: SubjectReadingAuthorizationPort<SubjectDetailCheck, YieldAdmission> & {
     prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
+    termDisclosure?: SubjectReadOptions['termDisclosure'];
   };
   runNative: <T>(read: (yieldAdmission?: YieldAdmission) => Promise<T>) => Promise<T>;
   readAs: <T>(read: () => Promise<T>) => Promise<T>;
@@ -492,11 +498,10 @@ async function readSubjectSummaryObservation(
   };
 }
 
-type TermSummaryWitness = {
-  id: string;
-  component: SubjectComponent;
+type TermSummaryWitness = TermDetailWitness & {
   type: string;
   labels: Record<string, string>;
+  disclose?: SubjectReadOptions['termDisclosure'];
 };
 
 function displaySummary(
@@ -555,6 +560,14 @@ async function readSummaryBatch(
       : deps.authorize;
   const prepare = preparations.get(authorize);
   const owned = currentReadSnapshot(deps.pool);
+  if (termWitness?.disclose && !owned && 'release' in deps) {
+    const allowed = await termWitness.disclose(termWitness);
+    if (allowed === 'changed') termWitness = undefined;
+    else if (allowed !== undefined) {
+      if (allowed) results.set(termWitness.id, displaySummary(deps.release, termWitness, languages, null));
+      return results;
+    }
+  }
   // An already-owned snapshot can use previously prepared checks, but must never
   // acquire preparation evidence through another same-pool checkout.
   if (owned && prepare) throw new AccessUnavailableError('contention');
@@ -1081,13 +1094,13 @@ async function readSubjectNative(
   const deadline = summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const readSnapshot = async (subjectId: string, terminal?: string) => {
     const route = routeOf(subjectId)!;
-    return withSubjectStatementReader(summaries.readAs, async (needsAudienceRefresh) => {
-      const prepare = () =>
-        summaries.prepareAuthorize
-          ? summaries.prepareAuthorize(subjectId)
-          : summaries.prepareAuthorization
-            ? summaries.prepareAuthorization()
-            : Promise.resolve(authorize);
+    const prepare = (): Promise<DetailCheck> =>
+      summaries.prepareAuthorize
+        ? summaries.prepareAuthorize(subjectId)
+        : summaries.prepareAuthorization
+          ? summaries.prepareAuthorization()
+          : Promise.resolve(authorize);
+    const read = async (initialAuthorize: DetailCheck, needsAudienceRefresh: boolean, deferReader: boolean) => {
       const requireProjection = async (component: SubjectComponent, stage: 'initial' | 'revision-recheck') => {
         let reason: SubjectLinkWaitReason = 'deadline';
         const ready = await waitForSubjectLinks(
@@ -1113,7 +1126,15 @@ async function readSubjectNative(
         recheck?: { expected: Identity; authorize: typeof authorize },
       ) => {
         const rows = listed(
-          (await readSubjectStatement.run(client, { route, subject_id: subjectId })) as
+          (await (deferReader
+            ? nativeSourceQuery(
+                client,
+                readSubjectStatement,
+                { route, subject_id: subjectId },
+                'compiled',
+                'subject-read-terms',
+              )
+            : readSubjectStatement.run(client, { route, subject_id: subjectId }))) as
             | SubjectReadRow[]
             | SubjectReadRow
             | null,
@@ -1148,6 +1169,7 @@ async function readSubjectNative(
           include_members: !terminal,
         }))!;
         if (!terms_only) {
+          if (deferReader) throw new StatementReaderRequired();
           const properties = release.types[rows[0]!.type]!.properties;
           const relations = new Set(properties.filter((property) => isRelationProperty(release, property)));
           const scalars = properties.filter((property) => !relations.has(property));
@@ -1291,16 +1313,11 @@ async function readSubjectNative(
           relationCounts,
         };
       };
-      const initialAuthorize = await prepare();
       let snapshot = await withReadTransaction(
         pool,
         async (client) => {
-          const identity = await readSubjectIdentity.run(client, {
-            route,
-            subject_id: subjectId,
-            partition_no: partitionOf(route),
-          });
-          if (!identity || identity.visibility !== 'visible' || !(await initialAuthorize(client))) return null;
+          const identity = await readAuthorizedSubjectIdentity(pool, client, route, subjectId, initialAuthorize);
+          if (!identity) return null;
           if (identity.redirect && identity.redirect !== terminal)
             throw new SubjectRedirectError(subjectId, identity.redirect);
           const component = {
@@ -1332,6 +1349,7 @@ async function readSubjectNative(
       );
       let stage: 'initial' | 'revision-recheck' = 'initial';
       while (snapshot?.freshnessRetry) {
+        if (deferReader) throw new StatementReaderRequired();
         const expected = snapshot;
         requireAccessDeadline(deadline);
         await requireProjection(expected.component, stage);
@@ -1359,7 +1377,20 @@ async function readSubjectNative(
         );
       }
       return snapshot;
-    });
+    };
+    if (!summaries.termDisclosure)
+      return withSubjectStatementReader(summaries.readAs, async (refresh) => read(await prepare(), refresh, false));
+    const initialAuthorize = await prepare();
+    if (initialAuthorize.termCandidate && summaries.readAs && !summaries.reviewIdentity) {
+      try {
+        return await withSubjectStatementReader(undefined, (refresh) => read(initialAuthorize, refresh, true));
+      } catch (error) {
+        if (!(error instanceof StatementReaderRequired)) throw error;
+      }
+      // A projection wait or a newly visible statement needs a freshly prepared audience and Access check.
+      return withSubjectStatementReader(summaries.readAs, async (refresh) => read(await prepare(), refresh, false));
+    }
+    return withSubjectStatementReader(summaries.readAs, (refresh) => read(initialAuthorize, refresh, false));
   };
   const snapshot = await readSnapshot(id);
   if (!snapshot) return null;
@@ -1453,7 +1484,17 @@ async function readSubjectNative(
           {
             languages: summaries.languages ?? [],
             ...(snapshot.reuseLabels
-              ? { termWitness: { id, component, type: subject.type, labels: subject.labels } }
+              ? {
+                  termWitness: {
+                    id,
+                    component,
+                    type: subject.type,
+                    labels: subject.labels,
+                    revision: rows[0]!.revision,
+                    securityRevision: rows[0]!.security_revision,
+                    ...(summaries.termDisclosure ? { disclose: summaries.termDisclosure } : {}),
+                  },
+                }
               : {}),
           },
         )
@@ -1694,6 +1735,7 @@ async function readSubjectPage(
             }
           : {}),
         authorize: authorizeSummary(yieldAdmission),
+        ...(input.authorization.termDisclosure ? { termDisclosure: input.authorization.termDisclosure } : {}),
         seen: input.seen,
         ...(input.observeMissingCheckpoint ? { observeMissingCheckpoint: true } : {}),
         ...(yieldAdmission ? { yieldAdmission } : {}),

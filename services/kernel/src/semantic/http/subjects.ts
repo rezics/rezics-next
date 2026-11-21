@@ -1,3 +1,5 @@
+import { termSummaryDisclosure } from '../term-summary-disclosure.ts';
+import { accessRoot } from '../../access/derived-access.ts';
 import { requireLiveJob } from '../../http/admission.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { parseSelectedSynopsis } from '../selected-synopsis.ts';
@@ -57,7 +59,12 @@ import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { isImportCatalogueWalk, ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { relatedReadDecisionEligibility, relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
+import {
+  relatedReadDecisionEligibility,
+  relatedReadEligibility,
+  prepareSubjectDetailCheck,
+  subjectReadEligibility,
+} from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
 import { listSubjectGraph } from '../graph.ts';
 import { readSubjectRelationCounts, type SubjectRelationCountResponse } from '../counts.ts';
@@ -1291,11 +1298,17 @@ function subjectRoutes(
           context: query.context ?? GLOBAL_CONTEXT,
           languages,
           authorization: {
-            prepareDetail: (id, permit) => {
-              const route = routeOf(id)!;
-              const resource = { route, id };
-              return authorize({ ...resource, eligibility: subjectReadEligibility(resource) }, permit);
-            },
+            termDisclosure: (witness) =>
+              termSummaryDisclosure(
+                { pool, access: accessRoot(requestAccess), actor, deadline: job.deadline },
+                witness,
+              ),
+            prepareDetail: (id, permit) =>
+              prepareSubjectDetailCheck(
+                { route: routeOf(id)!, id },
+                actor.kind === 'account' && (query.context ?? GLOBAL_CONTEXT) === GLOBAL_CONTEXT,
+                (resource) => authorize(resource, permit),
+              ),
             prepareSummary: (id, related, permit) => {
               const route = routeOf(id)!;
               const resource = { route, id };
