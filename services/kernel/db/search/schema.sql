@@ -4076,6 +4076,13 @@ CREATE INDEX public_filter_pit_claim_due ON search.public_filter_pit_claim USING
 
 
 --
+-- Name: public_filter_pit_claim_physical_due; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_pit_claim_physical_due ON search.public_filter_pit_claim USING btree (target_prefix, retry_after, partition_no, bootstrap) WHERE (state = ANY (ARRAY['retained'::text, 'handed'::text, 'closing'::text]));
+
+
+--
 -- Name: public_filter_pit_owned; Type: INDEX; Schema: search; Owner: -
 --
 

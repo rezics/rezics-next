@@ -155,15 +155,27 @@ test('cold Subject publication discloses the originals and preserves relevance t
       CREATE TRIGGER refuse_test_open BEFORE UPDATE ON search.public_filter_pit_claim
       FOR EACH ROW WHEN (OLD.state='new' AND NEW.state='opening') EXECUTE FUNCTION search.refuse_test_open()`);
     try {
-      const failed = await fixture.request('anonymous', 'POST', '/v1/subjects:search', query);
-      expect(failed.status).toBe(503);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const failed = await fixture.request('anonymous', 'POST', '/v1/subjects:search', query);
+        expect(failed.status).toBe(503);
+      }
     } finally {
       await database.pool.query(
         'DROP TRIGGER refuse_test_open ON search.public_filter_pit_claim; DROP FUNCTION search.refuse_test_open()',
       );
     }
-    const [undispatched] = (await cutIds()).filter((row) => !priorCuts.has(row.bootstrap));
-    expect(undispatched).toEqual(expect.objectContaining({ state: 'begun', queried: null, claim: 'new' }));
+    const children = (await cutIds()).filter((row) => !priorCuts.has(row.bootstrap));
+    expect(children).toHaveLength(2);
+    for (const child of children)
+      expect(child).toEqual(expect.objectContaining({ state: 'begun', queried: null, claim: 'new' }));
+    const [undispatched, dispatched] = children;
+    // At the dispatch boundary the native claim is durable before OpenSearch can reply.
+    // With no retained locator this child cannot prove that its PIT is closed.
+    await database.pool.query(
+      `UPDATE search.public_filter_pit_claim SET state='opening',deadline=$2,retry_after=$2
+       WHERE partition_no=0 AND bootstrap=$1 AND state='new'`,
+      [dispatched!.bootstrap, Date.now() - 1],
+    );
     expect(await nativePits()).toBe(held);
     const expired = await database.pool.query(
       `UPDATE search.public_filter_pit_claim c SET deadline=$2,retry_after=$2
@@ -182,6 +194,9 @@ test('cold Subject publication discloses the originals and preserves relevance t
     for (const row of (await cutIds()).filter((row) => retired.has(row.bootstrap))) {
       expect(row).toEqual(expect.objectContaining({ state: 'aborted', claim: null }));
     }
+    expect((await cutIds()).find((row) => row.bootstrap === dispatched!.bootstrap)).toEqual(
+      expect.objectContaining({ state: 'aborting', claim: 'uncertain', queried: null }),
+    );
     expect(await nativePits()).toBe(held);
     const continuations = await Promise.all(
       concurrent.map((response) =>

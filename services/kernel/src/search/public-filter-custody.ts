@@ -3067,6 +3067,24 @@ export async function drainExpiredServingPits(
   const meter = operationCost(pool, context);
   for (let turn = 0; turn < 16; turn++) {
     if (Date.now() >= context.deadline) return true;
+    // A rejected or lost open has no physical locator. Under load its older
+    // intent must not monopolize retirement while known PITs still occupy the engine.
+    const physical = await sql(
+      pool,
+      meter,
+      `SELECT registration,c.bootstrap::text FROM search.public_filter_pit_claim c
+       WHERE target_prefix=$1 AND retry_after<=$2 AND deadline<=$2
+         AND state IN ('retained','handed','closing')
+       ORDER BY retry_after DESC,partition_no DESC,c.bootstrap DESC LIMIT 4`,
+      [prefix, Date.now()],
+      { points: 4, keys: 5, writes: 0 },
+    );
+    const closures = await Promise.allSettled(
+      physical.rows.map(({ registration, bootstrap }) =>
+        retireServingPitClaim(pool, search, prefix, context, { registration, bootstrap: '0:' + bootstrap, requireDue: true }),
+      ),
+    );
+    if (Date.now() >= context.deadline) return true;
     const result = await sql(
       pool,
       meter,
@@ -3075,7 +3093,7 @@ export async function drainExpiredServingPits(
          FROM search.public_filter_pit_claim c WHERE c.target_prefix=$1 AND c.retry_after<=$2 AND c.state<>'uncertain'
          ORDER BY c.retry_after,c.partition_no,c.bootstrap LIMIT 32 FOR UPDATE SKIP LOCKED
        ), proven AS MATERIALIZED (
-         SELECT c.partition_no,c.bootstrap FROM due c
+         SELECT c.partition_no,c.bootstrap,c.state FROM due c
          JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
          JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
          JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(c.partition_no,c.registration)
@@ -3083,7 +3101,7 @@ export async function drainExpiredServingPits(
            (c.partition_no,c.registration,c.partition_no::text||':'||c.bootstrap::text)
          WHERE c.deadline<=$2 AND b.snapshot_kind='pit' AND b.coverage_publication IS NOT NULL AND b.publication_job IS NULL
            AND regexp_replace(r.physical_target,'subjects-g[1-9][0-9]*$','')=c.target_prefix
-           AND ((c.state='new' AND b.state='begun' AND b.queried IS NULL AND o.observation IS NULL)
+           AND ((c.state IN ('new','opening') AND b.state IN ('begun','aborting') AND b.queried IS NULL AND o.observation IS NULL)
              OR (c.state IN ('retained','handed','closing') AND o.state='closed'
                AND (o.consumer_work IS NULL OR o.consumer_bootstrap=o.observation)
                AND b.state IN ('begun','adopted','aborting','aborted')
@@ -3092,16 +3110,22 @@ export async function drainExpiredServingPits(
                  WHERE (pit.partition_no,pit.observation)=(o.partition_no,o.observation) AND pit.state='owned')))
          FOR UPDATE OF b
        ), settled AS (
-         UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM proven p
-         WHERE (b.partition_no,b.bootstrap)=(p.partition_no,p.bootstrap) RETURNING b.partition_no,b.bootstrap
+         UPDATE semantic.public_filter_bootstrap b SET state=CASE WHEN p.state='opening' THEN 'aborting' ELSE 'aborted' END FROM proven p
+         WHERE (b.partition_no,b.bootstrap)=(p.partition_no,p.bootstrap) RETURNING b.partition_no,b.bootstrap,p.state
+       ), uncertain AS (
+         UPDATE search.public_filter_pit_claim c SET state='uncertain',consumer_work=NULL,retry_after=$2+5000
+         FROM settled s WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap) AND s.state='opening'
+         RETURNING c.bootstrap
        ), removed AS (
          DELETE FROM search.public_filter_pit_claim c USING settled s
-         WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap) RETURNING c.bootstrap
-       ) SELECT (SELECT count(*)::integer FROM due) AS due,(SELECT count(*)::integer FROM removed) AS removed`,
+         WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap) AND s.state<>'opening' RETURNING c.bootstrap
+       ) SELECT (SELECT count(*)::integer FROM due) AS due,((SELECT count(*)::integer FROM removed)+(SELECT count(*)::integer FROM uncertain)) AS removed`,
       [prefix, Date.now()],
       { points: 225, keys: 609, writes: 64 },
     );
     const { due, removed } = result.rows[0];
+    const failed = closures.find((closure) => closure.status === 'rejected');
+    if (failed) throw failed.reason;
     if (due === 0) return false;
     if (removed === 0) {
       const retired = await retireServingPitClaim(pool, search, prefix, context);
@@ -3116,20 +3140,25 @@ export function startServingPitRetirement(pool: Pool, search: OpenSearch, prefix
   let stopped = false;
   let running: Promise<void> | undefined;
   let timer: ReturnType<typeof setTimeout>;
+  let failureDelay = 250;
   const schedule = (delay: number) => {
     if (stopped) return;
     timer = setTimeout(() => {
-      let more = false;
+      let nextDelay = 10_000;
       running = drainExpiredServingPits(pool, search, prefix, { deadline: Date.now() + 2_000 })
         .then(
           (pending) => {
-            more = pending;
+            nextDelay = pending ? 250 : 10_000;
+            failureDelay = 250;
           },
-          () => {},
+          () => {
+            nextDelay = failureDelay;
+            failureDelay = Math.min(10_000, failureDelay * 2);
+          },
         )
         .finally(() => {
           running = undefined;
-          schedule(more ? 250 : 10_000);
+          schedule(nextDelay);
         });
     }, delay);
   };
@@ -3150,7 +3179,7 @@ export async function retireServingPitClaim(
   search: OpenSearch,
   prefix: string,
   context: PublicFilterConsumerContext,
-  original?: Readonly<{ registration: string; bootstrap: string }>,
+  original?: Readonly<{ registration: string; bootstrap: string; requireDue?: true }>,
 ): Promise<CustodyCost> {
   const meter = operationCost(pool, context);
   const now = Date.now();
@@ -3180,19 +3209,19 @@ export async function retireServingPitClaim(
        LEFT JOIN search.public_filter_observation o ON (o.partition_no,o.registration,o.observation)=
           (c.partition_no,c.registration,c.partition_no::text||':'||c.bootstrap::text)
        WHERE (c.partition_no,c.bootstrap)=($1,$2) AND c.target_prefix=$3 AND ($4::text IS NULL OR c.registration=$4)
-         AND c.state<>'uncertain' AND (c.deadline<=$5 OR $4::text IS NOT NULL)
+         AND c.state<>'uncertain' AND (c.deadline<=$5 OR ($4::text IS NOT NULL AND NOT $6::boolean)) AND (NOT $6 OR c.retry_after<=$5)
          AND regexp_replace(r.physical_target,'subjects-g[1-9][0-9]*$','')=c.target_prefix
          AND b.state IN ('begun','adopted','aborting') AND b.snapshot_kind='pit' AND b.coverage_publication IS NOT NULL
          AND b.publication_job IS NULL AND (b.queried IS NULL OR b.queried='0:'||b.bootstrap::text)
          AND (o.consumer_work IS NULL OR (c.state IN ('handed','closing') AND o.consumer_bootstrap='0:'||c.bootstrap::text))
          FOR UPDATE OF c,b`,
-      [keys.partition_no, keys.bootstrap, prefix, original?.registration ?? null, now],
+      [keys.partition_no, keys.bootstrap, prefix, original?.registration ?? null, now, original?.requireDue ?? false],
       { points: 5, keys: 14, writes: 0 },
     );
     if (!claim) {
       // A fenced owner may return later. Keep its exact claim, but let other
       // indexed originals progress while its epoch or Source binding is unavailable.
-      if (!original)
+      if (!original || original.requireDue)
         await sql(
           db,
           meter,
