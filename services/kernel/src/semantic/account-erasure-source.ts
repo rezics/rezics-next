@@ -574,8 +574,9 @@ function sourceFactory(
           );
           budget.reserve(SEEK_BODY, wireBytes([sourceHome, barrier.accountId, ...after]));
           const sought = await withReadTransaction(pool, async (tx) => {
+            // The snapshot selects a candidate. Its holding command rechecks and locks the seal.
             const seal = await tx.query(
-              `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
+              `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz`,
               [sourceHome, barrier.accountId, barrier.version, barrier.at],
             );
             if (!seal.rowCount) return null;
