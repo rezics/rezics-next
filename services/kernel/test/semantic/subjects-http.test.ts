@@ -16,6 +16,10 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 
+import { observeSql } from '../content/support/sql-observer.ts';
+import initializePublication from '../../src/semantic/subject-page-publication-initialize.sql';
+import lockPublication from '../../src/semantic/subject-page-publication-lock.sql';
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
@@ -118,6 +122,45 @@ test('a create is 201 with its location and session token, and its key replays i
   expect(reused.response.status).toBe(422);
   expect(reused.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
 });
+
+test('a fresh Book publishes its first label on its original locked point and receipt replay leaves the publication intact', async () => {
+  const key = JSON.stringify(randomUUID());
+  const book = { labels: { en: 'Initial publication' } };
+  const observer = observeSql(pool);
+  try {
+    const first = await create(book, key);
+    expect(first.response.status).toBe(201);
+    const id = first.body.subject.id as string;
+    const point = async () =>
+      (
+        await admin.query(
+          'SELECT readiness, generation::text, completed_position::text, change_position::text, public_effective_at, evidence, ctid::text AS version FROM semantic.subject_page_publication WHERE route=$1 AND subject_id=$2',
+          [routeOf(id), id],
+        )
+      ).rows[0];
+    const created = await point();
+    expect(created).toMatchObject({
+      readiness: 'ready',
+      evidence: 'known',
+      completed_position: '1',
+      change_position: '1',
+    });
+    expect(created.public_effective_at).toBeInstanceOf(Date);
+    const replay = await create(book, key);
+    expect(replay.response.status).toBe(201);
+    expect(replay.body.subject.id).toBe(id);
+    expect(await point()).toEqual(created);
+    const subjectReads = observer.records.filter(({ parameters }) => parameters.includes(id));
+    expect(
+      subjectReads.filter(({ statement }) => statement === initializePublication['~standard'].query.text),
+    ).toHaveLength(1);
+    expect(subjectReads.filter(({ statement }) => statement === lockPublication['~standard'].query.text)).toHaveLength(
+      0,
+    );
+  } finally {
+    await observer.close();
+  }
+}, 60_000);
 
 test('a create needs an account, a structured idempotency key, a valid item and the create grant', async () => {
   const book = { type: 'schema:Book', labels: { en: 'Kokoro' } };

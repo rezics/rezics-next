@@ -5,7 +5,7 @@ import {
   collectSemanticRecordFacts,
   sealSemanticRecordSourceSet,
 } from './record-source-set.ts';
-import { initializeSubjectPagePublication, retainSubjectPageSource } from './subject-page-publication-store.ts';
+import { retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate } from './statement-disclosure.ts';
 import type { Source } from '@rezics/definitions/bulk';
@@ -328,7 +328,6 @@ export async function writeSubject(
       source: options.source,
       routeKey: options.routeKey,
     });
-  await initializeSubjectPagePublication(tx, { route, id: subjectId });
   await recordSubjectPageDiff(
     tx,
     subjectId,
@@ -342,6 +341,7 @@ export async function writeSubject(
       options.routeKey,
     ),
     events,
+    { initialize: true },
   );
   await sealSemanticRecordSourceSet(tx, sourceSet);
   // A create command has the submitted facts but not the bounded, current

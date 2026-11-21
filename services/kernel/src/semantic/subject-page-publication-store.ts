@@ -39,6 +39,7 @@ import {
   SUBJECT_PAGE_REPAIR_QUEUED,
 } from './events.ts';
 import readPointStatement from './subject-page-publication-read.sql';
+import initializePoint from './subject-page-publication-initialize.sql';
 import lockPointStatement from './subject-page-publication-lock.sql';
 import publishPointStatement from './subject-page-publication-publish.sql';
 import insertChangeStatement from './subject-page-publication-change.sql';
@@ -246,19 +247,9 @@ export function publicState(value: unknown): PublicState {
 }
 
 /** Native creation proves an empty baseline without inventing a public time. */
-export async function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<void> {
+export async function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<Point> {
   home(tx, subject.route);
-  const point = (await lockPoint.run(tx, { route: subject.route, subject_id: subject.id }))[0]! as Point;
-  await publishPoint.run(tx, {
-    route: subject.route,
-    subject_id: subject.id,
-    generation: point.generation,
-    readiness: 'ready',
-    completed_position: point.completed_position,
-    position: point.change_position,
-    effective_at: null,
-    witnesses: jsonParameter(point.witnesses),
-  });
+  return listed(await initializePoint.run(tx, { route: subject.route, subject_id: subject.id }))[0]! as Point;
 }
 
 /** Persist only actual affected identities; this never discovers a subject's degree. */
@@ -270,10 +261,12 @@ export async function recordSubjectPageTransition(
     components: ComponentTransition[];
     outbox: CommandEvent[];
     invalidateGate?: boolean;
+    initialize?: true;
   },
 ): Promise<void> {
   home(tx, input.subject.route);
   bounded(input.components.length, 512);
+  const point = input.initialize ? await initializeSubjectPagePublication(tx, input.subject) : undefined;
   const changes: ComponentTransition[] = [];
   for (const component of input.components) {
     if (component.before.shown !== component.after.shown || component.before.digest !== component.after.digest) {
@@ -297,7 +290,7 @@ export async function recordSubjectPageTransition(
   }
   if (!changes.length && !input.invalidateGate) return;
   const time = { effectiveAt: authoritativeTimeValue(commandTime(tx)!), evidence: 'known' as const };
-  await recordTransitions(tx, { ...input, components: changes.map((c) => ({ ...c, ...time })) });
+  await recordTransitions(tx, { ...input, components: changes.map((c) => ({ ...c, ...time })) }, point);
   if (input.invalidateGate)
     await applySubjectPageOwnerChange(tx, {
       owner: { kind: 'subject', route: input.subject.route, key: input.subject.id },
@@ -383,8 +376,10 @@ async function recordTransitions(
     outbox: CommandEvent[];
     invalidateGate?: boolean;
   },
+  initial?: Point,
 ) {
-  const point = (await lockPoint.run(tx, { route: input.subject.route, subject_id: input.subject.id }))[0]! as Point;
+  const point =
+    initial ?? ((await lockPoint.run(tx, { route: input.subject.route, subject_id: input.subject.id }))[0]! as Point);
   let position = BigInt(point.change_position);
   let effectiveAt: string | null = null;
   let current = witnesses(point.witnesses);

@@ -170,6 +170,7 @@ export async function recordSubjectPageDiff(
   before: PublicComponents,
   after: PublicComponents,
   outbox: CommandEvent[],
+  options?: { initialize: true },
 ) {
   const components: ComponentTransition[] = [];
   for (const key of new Set([...before.keys(), ...after.keys()])) {
@@ -185,6 +186,7 @@ export async function recordSubjectPageDiff(
   await recordSubjectPageTransition(tx, {
     subject: { route: routeOf(subject)!, id: subject },
     changeId,
+    ...options,
     components,
     outbox,
   });
