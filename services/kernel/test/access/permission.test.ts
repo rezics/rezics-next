@@ -521,6 +521,26 @@ test('future and expired explicit resource/Realm denials do not block; active ba
   }
 });
 
+test('an empty membership inverse still requires each native candidate ACL source', async () => {
+  const actor = identity({ requestedBy: null });
+  expect(await run(actor)).toBe(true);
+  for (const table of ['resource_grant', 'resource_role_grant', 'resource_denial']) {
+    await unavailable(table, async () => {
+      await expect(run(actor)).rejects.toBeInstanceOf(AccessUnavailableError);
+    });
+  }
+  await deny();
+  expect(await run(actor)).toBe(false);
+  await pool.query('DELETE FROM access.resource_denial WHERE route=$1', [resource.route]);
+  await organizationGrant();
+  expect(await run(actor)).toBe(true);
+  await pool.query('DELETE FROM access.membership_inverse_coverage WHERE route=$1 AND account_id=$2', [
+    routeOf(actorId),
+    actorId,
+  ]);
+  expect(await run(actor)).toBe(false);
+});
+
 test('organization evidence is separately anchored, role-specific and excludes automated members', async () => {
   await organizationGrant();
   expect(await run()).toBe(true);

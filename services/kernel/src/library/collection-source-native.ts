@@ -51,6 +51,7 @@ import partitionRead from '../partition/read.sql';
 import permissionTime from '../access/permission-time.sql';
 import inverse from '../access/permission-inverse.sql';
 import candidates from '../access/permission-candidates.sql';
+import emptyCandidates from '../access/permission-candidates-empty.sql';
 import permissions from '../access/permission-check.sql';
 import assignment from '../access/permission-assignment.sql';
 import membership from '../access/permission-membership.sql';
@@ -392,6 +393,8 @@ function costs() {
       register(inverse.sql, fixed(4004, 1, 128128));
       register(assignment.sql, fixed(8, 2, 512));
       register(membership.sql, fixed(32, 5, 1024));
+      // PostgreSQL folds the dependency-bound empty inverse to one Result and visits no ACL rows.
+      register(emptyCandidates.sql, fixed(1, 0, 0));
       for (const query of [candidates, permissions])
         register(query.sql, (values) => {
           const params = Object.fromEntries(query.params.map((name, i) => [name, values[i]]));

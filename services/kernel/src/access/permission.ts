@@ -68,6 +68,7 @@ import { routeOf as readRoute } from '../route/route.ts';
 import { deadlineClient, within } from './deadline.ts';
 import inverseRead from './permission-inverse.sql';
 import candidatesRead from './permission-candidates.sql';
+import emptyCandidatesRead from './permission-candidates-empty.sql';
 import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
@@ -961,57 +962,37 @@ export function createAccess(config: PermissionConfig): Access {
           roles,
           at,
         };
+        const globalReach = isGlobalReachAction(action) && !isPlatformResource(resource);
+        const readCandidates = (input: typeof candidateInput) =>
+          accessNativeWork(
+            context.work,
+            'candidates',
+            input,
+            {
+              targets: input.resource_ids.length,
+              roles: roles.length,
+              members: principalId ? 2 : 1,
+              grantRoles: grantRoles.length,
+            },
+            () => {
+              if (roles.length === 0) return emptyCandidatesRead.run(source);
+              return globalReach ? governanceReachCandidatesRead.run(source, input) : candidatesRead.run(source, input);
+            },
+          );
         // Preparation keeps the page and Global Context reads separately anchored.
         // The final formula still evaluates both at T in its sole statement.
-        const candidates =
-          isGlobalReachAction(action) && !isPlatformResource(resource)
-            ? (
-                await Promise.all([
-                  accessNativeWork(
-                    context.work,
-                    'candidates',
-                    candidateInput,
-                    {
-                      targets: candidateInput.resource_ids.length,
-                      roles: roles.length,
-                      members: principalId ? 2 : 1,
-                      grantRoles: grantRoles.length,
-                    },
-                    () => governanceReachCandidatesRead.run(source, candidateInput),
-                  ),
-                  (() => {
-                    const globalInput = {
-                      ...candidateInput,
-                      route: PLATFORM_RESOURCE.route,
-                      resource_ids: [PLATFORM_RESOURCE.id],
-                    };
-                    return accessNativeWork(
-                      context.work,
-                      'candidates',
-                      globalInput,
-                      {
-                        targets: 1,
-                        roles: roles.length,
-                        members: principalId ? 2 : 1,
-                        grantRoles: grantRoles.length,
-                      },
-                      () => governanceReachCandidatesRead.run(source, globalInput),
-                    );
-                  })(),
-                ])
-              ).flat()
-            : await accessNativeWork(
-                context.work,
-                'candidates',
-                candidateInput,
-                {
-                  targets: candidateInput.resource_ids.length,
-                  roles: roles.length,
-                  members: principalId ? 2 : 1,
-                  grantRoles: grantRoles.length,
-                },
-                () => candidatesRead.run(source, candidateInput),
-              );
+        const candidates = globalReach
+          ? (
+              await Promise.all([
+                readCandidates(candidateInput),
+                readCandidates({
+                  ...candidateInput,
+                  route: PLATFORM_RESOURCE.route,
+                  resource_ids: [PLATFORM_RESOURCE.id],
+                }),
+              ])
+            ).flat()
+          : await readCandidates(candidateInput);
         // Only hits from these bounded probes cause an anchored role read.
         const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
         const groups = new Map<string, RoleEvidence[]>();
