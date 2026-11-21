@@ -327,45 +327,27 @@ export async function countUnreadNotices(
   const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
   await assertCurrentInboxViewer(visit, accountId);
-  const rows = await withNoticeInboxReadConnection(
-    visit.pool,
-    visit.deadline,
-    async (client) => {
-      const frontierResult = await client.query(
-        `SELECT seen_created_at, seen_notice_id
-         FROM content.notice_seen WHERE route=$1 AND account_id=$2`,
-        [accountRoute, accountId],
-      );
-      const frontier = frontierResult.rows[0] as { seen_created_at: Date; seen_notice_id: string } | undefined;
-      const values: unknown[] = [accountRoute, accountId];
-      let seek = '';
-      if (frontier) {
-        values.push(frontier.seen_created_at, frontier.seen_notice_id);
-        seek = 'AND (n.created_at,n.notice_id) > ($3::timestamptz,$4::uuid)';
-      }
-      values.push(SUMMARY_CANDIDATE_LIMIT + 1);
-      const limit = `$${values.length}`;
-      const result = await client.query(
-        `WITH raw_candidates AS MATERIALIZED (
-           SELECT n.route,n.recipient_id,n.notice_id,n.kind,n.created_at,
-                  n.created_at::text AS created_at_key,
-                  n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id
-           FROM content.notice AS n
-           WHERE n.route=$1 AND n.recipient_id=$2 ${seek}
-             AND ${unacknowledgedSql()}
-           ORDER BY n.created_at,n.notice_id LIMIT ${limit}
-         )
-         SELECT n.notice_id,n.kind,n.created_at,n.created_at_key,
-                n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,
-                true AS unread
-         FROM raw_candidates AS n
-         ORDER BY n.created_at,n.notice_id`,
-        values,
-      );
-      return result.rows as NoticeCandidate[];
-    },
-    { repeatableRead: true },
-  );
+  // The two branches are exclusive. An existing frontier becomes an index seek with its exact PostgreSQL timestamp.
+  const after = (condition: string) => `
+    SELECT n.notice_id,n.kind,n.created_at,n.created_at::text AS created_at_key,
+           n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,true AS unread
+    FROM content.notice n WHERE n.route=$1 AND n.recipient_id=$2 AND ${condition} AND ${unacknowledgedSql()}
+    ORDER BY n.created_at,n.notice_id LIMIT $3`;
+  const rows = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
+    const result = await client.query(
+      `WITH frontier AS MATERIALIZED (
+         SELECT seen_created_at,seen_notice_id FROM content.notice_seen WHERE route=$1 AND account_id=$2
+       )
+       SELECT notices.* FROM (
+         (${after('NOT EXISTS (SELECT 1 FROM frontier)')})
+         UNION ALL
+         SELECT tail.* FROM frontier f CROSS JOIN LATERAL
+           (${after('(n.created_at,n.notice_id) > (f.seen_created_at,f.seen_notice_id)')}) tail
+       ) notices ORDER BY created_at,notice_id`,
+      [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
+    );
+    return result.rows as NoticeCandidate[];
+  });
   const truncated = rows.length > SUMMARY_CANDIDATE_LIMIT;
   const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT).filter((row) => row.unread);
   const visible = await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, candidates, {

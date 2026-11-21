@@ -20,7 +20,7 @@ test('unread summary skips growing acknowledged and seen prefixes before its can
     expect(effect).toBeDefined();
     await effect!.run(envelope.events.find(Boolean)!);
     const reply = await native.db.admin.query<{ notice_id: string }>(
-      `UPDATE content.notice SET created_at='2026-10-01T00:10:00Z'::timestamptz
+      `UPDATE content.notice SET created_at='2026-10-01T00:10:00.000629Z'::timestamptz
        WHERE route=$1 AND recipient_id=$2 AND kind='reply' AND source_id=$3 RETURNING notice_id`,
       [route, recipient, post.id],
     );
@@ -35,11 +35,11 @@ test('unread summary skips growing acknowledged and seen prefixes before its can
       const acknowledged = Array.from({ length: added }, () => newId(route));
       await native.db.admin.query(
         `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
-         SELECT $1,$2,id,'moderation_decision',id,
+         SELECT $1::integer,$2::uuid,id,'moderation_decision',id,
                 '2026-10-01T00:00:00Z'::timestamptz + (ordinality + $5) * interval '1 millisecond'
          FROM unnest($3::uuid[]) WITH ORDINALITY AS n(id,ordinality)
          UNION ALL
-         SELECT $1,$2,id,'moderation_decision',id,
+         SELECT $1::integer,$2::uuid,id,'moderation_decision',id,
                 '2026-10-02T00:00:00Z'::timestamptz + (ordinality + $5) * interval '1 millisecond'
          FROM unnest($4::uuid[]) WITH ORDINALITY AS n(id,ordinality)`,
         [route, recipient, seen, acknowledged, previous / 2],
@@ -59,6 +59,10 @@ test('unread summary skips growing acknowledged and seen prefixes before its can
         basis: 'current-visible-unread',
       });
     }
+    await markNoticesSeen(native.db.pool, recipient, reply.rows[0]!.notice_id);
+    const seen = await native.call(recipient, 'GET', `/v1/accounts/${recipient}/notifications/count`);
+    expect(seen.status).toBe(200);
+    expect(seen.value).toMatchObject({ count: 0, capped: false, basis: 'current-visible-unread' });
   } finally {
     await native.close();
   }
