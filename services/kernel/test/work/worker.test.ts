@@ -23,6 +23,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'rating',
     'commerce',
     'economy',
+    'economy-test-funding',
     'library',
     'community',
     'semantic',

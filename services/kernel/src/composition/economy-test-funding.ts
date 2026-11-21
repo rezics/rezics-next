@@ -9,13 +9,16 @@ import type { FundingIntent, ProviderBinding } from '../economy/settlement/fundi
 import { createFundingLedgerBinder } from '../economy/storage/funding-ledger.ts';
 import { createFundingStore, type FundingLedgerBinder } from '../economy/storage/funding-store.ts';
 import {
-  createDeterministicFundingRail,
+  createConfirmedFundingTestRail,
+  dueTestFundingLane,
+  enrollTestFundingLane,
   runDeterministicFundingDispatch,
 } from '../economy/storage/funding-test-rail.ts';
 import type { EconomyTestFundingPort } from '../economy/test-funding-routes.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
 type TestFundingConfig = Readonly<{ namespace: string; assetId: string; mode: 'test' }>;
+export type EconomyTestFundingBinding = TestFundingConfig & Readonly<{ bookId: string; node: string }>;
 const workBudget = 2_000;
 
 export function readEconomyTestFundingConfig(env: NodeJS.ProcessEnv): TestFundingConfig | undefined {
@@ -51,10 +54,7 @@ function requireResult<Value>(outcome: { kind: 'ok'; value: Value } | { kind: st
 }
 
 /** Synthetic test deposits and withdrawals. The request path queues work and keeps actor locks until commit. */
-export function createNativeEconomyTestFunding(
-  pool: Pool,
-  config: TestFundingConfig & { bookId: string; node: string },
-) {
+export function createNativeEconomyTestFunding(pool: Pool, config: EconomyTestFundingBinding) {
   const { assetId, bookId, namespace, node } = config;
   const environment = process.env.NODE_ENV;
   if (
@@ -108,11 +108,12 @@ export function createNativeEconomyTestFunding(
     bookId,
     binder,
   );
-  const rail = { ...createDeterministicFundingRail(namespace, () => 'confirmed'), admits };
+  const rail = { ...createConfirmedFundingTestRail(namespace), admits };
+  const testLane = { bookId, lane: scopedId(['test-funding-lane', bookId, assetId, namespace]) };
 
   function request<Value>(
     input: Readonly<{ accountId: string; deadline: number }>,
-    work: (store: ReturnType<typeof createFundingStore>, accountId: string) => Promise<Value>,
+    work: (store: ReturnType<typeof createFundingStore>, accountId: string, client: PoolClient) => Promise<Value>,
   ) {
     const accountId = input.accountId.toLowerCase();
     return transaction(pool, input.deadline, async (client) => {
@@ -120,13 +121,13 @@ export function createNativeEconomyTestFunding(
       if (admission === 'source_denied') throw new ProblemError('platform_closed');
       if (admission !== 'allowed') throw new ProblemError('dependency_unavailable');
       const database: EconomyDatabase = { transaction: (run) => run(client), read: (run) => run(client) };
-      return work(createFundingStore(database, bookId, requestBinder), accountId);
+      return work(createFundingStore(database, bookId, requestBinder), accountId, client);
     });
   }
 
   const port: EconomyTestFundingPort = {
     begin: (input) =>
-      request(input, async (store, accountId) => {
+      request(input, async (store, accountId, client) => {
         const intentId = scopedId(['test-funding-intent', bookId, accountId, input.operationId]);
         const outcome = requireResult(
           await store.begin({
@@ -145,6 +146,8 @@ export function createNativeEconomyTestFunding(
         const dispatch = requireResult(await store.prepare(intentId));
         if (dispatch.kind !== 'queued' && dispatch.kind !== 'complete')
           throw new ProblemError('dependency_unavailable');
+        if (dispatch.kind === 'queued' && !(await enrollTestFundingLane(client, testLane, intentId)))
+          throw new ProblemError('dependency_unavailable');
         return { intentId };
       }),
     read: (input) =>
@@ -156,9 +159,23 @@ export function createNativeEconomyTestFunding(
       }),
   };
 
-  return {
-    port,
-    /** An internal owner run, never an HTTP action. The runner proves the exact synthetic binding before claiming. */
-    dispatch: (intentId: string) => runDeterministicFundingDispatch(ownerStore, rail, intentId, crypto.randomUUID()),
-  };
+  /** An internal owner run, never an HTTP action. The runner proves the exact synthetic binding before claiming. */
+  const dispatch = (intentId: string) =>
+    runDeterministicFundingDispatch(ownerStore, rail, intentId, crypto.randomUUID());
+  async function sweep() {
+    const due = await withBoundedReadConnection(pool, Date.now() + workBudget, (client) =>
+      dueTestFundingLane(client, testLane),
+    );
+    let acknowledged = 0;
+    for (const intentId of due) {
+      try {
+        const outcome = await dispatch(intentId);
+        if (outcome.kind === 'ok' && outcome.value.kind === 'acknowledged') acknowledged++;
+      } catch {
+        // The native lease or due row retains failed work for a subsequent pass.
+      }
+    }
+    return { kind: 'advanced' as const, attempted: due.length, acknowledged };
+  }
+  return { port, dispatch, sweep };
 }
