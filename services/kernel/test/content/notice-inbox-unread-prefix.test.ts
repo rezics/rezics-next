@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { withQueryAccounting } from '../../src/database/pool.ts';
 import { markNoticesSeen } from '../../src/content/notice-inbox.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { contentNoticeEffects } from '../../src/content/relays.ts';
@@ -59,6 +60,40 @@ test('unread summary skips growing acknowledged and seen prefixes before its can
         basis: 'current-visible-unread',
       });
     }
+    // No instant permits an empty count: the unread reply exists until the same
+    // writer transaction fences the viewer and acknowledges it. The starting
+    // snapshot still sees the reply, and the post-hydration viewer check refuses it.
+    let crossed = false;
+    let retained = 0;
+    const revoked = await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(sql, _operands, dispatch) {
+          if (crossed || !sql.includes('WITH frontier AS MATERIALIZED')) return dispatch();
+          crossed = true;
+          await native.db.admin.query(
+            `WITH fenced AS (
+             UPDATE access.account SET authn_fenced=true WHERE (route,account_id)=($1,$2)
+             RETURNING route,account_id
+           )
+           INSERT INTO content.notice_ack(route,account_id,notice_id) SELECT route,account_id,$3 FROM fenced`,
+            [route, recipient, reply.rows[0]!.notice_id],
+          );
+          const result = await dispatch();
+          retained = (result as { rows: unknown[] }).rows.length;
+          return result;
+        },
+      },
+      () => native.call(recipient, 'GET', `/v1/accounts/${recipient}/notifications/count`),
+    );
+    expect(crossed).toBe(true);
+    expect(retained).toBe(1);
+    expect(revoked.status).toBe(404);
+    await native.db.admin.query('UPDATE access.account SET authn_fenced=false WHERE (route,account_id)=($1,$2)', [
+      route,
+      recipient,
+    ]);
+
     await markNoticesSeen(native.db.pool, recipient, reply.rows[0]!.notice_id);
     const seen = await native.call(recipient, 'GET', `/v1/accounts/${recipient}/notifications/count`);
     expect(seen.status).toBe(200);

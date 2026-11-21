@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { readAccount, accessCheck } from './access-port.ts';
-import type { Access, Actor } from '../request/access.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
@@ -101,9 +101,7 @@ function readerActor(dependencies: InboxDependencies, accountId: string): Extrac
   return actor;
 }
 
-/** Recheck account status, authn epoch and account:read after source hydration. */
-export async function assertCurrentInboxViewer(dependencies: InboxDependencies, accountId: string): Promise<void> {
-  const visit = inboxReadVisit(dependencies);
+async function prepareInboxViewer(visit: InboxReadVisit, accountId: string) {
   const actor = readerActor(visit, accountId);
   const accountRoute = route(accountId);
   const check = await accessCheck(
@@ -113,9 +111,9 @@ export async function assertCurrentInboxViewer(dependencies: InboxDependencies, 
     { route: accountRoute, id: accountId },
     { pool: visit.pool, deadline: visit.deadline },
   );
-  const current = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
+  return async (client: AccessClient): Promise<void> => {
     const account = await readAccount(client, accountRoute, accountId);
-    return !!(
+    const eligible =
       account &&
       account.accountId === accountId &&
       account.kind === 'actor' &&
@@ -123,11 +121,17 @@ export async function assertCurrentInboxViewer(dependencies: InboxDependencies, 
       !account.fenced &&
       Number.isSafeInteger(actor.authnEpoch) &&
       actor.authnEpoch > 0 &&
-      BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch &&
-      (await check(client))
-    );
-  });
-  if (!current) throw new InboxViewerUnavailableError('Current Inbox viewer is unavailable');
+      BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch;
+    if (!eligible || !(await check(client)))
+      throw new InboxViewerUnavailableError('Current Inbox viewer is unavailable');
+  };
+}
+
+/** Recheck account status, authn epoch and account:read after source hydration. */
+export async function assertCurrentInboxViewer(dependencies: InboxDependencies, accountId: string): Promise<void> {
+  const visit = inboxReadVisit(dependencies);
+  const checkViewer = await prepareInboxViewer(visit, accountId);
+  await withNoticeInboxReadConnection(visit.pool, visit.deadline, checkViewer);
 }
 
 function dependenciesForDisclosure(dependencies: InboxReadVisit) {
@@ -326,16 +330,22 @@ export async function countUnreadNotices(
 ): Promise<UnreadNoticeSummary> {
   const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
-  await assertCurrentInboxViewer(visit, accountId);
+  const checkViewer = await prepareInboxViewer(visit, accountId);
   // The two branches are exclusive. An existing frontier becomes an index seek with its exact PostgreSQL timestamp.
   const after = (condition: string) => `
     SELECT n.notice_id,n.kind,n.created_at,n.created_at::text AS created_at_key,
            n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,true AS unread
     FROM content.notice n WHERE n.route=$1 AND n.recipient_id=$2 AND ${condition} AND ${unacknowledgedSql()}
     ORDER BY n.created_at,n.notice_id LIMIT $3`;
-  const rows = await withNoticeInboxReadConnection(visit.pool, visit.deadline, async (client) => {
-    const result = await client.query(
-      `WITH frontier AS MATERIALIZED (
+  const rows = await withNoticeInboxReadConnection(
+    visit.pool,
+    visit.deadline,
+    async (client) => {
+      // Read eligibility and the unread frontier from one snapshot. With no candidates,
+      // this snapshot already witnesses the complete disclosure.
+      await checkViewer(client);
+      const result = await client.query(
+        `WITH frontier AS MATERIALIZED (
          SELECT seen_created_at,seen_notice_id FROM content.notice_seen WHERE route=$1 AND account_id=$2
        )
        SELECT notices.* FROM (
@@ -344,18 +354,24 @@ export async function countUnreadNotices(
          SELECT tail.* FROM frontier f CROSS JOIN LATERAL
            (${after('(n.created_at,n.notice_id) > (f.seen_created_at,f.seen_notice_id)')}) tail
        ) notices ORDER BY created_at,notice_id`,
-      [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
-    );
-    return result.rows as NoticeCandidate[];
-  });
+        [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
+      );
+      return result.rows as NoticeCandidate[];
+    },
+    { repeatableRead: true },
+  );
   const truncated = rows.length > SUMMARY_CANDIDATE_LIMIT;
   const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT).filter((row) => row.unread);
-  const visible = await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, candidates, {
-    includeActors: false,
-  });
-  await assertCurrentInboxViewer(visit, accountId);
-  const count = Math.min(visible.size, 100);
-  const capped = truncated || visible.size > 100;
+  let visible = 0;
+  if (rows.length) {
+    const projections = await discloseNoticeCandidates(dependenciesForDisclosure(visit), accountId, candidates, {
+      includeActors: false,
+    });
+    await assertCurrentInboxViewer(visit, accountId);
+    visible = projections.size;
+  }
+  const count = Math.min(visible, 100);
+  const capped = truncated || visible > 100;
   return {
     count,
     capped,

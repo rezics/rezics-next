@@ -76,7 +76,8 @@ test('a checkout arriving after expiry issues no SQL and the next visit succeeds
   resolveCheckout(late.client);
   await late.releaseWait;
   expect(late.statements).toEqual([]);
-  expect(late.releaseError()).toBeInstanceOf(AccessUnavailableError);
+  // The expired lease returns this unused physical connection healthy.
+  expect(late.releaseError()).toBeUndefined();
   await expect(snapshot(pool, Date.now() + 1000)).resolves.toBe('current source');
 });
 

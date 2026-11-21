@@ -23,6 +23,11 @@ beforeAll(async () => {
     .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
     .join(',');
   fixture = await reactionFixture();
+  await fixture.db.admin.query(
+    'UPDATE access.account SET minimum_authn_epoch=greatest(minimum_authn_epoch,1) WHERE (route,account_id)=($1,$2)',
+    [routeOf(fixture.accountId), fixture.accountId],
+  );
+  await fixture.renew(fixture.accountId);
   const verified = await fixture.verified();
   if (verified.kind !== 'account') throw new Error('expected an account viewer');
   await fixture.db.admin.query(
@@ -34,7 +39,7 @@ beforeAll(async () => {
     pool: fixture.db.pool,
     routeKey: new Uint8Array(32).fill(71),
     access: fixture.access,
-    actor: { ...verified, authnEpoch: Math.max(verified.authnEpoch, 1) },
+    actor: verified,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
     deadline: Date.now() + 180_000,
     now: () => new Date(),
@@ -147,13 +152,13 @@ test('notice actor composition admits Media variants independently and retires c
     `INSERT INTO content.media
       (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,
        byte_count,actual_byte_count,sha256,state,key,transaction_id,width,height,thumbhash,average_color)
-     VALUES ($1,$2,$3,$3,$2::text,'avatar','image/png',256,256,repeat('a',64),'available',
-             'unused-original-key',$2,64,64,decode('010203','hex'),'#123456')`,
+     VALUES ($1,$2,$3,$3,$2::uuid::text,'avatar','image/png',256,256,repeat('a',64),'available',
+             'm/'||$2::uuid||'/original',$2,64,64,decode('010203','hex'),'#123456')`,
     [r, media, id],
   );
   await fixture.db.admin.query(
     `INSERT INTO content.media_variant(route,media_id,format,width,height,media_type,byte_count,sha256,key,transaction_id)
-     VALUES ($1,$2,'webp',64,64,'image/webp',100,repeat('b',64),'unused-variant-key',$2)`,
+     VALUES ($1,$2,'webp',64,64,'image/webp',100,repeat('b',64),'m/'||$2::uuid||'/webp-64',$2)`,
     [r, media],
   );
   const original = (
@@ -206,7 +211,10 @@ test('notice actor composition admits Media variants independently and retires c
       error: new Error('Account observation unavailable'),
     });
     await expect(read()).rejects.toThrow('Account observation unavailable');
-    await fixture.db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [r, media]);
+    await fixture.db.admin.query(
+      'UPDATE content.media SET taken_down=true,security_revision=security_revision+1 WHERE route=$1 AND media_id=$2',
+      [r, media],
+    );
     expect((await read()).get(id)).toMatchObject({ state: 'available', avatar: null, avatarUrl: null });
   } finally {
     await trace.close();
