@@ -17,7 +17,12 @@ import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable }
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './credential-floor-identity.ts';
 import { installAccessClock } from './access-clock.ts';
 
-import { withConnection, withBoundedReadOnlyTransaction, discardConnection } from '../database/pool.ts';
+import {
+  hasPretransactionReadSession,
+  withConnection,
+  withBoundedReadOnlyTransaction,
+  discardConnection,
+} from '../database/pool.ts';
 import {
   accessCommandAttempt,
   commandAccessContext,
@@ -254,7 +259,11 @@ export function createAccess(config: AccessConfig): Access {
       const permissionContext = {
         ...(context.work ? { work: context.work } : {}),
         ...(context.time ? { time: context.time } : {}),
-        pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+        // Bounded permission reads carry this deadline on their native transport.
+        // Keep the exact pool identity when the executor lends its pretransaction session.
+        pool: hasPretransactionReadSession(context.pool)
+          ? context.pool
+          : (deadlineClient(context.pool, deadline) as typeof context.pool),
         deadline,
       };
       if (actor.kind === 'anonymous' && !attempt && !page && !nativeTime && !context.work)

@@ -19,13 +19,18 @@ import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
-import { discardConnection, withBoundedCommandConnection, withConnection } from '../database/pool.ts';
+import {
+  discardConnection,
+  withBoundedCommandConnection,
+  withConnection,
+  withPretransactionReads,
+} from '../database/pool.ts';
 import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
 import { currentCommandWorkAssociation, type CommandWorkAssociation } from './work-context.ts';
-import { enterCommandGate } from './gate.ts';
+import { beginIdentityBirthTransaction, enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, configuredReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -173,6 +178,7 @@ export type CommandOutcome<T> = {
 };
 
 const receiptNotFound = Symbol('receipt-not-found');
+const retryBirthAfterReceiptMiss = Symbol('retry-birth-after-receipt-miss');
 type CommandExecution<T> = CommandOutcome<T> | typeof receiptNotFound;
 
 declare const authoritativeTime: unique symbol;
@@ -712,6 +718,14 @@ async function executeCommand<T>(
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
+  const coordinatesBirth =
+    !commandWork &&
+    !singleAttempt.getStore() &&
+    !dispatch &&
+    !receiptPreflight &&
+    options.receipt?.kind === 'subject.create' &&
+    authorization?.action === 'subject:create';
+  let birthReceiptChecked = false;
   while (Date.now() < deadline) {
     if (singleAttempt.getStore() && singleAttemptCount++ > 0)
       throw new CommandUnavailableError('contention', partition);
@@ -719,20 +733,22 @@ async function executeCommand<T>(
     try {
       let evidence: unknown;
       let attempt: CommandAttempt | undefined;
-      if (authorization?.prepare) {
-        // The clock read finishes before parent/org evidence and child checkout.
+      const waitForBirth = coordinatesBirth && birthReceiptChecked;
+      const prepare = async (leased?: PoolClient) => {
+        if (!authorization?.prepare) return;
+        const readTime = (client: PoolClient) => boundedRead(client, deadline, () => mintTime(client, options.clock));
         time = await measureCommandPhase('time_mint', () =>
-          withBoundedCommandConnection(
-            pool,
-            deadline,
-            (client) => boundedRead(client, deadline, () => mintTime(client, options.clock)),
-            { deadlineError: () => new CommandUnavailableError('deadline', partition) },
-          ),
+          leased
+            ? readTime(leased)
+            : withBoundedCommandConnection(pool, deadline, readTime, {
+                deadlineError: () => new CommandUnavailableError('deadline', partition),
+              }),
         );
         attempt = Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
         attemptDeadlines.set(attempt, deadline);
         evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
-      }
+      };
+      if (!coordinatesBirth) await prepare();
       dispatch?.checkpoint();
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
@@ -741,6 +757,7 @@ async function executeCommand<T>(
       let callbackState: CallbackState | undefined;
       let commitPending = false;
       const checkout = async <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => {
+        if (coordinatesBirth && !waitForBirth) await prepare();
         dispatch?.checkout();
         const run = (client: PoolClient) => {
           // Actual acquisition boundary, inside withConnection's release custody.
@@ -802,10 +819,16 @@ async function executeCommand<T>(
             throw error;
           }
         };
+        let checkBirthReceipt = false;
         try {
           dispatch?.checkpoint();
           if (dispatch) await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
-          else await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+          else if (coordinatesBirth) {
+            const wait = waitForBirth
+              ? { deadline, prepare: () => withPretransactionReads(pool, client, () => prepare(client)) }
+              : undefined;
+            checkBirthReceipt = (await beginIdentityBirthTransaction(client, partition, wait)) === 'receipt';
+          } else await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
           if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
           else await client.query("SET LOCAL lock_timeout = '200ms'");
           if (dispatch)
@@ -861,11 +884,11 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
-          if (receiptPreflight) {
+          if (receiptPreflight || checkBirthReceipt) {
             receiptOwners.delete(tx);
             await measureCommandPhase('commit', commit);
             sealEventTypes();
-            return receiptNotFound;
+            return checkBirthReceipt ? retryBirthAfterReceiptMiss : receiptNotFound;
           }
           if (publisher) {
             const replay = await publisher.lookup(client);
@@ -1089,6 +1112,12 @@ async function executeCommand<T>(
         gate.release();
         commandPhase('command_overhead');
       });
+      // Only a current authorized miss queues for the writer. Re-enter with a new
+      // attempt and snapshot; both authorization and the original receipt are checked again.
+      if (result === retryBirthAfterReceiptMiss) {
+        birthReceiptChecked = true;
+        continue;
+      }
       if (result) return result;
       // Do not keep a failed attempt's T/capability alive during operational waits.
       if (time) times.delete(time);

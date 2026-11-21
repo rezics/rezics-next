@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import { beginIdentityBirthTransaction } from '../../src/command/gate.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { Admission } from '../../src/http/admission.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -113,14 +114,81 @@ test('a create is 201 with its location and session token, and its key replays i
   const session = first.response.headers.get(SESSION_HEADER)!;
   expect(decodeSession(tokens, `account:${accounts.writer}`, session)).toHaveLength(1);
 
-  const again = await create({ labels: { ja: '坊っちゃん', en: 'Botchan' } }, key);
-  expect(again.response.status).toBe(201);
-  expect(again.body.subject.id).toBe(id);
-  expect(again.response.headers.get('location')).toBe(`/v1/subjects/${id}`);
+  // A different replica may already be writing on this basis shard. A persisted
+  // receipt still receives current authorization and its original digest check.
+  const competing = await admin.connect();
+  try {
+    expect(await beginIdentityBirthTransaction(competing, partitionOf(routeOf(id)!))).toBe('writer');
+    const again = await create({ labels: { ja: '坊っちゃん', en: 'Botchan' } }, key);
+    expect(again.response.status).toBe(201);
+    expect(again.body.subject.id).toBe(id);
+    expect(again.response.headers.get('location')).toBe(`/v1/subjects/${id}`);
 
-  const reused = await create({ labels: { en: 'Kokoro' } }, key);
-  expect(reused.response.status).toBe(422);
-  expect(reused.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
+    const reused = await create({ labels: { en: 'Kokoro' } }, key);
+    expect(reused.response.status).toBe(422);
+    expect(reused.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
+  } finally {
+    await competing.query('ROLLBACK');
+    competing.release();
+  }
+});
+
+test('a queued creation checks the parent grant again after the competing writer releases its shard', async () => {
+  const rawKey = randomUUID();
+  const label = rawKey;
+  const target = subjectTarget(routeKey, accounts.writer, rawKey);
+  const parent = { route: 0, id: GLOBAL_CONTEXT };
+  const holder = await admin.connect();
+  let pending: ReturnType<typeof create> | undefined;
+  try {
+    expect(await beginIdentityBirthTransaction(holder, partitionOf(target.route))).toBe('writer');
+    const { pid } = (await holder.query('SELECT pg_backend_pid() AS pid')).rows[0]!;
+    pending = create({ labels: { en: label } }, JSON.stringify(rawKey));
+    const waitForWriter = async () => {
+      let waiting = false;
+      const until = Date.now() + 1800;
+      while (!waiting && Date.now() < until) {
+        waiting = (
+          await admin.query(
+            "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND $1::integer=ANY(pg_blocking_pids(pid))) AS waiting",
+            [pid],
+          )
+        ).rows[0]!.waiting;
+        if (!waiting) await Bun.sleep(10);
+      }
+      expect(waiting).toBe(true);
+    };
+    await waitForWriter();
+    await realAccess.revoke(parent, 'writer', 'subject:create');
+    await holder.query('ROLLBACK');
+    expect((await pending).response.status).toBe(403);
+    expect(
+      (await admin.query('SELECT 1 FROM semantic.subject WHERE route=$1 AND canonical_name=$2', [target.route, label]))
+        .rowCount,
+    ).toBe(0);
+
+    await realAccess.grant(parent, 'writer', 'subject:create');
+    expect(await beginIdentityBirthTransaction(holder, partitionOf(target.route))).toBe('writer');
+    pending = create({ labels: { en: label } }, JSON.stringify(rawKey));
+    await waitForWriter();
+    await holder.query('ROLLBACK');
+    const resumed = await pending;
+    expect(resumed.response.status).toBe(201);
+    expect(resumed.response.headers.get('location')).toBe(`/v1/subjects/${resumed.body.subject.id}`);
+    expect(
+      (
+        await admin.query('SELECT subject_id AS id FROM semantic.subject WHERE route=$1 AND canonical_name=$2', [
+          target.route,
+          label,
+        ])
+      ).rows,
+    ).toEqual([{ id: resumed.body.subject.id }]);
+  } finally {
+    await holder.query('ROLLBACK');
+    holder.release();
+    await pending?.catch(() => {});
+    await realAccess.grant(parent, 'writer', 'subject:create');
+  }
 });
 
 test('a fresh Book publishes its first label on its original locked point and receipt replay leaves the publication intact', async () => {

@@ -41,6 +41,14 @@ type Checkout = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
 type Discard = (client: PoolClient, error: Error) => void;
 const deferredReadDiscards = new WeakMap<PoolClient, (error: Error) => void>();
 
+/** A nested owner can request disposal without taking over physical release. */
+export function discardBoundedReadLease(client: PoolClient, error: Error): boolean {
+  const discard = deferredReadDiscards.get(client);
+  if (!discard) return false;
+  discard(error);
+  return true;
+}
+
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error('Bounded database read connection became uncertain');
 }

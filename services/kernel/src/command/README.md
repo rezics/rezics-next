@@ -20,6 +20,17 @@ An expired or uncertain checkout is retired and its underlying pool client is re
 with an error; late body or callback code has no further SQL dispatch authority. The
 executor retains custody of the original callback and its eventual settlement.
 
+A fresh `subject.create` advances the published identity basis at its command home modulo 64.
+Replicas compete for that shard on the original bounded checkout before starting the serializable
+writer. A busy shard admits an authorized receipt lookup. A hit returns the existing result. After
+a miss, the next attempt waits on the original shard before its writer snapshot. While holding that
+lease it mints a new time and prepares current authorization. Same-pool bounded point reads reuse the
+leased backend before writer BEGIN. A distinct authority pool retains its own connection. The writer
+checks the receipt again before applying its effect. Explicit single-attempt operations and commands with a
+predeclared work budget retain their original executor. The request deadline covers the wait and all native work. PostgreSQL releases
+the transferred advisory lock at transaction completion. A lost acquisition or transfer discards the
+underlying session.
+
 A lost or timed-out `COMMIT` response is an uncertain durable outcome. It must not be
 reported as success or as a proven rollback, and it must not be retried as a fresh effect.
 Owners settle receipt-bearing commands by reading their existing receipt under current

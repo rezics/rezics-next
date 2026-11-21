@@ -1,7 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
-import { withBoundedReadLifetime, type BoundedReadLifetimeOptions } from './bounded-read-lifetime.ts';
+import {
+  discardBoundedReadLease,
+  withBoundedReadLifetime,
+  type BoundedReadLifetimeOptions,
+} from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
 export {
@@ -115,6 +119,51 @@ export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Prom
 
 type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction' | 'mode'>;
 
+type PreparationSession = {
+  pool: Pool;
+  client: PoolClient;
+  open: boolean;
+  reads: Promise<void>;
+};
+const preparationSession = new AsyncLocalStorage<PreparationSession>();
+const readingSession = new AsyncLocalStorage<PreparationSession>();
+
+export function hasPretransactionReadSession(pool: Pool): boolean {
+  const session = preparationSession.getStore();
+  return session?.pool === pool && session.open;
+}
+
+/** Before writer BEGIN, bounded native point reads on this exact pool may use
+ * the already leased backend. Distinct pools keep their own checkout custody. */
+export async function withPretransactionReads<T>(
+  pool: Pool,
+  client: PoolClient,
+  prepare: () => Promise<T>,
+): Promise<T> {
+  const session = { pool, client, open: true, reads: Promise.resolve() };
+  try {
+    return await preparationSession.run(session, prepare);
+  } finally {
+    session.open = false;
+    await session.reads;
+  }
+}
+
+function checkoutRead<T>(pool: Pool, run: (client: PoolClient) => Promise<T>): Promise<T> {
+  const session = preparationSession.getStore();
+  if (session?.pool !== pool) return withConnection(pool, run);
+  if (!session.open || readingSession.getStore() === session) return Promise.reject(new NestedPoolCheckoutError());
+  const read = session.reads.then(() => {
+    if (!session.open) throw new NestedPoolCheckoutError();
+    return readingSession.run(session, () => run(session.client));
+  });
+  session.reads = read.then(
+    () => {},
+    () => {},
+  );
+  return read;
+}
+
 /** Opt in to one finite physical checkout for native read work. */
 export function withBoundedReadConnection<T>(
   pool: Pool,
@@ -122,7 +171,7 @@ export function withBoundedReadConnection<T>(
   read: (client: PoolClient) => Promise<T>,
   options: BoundedReadOptions = {},
 ): Promise<T> {
-  return withBoundedReadLifetime((work) => withConnection(pool, work), retireConnection, deadline, read, options);
+  return withBoundedReadLifetime((work) => checkoutRead(pool, work), retireConnection, deadline, read, options);
 }
 
 /** Bound a native transaction without changing the identity of its original Pool. */
@@ -184,7 +233,7 @@ async function checkedOutConnection<T>(
 }
 
 export function discardConnection(client: PoolClient, error: Error): void {
-  brokenClients.set(client, error);
+  if (!discardBoundedReadLease(client, error)) brokenClients.set(client, error);
 }
 
 /** Error-release closes an uncertain pg session while its original callback still drains. */
