@@ -24,6 +24,17 @@ CREATE SCHEMA search;
 
 
 --
+-- Name: consumer_range; Type: TYPE; Schema: search; Owner: -
+--
+
+CREATE TYPE search.consumer_range AS RANGE (
+    subtype = text,
+    multirange_type_name = search.consumer_multirange,
+    collation = pg_catalog."C"
+);
+
+
+--
 -- Name: public_filter_ack_basis_v1; Type: TYPE; Schema: search; Owner: -
 --
 
@@ -300,44 +311,66 @@ END $$;
 
 
 --
+-- Name: capture_freshness_gaps(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.capture_freshness_gaps() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  previous search.consumer_multirange := '{}';
+  following search.consumer_multirange;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.checkpoints = '{}' AND NEW.checkpoints = '{}' THEN RETURN NULL; END IF;
+    previous := search.lagging_consumers(OLD.head, OLD.checkpoints);
+  END IF;
+  following := search.lagging_consumers(NEW.head, NEW.checkpoints);
+  IF previous = following THEN RETURN NULL; END IF;
+  IF previous <> '{}' THEN
+    DELETE FROM search.freshness_gap WHERE partition_no = NEW.partition_no;
+  END IF;
+  INSERT INTO search.freshness_gap SELECT NEW.partition_no, unnest(following);
+  RETURN NULL;
+END
+$$;
+
+
+--
 -- Name: capture_freshness_position(); Type: FUNCTION; Schema: search; Owner: -
 --
 
 CREATE FUNCTION search.capture_freshness_position() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  old_consumer text := '';
-  new_consumer text := '';
-  emptied boolean;
 BEGIN
-  IF TG_TABLE_NAME = 'consumer_checkpoint' THEN
-    old_consumer := OLD.consumer;
-    new_consumer := NEW.consumer;
-    IF NOT (coalesce(starts_with(old_consumer, 'search_'), false)
-         OR coalesce(starts_with(new_consumer, 'search_'), false)) THEN RETURN NULL; END IF;
-  END IF;
-
-  IF TG_OP = 'UPDATE' AND (old_consumer, OLD.partition_no, OLD.position)
-      IS NOT DISTINCT FROM (new_consumer, NEW.partition_no, NEW.position) THEN RETURN NULL; END IF;
-
-  IF TG_OP <> 'INSERT' AND OLD.position > 0 AND (old_consumer = '' OR starts_with(old_consumer, 'search_'))
-      AND (TG_OP = 'DELETE' OR NEW.position = 0
-           OR (old_consumer, OLD.partition_no) IS DISTINCT FROM (new_consumer, NEW.partition_no)) THEN
-    UPDATE search.freshness_positions SET positions = positions - OLD.partition_no::text
-      WHERE consumer = old_consumer AND shard = OLD.partition_no / 64
-      RETURNING positions = '{}'::jsonb INTO emptied;
-    IF emptied THEN
-      DELETE FROM search.freshness_positions WHERE consumer = old_consumer AND shard = OLD.partition_no / 64;
+  IF TG_TABLE_NAME = 'partition' THEN
+    IF TG_OP = 'UPDATE' AND (OLD.partition_no, OLD.position) = (NEW.partition_no, NEW.position) THEN RETURN NULL; END IF;
+    IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.partition_no <> NEW.partition_no) THEN
+      UPDATE search.freshness_home SET head = 0 WHERE partition_no = OLD.partition_no;
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+      UPDATE search.freshness_home SET head = NEW.position WHERE partition_no = NEW.partition_no;
+      IF NOT FOUND THEN
+        INSERT INTO search.freshness_home AS h (partition_no, head) VALUES (NEW.partition_no, NEW.position)
+          ON CONFLICT (partition_no) DO UPDATE SET head = EXCLUDED.head;
+      END IF;
+    END IF;
+  ELSE
+    IF TG_OP = 'UPDATE' AND (OLD.partition_no, OLD.consumer, OLD.position) = (NEW.partition_no, NEW.consumer, NEW.position)
+      THEN RETURN NULL; END IF;
+    IF TG_OP <> 'INSERT' AND starts_with(OLD.consumer, 'search_') AND OLD.position > 0 AND
+       (TG_OP = 'DELETE' OR NEW.position = 0 OR (OLD.partition_no, OLD.consumer) <> (NEW.partition_no, NEW.consumer)) THEN
+      UPDATE search.freshness_home SET checkpoints = checkpoints - OLD.consumer WHERE partition_no = OLD.partition_no;
+    END IF;
+    IF TG_OP <> 'DELETE' AND starts_with(NEW.consumer, 'search_') AND NEW.position > 0 THEN
+      INSERT INTO search.freshness_home AS h (partition_no, checkpoints)
+        VALUES (NEW.partition_no, jsonb_build_object(NEW.consumer, NEW.position))
+        ON CONFLICT (partition_no) DO UPDATE SET checkpoints = h.checkpoints || EXCLUDED.checkpoints;
     END IF;
   END IF;
-  IF TG_OP <> 'DELETE' AND NEW.position > 0 AND (new_consumer = '' OR starts_with(new_consumer, 'search_')) THEN
-    INSERT INTO search.freshness_positions AS retained (consumer, shard, positions)
-      VALUES (new_consumer, NEW.partition_no / 64, jsonb_build_object(NEW.partition_no, NEW.position))
-      ON CONFLICT (consumer, shard) DO UPDATE SET positions = retained.positions || EXCLUDED.positions;
-  END IF;
   RETURN NULL;
-END;
+END
 $$;
 
 
@@ -909,6 +942,21 @@ BEGIN
   END IF;
   RETURN NULL;
 END
+$$;
+
+
+--
+-- Name: lagging_consumers(bigint, jsonb); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.lagging_consumers(head bigint, checkpoints jsonb) RETURNS search.consumer_multirange
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT CASE WHEN head = 0 OR checkpoints = '{}' THEN '{}'::search.consumer_multirange
+    ELSE search.consumer_multirange(search.consumer_range(NULL, NULL)) -
+      coalesce(range_agg(search.consumer_range(key, key, '[]')), '{}'::search.consumer_multirange)
+    END
+  FROM jsonb_each_text(checkpoints) WHERE value::bigint >= head
 $$;
 
 
@@ -2125,9 +2173,13 @@ CREATE FUNCTION search.truncate_freshness_positions() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  DELETE FROM search.freshness_positions WHERE (consumer = '') = (TG_TABLE_NAME = 'partition');
+  IF TG_TABLE_NAME = 'partition' THEN
+    UPDATE search.freshness_home SET head = 0 WHERE head > 0;
+  ELSE
+    UPDATE search.freshness_home SET checkpoints = '{}' WHERE checkpoints <> '{}';
+  END IF;
   RETURN NULL;
-END;
+END
 $$;
 
 
@@ -2410,16 +2462,24 @@ CREATE TABLE search.facet_value (
 
 
 --
--- Name: freshness_positions; Type: TABLE; Schema: search; Owner: -
+-- Name: freshness_gap; Type: TABLE; Schema: search; Owner: -
 --
 
-CREATE TABLE search.freshness_positions (
-    consumer text NOT NULL,
-    shard integer NOT NULL,
-    positions jsonb NOT NULL,
-    CONSTRAINT freshness_positions_consumer_check CHECK (((consumer = ''::text) OR starts_with(consumer, 'search_'::text))),
-    CONSTRAINT freshness_positions_positions_check CHECK ((jsonb_typeof(positions) = 'object'::text)),
-    CONSTRAINT freshness_positions_shard_check CHECK ((shard >= 0))
+CREATE TABLE search.freshness_gap (
+    partition_no integer NOT NULL,
+    consumers search.consumer_range NOT NULL
+);
+
+
+--
+-- Name: freshness_home; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.freshness_home (
+    partition_no integer NOT NULL,
+    head bigint DEFAULT 0 NOT NULL,
+    checkpoints jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT freshness_home_head_check CHECK ((head >= 0))
 );
 
 
@@ -3770,11 +3830,11 @@ ALTER TABLE ONLY search.facet_value
 
 
 --
--- Name: freshness_positions freshness_positions_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+-- Name: freshness_home freshness_home_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
-ALTER TABLE ONLY search.freshness_positions
-    ADD CONSTRAINT freshness_positions_pkey PRIMARY KEY (consumer, shard);
+ALTER TABLE ONLY search.freshness_home
+    ADD CONSTRAINT freshness_home_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -4363,6 +4423,27 @@ CREATE UNIQUE INDEX facet_one_ready ON search.facet_generation USING btree (part
 
 
 --
+-- Name: freshness_gap_consumer; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX freshness_gap_consumer ON search.freshness_gap USING gist (consumers);
+
+
+--
+-- Name: freshness_gap_home; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX freshness_gap_home ON search.freshness_gap USING btree (partition_no);
+
+
+--
+-- Name: freshness_uncheckpointed_home; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX freshness_uncheckpointed_home ON search.freshness_home USING btree (partition_no) WHERE ((head > 0) AND (checkpoints = '{}'::jsonb));
+
+
+--
 -- Name: generation_publication_bootstrap; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -4773,6 +4854,15 @@ CREATE TRIGGER erasure_enroll_prepared AFTER INSERT ON search.public_filter_prep
 --
 
 CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_registration FOR EACH ROW EXECUTE FUNCTION search.enroll_retained_copy();
+
+
+--
+-- Name: freshness_home freshness_gaps; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER freshness_gaps AFTER INSERT OR UPDATE ON search.freshness_home FOR EACH ROW EXECUTE FUNCTION search.capture_freshness_gaps();
+
+ALTER TABLE search.freshness_home ENABLE ALWAYS TRIGGER freshness_gaps;
 
 
 --

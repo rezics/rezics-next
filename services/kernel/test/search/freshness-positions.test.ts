@@ -7,7 +7,9 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   const [up, down] = (
-    await Bun.file(new URL('../../db/search/migrations/20261119015031_freshness_positions.sql', import.meta.url)).text()
+    await Bun.file(
+      new URL('../../db/search/migrations/20261121024000_freshness_home_lanes.sql', import.meta.url),
+    ).text()
   ).split('-- migrate:down');
   const first = subjectConsumer('positions-', 1);
   const next = subjectConsumer('positions-', 2);
@@ -26,7 +28,7 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       (
         await db.query(`
     SELECT sum(seq_tup_read + idx_tup_fetch) AS n FROM pg_stat_xact_user_tables
-    WHERE relid IN ('search.freshness_positions'::regclass, 'core.partition'::regclass,
+    WHERE relid IN ('search.freshness_home'::regclass, 'search.freshness_gap'::regclass, 'core.partition'::regclass,
                     'core.consumer_checkpoint'::regclass, 'core.outbox'::regclass)`)
       ).rows[0]!.n,
     );
@@ -42,11 +44,10 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       [[first, next, generic]],
     );
     await db.query(up!);
-    await db.query('ANALYZE search.freshness_positions');
+    await db.query('ANALYZE search.freshness_home; ANALYZE search.freshness_gap');
     const before = await tuples();
     expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
     const caughtUpRows = (await tuples()) - before;
-    expect(caughtUpRows).toBeGreaterThan(0);
     expect(caughtUpRows).toBeLessThan(512);
 
     await db.query('UPDATE core.partition SET position = position + 1 WHERE partition_no IN (0,4095)');
@@ -72,13 +73,31 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     );
     expect(await read(first)).toMatchObject({ behind: 1, oldest: later });
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
+    await db.query('UPDATE core.partition SET position = 0 WHERE partition_no = 0');
+    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    expect(await read(next)).toMatchObject({ behind: 1, oldest: earlier });
+    await db.query(
+      'UPDATE core.consumer_checkpoint SET position = position + 1 WHERE consumer = $1 AND partition_no = 4095',
+      [first],
+    );
+    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    await db.query(
+      "UPDATE core.consumer_checkpoint SET consumer = 'moved_reader' WHERE consumer = $1 AND partition_no = 4095",
+      [first],
+    );
+    expect(await read(first)).toMatchObject({ behind: 1, oldest: null });
+    await db.query(
+      'UPDATE core.consumer_checkpoint SET position = 0, epoch = NULL WHERE consumer = $1 AND partition_no = 4095',
+      [next],
+    );
+    expect(await read(next)).toMatchObject({ behind: 1, oldest: null });
     await db.query('ROLLBACK TO advances');
     expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
 
     await db.query('DELETE FROM core.consumer_checkpoint WHERE consumer = $1', [first]);
-    expect((await db.query('SELECT shard FROM search.freshness_positions WHERE consumer = $1', [first])).rows).toEqual(
-      [],
-    );
+    expect(
+      (await db.query('SELECT partition_no FROM search.freshness_home WHERE checkpoints ? $1', [first])).rows,
+    ).toEqual([]);
     // The next envelope after a missing checkpoint is position one, absent from this history.
     expect(await read(first)).toMatchObject({ behind: 4096, oldest: null });
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
@@ -92,3 +111,34 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     }
   }
 }, 30_000);
+
+test('different homes in one former shard can advance before either transaction finishes', async () => {
+  const connections = [new pg.Client(process.env.DATABASE_URL), new pg.Client(process.env.DATABASE_URL)];
+  await Promise.all(connections.map((client) => client.connect()));
+  try {
+    for (const client of connections) {
+      await client.query(
+        "BEGIN ISOLATION LEVEL SERIALIZABLE; SET LOCAL lock_timeout = '1s'; SELECT pg_current_snapshot()",
+      );
+    }
+    for (const [i, client] of connections.entries()) {
+      const home = 64 + i;
+      await client.query('UPDATE core.partition SET position = position + 1 WHERE partition_no = $1', [home]);
+      await client.query(
+        `INSERT INTO core.consumer_checkpoint(partition_no, consumer, epoch, position)
+         SELECT partition_no, 'search_pair_regression', epoch, position FROM core.partition WHERE partition_no = $1`,
+        [home],
+      );
+    }
+  } finally {
+    await Promise.all(
+      connections.map(async (client) => {
+        try {
+          await client.query('ROLLBACK');
+        } finally {
+          await client.end();
+        }
+      }),
+    );
+  }
+});

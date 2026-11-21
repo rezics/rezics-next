@@ -1622,24 +1622,26 @@ population completeness, or expand the existing preview's disclosure guarantees.
 
 ### Freshness
 
-- One statement compares the shared committed outbox heads with the queried generation's checkpoints.
-  `search.freshness_positions` stores positive native bigint positions in groups of 64 homes. A missing home
-  starts at zero. Equal groups need no home expansion. For each behind home in a differing group, the reader
-  seeks exactly `(home, checkpoint + 1, event_seq = 0)` in the live outbox. It returns the behind count and
-  minimum retained timestamp. A positive count with no retained timestamp fails. Other consumers of this
-  reader use their native checkpoints directly for positive heads.
-- Each head write changes one shared group. A Search checkpoint changes only that consumer's group. A key
-  move also clears the previous slot, and clearing a group's last slot removes its row. Backfill runs under
-  both source write locks. Triggers follow native changes in the same transaction, including replica-mode
-  writes and truncation. Outbox retention and timestamp changes need no summary updates.
-- At most 64 head groups and 64 checkpoint groups qualify for the named Search generation. Comparing
-  groups can inspect up to 4,096 in-memory positions even when caught up. Only differing groups expand into
-  home rows, and each behind home adds one indexed envelope seek. PostgreSQL can scan the small group table
-  or use its consumer-leading index as unrelated generations grow. Concurrent writers to the same consumer
-  and group serialize on that row, including head writers sharing a 64-home range.
+- A home retains its committed Source head and its positive Search checkpoints as exact bigint positions.
+  A missing head or checkpoint starts at zero. Native triggers merge changes to the same home in the
+  originating transaction, including replica-mode replay, key moves, retirement, reset and truncation.
+  Upgrade reads both native sources under write locks.
+- A positive home without Search checkpoints qualifies for every generation through a partial index.
+  For other positive homes, Search indexes the disjoint name ranges between consumers whose checkpoint
+  is at or ahead of the head. A name in one of those gaps is behind. Each qualified home contributes
+  a point lookup for its native checkpoint and another for its next envelope at
+  `(home, checkpoint + 1, event_seq = 0)`. Non-Search readers use their native checkpoint at each
+  positive home. The result is the behind count and the earliest
+  retained timestamp. A positive count without a retained timestamp fails.
+- A home stores at most one more range than its number of caught-up consumers. Membership changes
+  replace that home's ranges. A head with no Search checkpoints needs no range maintenance. Moving a key also withdraws
+  the old position. A Search read visits at most one matching range per behind home and does no
+  per-home lookups for caught-up homes. Outbox retention and changes to timestamps remain visible at read time.
   Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
   callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
   the deadline (default one hour).
+- [Native position tests](../../test/search/freshness-positions.test.ts) cover concurrent homes, retained
+  positions beyond JavaScript integer precision, replay, withdrawal and a dense 4,096-home generation.
 - Growth check: [test/search/freshness.test.ts](../../test/search/freshness.test.ts): “the reader answers each call
   from a read that began after the call”; SQL: [test/search/growth-query.test.ts](../../test/search/growth-query.test.ts):
   “Freshness stays within its bound as H grows” (rows/blocks, also P/N).
@@ -2514,10 +2516,9 @@ preferences, separately from pending form edits. Language preferences select res
 predicate. Count evidence retains exact/lower-bound/unavailable semantics. Empty and terminal pages prove neither
 index completeness nor permission; current final native disclosure still removes stale or concealed results.
 
-Cost: reuse one coalesced `createFreshness` observation per pinned generation. The existing SQL aggregates at most
-4,096 fixed partition rows, left-joins checkpoints by full `(partition_no, consumer)` key and does at most 4,096
-outbox seeks by `(partition_no, position, event_seq=0)` with `LIMIT 1`, returning one aggregate row. No new outbox
-scan or request polling exists. One read runs per reader; arrivals share the following read. Catalogue retains its
+Cost: reuse one coalesced `createFreshness` observation per pinned generation. The indexed freshness query
+returns one aggregate row. Each behind home contributes one native checkpoint lookup and one outbox lookup.
+One read runs per reader; arrivals share the following read. Catalogue retains its
 bounded reader cache; mixed likewise retains four generation readers by LRU (in-flight readers keep their generation). The public addition
 is at most 36 UTF-8 JSON bytes (`freshness` object plus separator), constant per page, without consumer, partition,
 backlog, raw event time or relay detail. Existing request deadlines and result fan-out limits are unchanged.

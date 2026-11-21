@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { createFreshness, readFreshness } from '../../src/search/freshness.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -99,45 +99,40 @@ test('a partition without a checkpoint row counts from position zero', async () 
   expect(result.asOf.toISOString()).toBe(recent);
 });
 
-/** The test pool, with each statement held at `gate` after it ran, so a read can stay in flight. */
-function heldPool() {
-  let open!: () => void;
-  const gate = new Promise<void>((resolve) => (open = resolve));
-  let statements = 0;
-  const held = new Proxy(pool, {
-    get(target, key) {
-      if (key !== 'query') return Reflect.get(target, key, target);
-      return async (...args: Parameters<typeof target.query>) => {
-        statements++;
-        const result = await (target.query as (...args: unknown[]) => Promise<unknown>)(...args);
-        await gate;
-        return result;
-      };
-    },
-  });
-  return { pool: held, open, statements: () => statements };
-}
-
 test('the reader answers each call from a read that began after the call', async () => {
-  const consumer = freshConsumer();
-  const held = heldPool();
-  const reader = createFreshness(held.pool, consumer);
-  const first = reader.current();
-  await Bun.sleep(50);
-  expect(held.statements()).toBe(1);
+  const reader = createFreshness(pool, freshConsumer());
+  const observed = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let statements = 0;
+  const current = () =>
+    withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(_sql, _operands, dispatch) {
+          const result = await dispatch();
+          statements++;
+          observed.resolve();
+          await release.promise;
+          return result;
+        },
+      },
+      () => reader.current(),
+    );
+  const first = current();
+  await Promise.race([observed.promise, first]);
+  expect(statements).toBe(1);
   await append(600, '2025-12-31T00:00:00.000Z');
-  const waiting = [reader.current(), reader.current(), reader.current()];
-  await Bun.sleep(50);
-  expect(held.statements()).toBe(1);
-  held.open();
+  const waiting = [current(), current(), current()];
+  expect(statements).toBe(1);
+  release.resolve();
   const before = await first;
   const after = await Promise.all(waiting);
-  expect(held.statements()).toBe(2);
+  expect(statements).toBe(2);
   expect(before.asOf.getTime()).toBeGreaterThan(Date.parse('2025-12-31T00:00:00.000Z'));
   for (const result of after) expect(result.asOf.toISOString()).toBe('2025-12-31T00:00:00.000Z');
   expect(after[1]).toEqual(after[0]);
   expect(after[2]).toEqual(after[0]);
   await append(601, '2025-12-30T00:00:00.000Z');
-  expect((await reader.current()).asOf.toISOString()).toBe('2025-12-30T00:00:00.000Z');
-  expect(held.statements()).toBe(3);
+  expect((await current()).asOf.toISOString()).toBe('2025-12-30T00:00:00.000Z');
+  expect(statements).toBe(3);
 });
