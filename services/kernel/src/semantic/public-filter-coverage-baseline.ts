@@ -315,16 +315,7 @@ async function verifyReceipts(
   return length < 0 ? receipts : receipts.slice(0, length);
 }
 
-/** Adopt a verified contiguous prefix with one registration lock and commit
- * both cursor advances with the original receipt chain and per-home effects.
- */
-export async function adoptPublicFilterCoverageBaselinePage<T = void>(
-  pool: Pool,
-  input: PublicFilterBaselineBinding,
-  enrollments: readonly AccountDiscoveryEnrollment[],
-  deadline: number,
-  readCommitted?: (client: PoolClient) => Promise<T>,
-): Promise<T | undefined> {
+function snapshotPage(input: PublicFilterBaselineBinding, enrollments: readonly AccountDiscoveryEnrollment[]) {
   const binding = snapshotBinding(input);
   if (!Array.isArray(enrollments) || types.isProxy(enrollments) || enrollments.length > maxPublicFilterEnrollmentHomes)
     throw new TypeError('Baseline enrollment requires a bounded native page');
@@ -338,9 +329,23 @@ export async function adoptPublicFilterCoverageBaselinePage<T = void>(
     if (i > 0 && receipt.partition !== receipts[i - 1]!.partition + 1)
       throw new CommandUnavailableError('contention', receipt.partition);
   }
-  if (receipts.length === 0) return;
-  if (binding.registration.partition !== 0)
+  if (receipts.length && binding.registration.partition !== 0)
     throw new CommandUnavailableError('contention', binding.registration.partition);
+  return { binding, receipts };
+}
+
+/** Adopt a verified contiguous prefix with one registration lock and commit
+ * both cursor advances with the original receipt chain and per-home effects.
+ */
+export async function adoptPublicFilterCoverageBaselinePage<T = void>(
+  pool: Pool,
+  input: PublicFilterBaselineBinding,
+  enrollments: readonly AccountDiscoveryEnrollment[],
+  deadline: number,
+  readCommitted?: (client: PoolClient) => Promise<T>,
+): Promise<T | undefined> {
+  const { binding, receipts } = snapshotPage(input, enrollments);
+  if (!receipts.length) return;
   if (!readCommitted) {
     await adoptVerifiedPrefix((body) => transaction(pool, deadline, body), binding, receipts);
     return;
@@ -375,6 +380,28 @@ async function adoptVerifiedPrefix(
   return verified.length === receipts.length;
 }
 
+function baselinePageValues(binding: PublicFilterBaselineBinding, receipts: readonly AccountDiscoveryEnrollment[]) {
+  return [
+    binding.registration.id,
+    binding.bootstrap,
+    binding.definition,
+    binding.consumer,
+    binding.accounts,
+    JSON.stringify(
+      receipts.map((receipt) => ({
+        partition: receipt.partition,
+        epoch: receipt.epoch,
+        source_position: String(receipt.sourcePosition),
+        creation_position: String(receipt.creationPosition),
+        enqueue_revision: String(receipt.enqueueRevision),
+        revision: String(receipt.revision),
+        claim_revision: String(receipt.claimRevision),
+        receipt: receipt.receipt,
+      })),
+    ),
+  ];
+}
+
 async function writeBaselinePage(
   client: PoolClient,
   binding: PublicFilterBaselineBinding,
@@ -385,25 +412,47 @@ async function writeBaselinePage(
   await client.query(
     `/* semantic.native-keyed:${16 * receipts.length + 1}:${16 * receipts.length + 1}:${4 * receipts.length + 2} */
      SELECT semantic.adopt_public_filter_baseline_page($1,$2,$3,$4,$5,$6::jsonb)`,
-    [
-      binding.registration.id,
-      binding.bootstrap,
-      binding.definition,
-      binding.consumer,
-      binding.accounts,
-      JSON.stringify(
-        receipts.map((receipt) => ({
-          partition: receipt.partition,
-          epoch: receipt.epoch,
-          source_position: String(receipt.sourcePosition),
-          creation_position: String(receipt.creationPosition),
-          enqueue_revision: String(receipt.enqueueRevision),
-          revision: String(receipt.revision),
-          claim_revision: String(receipt.claimRevision),
-          receipt: receipt.receipt,
-        })),
-      ),
-    ],
+    baselinePageValues(binding, receipts),
+  );
+}
+
+/** Adopt an ordinary registration page. Recheck the committed receipts and pins
+ * in a single statement transaction, releasing all home locks before adoption.
+ */
+export async function adoptPublicFilterRegistrationBaselinePage(
+  pool: Pool,
+  input: PublicFilterBaselineBinding,
+  enrollments: readonly AccountDiscoveryEnrollment[],
+  deadline: number,
+) {
+  const { binding, receipts } = snapshotPage(input, enrollments);
+  if (!receipts.length) return;
+  return withBoundedCommandConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const verified = await verifyReceipts((body) => body(client), binding, receipts);
+      await client.query('BEGIN');
+      await commitBaseline(client, deadline, async () => {
+        const points = 16 * verified.length + 3;
+        const adopted = await client.query<{ write_state: string; registered: boolean }>(
+          `/* semantic.native-keyed:${points}:${points}:${4 * verified.length + 2} */
+         WITH owner AS MATERIALIZED (
+           SELECT write_state FROM core.partition WHERE partition_no=0 FOR SHARE
+         ), registration AS MATERIALIZED (
+           SELECT r.id FROM search.public_filter_registration r JOIN owner ON owner.write_state='active'
+           WHERE (r.partition_no,r.id)=(0,$1) AND r.state='active' AND r.consumer=$4 FOR UPDATE OF r
+         )
+         SELECT owner.write_state,r.id IS NOT NULL AS registered,
+           CASE WHEN r.id IS NOT NULL THEN semantic.adopt_public_filter_baseline_page(r.id,$2,$3,$4,$5,$6::jsonb) END
+         FROM owner LEFT JOIN registration r ON true`,
+          baselinePageValues(binding, verified),
+        );
+        if (adopted.rows[0]?.write_state !== 'active') throw new CommandUnavailableError('fenced', 0);
+        if (!adopted.rows[0].registered) throw new CommandUnavailableError('contention', 0);
+      });
+    },
+    { deadlineError: () => new AccessUnavailableError('deadline') },
   );
 }
 
@@ -552,12 +601,39 @@ async function coldEnrollmentFrontier(client: Pool | PoolClient, binding: ColdEn
   return result.rows[0]!.after_home;
 }
 
-async function readColdEnrollment(
-  client: Pool | PoolClient,
-  binding: ColdEnrollmentBinding,
+export function readPublicFilterRegistrationReceiptPrefix(
+  pool: Pool,
+  binding: PublicFilterBaselineBinding & Readonly<{ keys: readonly string[] }>,
   range: HomeRange,
-  locked: boolean,
+  deadline: number,
 ) {
+  // Access seals the compiler keys in native byte order.
+  const keys = [...binding.keys].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  return withBoundedCommandConnection(
+    pool,
+    deadline,
+    (client) => readPublicFilterSubjectEnrollments(client, { ...binding, keys }, range, 'prefix'),
+    { deadlineError: () => new AccessUnavailableError('deadline') },
+  );
+}
+
+async function readPublicFilterSubjectEnrollments(
+  client: Pool | PoolClient,
+  binding: PublicFilterBaselineBinding & Readonly<{ keys: readonly string[] }>,
+  range: HomeRange,
+  mode: 'prepared' | 'locked' | 'prefix',
+) {
+  if (
+    !Number.isInteger(range.start) ||
+    !Number.isInteger(range.end) ||
+    range.start < 0 ||
+    range.end > 4096 ||
+    range.end <= range.start ||
+    range.end - range.start > maxPublicFilterEnrollmentHomes ||
+    binding.accounts
+  )
+    throw new RangeError('Subject receipts require a bounded native home range');
+  const locked = mode === 'locked';
   const { rows } = await client.query<{
     partition: number;
     epoch: number;
@@ -599,8 +675,10 @@ async function readColdEnrollment(
       binding.keys.at(-1) ?? null,
     ],
   );
-  if (rows.length !== range.end - range.start) throw new CommandUnavailableError('contention', range.start);
-  const receipts = rows.map((row): AccountDiscoveryEnrollment => ({
+  if (mode !== 'prefix' && rows.length !== range.end - range.start)
+    throw new CommandUnavailableError('contention', range.start);
+  const gap = rows.findIndex((row, i) => row.partition !== range.start + i);
+  const receipts = (gap < 0 ? rows : rows.slice(0, gap)).map((row): AccountDiscoveryEnrollment => ({
     partition: row.partition,
     epoch: row.epoch,
     sourcePosition: BigInt(row.source),
@@ -652,7 +730,7 @@ export async function prepareColdEnrollment(
       try {
         // An already adopted range can be read back after a lost response.
         if (range.end > frontier) await enroll(range);
-        const receipts = await readColdEnrollment(pool, binding, range, false);
+        const receipts = await readPublicFilterSubjectEnrollments(pool, binding, range, 'prepared');
         return { start: range.start, end: range.end, digest: coldEnrollmentDigest(binding, range, receipts) };
       } finally {
         timing?.mark('enrollmentRangePrepareEnd', range.start);
@@ -684,7 +762,7 @@ export async function adoptColdEnrollment(
     // Lock home zero before higher homes, and keep the original pins and owner
     // epochs stable through the ordered cursor write.
     await client.query('/* semantic.native-keyed:1:1 */ SELECT 1 FROM core.partition WHERE partition_no=0 FOR SHARE');
-    const receipts = await readColdEnrollment(client, binding, { start, end }, true);
+    const receipts = await readPublicFilterSubjectEnrollments(client, binding, { start, end }, 'locked');
     for (const range of ranges) {
       const original = receipts.slice(range.start - start, range.end - start);
       if (coldEnrollmentDigest(binding, range, original) !== range.digest)

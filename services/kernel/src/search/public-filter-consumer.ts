@@ -2161,6 +2161,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         binding,
         {
           bootstrap: work.bootstrap.id,
+          ...(recovery ? { recovery } : {}),
           inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
         },
         context,

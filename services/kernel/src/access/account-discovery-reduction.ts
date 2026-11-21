@@ -492,7 +492,7 @@ export async function enrollNewAccountDiscoveryHomes(
         // retained pin or receipt leaves the whole group to the single-home path.
         // Limit each lookup so PostgreSQL keeps the carry reads as per-home probes.
         const carries = await client.query<{ partition: number; enqueue: string; pinned: boolean }>(
-          `/* semantic.native-keyed:${5 * count}:${5 * count}:1 */
+          `/* semantic.native-keyed:${5 * count}:${5 * count}:${count} */
            WITH carries AS MATERIALIZED (
              SELECT h.partition,coalesce(p.enqueue_revision::text,'0') AS enqueue,
                (e.bootstrap IS NOT NULL OR c.consumer IS NOT NULL) AS retained
@@ -537,7 +537,7 @@ export async function enrollNewAccountDiscoveryHomes(
         const enrollmentInputs = count * (6 + 2 * keys.length);
         // Require every original receipt to be inserted before advancing the Source key generations.
         const enrolled = await client.query(
-          `/* semantic.native-keyed:${enrollmentInputs}:${enrollmentInputs}:${1 + count * keys.length} */
+          `/* semantic.native-keyed:${enrollmentInputs}:${enrollmentInputs}:${count * (2 + keys.length)} */
            WITH enrollment AS (
              INSERT INTO semantic.public_filter_home_enrollment
                (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,

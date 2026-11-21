@@ -36,6 +36,8 @@ import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenan
 import {
   beginPublicFilterCoverageBaseline,
   adoptPublicFilterCoverageBaselinePage,
+  adoptPublicFilterRegistrationBaselinePage,
+  readPublicFilterRegistrationReceiptPrefix,
   adoptColdEnrollment,
   coldEnrollmentFunding,
   prepareColdEnrollment,
@@ -663,6 +665,7 @@ type NativePreparationInput =
       inputLimit?: number;
       subjectEnrollment?: SubjectEnrollment;
       coldEnrollment?: ColdEnrollmentRequest;
+      recovery?: PublicSourceBootstrapRecovery;
     }>;
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
@@ -829,7 +832,9 @@ export function advanceNativePublicFilterPreparation(
 ): Promise<NativePreparationResult | null>;
 export function advanceNativePublicFilterPreparation(
   binding: PublicFilterSourceBinding,
-  input: Exclude<NativePreparationInput, { bootstrap: string }> | { bootstrap: string; inputLimit?: number },
+  input:
+    | Exclude<NativePreparationInput, { bootstrap: string }>
+    | { bootstrap: string; inputLimit?: number; recovery?: PublicSourceBootstrapRecovery },
   context: PublicFilterConsumerContext,
 ): Promise<NativePublicFilterPreparation | null>;
 export async function advanceNativePublicFilterPreparation(
@@ -1207,6 +1212,15 @@ export function createNativePublicFilterSourceBinding(
     };
     return { row, definition, bootstrap };
   }
+  // One continuation of this exact recovery can reuse its immutable definition and
+  // starting cursor. Adoption still locks and compares the live native frontier.
+  const pendingCuts = new WeakMap<
+    PublicSourceBootstrapRecovery,
+    {
+      deadline: number;
+      cut: Awaited<ReturnType<typeof loadBootstrap>>;
+    }
+  >();
   function requirePopulationBaseline(row: NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>) {
     if (
       row.account_after !== 4096 ||
@@ -3670,16 +3684,19 @@ export function createNativePublicFilterSourceBinding(
         const catalogue = 'catalogueCoverage' in capture && capture.catalogueCoverage === true;
         const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys, catalogue);
         const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
-        const grouped = baseline.accounts || catalogue ? ports.access.newAccountEnrollment : undefined;
+        const grouped = ports.access.newAccountEnrollment;
+        const registrationPage = !baseline.accounts && !catalogue;
         if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
           if (cut.row.coverage_generation === null) await beginPublicFilterCoverageBaseline(db, baseline, deadline);
-          const page = planPublicFilterEnrollment({
+          const offer = {
             inputBudget: Math.min(preparationInputLimit, inputLimit) - cost.inputKeys,
             keyCount: compilerKeys.length,
             homesLeft: 4096 - cut.row.account_after,
-            ...(grouped ? { probeInputsPerHome: grouped.probeInputsPerHome } : {}),
-          });
+          };
+          const withProbe = { ...offer, probeInputsPerHome: grouped?.probeInputsPerHome ?? 0 };
+          let page = planPublicFilterEnrollment(registrationPage ? offer : withProbe);
+          let missedProbeInputs = 0;
           const receipts: AccountDiscoveryEnrollment[] = [];
           const nativeInput = {
             bootstrap: inserted.bootstrap,
@@ -3697,17 +3714,37 @@ export function createNativePublicFilterSourceBinding(
             const remaining = page.homes - receipts.length;
             const count = Math.min(remaining, grouped?.groupSize ?? 3);
             const partitions = Array.from({ length: count }, (_, i) => start + i);
-            const fresh =
-              grouped && count > 1 && compilerKeys.length <= page.keyLimit
-                ? await grouped.enroll(db, { ...nativeInput, partitions }, { deadline })
-                : null;
-            if (fresh) {
-              receipts.push(...fresh);
-              continue;
+            if (grouped && count > 1 && compilerKeys.length <= page.keyLimit) {
+              const fresh = await grouped.enroll(db, { ...nativeInput, partitions }, { deadline });
+              if (fresh) {
+                receipts.push(...fresh);
+                continue;
+              }
+              // A retained pin, receipt or unavailable home costs the probe as
+              // well as its single-home retry. Keep both inside the original offer.
+              if (registrationPage) {
+                // A lost registration commit can leave this page's exact original
+                // receipts in Access. Resume only their contiguous pinned prefix.
+                const original = await readPublicFilterRegistrationReceiptPrefix(
+                  db,
+                  { ...baseline, keys: compilerKeys },
+                  { start, end: start + count },
+                  deadline,
+                );
+                if (original.length) {
+                  receipts.push(...original);
+                  break;
+                }
+                missedProbeInputs += count * (grouped.probeInputsPerHome + 4);
+                page = planPublicFilterEnrollment({ ...offer, inputBudget: offer.inputBudget - missedProbeInputs });
+              }
             }
+            const fallbackHomes = Math.min(count, page.homes - receipts.length);
             const batch: PromiseSettledResult<AccountDiscoveryEnrollment>[] = [];
-            for (let offset = 0; offset < count; offset += 3) {
-              const ready = await Promise.allSettled(partitions.slice(offset, offset + 3).map(enrollment));
+            for (let offset = 0; offset < fallbackHomes; offset += 3) {
+              const ready = await Promise.allSettled(
+                partitions.slice(offset, Math.min(offset + 3, fallbackHomes)).map(enrollment),
+              );
               batch.push(...ready);
               if (ready.some((result) => result.status === 'rejected' || !result.value.complete)) break;
             }
@@ -3724,19 +3761,23 @@ export function createNativePublicFilterSourceBinding(
             }
             if (receipts.length !== start - cut.row.account_after + count) break;
           }
-          committed = await adoptPublicFilterCoverageBaselinePage(
-            db,
-            baseline,
-            receipts,
-            deadline,
-            existing?.enrollmentRegistration
-              ? async (client) => {
-                  if (failure || receipts.length !== page.homes) return;
-                  readingCommitted = true;
-                  return loadBootstrap('0:' + inserted.bootstrap, client, resolved.definition);
-                }
-              : undefined,
-          );
+          if (registrationPage) {
+            await adoptPublicFilterRegistrationBaselinePage(db, baseline, receipts, deadline);
+          } else {
+            committed = await adoptPublicFilterCoverageBaselinePage(
+              db,
+              baseline,
+              receipts,
+              deadline,
+              existing?.enrollmentRegistration
+                ? async (client) => {
+                    if (failure || receipts.length !== page.homes) return;
+                    readingCommitted = true;
+                    return loadBootstrap('0:' + inserted.bootstrap, client, resolved.definition);
+                  }
+                : undefined,
+            );
+          }
           if (failure) throw failure.reason;
         } catch (error) {
           if (readingCommitted || ports.access.classifyUnavailability(error) !== 'contention') throw error;
@@ -4966,8 +5007,12 @@ export function createNativePublicFilterSourceBinding(
         deadline = context.deadline;
       return run({ deadline }, async (cost, db) => {
         const cut = await loadBootstrap(id, db);
-        if (cut.row.state === 'aborting' || cut.row.state === 'aborted' || cut.row.state === 'capturing')
-          return { status: 'pending' as const, cost };
+        if (cut.row.state === 'capturing') {
+          const pending = { status: 'pending' as const, cost };
+          pendingCuts.set(pending, { deadline, cut });
+          return pending;
+        }
+        if (cut.row.state === 'aborting' || cut.row.state === 'aborted') return { status: 'pending' as const, cost };
         // Search may have committed retain/open before the caller crashed before adoption.
         // Resolve its actual owner record; an absent/uncertain observation never proves no physical effect.
         const native = await ports.search.readGenerationPublicationCustody(
@@ -5400,7 +5445,12 @@ export function createNativePublicFilterSourceBinding(
       // Finish the original Source read before Search registration or Access enrollment takes a checkout.
       const expected = input.subjectEnrollment;
       const read = async (client: CommandTransaction) => {
-        const cut = await loadBootstrap(input.bootstrap, client);
+        const recovered = input.recovery && pendingCuts.get(input.recovery);
+        if (input.recovery) pendingCuts.delete(input.recovery);
+        const cut =
+          !expected && recovered?.deadline === context.deadline && recovered.cut.bootstrap.id === input.bootstrap
+            ? recovered.cut
+            : await loadBootstrap(input.bootstrap, client);
         const { row, definition, bootstrap } = cut;
         if (row.state !== 'capturing' && row.state !== 'begun') throw new BindingError('observation_lost');
         if (
