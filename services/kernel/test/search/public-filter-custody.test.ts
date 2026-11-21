@@ -1,4 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
+import { pageControls } from '../../src/search/book-page-controls.ts';
+import { explainPlanEntries, walkPlanTree } from '../support/growth-plan-walk.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
@@ -583,6 +585,78 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   const retained = await registry.read({ queried: prepared.queried }, context());
   expect(retained.status === 'found' && retained.queried).toEqual(prepared.queried);
   await registry.closeObservation(prepared.queried, search, context());
+}, 120_000);
+
+test('native page admission seeks the original observation as unrelated active pages grow', async () => {
+  const { queried, registration } = await setup();
+  const acquired = await registry.acquire(queried, context());
+  if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let previous = 0;
+    for (const scale of [64, 512, 4096]) {
+      const growth = await client.query(
+        `WITH observations AS (
+           INSERT INTO search.public_filter_observation
+             (partition_no,observation,registration,queried,covered,expires_at,state)
+           SELECT partition_no,partition_no||':'||gen_random_uuid(),registration,queried,covered,expires_at,'open'
+           FROM search.public_filter_observation CROSS JOIN generate_series(1,$3::integer)
+           WHERE (partition_no,observation)=($1,$2) RETURNING partition_no,observation,registration,expires_at
+         ) INSERT INTO search.public_filter_coverage_page
+             (partition_no,id,observation,registration,definition,consumer,deadline,boundary_consumed,ceiling,state,work)
+           SELECT o.partition_no,gen_random_uuid(),o.observation,o.registration,r.definition,r.consumer,
+             o.expires_at,0,63,'planned','{}'
+           FROM observations o JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)`,
+        [registration.partition, queried.snapshot.observation, scale - previous],
+      );
+      expect(growth.rowCount).toBe(scale - previous);
+      previous = scale;
+      await client.query('ANALYZE search.public_filter_coverage_page, search.public_filter_observation');
+      await client.query('SAVEPOINT original');
+      const now = Date.now();
+      const args = [
+        registration.partition,
+        queried.snapshot.observation,
+        crypto.randomUUID(),
+        acquired.use.token,
+        now,
+        now + 2_000,
+        null,
+        0,
+        null,
+        63,
+        '{}',
+      ];
+      const output = await client.query('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ' + pageControls.plan(1), args);
+      const plan = explainPlanEntries(output.rows[0]['QUERY PLAN'])[0]!.plan;
+      expect(plan['Actual Rows']).toBe(1);
+      const nodes = [...walkPlanTree(plan)].map(({ node }) => node);
+      const probes = nodes.filter(
+        (node) => node['Relation Name'] === 'public_filter_coverage_page' && node['Node Type'] !== 'ModifyTable',
+      );
+      expect(probes).toHaveLength(1);
+      const probe = probes[0]!;
+      if (scale >= 512) {
+        expect(probe['Index Cond']).toContain('observation');
+        expect(probe['Rows Removed by Filter'] ?? 0).toBe(0);
+        expect(Number(probe['Shared Hit Blocks']) + Number(probe['Shared Read Blocks'])).toBeLessThanOrEqual(8);
+      }
+      expect(
+        (await client.query(pageControls.plan(1), [...args.slice(0, 2), crypto.randomUUID(), ...args.slice(3)]))
+          .rowCount,
+      ).toBe(0);
+      await client.query('ROLLBACK TO original');
+    }
+  } finally {
+    try {
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+      await registry.release(acquired.use, context());
+      await registry.closeObservation(queried, search, context());
+    }
+  }
 }, 120_000);
 
 test('native keyed custody growth includes unrelated definitions observations and executions at 64/512/4096', async () => {
