@@ -146,6 +146,9 @@ async function verifyPublication(url: string) {
     ).toEqual([{ end_home: 34 }]);
     expect(await frontier()).toEqual({ next_home: 2, next_ordinal: 1 });
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
+    // Receiver adoption commits separately from the producer's finite window.
+    expect(await frontier()).toEqual({ next_home: 2, next_ordinal: 1 });
+    expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
     expect(await frontier()).toEqual({ next_home: 34, next_ordinal: 0 });
     const { body } = await search.request<{ hits: { hits: { _id: string }[] } }>('POST', '/' + target + '/_search', {
       query: { match_all: {} },
