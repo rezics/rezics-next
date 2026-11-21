@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -150,6 +150,15 @@ beforeAll(async () => {
   closed = mount();
 }, 90_000);
 
+beforeEach(async () => {
+  await db.admin.query(
+    `DELETE FROM access.resource_grant
+     WHERE route = 0 AND resource_id = $1 AND subject_kind = 'identity'
+       AND subject_id = ANY($2::uuid[]) AND action IN ('gate:economy', 'gate:any')`,
+    [GLOBAL_CONTEXT.id, [seller, second, viewer, ordinary]],
+  );
+});
+
 afterAll(async () => {
   try {
     await closeBroadAdmission?.();
@@ -274,6 +283,8 @@ test('the signed trade feed only exposes settled amounts and seeks across native
   const price = 9_007_199_254_740_993n;
   const unitsPerLot = 10_000_000_000_000_000n;
   await grant(seller);
+  await grant(second);
+  await grant(viewer);
   expect(
     await work.provision({
       id: instrumentId,
@@ -436,6 +447,8 @@ test('a private order fill page merges both matching roles and exposes only the 
   const takerFeeBps = 2500n;
   const expectedFee = (p: bigint, bps: bigint, lots: bigint) => (((p * bps + 9999n) / 10_000n) * lots).toString();
 
+  await grant(seller);
+  await grant(second);
   expect(
     await work.provision({
       id: instrumentId,
@@ -605,7 +618,9 @@ test('private discovery returns installed instruments and seeks only the actorâ€
   const instrumentId = ids[0]!;
   const orders = `${catalog}/${instrumentId}/orders`;
 
+  await grant(seller);
   await grant(second);
+  await grant(viewer);
   const empty = await call(discovery, catalog, sellerToken);
   expect(empty.status).toBe(200);
   expect(await empty.json()).toEqual({ instruments: [], next: null });
@@ -783,6 +798,8 @@ test('the signed quote follows resting prices and only the exact latest settled 
   const deepAsk = center + 20n;
   const baseUnits = 9_007_199_254_740_995n;
   await grant(seller);
+  await grant(second);
+  await grant(viewer);
   expect(
     await work.provision({
       id: instrumentId,
