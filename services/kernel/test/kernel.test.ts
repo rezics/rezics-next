@@ -276,6 +276,7 @@ const typed = [
   'POST /v1/economy/market/listings/:listingId/cancel',
   'GET /v1/economy/market/trades',
   'GET /v1/economy/market/trades/:tradeId',
+  'POST /v1/economy/market/trades/:tradeId/$repair',
   ...testFundingRoutes,
   'POST /v1/subjects/:id/candidates',
   'DELETE /v1/subjects/:id/candidates/:candidate',
@@ -651,6 +652,7 @@ test('the Eden contract covers all supported routes and the default kernel omits
   const served = app.routes.map(({ method, path }) => `${method} ${path}`);
   const paths = openApiDocument(app).paths;
   expect(Object.keys(paths).filter((path) => path.startsWith('/v1/economy/test-funding/'))).toEqual([]);
+  expect(paths['/v1/economy/market/trades/{tradeId}:repair']).toBeUndefined();
   const journal = paths['/v1/progressSessions/{sessionId}/journal'];
   expect(journal?.get?.operationId).toBe('progress_session_journal.read');
   expect(journal?.patch?.operationId).toBe('progress_session_journal.update');
@@ -728,7 +730,7 @@ test('the Eden contract covers all supported routes and the default kernel omits
     security: [{ bearerAuth: [] }],
   });
   expect([complete, precise]).toEqual([true, true]);
-  const optionalRoutes = new Set<string>(testFundingRoutes);
+  const optionalRoutes = new Set<string>([...testFundingRoutes, 'POST /v1/economy/market/trades/:tradeId/$repair']);
   expect(served.sort()).toEqual(typed.filter((route) => !optionalRoutes.has(route)).sort());
 });
 
