@@ -285,7 +285,11 @@ for (const [store, role, routing] of ERASURE_DISCOVERY_ROLES) {
       WHERE x.indrelid=$1::regclass AND i.relname LIKE 'erasure_%'`,
       [`access.${store}`],
     );
-    const roleIndexes = indexes.rows.filter((index) => index.first === role).map((index) => index.name);
+    // A resource initialization is unique on the exact routed key supplied by owner discovery.
+    const roleIndexes =
+      store === 'resource_initialization' && role === 'resource_id'
+        ? ['resource_initialization_pkey']
+        : indexes.rows.filter((index) => index.first === role).map((index) => index.name);
     expect(roleIndexes.length).toBeGreaterThan(0);
     expect(scans.some((node) => roleIndexes.includes(node['Index Name']))).toBe(true);
     expect(costOf(measured).statements).toBeLessThanOrEqual(8 + 4 * value.keys.length);

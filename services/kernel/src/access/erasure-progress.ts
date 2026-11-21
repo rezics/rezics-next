@@ -324,8 +324,12 @@ export async function discoverErasurePage(
       if (sealedPartition !== null && sealedPartition !== partition)
         throw new Error('Live copy discovery frontier changed; retry original page');
       const low = routing === 'owner' ? route : partition * 16;
-      const high = routing === 'owner' || routing === 'zero' ? low : low + 15;
-      const values: unknown[] = [accountId, low, high];
+      const values: unknown[] = [accountId, low];
+      let routePredicate = 'route = $2::integer';
+      if (routing === 'partitions') {
+        values.push(low + 15);
+        routePredicate = 'route >= $2::integer AND route <= $3::integer';
+      }
       const cursor = progress.cursor;
       const after = cursor
         ? `AND (${seekColumns.map(({ name }) => name).join(',')}) > (${seekColumns
@@ -338,7 +342,7 @@ export async function discoverErasurePage(
       const selected = await tx.query<{ key: string[] }>(
         `SELECT ARRAY[${columns.map(({ name }) => `${name}::text`).join(',')}] AS key
          FROM access.${store}
-         WHERE ${role}=$1::uuid AND route >= $2::integer AND route <= $3::integer
+         WHERE ${role}=$1::uuid AND ${routePredicate}
          ${predicate ? `AND ${predicate}` : ''} ${after}
          ORDER BY ${seekColumns.map(({ name }) => name).join(',')} LIMIT 101`,
         values,

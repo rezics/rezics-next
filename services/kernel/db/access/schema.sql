@@ -5798,13 +5798,6 @@ CREATE INDEX erasure_resource_initialization_creator_id ON access.resource_initi
 
 
 --
--- Name: erasure_resource_initialization_resource_id; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX erasure_resource_initialization_resource_id ON access.resource_initialization USING btree (resource_id, route);
-
-
---
 -- Name: erasure_resource_role_grant_resource_id; Type: INDEX; Schema: access; Owner: -
 --
 
