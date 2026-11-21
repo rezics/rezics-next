@@ -2711,6 +2711,7 @@ export function createPublicFilterCustody(
         );
         if (!barrier.rowCount) throw new Failure('observation_lost');
         if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
+        let expiredReference = false;
         const signal = drainSignal(input.snapshot.observation);
         try {
           // At most three indexed maximum probes, including stale delivery and cross-process fallback.
@@ -2721,10 +2722,14 @@ export function createPublicFilterCustody(
             const refs = await sql(
               pool,
               meter,
-              'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1',
-              [...values, Date.now()],
+              'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1',
+              values,
             );
             if (!refs.rowCount) break;
+            if (Number(refs.rows[0].expires_at) <= Date.now()) {
+              expiredReference = true;
+              break;
+            }
             if (attempt === 2) throw new Failure('deadline');
             const now = Date.now();
             const remaining = context.deadline - now;
@@ -2735,25 +2740,27 @@ export function createPublicFilterCustody(
           signal.dispose();
         }
         check(context);
-        const expired = await sql(
-          pool,
-          meter,
-          `DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token) IN
-           (SELECT partition_no,observation,token FROM search.public_filter_reference
-            WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3 ORDER BY expires_at LIMIT 1) RETURNING token`,
-          [...values, Date.now()],
-          { points: 2, keys: 6, writes: 1 },
-        );
-        if (expired.rowCount) {
-          const more = await sql(
+        if (expiredReference) {
+          const expired = await sql(
             pool,
             meter,
-            `SELECT token FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2)
-             AND expires_at<=$3 ORDER BY expires_at LIMIT 1`,
+            `DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token) IN
+             (SELECT partition_no,observation,token FROM search.public_filter_reference
+              WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3 ORDER BY expires_at LIMIT 1) RETURNING token`,
             [...values, Date.now()],
-            { points: 1, keys: 3, writes: 0 },
+            { points: 2, keys: 6, writes: 1 },
           );
-          if (more.rowCount) throw new Failure('deadline');
+          if (expired.rowCount) {
+            const more = await sql(
+              pool,
+              meter,
+              `SELECT token FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2)
+               AND expires_at<=$3 ORDER BY expires_at LIMIT 1`,
+              [...values, Date.now()],
+              { points: 1, keys: 3, writes: 0 },
+            );
+            if (more.rowCount) throw new Failure('deadline');
+          }
         }
         check(context);
         // One funded PIT batch per invocation. The owned-only index prevents
@@ -2764,31 +2771,26 @@ export function createPublicFilterCustody(
           "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
           values,
         );
-        if (owned.rowCount) {
-          for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
-          check(context);
-          await sql(
-            pool,
-            meter,
-            "UPDATE search.public_filter_pit SET state='released' WHERE (partition_no,observation)=($1,$2) AND id=ANY($3::text[])",
-            [...values, owned.rows.map((row) => row.id)],
-          );
-          const more = await sql(
-            pool,
-            meter,
-            "SELECT id FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 1",
-            values,
-            { points: 1, keys: 2, writes: 0 },
-          );
-          if (more.rowCount) throw new Failure('deadline');
-        }
+        for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
         check(context);
-        await sql(
+        const ids = owned.rows.map((row) => row.id);
+        // The delete receipts and the terminal state commit together. Excluding those exact IDs
+        // lets the sibling CTE see whether any other owned locator remains in the same snapshot.
+        const settled = await sql(
           pool,
           meter,
-          "UPDATE search.public_filter_observation SET state='closed' WHERE (partition_no,observation)=($1,$2) AND state='closing'",
-          values,
+          `WITH released AS (
+             UPDATE search.public_filter_pit SET state='released'
+             WHERE (partition_no,observation)=($1,$2) AND state='owned' AND id=ANY($3::text[])
+           ) UPDATE search.public_filter_observation o SET state='closed'
+           WHERE (o.partition_no,o.observation)=($1,$2) AND o.state IN ('closing','closed')
+             AND NOT EXISTS (SELECT 1 FROM search.public_filter_pit p
+               WHERE (p.partition_no,p.observation)=($1,$2) AND p.state='owned' AND p.id<>ALL($3::text[]) LIMIT 1)
+           RETURNING o.observation`,
+          [...values, ids],
+          { points: 2 * ids.length + 2, keys: ids.length + 6, writes: ids.length + 1 },
         );
+        if (!settled.rowCount) throw new Failure('deadline');
         return { status: 'closed' as const, cost: meter };
       });
     },

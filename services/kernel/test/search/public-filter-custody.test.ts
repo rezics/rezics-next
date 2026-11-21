@@ -593,6 +593,12 @@ test('native keyed custody growth includes unrelated definitions observations an
     for (const axis of ['registration', 'observation', 'execution']) {
       const report = await checkGrowth(db, {
         name: `public-filter-custody-${axis}`,
+        seededRelations: [
+          'search.public_filter_target',
+          'search.public_filter_registration',
+          'search.public_filter_observation',
+          'search.public_filter_execution',
+        ],
         scales: [64, 512, 4096],
         indexProbes: 8,
         bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
@@ -889,7 +895,9 @@ test('live uses forbid native deletion, expired uses drain, and a deadline or lo
       status: 'unavailable',
       reason: 'owner_unavailable',
     });
-    expect((await recovered.closeObservation(n.queried, search, context())).status).toBe('closed');
+    const retried = await recovered.closeObservation(n.queried, search, context());
+    expect(retried.status).toBe('closed');
+    expect(retried.cost.statements).toBeLessThanOrEqual(4);
     const expired = await registry.acquire(unrelated.queried, { deadline: Date.now() + 200 });
     if (expired.status !== 'acquired') throw new Error(expired.reason);
     // This is the separate expiry positive, not the early-release control above.
