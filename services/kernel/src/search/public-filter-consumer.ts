@@ -662,7 +662,12 @@ import type {
   CustodyCost,
   CustodyExecution,
 } from './public-filter-custody-contract.ts';
-import type { PublicFilterPreparationSegmentEntry } from './public-filter-preparation-segment.ts';
+import {
+  readPopulationProjection,
+  readPopulationTerminals,
+  type SubjectPopulationProjection,
+  type PublicFilterPreparationSegmentEntry,
+} from './public-filter-preparation-segment.ts';
 import {
   createPublicFilterCustody,
   stepRetainedObservationErasure,
@@ -828,6 +833,7 @@ type ConsumerWork = {
   bootstrap: Omit<PublicSourceBootstrap, 'definition'>;
   queried: PublicFilterQueriedObservation | null;
   materializing: PublicFilterQueriedObservation | null;
+  populationProjection?: SubjectPopulationProjection;
   /** Older in-flight generations keep their original replayable payload until they settle. */
   prepared?: (SearchResult['hits'][number] | DiscoveryEngineHit)[];
   preparedRows?: { original: string; terminal: string }[];
@@ -1856,10 +1862,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m: Meter,
     context: PublicFilterConsumerContext,
     identitiesOnly = false,
+    population?: { work: ConsumerWork; rawCount: number; priorTerminals: readonly string[] },
   ) {
     const rows: { original: string; terminal: string }[] = [];
     const accepted: number[] = [];
-    const terminals = new Set<string>();
+    const terminals = new Set(population?.priorTerminals);
+    // Reserve time to commit the exact checked prefix of a private population window.
+    const sourceContext = population ? { deadline: context.deadline - 2000 } : context;
     const readIdentities = identitiesOnly ? config.source.readPublicFilterSubjectIdentities : undefined;
     const subjects = readIdentities ? [...new Set(hits.map((hit) => hit.id))] : [];
     const remaining = m.inputLimit - m.cost.inputKeys;
@@ -1875,18 +1884,45 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     for (const [position, hit] of hits.entries()) {
       m.check();
+      const available = m.inputLimit - m.cost.inputKeys;
+      if (
+        population &&
+        (sourceContext.deadline <= Date.now() || available <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE)
+      ) {
+        if (rows.length) break;
+        throw new ConsumerFailure('source_pending');
+      }
       let source = bySubject?.get(hit.id);
       if (!bySubject) {
-        const page = m.take(
-          await config.source.readPublicFilterProjectionPage({
-            subject: hit.id,
-            meaning,
-            inputLimit: Math.max(1, m.inputLimit - m.cost.inputKeys),
-            frontier: null,
-            context,
-          }),
-        );
-        if (page.status !== 'complete') throw new ConsumerFailure('source_pending');
+        const request = {
+          subject: hit.id,
+          meaning,
+          inputLimit: Math.max(1, available - (population ? PUBLIC_FILTER_PREPARATION_INPUT_RESERVE : 0)),
+          context: sourceContext,
+        };
+        const projection = population
+          ? await readPopulationProjection(
+              config.source,
+              request,
+              population.rawCount + position,
+              population.work.populationProjection,
+            )
+          : {
+              page: await config.source.readPublicFilterProjectionPage({ ...request, frontier: null }),
+              next: undefined,
+            };
+        if (!projection) throw new ConsumerFailure('observation_lost');
+        const page = m.take(projection.page);
+        if (population && (page.status === 'progress' || page.status === 'changed')) {
+          if (projection.next) population.work.populationProjection = projection.next;
+          else delete population.work.populationProjection;
+          break;
+        }
+        if (page.status !== 'complete') {
+          if (population && rows.length) break;
+          throw new ConsumerFailure('source_pending');
+        }
+        if (population) delete population.work.populationProjection;
         source = page.source;
       }
       if (
@@ -2455,16 +2491,38 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           const acquired = m.take(await custody.acquire(q, context));
           if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
           try {
+            const privateSubject = publication && !('representation' in recovery.bootstrap.definition.capture);
+            const prefixLength = privateSubject ? rawCount % batchSize : 0;
+            let priorTerminals: string[] | undefined;
+            if (privateSubject) {
+              if (work.populationProjection && work.populationProjection.ordinal < rawCount)
+                delete work.populationProjection;
+              m.cost.inputKeys += prefixLength;
+              m.check();
+              const prior = await readPopulationTerminals(
+                m.sql,
+                {
+                  partition: work.registration.partition,
+                  registration: work.registration.id,
+                  build: work.bootstrap.id,
+                  generation: 1n,
+                },
+                rawCount - prefixLength,
+                rawCount,
+              );
+              if (!prior) return m.unavailable('observation_lost');
+              priorTerminals = prior;
+            }
             const result = await nativeBatch(
               q,
               recovery.bootstrap.definition.capture,
-              batchSize,
+              batchSize - prefixLength,
               found.frontier.after,
               acquired.use,
               m,
               context,
             );
-            const raw = result.raw;
+            let raw = result.raw;
             m.cost.candidates += raw.length;
             m.cost.rows += raw.length;
             m.cost.bytes += Buffer.byteLength(encodeState(raw));
@@ -2473,7 +2531,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               checked =
                 'representation' in recovery.bootstrap.definition.capture
                   ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
-                  : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+                  : await ownRows(
+                      raw as readonly SearchResult['hits'][number][],
+                      m,
+                      context,
+                      false,
+                      priorTerminals && { work, rawCount, priorTerminals },
+                    );
             } catch (error) {
               if (error instanceof MixedOwnerPending) {
                 await save(work, encoded, true, m);
@@ -2481,6 +2545,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               }
               throw error;
             }
+            if (privateSubject && raw.length && !checked.rows.length) {
+              // The current Subject has another signed Source page. Persist its frontier
+              // without consuming that hit or marking the native result exhausted.
+              work.materializing = result.queried;
+              encoded = await save(work, encoded, true, m);
+              return { status: 'preparing', repair: job, cost: m.cost };
+            }
+            if (privateSubject && !raw.length && work.populationProjection) return m.unavailable('observation_lost');
+            const fullyChecked = !privateSubject || checked.rows.length === raw.length;
+            if (!fullyChecked) raw = raw.slice(0, checked.rows.length);
             const capture = recovery.bootstrap.definition.capture;
             let nextOutputOrdinal = outputCount;
             let entries: readonly PublicFilterPreparationSegmentEntry[];
@@ -2539,7 +2613,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                   },
                   entries,
                   after: raw.at(-1)?.sort ?? found.frontier.after,
-                  rawExhausted: result.exhausted,
+                  rawExhausted: fullyChecked && result.exhausted,
                 },
                 context,
               ),
@@ -2548,7 +2622,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               return m.unavailable('observation_lost');
             rawCount = nextRawCount;
             outputCount = nextOutputOrdinal;
-            exhausted = result.exhausted;
+            exhausted = fullyChecked && result.exhausted;
             work.materializing = result.queried;
             own(result.queried, context, m);
             encoded = await save(work, encoded, true, m);

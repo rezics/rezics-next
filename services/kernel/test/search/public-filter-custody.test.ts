@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { pageControls } from '../../src/search/book-page-controls.ts';
+import { readPopulationTerminals } from '../../src/search/public-filter-preparation-segment.ts';
 import { explainPlanEntries, walkPlanTree } from '../support/growth-plan-walk.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -220,7 +221,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
           const entry = {
             rawOrdinal: ordinal,
             outputOrdinal,
-            payload: { hit, owner: { original: hit.id, terminal: `${build}:owner:${ordinal}` } },
+            payload: { hit, owner: { original: hit.id, terminal: `${build}:owner:${ordinal % 17}` } },
           };
           entries.push(entry);
           if (selected) expected.push(hit);
@@ -260,6 +261,10 @@ test('native interrupted prepared builds replay one fixed segment and read exact
         rawCount = end;
         after = nextAfter;
       }
+      const key = { partition: n.registration.partition, registration: n.registration.id, build, generation };
+      const prior = await readPopulationTerminals(pool.query.bind(pool), key, count - 100, count - 56);
+      expect(prior).toEqual(Array.from({ length: 44 }, (_, offset) => `${build}:owner:${(count - 100 + offset) % 17}`));
+      expect(await readPopulationTerminals(pool.query.bind(pool), key, count - 1, count + 1)).toBeNull();
       if (count === 1000) {
         const boundary = {
           registration: n.registration,

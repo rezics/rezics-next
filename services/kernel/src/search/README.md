@@ -1110,7 +1110,12 @@ Let `N` be the global physical candidate population, `n` the raw candidates reta
 
 Generation publication has a separate private population. Its native job, physical incarnation, registration and sealed
 Source cut admit each segment after the first 1,000 raw candidates. The producer advances by at most 100 candidates and
-verifies at most 100 ordered raw and selected-output ordinals per turn. This population cannot supply a serving window.
+verifies at most 100 ordered raw and selected-output ordinals per turn. A Subject worker can checkpoint the exact
+checked prefix when the next Source projection is pending or the turn is nearly spent. On resume it reads at most
+99 retained terminal IDs from the same build and logical 100-candidate window, preserving duplicate reduction and
+the original sort cursor across retries. A multi-page Subject projection retains its Source-issued frontier with its
+unconsumed raw ordinal and Subject ID. A partially checked window cannot certify engine exhaustion.
+This population cannot supply a serving window.
 While materializing, the worker renews the same live PIT when half its lease remains. Search verifies its physical
 incarnation and saves the returned locator against the original observation revision. An expired materialization can restart after the original PIT has closed and the reconciled job still has no pinned
 bootstrap, execution, observation or publication fence. Cleanup retires that exact unadopted build in bounded batches.

@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
 import type { QueryResult, QueryResultRow } from 'pg';
+import type {
+  PublicFilterProjectionFrontier,
+  PublicFilterProjectionRequest,
+  PublicFilterSource,
+} from '../semantic/index.ts';
 
 /** One raw native candidate and the owner witness that was checked before retention. */
 export type PublicFilterPreparationSegmentEntry = Readonly<{
@@ -67,6 +72,53 @@ export async function insertSegmentRows(
     appendPayload(entries),
   ]);
   return result.rowCount ?? 0;
+}
+
+export type SubjectPopulationProjection = Readonly<{
+  ordinal: number;
+  subject: string;
+  frontier: PublicFilterProjectionFrontier;
+}>;
+
+/** Resume only the Source-issued frontier for this exact physical candidate and ordinal. */
+export async function readPopulationProjection(
+  source: PublicFilterSource,
+  request: Omit<PublicFilterProjectionRequest, 'frontier'>,
+  ordinal: number,
+  retained?: SubjectPopulationProjection,
+) {
+  if (retained && (ordinal !== retained.ordinal || request.subject !== retained.subject)) return null;
+  const page = await source.readPublicFilterProjectionPage({ ...request, frontier: retained?.frontier ?? null });
+  return {
+    page,
+    next: page.status === 'progress' ? { ordinal, subject: request.subject, frontier: page.frontier } : undefined,
+  };
+}
+
+/** Resume duplicate reduction inside the original native window after a partial checkpoint. */
+export async function readPopulationTerminals(
+  query: PreparedSegmentQuery,
+  key: PublicFilterPreparationSegmentKey,
+  first: number,
+  end: number,
+): Promise<string[] | null> {
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(end) || first < 0 || end < first || end - first >= 100)
+    return null;
+  if (first === end) return [];
+  const result = await query<{ raw_ordinal: number; terminal: string | null }>(
+    `SELECT raw_ordinal,payload #>> '{owner,terminal}' AS terminal
+     FROM search.public_filter_preparation_segment
+     WHERE (partition_no,registration,build,generation)=($1,$2,$3,$4::numeric)
+       AND raw_ordinal >= $5 AND raw_ordinal < $6 ORDER BY raw_ordinal LIMIT 100`,
+    [key.partition, key.registration, key.build, key.generation.toString(), first, end],
+  );
+  if (result.rows.length !== end - first) return null;
+  const terminals: string[] = [];
+  for (const [offset, row] of result.rows.entries()) {
+    if (row.raw_ordinal !== first + offset || !row.terminal) return null;
+    terminals.push(row.terminal);
+  }
+  return terminals;
 }
 
 export async function readSegmentWindow(

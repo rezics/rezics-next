@@ -6,6 +6,7 @@ import { withQueryAccounting } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
 import { lockReleasedProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
+import { readPopulationProjection } from '../../src/search/public-filter-preparation-segment.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
 import { readRelease } from '../../src/semantic/definition-release-read.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -146,6 +147,49 @@ test('concurrent first pages for one Book complete across a native serialization
     await f.close();
   }
 }, 60_000);
+
+test('a private population resumes the signed projection for the same pending candidate', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const authors = [];
+    for (let i = 0; i < 8; i++) authors.push(await f.create());
+    const subject = await f.create('schema:Book', {
+      'schema:author': authors.map((author) => statement('schema:author', author)),
+    });
+    const request = () => ({ subject, meaning: f.meaning, context: readContext(), inputLimit: 4 });
+    let progress = await readPopulationProjection(publicFilterSource(f.config), request(), 1117);
+    if (!progress?.next) throw new Error(`Expected a partial native projection, got ${progress?.page.status}`);
+    const original = progress.next;
+    expect(await readPopulationProjection(publicFilterSource(f.config), request(), 1118, original)).toBeNull();
+    expect(
+      await readPopulationProjection(
+        publicFilterSource(f.config),
+        { ...request(), subject: authors[0]! },
+        1117,
+        original,
+      ),
+    ).toBeNull();
+    const changed = await readPopulationProjection(publicFilterSource(f.config), request(), 1117, {
+      ...original,
+      frontier: { ...original.frontier, continuation: original.frontier.continuation + 'x' },
+    });
+    expect(changed?.page.status).toBe('changed');
+    expect(changed?.next).toBeUndefined();
+    for (let i = 0; progress?.next; i++) {
+      if (i >= 64) throw new Error('Original bounded projection did not complete');
+      progress = await readPopulationProjection(
+        publicFilterSource(f.config),
+        request(),
+        1117,
+        structuredClone(progress.next),
+      );
+    }
+    expect(progress?.page).toMatchObject({ status: 'complete', source: { subject } });
+  } finally {
+    await f.close();
+  }
+}, 120_000);
 
 test('native complete selected public facet projection retains bounded frontier exact statement associations and current dependencies', async () => {
   const { publicFilterSource } = await nativeProducer();
