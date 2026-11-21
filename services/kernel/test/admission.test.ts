@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { createPool } from '../src/database/pool.ts';
 import { Admission, ADMISSION_LIMITS } from '../src/http/admission.ts';
 import { createApp, REQUEST_DEADLINE_MS } from '../src/http/app.ts';
@@ -18,9 +19,8 @@ function gate() {
 const later = () => ({ deadline: Date.now() + 5000 });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-test('the limits follow doc 04 and the pool has room for every permit', () => {
-  expect(ADMISSION_LIMITS).toEqual({ permits: 8, reserved: 2, queue: 32 });
-  expect(pool.options.max).toBe(ADMISSION_LIMITS.permits + ADMISSION_LIMITS.reserved);
+test('default admission bounds native work, health checks and bearer verification', () => {
+  expect(ADMISSION_LIMITS).toEqual({ permits: 8, reserved: 2, bearer: 4, queue: 32 });
 });
 
 test('at most eight jobs run at once and waiters start in arrival order', async () => {
@@ -35,13 +35,13 @@ test('at most eight jobs run at once and waiters start in arrival order', async 
     }),
   );
   await settle();
-  expect(admission.running).toEqual({ normal: 8, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 8, reserved: 0, bearer: 0 });
   expect(admission.waiting).toBe(3);
   expect(order).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   blocker.open();
   expect(await Promise.all(jobs)).toEqual(Array.from({ length: 11 }, (_, n) => n));
   expect(order).toEqual(Array.from({ length: 11 }, (_, n) => n));
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('a full queue is refused at once as overloaded with Retry-After', async () => {
@@ -93,7 +93,7 @@ test('a waiter leaves the queue when its deadline passes or its client goes away
   blocker.open();
   await holder;
   expect(ran).toBe(false);
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('a failed job gives its permit back', async () => {
@@ -101,7 +101,7 @@ test('a failed job gives its permit back', async () => {
   const failure = new Error('job failed');
   expect(await admission.run('normal', later(), () => Promise.reject(failure)).catch((e) => e)).toBe(failure);
   expect(await admission.run('normal', later(), async () => 'next')).toBe('next');
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('subject freshness polling yields its normal permit between database checks', async () => {
@@ -127,21 +127,29 @@ test('subject freshness polling yields its normal permit between database checks
   });
   expect(caughtUp).toBe(false);
   expect(yielded).toBeGreaterThan(0);
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
-test('health checks use the reserved permits while resource work is saturated', async () => {
+test('health checks use a reserved permit and checkout while resource work is saturated', async () => {
   const admission = new Admission();
   const blocker = gate();
   const held = Array.from({ length: 8 + 32 }, () => admission.run('normal', later(), () => blocker.opened));
   await settle();
-  const app = createApp({ pool, admission });
-  const health = await app.handle(new Request('http://kernel.test/health'));
-  expect(health.status).toBe(200);
-  expect(await health.json()).toEqual({ status: 'ok' });
-  expect(admission.running.reserved).toBe(0);
-  blocker.open();
-  await Promise.all(held);
+  const healthPool = createPool(databaseUrl, { max: 1 });
+  const leased: PoolClient[] = [];
+  try {
+    for (let index = 0; index < pool.options.max; index++) leased.push(await pool.connect());
+    const app = createApp({ pool, healthPool, admission });
+    const health = await app.handle(new Request('http://kernel.test/health'));
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ status: 'ok' });
+    expect(admission.running.reserved).toBe(0);
+  } finally {
+    leased.forEach((client) => client.release());
+    await healthPool.end();
+    blocker.open();
+    await Promise.all(held);
+  }
 });
 
 test('a request carries a deadline two seconds from its arrival and its client signal', async () => {
@@ -176,12 +184,13 @@ test('an overloaded request is served as a problem document', async () => {
   await holder;
 });
 
-test('native work and health can enter through a full bearer backlog', async () => {
-  const admission = new Admission({ permits: 1, reserved: 2, queue: 1 });
+test('bearer, native and health permits are independent and native waiters can displace queued bearers', async () => {
+  const admission = new Admission({ permits: 1, reserved: 2, bearer: 2, queue: 1 });
   const blocker = gate();
-  const held = Array.from({ length: 2 }, () => admission.run('bearer', later(), () => blocker.opened));
+  const held = [admission.run('normal', later(), () => blocker.opened)];
+  held.push(...Array.from({ length: 2 }, () => admission.run('bearer', later(), () => blocker.opened)));
   const untouched = admission.run('bearer', later(), () => 'verified').catch((e) => e);
-  expect(admission.running).toEqual({ normal: 1, reserved: 1 });
+  expect(admission.running).toEqual({ normal: 1, reserved: 0, bearer: 2 });
   expect(admission.waiting).toBe(1);
   const native = admission.run('normal', later(), () => 'served');
   expect(await untouched).toMatchObject({ code: 'overloaded', headers: { 'retry-after': '1' } });

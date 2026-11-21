@@ -21,7 +21,7 @@ import {
 } from '../request/access.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { Admission, requireLiveJob, type AdmissionYield } from './admission.ts';
+import { Admission, ADMISSION_LIMITS, requireLiveJob, type AdmissionYield } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
 import { logInternalError, PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
@@ -46,7 +46,6 @@ import {
   MAX_BODY_LIMIT,
   IngressBodyBudget,
 } from './body.ts';
-import { ADMISSION_LIMITS } from './admission.ts';
 
 export function REQUEST_DEADLINE_MS() {
   return memoizedValue(REQUEST_DEADLINE_MS, () => DEFAULT_REQUEST_DEADLINE_MS);
@@ -54,6 +53,7 @@ export function REQUEST_DEADLINE_MS() {
 
 export function createApp({
   pool,
+  healthPool = pool,
   requestDeadlineMs = REQUEST_DEADLINE_MS(),
   admission = new Admission(),
   access = createAccess,
@@ -64,6 +64,7 @@ export function createApp({
   clock,
 }: {
   pool: Pool;
+  healthPool?: Pool;
   requestDeadlineMs?: number;
   admission?: Admission;
   access?: Access | AccessFactory;
@@ -151,6 +152,7 @@ export function createApp({
           bodyLimitOf(candidate.hooks?.detail as Record<string, unknown> | undefined),
         ),
       );
+      // Keep the byte ceiling independent of the server's configured concurrency.
       const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest;
       bodyBudget ??= new IngressBodyBudget(budget);
       try {
@@ -355,7 +357,7 @@ export function createApp({
     .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {
         await lanes.run('reserved', job, () =>
-          withConnection(pool, async (client) => {
+          withConnection(healthPool, async (client) => {
             await healthCheck.run(client, {});
           }),
         );

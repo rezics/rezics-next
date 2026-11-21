@@ -40,11 +40,11 @@ type Connect = Pool['connect'];
 
 export function createPool(
   url: string,
-  options: { connectionTimeoutMillis?: number; idleTimeoutMillis?: number; min?: number } = {},
+  options: { connectionTimeoutMillis?: number; idleTimeoutMillis?: number; min?: number; max?: number } = {},
 ): Pool {
   const pool = new pg.Pool({
     connectionString: url,
-    max: KERNEL_POOL_MAX,
+    max: options.max ?? KERNEL_POOL_MAX,
     ...(options.min === undefined ? {} : { min: options.min }),
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? readPoolAcquireTimeoutMillis(),
     idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,

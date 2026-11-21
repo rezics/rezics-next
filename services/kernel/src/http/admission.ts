@@ -1,6 +1,6 @@
 import { ProblemError } from './problem.ts';
 
-export const ADMISSION_LIMITS = { permits: 8, reserved: 2, queue: 32 } as const;
+export const ADMISSION_LIMITS = { permits: 8, reserved: 2, bearer: 4, queue: 32 } as const;
 
 export type AdmissionLane = 'normal' | 'reserved';
 export type JobContext = { deadline: number; signal?: AbortSignal };
@@ -8,7 +8,7 @@ export type JobContext = { deadline: number; signal?: AbortSignal };
 type AdmissionWork = AdmissionLane | 'bearer';
 
 type HeldNormalJob = { context: JobContext; pending?: Promise<unknown> };
-type Limits = { permits: number; reserved: number; queue: number };
+type Limits = { permits: number; reserved: number; bearer?: number; queue: number };
 type Waiter = {
   lane: AdmissionWork;
   context: JobContext;
@@ -35,16 +35,16 @@ export function requireLiveJob(context: JobContext): void {
 }
 
 export class Admission {
-  private readonly limits: Limits;
-  private readonly active = { normal: 0, reserved: 0 };
+  private readonly limits: Required<Limits>;
+  private readonly active = { normal: 0, reserved: 0, bearer: 0 };
   private readonly queue: Waiter[] = [];
   private readonly normalJobs = new WeakMap<AdmissionYield, HeldNormalJob>();
 
   constructor(limits: Limits = ADMISSION_LIMITS) {
-    this.limits = { ...limits };
+    this.limits = { ...limits, bearer: limits.bearer ?? ADMISSION_LIMITS.bearer };
   }
 
-  get running(): Readonly<{ normal: number; reserved: number }> {
+  get running(): Readonly<Record<AdmissionWork, number>> {
     return { ...this.active };
   }
 
@@ -135,8 +135,8 @@ export class Admission {
     requireLiveJob(context);
     const available = this.available(lane);
     if (available) {
-      this.active[available]++;
-      return this.release(available);
+      this.active[lane]++;
+      return this.release(lane);
     }
     if (this.queue.length >= this.limits.queue) {
       // An untouched bearer can retry. Keep room for work that already authenticated.
@@ -164,20 +164,17 @@ export class Admission {
     });
   }
 
-  private available(work: AdmissionWork): AdmissionLane | undefined {
-    if (work === 'reserved') return this.active.reserved < this.limits.reserved ? 'reserved' : undefined;
-    // Keep a reserved permit for health. Bearers can also use otherwise idle normal capacity.
-    if (work === 'bearer' && this.active.reserved < this.limits.reserved - 1) return 'reserved';
-    return this.active.normal < this.limits.permits ? 'normal' : undefined;
+  private available(lane: AdmissionWork): boolean {
+    return this.active[lane] < this.limits[lane === 'normal' ? 'permits' : lane];
   }
 
-  private release(lane: AdmissionLane): () => void {
+  private release(lane: AdmissionWork): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
       this.active[lane]--;
-      this.drain();
+      this.drain(lane);
     };
   }
 
@@ -192,19 +189,12 @@ export class Admission {
     this.queue.splice(index, 1);
     this.clear(waiter);
     waiter.reject(reason);
-    this.drain();
   }
 
-  private drain(): void {
-    this.drainWaiters(false);
-    this.drainWaiters(true);
-  }
-
-  private drainWaiters(bearers: boolean): void {
-    for (let index = 0; index < this.queue.length;) {
+  private drain(lane: AdmissionWork): void {
+    for (let index = 0; index < this.queue.length && this.available(lane);) {
       const waiter = this.queue[index]!;
-      const lane = (waiter.lane === 'bearer') === bearers ? this.available(waiter.lane) : undefined;
-      if (!lane) {
+      if (waiter.lane !== lane) {
         index++;
         continue;
       }

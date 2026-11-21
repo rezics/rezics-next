@@ -49,7 +49,7 @@ type Seen = { authenticated: number[]; checks: unknown[][]; prepared: number[] }
 function recorder(seen: Seen, admission: Admission, prepare = false): Access {
   return {
     async authenticate(token) {
-      seen.authenticated.push(admission.running.reserved);
+      seen.authenticated.push(admission.running.bearer);
       if (token === 'refused') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
       return account;
     },
@@ -117,7 +117,7 @@ test('a route without a well-formed action, operation id or security is refused'
   expect(() => actionCatalogue(mixed)).toThrow('POST /v1/y: thing:read is declared with different security');
 });
 
-test('a request without credentials is anonymous, and a bearer token is verified on a reserved permit', async () => {
+test('a request without credentials is anonymous, and a bearer token uses a verification permit', async () => {
   const seen: Seen = { authenticated: [], checks: [], prepared: [] };
   const admission = new Admission();
   const app = thingApp({ admission, access: recorder(seen, admission) });
@@ -126,7 +126,7 @@ test('a request without credentials is anonymous, and a bearer token is verified
   const signed = await call(app, 'GET', `/v1/things/${thing.id}`, { authorization: 'Bearer good' });
   expect(await signed.json()).toMatchObject({ actor: 'account' });
   expect(seen.authenticated).toEqual([1]);
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('a refused or malformed credential is a problem document with its challenge', async () => {

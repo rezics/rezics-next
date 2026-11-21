@@ -8,10 +8,12 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 const routeKey = Buffer.alloc(32, 1).toString('base64url');
 const sessionKey = Buffer.alloc(32, 2).toString('base64url');
+const receiptKey = Buffer.alloc(32, 3).toString('base64url');
 const baseEnv = {
   DATABASE_URL: databaseUrl,
   KERNEL_ROUTE_KEY: routeKey,
   KERNEL_SESSION_KEYS: `1:${sessionKey}`,
+  KERNEL_RECEIPT_KEYS: `1:${receiptKey}`,
 };
 
 function withPoolTimeout<T>(value: string | undefined, use: () => T): T {
@@ -62,12 +64,16 @@ test('pool acquisition timeout defaults to 200 ms, accepts bounded integers, and
 });
 
 test('a started server fills its pool before serving and retains every connection while idle', async () => {
-  const config = { ...readConfig({ ...baseEnv, KERNEL_PORT: '0' }), poolIdleTimeoutMillis: 50 };
+  const env = { ...baseEnv, KERNEL_PORT: '0', KERNEL_HTTP_POOL_SIZE: '12', KERNEL_HTTP_PERMITS: '16' };
+  expect(() => readConfig({ ...env, KERNEL_HTTP_POOL_SIZE: '101' })).toThrow('KERNEL_HTTP_POOL_SIZE');
+  expect(() => readConfig({ ...env, KERNEL_HTTP_PERMITS: '0' })).toThrow('KERNEL_HTTP_PERMITS');
+  const config = { ...readConfig(env), poolIdleTimeoutMillis: 50 };
   const server = await startServer(config);
 
   const pool = server.pool;
   const origin = server.url.href.replace(/\/$/, '');
   try {
+    expect(pool.max).toBe(12);
     expect(pool.totalCount).toBe(pool.max);
     const totalBeforeRequest = pool.totalCount;
     const firstRequest = await fetch(`${origin}/v1/subjects/${newId(0x0042)}`);
