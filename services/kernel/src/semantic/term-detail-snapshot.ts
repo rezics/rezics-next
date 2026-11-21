@@ -40,7 +40,7 @@ export function termDetailSql() {
       eligible AS MATERIALIZED (
         SELECT k.route, k.subject_id, d.epoch, d.position, active.digest
         FROM disclosure d
-        CROSS JOIN LATERAL (SELECT ($5::integer[])[1] AS route, d.id::uuid AS subject_id) k
+        CROSS JOIN LATERAL (SELECT $5::integer AS route, d.id::uuid AS subject_id) k
         CROSS JOIN LATERAL (SELECT digest FROM semantic.definition_activation
                             WHERE route=0 ORDER BY head DESC LIMIT 1) active
         WHERE d.id IS NOT NULL AND d.visibility='visible' AND d.target IS NULL AND d.denied IS FALSE
@@ -93,8 +93,8 @@ export async function readTermDetailSnapshot(
           actor.accountId,
           reader.floor,
           reader.accountVersion,
-          [route],
-          [id],
+          route,
+          id,
           partition,
           seen.map((c) => c.partition),
           seen.map((c) => c.epoch),

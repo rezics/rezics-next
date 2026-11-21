@@ -18,10 +18,13 @@ export type TermDetailWitness = {
 
 export function termDisclosureSql() {
   return memoizedValue(termDisclosureSql, () => {
-    // Bind both disclosure instants to the statement's native decision time.
+    // Each term read requests one Subject. Expose that cardinality to the planner
+    // even on a generic plan, while using the same batched disclosure predicate.
     const source = disclosure.sql
       .trim()
       .replace(/;$/, '')
+      .replace(/\$5\b/g, 'ARRAY[$5::integer]')
+      .replace(/\$6\b/g, 'ARRAY[$6::uuid]')
       .replace(/\$[78]\b/g, 'transaction_timestamp()');
     return `SELECT d.id, d.visibility, d.target, d.denied, d.revision, d.security_revision,
                    d.epoch, p.position::text
@@ -62,8 +65,8 @@ export async function termSummaryDisclosure(
           actor.accountId,
           reader.floor,
           reader.accountVersion,
-          [routeOf(id)],
-          [id],
+          routeOf(id),
+          id,
           component.partition,
         ],
       }),
