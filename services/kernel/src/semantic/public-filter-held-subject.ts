@@ -102,6 +102,7 @@ async function produce(
   cursor: Cursor,
   cuts: readonly Cut[],
   context: Context,
+  received: boolean,
 ): Promise<Step> {
   const { ordinal, bootstrap, birth, firstHome, endHome } = page;
   const evidence: Step['evidence'] = {};
@@ -156,8 +157,17 @@ async function produce(
     }
     evidence.inventory = inventory;
     next = more && last ? { phase: 'inventory', partition: lastHome, after: last } : { phase: 'window' };
-  } else if (cursor.phase === 'window') {
-    // Only the committed final inventory step can select these finite ends.
+  }
+  // A fresh empty inventory has no outstanding writer. If every head is
+  // still its retained base, this snapshot closes every command window too.
+  const emptyAtCut =
+    received &&
+    cursor.phase === 'inventory' &&
+    ordinal === 0 &&
+    evidence.inventory?.length === cuts.length &&
+    obligations.length === 0 &&
+    cuts.every((cut, i) => cut.command === heads[i]!.head);
+  if (cursor.phase === 'window' || emptyAtCut) {
     evidence.windows = cuts.map(({ home, epoch, receipt, command }, i) => ({
       partition: home,
       epoch,
@@ -170,8 +180,8 @@ async function produce(
       eventCount: null,
     }));
     const windows = evidence.windows.filter((w) => w.base !== w.through);
-    if (windows.length) next = { phase: 'events', windows };
-  } else {
+    next = windows.length ? { phase: 'events', windows } : null;
+  } else if (cursor.phase === 'events') {
     const [original, ...rest] = cursor.windows;
     if (!original) return pending(firstHome);
     const window = loadWindow(original);
@@ -271,7 +281,16 @@ function validatedPage(input: Page) {
 async function readOrSaveStep(db: PoolClient, page: Page, context: Context): Promise<Step> {
   const { job, bootstrap, birth, firstHome, endHome, ordinal } = page;
   const { rows } = await db.query<{ cuts: Cut[] }>(
-    `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5) AS cuts FROM core.subject_subscription_v1 m
+    acceptReceiver
+      ? // The acceptance trigger reopens these exact committed Core and Access
+        // cuts under the membership and owner locks in our inventory snapshot.
+        `WITH accepted AS MATERIALIZED (
+           SELECT semantic.accept_subject_receiver_page_v1(m.job) AS homes FROM core.subject_subscription_v1 m
+           JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap,b.coverage_after)=(0,m.bootstrap,$4)
+           WHERE (m.job,m.bootstrap,m.birth)=($1,$2,$3)
+         ) SELECT p.cuts FROM accepted JOIN semantic.subject_access_page_v1 p
+           ON (p.birth,p.first_home,p.end_home)=($3,$4,$5) AND accepted.homes=p.end_home-p.first_home`
+      : `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5) AS cuts FROM core.subject_subscription_v1 m
      JOIN semantic.subject_source_preparation_v1 s USING(birth)
      JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home,p.end_home)=(m.birth,$4,$5)
      WHERE (m.job,m.bootstrap,m.birth)=($1,$2,$3) AND p.captured_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()`,
@@ -289,7 +308,7 @@ async function readOrSaveStep(db: PoolClient, page: Page, context: Context): Pro
   const cursor: Cursor | null =
     ordinal === 0 ? { phase: 'inventory', partition: firstHome, after: null } : (prior?.evidence.next ?? null);
   if (!cursor) return pending(firstHome);
-  const step = await produce(db, page, cursor, cuts, context);
+  const step = await produce(db, page, cursor, cuts, context, acceptReceiver);
   await db.query('INSERT INTO semantic.subject_source_step_v1 VALUES($1,$2,$3,$4)', [birth, firstHome, ordinal, step]);
   return step;
 }
@@ -305,6 +324,7 @@ export async function reconcileHeldSubjectPage(
   input: HeldSubjectFrontier,
   context: Context,
   settle: (obligation: Obligation) => Promise<void>,
+  receiveCommittedCut?: () => Promise<number>,
 ) {
   const page = validatedPage(input);
   const captured =
@@ -321,8 +341,10 @@ export async function reconcileHeldSubjectPage(
   // The original cut must commit before the first key seek. A fresh turn can
   // save that inventory with its second page check. If it found writer work,
   // leave the original ordinal for the next funded comparison and recheck.
+  const receive = captured && captured.rowCount === 1 && receiveCommittedCut;
+  if (receive && (await receive()) !== page.endHome - page.firstHome) return pending(page.firstHome);
   const step = await transaction(pool, context, async (db) => {
-    const original = await readOrSaveStep(db, page, context);
+    const original = await readOrSaveStep(db, page, context, !!receive);
     if (original.obligations.length === 0) await advanceFrontier(db, page, original, false);
     return original;
   });

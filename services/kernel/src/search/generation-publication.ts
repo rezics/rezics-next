@@ -1026,6 +1026,7 @@ export function createSearchGenerationPublication(
                 Job & {
                   held_birth: string | null;
                   held_bootstrap: string | null;
+                  coverage_after: number | null;
                   next_home: number | null;
                   next_ordinal: number | null;
                   end_home: number | null;
@@ -1034,7 +1035,9 @@ export function createSearchGenerationPublication(
                 `SELECT * FROM search.generation_publication j
                  LEFT JOIN LATERAL (
                    SELECT m.birth::text AS held_birth,m.bootstrap AS held_bootstrap,
-                     s.next_home,s.next_ordinal,p.end_home FROM core.subject_subscription_v1 m
+                     s.next_home,s.next_ordinal,p.end_home,b.coverage_after
+                   FROM core.subject_subscription_v1 m
+                   JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,m.bootstrap)
                    JOIN semantic.subject_source_preparation_v1 s ON (s.birth,s.bootstrap)=(m.birth,m.bootstrap)
                    LEFT JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home)=(s.birth,s.next_home)
                    WHERE m.job=j.job LIMIT 1
@@ -1043,8 +1046,24 @@ export function createSearchGenerationPublication(
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              const receiveCut = async (homes: number, receiver: Meter) => {
+                // Search's committed comparison and Source's acceptance trigger
+                // each reopen the original interval. Reserve both before dispatch.
+                receiver.inputKeys += 192 + homes * 24;
+                receiver.dependencyPoints += 192 + homes * 24;
+                const page = await client.query<{ homes: number }>(
+                  'SELECT search.advance_subject_receiver_v1($1,$2) AS homes',
+                  [job.job, homes],
+                );
+                const covered = page.rows[0]!.homes;
+                receiver.inputKeys -= (homes - covered) * 24;
+                receiver.dependencyPoints -= (homes - covered) * 24;
+                if (covered) receiver.frontierWrites += 3;
+                return covered;
+              };
               if (job.subscription_protocol === 1 && job.pass === '1' && job.phase === 'subject') {
-                if (!job.held_birth) throw new Pending('source_pending');
+                if (!job.held_birth || job.coverage_after === null || job.next_home === null)
+                  throw new Pending('source_pending');
                 const pin = await client.query<{ ready: boolean }>(
                   'SELECT search.begin_subject_receiver_v1($1,$2) AS ready',
                   [job.job, encodePublicFilterNativeState(job.consumer)],
@@ -1052,18 +1071,17 @@ export function createSearchGenerationPublication(
                 meter.inputKeys += 16;
                 meter.dependencyPoints += 16;
                 if (!pin.rows[0]?.ready) throw new Pending('source_pending');
-                const homes = Math.min(32, Math.floor((1000 - meter.inputKeys - 192) / 24));
-                const page = await client.query<{ homes: number }>(
-                  'SELECT search.advance_subject_receiver_v1($1,$2) AS homes',
-                  [job.job, homes],
-                );
-                if (page.rows[0]?.homes) {
-                  meter.inputKeys += 192 + page.rows[0].homes * 24;
-                  meter.dependencyPoints += 192 + page.rows[0].homes * 24;
-                  // Separate commits let Source recover the receiver's original after a lost reply.
-                  await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
-                  meter.frontierWrites += 3;
-                  return work(job, client, null, undefined, true);
+                // Recover the same retained page if either owner's previous
+                // reply was lost. A fresh page starts with Source capture below.
+                if (
+                  job.coverage_after < job.next_home ||
+                  (job.coverage_after === job.next_home && job.end_home !== null)
+                ) {
+                  const homes = Math.min(32, Math.floor((1000 - meter.inputKeys - 192) / 24));
+                  if (await receiveCut(homes, meter)) {
+                    await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+                    return work(job, client, null, undefined, true);
+                  }
                 }
               }
               if (job.held_birth != null && (job.subscription_protocol !== 1 || job.next_home !== 4096)) {
@@ -1100,7 +1118,10 @@ export function createSearchGenerationPublication(
                 const perHomeInputs = 18;
                 const available = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys - 5 * 32;
                 const width = Math.min(32, Math.floor((available - fixedInputs) / perHomeInputs));
-                const endHome = job.end_home ?? Math.min(4096, job.next_home + width);
+                // A retained short cut can end inside an authority interval.
+                // Close that suffix before capturing further full intervals.
+                const remaining = batchHeld && job.subscription_protocol === 1 ? 32 - (job.next_home % 32) : 32;
+                const endHome = job.end_home ?? Math.min(4096, job.next_home + Math.min(width, remaining));
                 const inputs = fixedInputs + perHomeInputs * (endHome - job.next_home);
                 if (endHome <= job.next_home || inputs > available) throw new Pending('source_pending');
                 meter.inputKeys += inputs;
@@ -1113,55 +1134,34 @@ export function createSearchGenerationPublication(
                   endHome,
                   ordinal: job.next_ordinal,
                 };
-                const step = await reconcileHeldSubjectPage(pool, frontier, context, async (obligation) => {
-                  await checkWriterTarget();
-                  await reconcile(
-                    job,
-                    obligation.partition,
-                    obligation.ids,
-                    undefined,
-                    BigInt(obligation.position),
-                    context,
-                    meter,
-                    true,
-                  );
-                });
-                meter.frontierWrites++;
-                if (
-                  batchHeld &&
-                  job.subscription_protocol === 1 &&
-                  step?.next?.phase === 'window' &&
-                  step.obligations.length === 0
-                ) {
-                  // Both owners read the committed inventory. Receiver acceptance
-                  // remains a third transaction, including after an uncertain reply.
-                  const sourceCost = cost(),
-                    receiverCost = cost();
-                  sourceCost.inputKeys = sourceCost.dependencyPoints = inputs;
-                  receiverCost.inputKeys = receiverCost.dependencyPoints = 192 + 32 * 24;
-                  const [window, receiver] = await Promise.allSettled([
-                    reconcileHeldSubjectPage(
-                      pool,
-                      { ...frontier, ordinal: frontier.ordinal + 1 },
+                const additional: Meter[] = [];
+                await reconcileHeldSubjectPage(
+                  pool,
+                  frontier,
+                  context,
+                  async (obligation) => {
+                    await checkWriterTarget();
+                    await reconcile(
+                      job,
+                      obligation.partition,
+                      obligation.ids,
+                      undefined,
+                      BigInt(obligation.position),
                       context,
-                      async () => {
-                        throw new Pending('source_pending');
-                      },
-                    ),
-                    client.query<{ homes: number }>('SELECT search.advance_subject_receiver_v1($1,32) AS homes', [
-                      job.job,
-                    ]),
-                  ]);
-                  if (receiver.status === 'rejected') throw receiver.reason;
-                  if (receiver.value.rows[0]?.homes) {
-                    await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
-                    receiverCost.frontierWrites += 3;
-                  }
-                  if (window.status === 'rejected') throw window.reason;
-                  sourceCost.frontierWrites++;
-                  return work(job, client, null, undefined, true, [sourceCost, receiverCost]);
-                }
-                return work(job, client, null, undefined, true);
+                      meter,
+                      true,
+                    );
+                  },
+                  batchHeld && job.subscription_protocol === 1 && job.coverage_after === job.next_home
+                    ? () => {
+                        const receiver = cost();
+                        additional.push(receiver);
+                        return receiveCut(endHome - frontier.firstHome, receiver);
+                      }
+                    : undefined,
+                );
+                meter.frontierWrites++;
+                return work(job, client, null, undefined, true, additional);
               }
               if (
                 job.subscription_protocol === 1 &&
