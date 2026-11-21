@@ -213,7 +213,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
     | {
         config: AuthenticationConfig;
         keys: ReturnType<typeof createRemoteJWKSet>;
-        resolveKey: ReturnType<typeof createRemoteJWKSet>;
+        meteredKeys: ReturnType<typeof createRemoteJWKSet>;
       }
     | undefined;
   function resolveVerifier() {
@@ -276,7 +276,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         },
       });
       let cachedKeyCount = 0;
-      const resolveKey = Object.defineProperties(
+      const meteredKeys = Object.defineProperties(
         async (...args: Parameters<typeof keys>) => {
           const invocation = calls.getStore();
           if (!invocation) throw invalid();
@@ -341,7 +341,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
           jwks: { value: keys.jwks },
         },
       ) as typeof keys;
-      verifier = { config, keys, resolveKey };
+      verifier = { config, keys, meteredKeys };
     }
     return verifier;
   }
@@ -349,10 +349,10 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
   const authenticateCurrent = async (token: string, context: AccessContext): Promise<AccountActor> => {
     try {
       remaining(context.deadline);
-      const { config, resolveKey } = resolveVerifier();
+      const { config, keys, meteredKeys } = resolveVerifier();
       const at = new Date();
       const verify = () =>
-        jwtVerify(token, resolveKey, {
+        jwtVerify(token, context.work ? meteredKeys : keys, {
           currentDate: at,
           issuer: config.issuer,
           audience: config.audience,

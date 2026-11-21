@@ -90,7 +90,7 @@ export function createApp({
   // body through parsing, then restore it before the route's schema checks.
   const absentBody = Symbol('absent request body');
   const bodyReservations = new WeakMap<Request, number>();
-  let bodyBudget: IngressBodyBudget | undefined;
+  let bodyBudget: IngressBodyBudget;
   const selfParsingRoutes = new Set([
     'POST /v1/boards',
     'POST /v1/realms/:realmId/boards',
@@ -144,15 +144,6 @@ export function createApp({
         request.headers.has('content-length') && Number.isSafeInteger(declared) && declared >= 0
           ? Math.min(declared, limit)
           : limit;
-      const largest = Math.max(
-        DEFAULT_BODY_LIMIT,
-        MAX_BODY_LIMIT(),
-        ...catalogue.routes.map((candidate) =>
-          bodyLimitOf(candidate.hooks?.detail as Record<string, unknown> | undefined),
-        ),
-      );
-      const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest;
-      bodyBudget ??= new IngressBodyBudget(budget);
       try {
         if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
         bodyReservations.set(request, reservation);
@@ -166,7 +157,7 @@ export function createApp({
     .onAfterResponse(({ request }) => {
       const reservation = bodyReservations.get(request);
       if (reservation !== undefined) {
-        bodyBudget?.release(reservation);
+        bodyBudget.release(reservation);
         bodyReservations.delete(request);
       }
     })
@@ -387,8 +378,15 @@ export function createApp({
       }
     }
     catalogue = mountedRouteCatalogue(mountedApp, routes);
-    const verbs = new Set(
-      catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
+    const verbs = new Set<string>();
+    let largest = Math.max(DEFAULT_BODY_LIMIT, MAX_BODY_LIMIT());
+    for (const route of catalogue.routes) {
+      const verb = customMethodVerb(route.path);
+      if (verb !== undefined) verbs.add(verb);
+      largest = Math.max(largest, bodyLimitOf(route.hooks?.detail as Record<string, unknown> | undefined));
+    }
+    bodyBudget ??= new IngressBodyBudget(
+      (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest,
     );
     return (request) => {
       return withCommandTiming(() =>

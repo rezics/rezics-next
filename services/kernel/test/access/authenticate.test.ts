@@ -1,6 +1,7 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
 import { AccessUnavailableError, createAccess, createResourcePublicEligibility } from '../../src/access/index.ts';
@@ -358,31 +359,40 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
 
 test('authenticated requests read actor state and epoch once on its anchor', async () => {
   const { access } = verifier();
-  const reads: { text: string; values: unknown[] }[] = [];
-  const counted = Object.create(pool) as Pool;
-  counted.query = ((query: { text: string; values: unknown[] }) => {
-    if (/FROM access.account/.test(query.text)) reads.push(query);
-    return pool.query(query);
-  }) as Pool['query'];
-  const ctx = context(counted);
-  const actor = await access.authenticate(personToken, ctx);
-  for (let i = 0; i < 3; i++) {
-    const check = await accessCheck(access, actor, action, resource, ctx);
-    const client = await pool.connect();
-    try {
-      expect(await check(client)).toBe(true);
-    } finally {
-      client.release();
-    }
-  }
+  const reads: { text: string; values: readonly unknown[] }[] = [];
+  await withQueryAccounting(
+    {
+      connection: (dispatch) => dispatch(),
+      query: (text, values, dispatch) => {
+        if (text.includes('FROM access.account')) reads.push({ text, values });
+        return dispatch();
+      },
+    },
+    async () => {
+      const ctx = context();
+      const actor = await access.authenticate(personToken, ctx);
+      for (let i = 0; i < 3; i++) {
+        const check = await accessCheck(access, actor, action, resource, ctx);
+        expect(await withConnection(pool, check)).toBe(true);
+      }
+    },
+  );
   expect(reads).toHaveLength(1);
   expect(reads[0]!.values).toContain(routeOf(person));
   expect(reads[0]!.values).toContain(person);
   expect(reads[0]!.text).toContain('minimum_authn_epoch');
   expect(reads[0]!.text).toContain('state');
-  const unavailable = Object.create(pool) as Pool;
-  unavailable.query = (() => Promise.reject(new Error('Account dependency unavailable'))) as Pool['query'];
-  await invalid(access.authenticate(personToken, context(unavailable)));
+  await expect(
+    withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        query() {
+          throw new Error('Account dependency unavailable');
+        },
+      },
+      () => access.authenticate(personToken, context()),
+    ),
+  ).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'overloaded' });
   await invalid(access.authenticate(await signed({ sub: '00000000-0000-7000-8000-ffff00000000' }), context()));
 });
 
@@ -466,14 +476,19 @@ test('request deadlines and token expiry bound authentication and prepared autho
   await expect(access.authenticate(personToken, context(pool, Date.now() - 1))).rejects.toBeInstanceOf(
     AccessUnavailableError,
   );
-  const delayed = Object.create(pool) as Pool;
-  delayed.query = (async (query: Parameters<Pool['query']>[0]) => {
-    await Bun.sleep(120);
-    return pool.query(query);
-  }) as Pool['query'];
-  await expect(access.authenticate(personToken, context(delayed, Date.now() + 30))).rejects.toBeInstanceOf(
-    AccessUnavailableError,
-  );
+  await expect(
+    withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(_sql, _operands, dispatch) {
+          const value = await dispatch();
+          await Bun.sleep(120);
+          return value;
+        },
+      },
+      () => access.authenticate(personToken, context(pool, Date.now() + 30)),
+    ),
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
   const stalled = createAccess({
     actions,
     auth: {

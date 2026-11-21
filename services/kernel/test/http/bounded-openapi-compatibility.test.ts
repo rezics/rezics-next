@@ -346,6 +346,27 @@ test('native ingress reservations refuse excess requests before reading and rele
   expect(next.status).toBe(200);
 });
 
+test.each([1, 8, 64])('body ingress only consults the selected route with %i unrelated routes', async (unrelated) => {
+  const app = probe();
+  for (let i = 0; i < unrelated; i++) app.get(`/unrelated/${i}`, { detail }, () => 'unrelated');
+  const post = () =>
+    app.handle(
+      new Request('http://kernel.test/bounded-openapi', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"count":1,"enabled":true}',
+      }),
+    );
+  expect((await post()).status).toBe(200);
+  const limits = spyOn(await import('../../src/http/body.ts'), 'bodyLimitOf');
+  try {
+    expect((await post()).status).toBe(200);
+    expect(limits.mock.calls.length).toBeLessThanOrEqual(1);
+  } finally {
+    limits.mockRestore();
+  }
+});
+
 test('all mounted body routes use the shared cap or an explicitly listed bounded parser', async () => {
   const ownParsers = new Set([
     'POST /v1/boards',

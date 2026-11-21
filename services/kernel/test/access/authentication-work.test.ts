@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool, type QueryConfig } from 'pg';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { Pool } from 'pg';
+import { withQueryAccounting } from '../../src/database/pool.ts';
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
@@ -30,11 +31,18 @@ let access: Access;
 let derived: Access;
 let fetches = 0;
 const statements: string[] = [];
-const observedPool = Object.create(pool) as Pool;
-observedPool.query = (async (query: QueryConfig | string, values?: unknown[]) => {
-  statements.push(typeof query === 'string' ? query : query.text);
-  return pool.query(query as never, values as never);
-}) as Pool['query'];
+function observeActor(...args: Parameters<typeof actorOf>) {
+  return withQueryAccounting(
+    {
+      connection: (dispatch) => dispatch(),
+      query: (sql, _operands, dispatch) => {
+        statements.push(sql);
+        return dispatch();
+      },
+    },
+    () => actorOf(...args),
+  );
+}
 
 type Reservation = { operation: string; bound: AccessWork; kind: 'native' | 'owner'; actual?: AccessWork };
 function accounting(deadline: number) {
@@ -128,8 +136,8 @@ test('fresh Bearer authentication charges the original verifier and exact native
   const unknownKidDeadline = Date.now() + 5000;
   const unknownKidAccounting = accounting(unknownKidDeadline);
   await expect(
-    actorOf(derived, bearer(unknownKidToken), {
-      pool: observedPool,
+    observeActor(derived, bearer(unknownKidToken), {
+      pool,
       deadline: unknownKidDeadline,
       work: unknownKidAccounting.work,
     }),
@@ -147,8 +155,8 @@ test('fresh Bearer authentication charges the original verifier and exact native
   const directDeadline = Date.now() + 5000;
   const directAccounting = accounting(directDeadline);
   statements.length = 0;
-  const actor = await actorOf(derived, bearer(directToken), {
-    pool: observedPool,
+  const actor = await observeActor(derived, bearer(directToken), {
+    pool,
     deadline: directDeadline,
     work: directAccounting.work,
   });
@@ -177,7 +185,7 @@ test('fresh Bearer authentication charges the original verifier and exact native
     'account:manage',
     { route: routeOf(actorId)!, id: actorId },
     {
-      pool: observedPool,
+      pool,
       deadline: Date.now() + 5000,
     },
   );
@@ -188,7 +196,7 @@ test('fresh Bearer authentication charges the original verifier and exact native
       'account:manage',
       { route: routeOf(actorId)!, id: actorId },
       {
-        pool: observedPool,
+        pool,
         deadline: Date.now() + 5000,
       },
     ),
@@ -199,8 +207,8 @@ test('fresh Bearer authentication charges the original verifier and exact native
   const delegatedDeadline = Date.now() + 5000;
   const delegatedAccounting = accounting(delegatedDeadline);
   statements.length = 0;
-  const delegated = await actorOf(derived, bearer(delegatedToken), {
-    pool: observedPool,
+  const delegated = await observeActor(derived, bearer(delegatedToken), {
+    pool,
     deadline: delegatedDeadline,
     work: delegatedAccounting.work,
   });
@@ -219,14 +227,32 @@ test('fresh Bearer authentication charges the original verifier and exact native
   expect(JSON.stringify(delegatedAccounting.reservations)).not.toContain(delegatedToken);
 });
 
+test('ordinary Bearer verification reuses the public key set without copying it for accounting', async () => {
+  const value = await token();
+  const verify = () => actorOf(access, bearer(value), { pool, deadline: Date.now() + 5000 });
+  await verify();
+  const count = fetches;
+  const copies = spyOn(globalThis, 'structuredClone');
+  try {
+    expect(await verify()).toMatchObject({ kind: 'account', accountId: actorId });
+    expect(fetches).toBe(count);
+    const snapshots = copies.mock.calls.filter(
+      ([input]) => typeof input === 'object' && input !== null && 'keys' in input && Array.isArray(input.keys),
+    );
+    expect(snapshots).toHaveLength(0);
+  } finally {
+    copies.mockRestore();
+  }
+});
+
 test('invalid and unresolved delegated Bearers settle their reached reads without exposing identity', async () => {
   const invalidToken = await token({}, 'https://wrong-audience.authentication-work.test');
   const invalidDeadline = Date.now() + 5000;
   const invalidAccounting = accounting(invalidDeadline);
   statements.length = 0;
   await expect(
-    actorOf(derived, bearer(invalidToken), {
-      pool: observedPool,
+    observeActor(derived, bearer(invalidToken), {
+      pool,
       deadline: invalidDeadline,
       work: invalidAccounting.work,
     }),
@@ -241,8 +267,8 @@ test('invalid and unresolved delegated Bearers settle their reached reads withou
   const unresolvedAccounting = accounting(unresolvedDeadline);
   statements.length = 0;
   await expect(
-    actorOf(derived, bearer(unresolvedToken), {
-      pool: observedPool,
+    observeActor(derived, bearer(unresolvedToken), {
+      pool,
       deadline: unresolvedDeadline,
       work: unresolvedAccounting.work,
     }),
@@ -264,9 +290,9 @@ test('metered original authentication keeps suspended-account denial after charg
       actorId,
       'suspended',
     ]);
-    await expect(
-      actorOf(derived, bearer(value), { pool: observedPool, deadline, work: metered.work }),
-    ).rejects.toMatchObject({ code: 'account_suspended' });
+    await expect(observeActor(derived, bearer(value), { pool, deadline, work: metered.work })).rejects.toMatchObject({
+      code: 'account_suspended',
+    });
     expect(PROBLEMS.account_suspended.status).toBe(403);
     expect(statements).toHaveLength(1);
     expect(statements[0]).toContain('access.account');
@@ -289,12 +315,6 @@ test('metered original authentication keeps suspended-account denial after charg
 });
 
 test('a dispatched account-read failure burns the original finite authentication declaration', async () => {
-  const failedPool = Object.create(pool) as Pool;
-  failedPool.query = (async (query: QueryConfig | string, values?: unknown[]) => {
-    const text = typeof query === 'string' ? query : query.text;
-    if (text.includes('FROM access.account')) throw new Error('account read unavailable');
-    return pool.query(query as never, values as never);
-  }) as Pool['query'];
   const failingAccess = deriveAccess(
     createAccess({
       actions,
@@ -315,8 +335,17 @@ test('a dispatched account-read failure burns the original finite authentication
   const metered = accounting(deadline);
   const bound = authenticationWorkBound(value);
   await expect(
-    actorOf(failingAccess, bearer(value), { pool: failedPool, deadline, work: metered.work }),
-  ).rejects.toMatchObject({ status: 401, challenge: 'Bearer error="invalid_token"' });
+    withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        query: (sql, _operands, dispatch) => {
+          if (sql.includes('FROM access.account')) throw new Error('account read unavailable');
+          return dispatch();
+        },
+      },
+      () => actorOf(failingAccess, bearer(value), { pool, deadline, work: metered.work }),
+    ),
+  ).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'overloaded' });
   expect(metered.reservations).toHaveLength(1);
   expect(metered.reservations[0]).toMatchObject({ operation: 'access.authenticate', bound, actual: bound });
   expect(metered.work.usage()).toEqual(bound);
@@ -349,8 +378,8 @@ test('the original producer refuses a caller deadline that differs from its Acce
   const metered = accounting(frameDeadline);
   const fetchCount = fetches;
   await expect(
-    actorOf(derived, bearer(value), {
-      pool: observedPool,
+    observeActor(derived, bearer(value), {
+      pool,
       deadline: frameDeadline + 1,
       work: metered.work,
     }),
