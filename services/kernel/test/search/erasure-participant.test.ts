@@ -235,7 +235,7 @@ async function post(actor: Persona, path: string, body: unknown, expected = 200)
       method: 'POST',
       headers: {
         authorization: `Bearer ${await currentBearer(actor)}`,
-        'content-type': 'application/json',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         'idempotency-key': JSON.stringify(crypto.randomUUID()),
       },
       body: JSON.stringify(body),
@@ -415,6 +415,7 @@ async function prune(index: string) {
 
 async function erasure(persona: () => Persona, delayed: boolean) {
   await fixture();
+  await post(personas.staff, '/v1/platform/exposure/search:open', undefined);
   const owner = persona();
   const prefix = `erasure-${crypto.randomUUID().slice(0, 8)}-`;
   const indices = [1, 2, 3].map((generation) => subjectIndexName(prefix, generation));
@@ -521,8 +522,9 @@ async function erasure(persona: () => Persona, delayed: boolean) {
           body: JSON.stringify({ text, limit: 20 }),
         }),
       );
-      expect(response.status).toBe(200);
-      return ((await response.json()) as { subjects: { id: string }[] }).subjects.map(({ id }) => id);
+      const result = await response.json();
+      expect(response.status, JSON.stringify(result)).toBe(200);
+      return (result as { subjects: { id: string }[] }).subjects.map(({ id }) => id);
     }
     for (const index of indices) {
       const docs = await eventually(
