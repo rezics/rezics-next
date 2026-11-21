@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
-import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
+import { createReviewDiscoverySource, pendingReviewCensusHomes } from '../../src/content/review-discovery.ts';
 import { maintainReviewCensusBatch, REVIEW_CENSUS_BATCH_PAGES } from '../../src/content/review-census-work.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
 import { restorePost } from '../../src/content/restore-post.ts';
@@ -267,8 +267,11 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
 
 test('an empty census and a stale cut remain distinguishable from a complete zero total', async () => {
   const partition = 0xfed;
+  const due = () => pendingReviewCensusHomes(fixture.pool, [partition], Date.now() + 30_000);
+  expect(await due()).toEqual([partition]);
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   const before = await source.censusCoverage(partition);
+  expect(await due()).toEqual([]);
   expect(before).toMatchObject({ state: 'preparing', installed: true, missing: 'empty-population' });
   expect(await source.count(partition)).toMatchObject({ unavailable: true });
   await fixture.reader.query(
@@ -276,12 +279,29 @@ test('an empty census and a stale cut remain distinguishable from a complete zer
       (SELECT jsonb_agg(home-'projection') FROM jsonb_array_elements(cut->'homes') home)) WHERE route=$1`,
     [partition * 16],
   );
+  const workId = newId(partition * 16);
+  await fixture.reader.query(
+    "INSERT INTO content.review_discovery_work(route,id,origin,scopes) VALUES ($1,$2,jsonb_build_object('partition',$3::integer,'epoch',1,'position','1','eventIndex',0,'id',$2::uuid,'type','com.rezics.subject.revised.v1'),jsonb_build_array(jsonb_build_object('kind','subject','id',$2::uuid)))",
+    [partition * 16, workId, partition],
+  );
+  try {
+    const missing = partition - 1;
+    expect(await pendingReviewCensusHomes(fixture.pool, [partition, missing], Date.now() + 30_000)).toEqual([missing]);
+    expect(await source.maintainCensus(partition)).toMatchObject({ state: 'preparing', examined: 0 });
+  } finally {
+    await fixture.reader.query('DELETE FROM content.review_discovery_work WHERE route=$1 AND id=$2', [
+      partition * 16,
+      workId,
+    ]);
+  }
+  expect(await due()).toEqual([partition]);
   expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'changed', examined: 0 });
   expect((await source.censusCoverage(partition)).generation).not.toBe(before.generation);
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   await fixture.reader.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
   try {
+    expect(await due()).toEqual([partition]);
     expect(await source.censusCoverage(partition)).toMatchObject({ state: 'unavailable', installed: false });
   } finally {
     await fixture.reader.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [partition]);

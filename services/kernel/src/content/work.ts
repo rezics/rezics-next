@@ -44,7 +44,11 @@ import {
 } from './hosted-publication-retention.ts';
 import { tryContentApplication } from './adapters/bind.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
-import { repairConversationActivityPage } from './conversation-activity-repair.ts';
+import {
+  CONVERSATION_ACTIVITY_HOME_WINDOW,
+  pendingConversationActivityHomes,
+  repairConversationActivityPage,
+} from './conversation-activity-repair.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
@@ -494,14 +498,24 @@ async function registerWork(
       name: BOARD_RANK_WORKFLOW,
     },
   );
+  const conversationActivityHomes = DBOS.registerStep(
+    (homes: readonly number[]) => pendingConversationActivityHomes(context.pool, homes, now() + 30_000),
+    { name: 'content.conversation-activity.repair.homes', ...retry },
+  );
   const conversationActivityRepairPage = DBOS.registerStep(
     async (partition: number) => repairConversationActivityPage(context.pool, partition, now() + 30_000),
     { name: 'content.conversation-activity.repair.page', ...retry },
   );
   DBOS.registerWorkflow(
     async (_scheduledDate: Date, _context: unknown) => {
-      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY)
-        await Promise.all(partitions.slice(offset, offset + PARTITION_CONCURRENCY).map(conversationActivityRepairPage));
+      const selectDue = await DBOS.patch('content.conversation-activity.select-homes');
+      const width = selectDue ? CONVERSATION_ACTIVITY_HOME_WINDOW : PARTITION_CONCURRENCY;
+      for (let offset = 0; offset < partitions.length; offset += width) {
+        const window = partitions.slice(offset, offset + width);
+        const homes = selectDue ? await conversationActivityHomes(window) : window;
+        for (let n = 0; n < homes.length; n += PARTITION_CONCURRENCY)
+          await Promise.all(homes.slice(n, n + PARTITION_CONCURRENCY).map(conversationActivityRepairPage));
+      }
     },
     { name: CONVERSATION_ACTIVITY_REPAIR_WORKFLOW },
   );

@@ -3,7 +3,11 @@ import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import type { Access } from '../request/access.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { ReviewCensusStep } from './review-census.ts';
-import { createReviewDiscoverySource } from './review-discovery.ts';
+import {
+  createReviewDiscoverySource,
+  pendingReviewCensusHomes,
+  REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT,
+} from './review-discovery.ts';
 
 export const REVIEW_CENSUS_WORKFLOW = 'content.review-census.sweep';
 export const REVIEW_CENSUS_SCHEDULE = 'content.review-census.hourly';
@@ -52,20 +56,29 @@ export function registerReviewCensusWork(context: WorkContext, access: Access, p
   const maintain = DBOS.registerWorkflow((partition: number) => maintainReviewCensusBatch(partition, page), {
     name: partitionWorkflow,
   });
+  const due = DBOS.registerStep(
+    (homes: readonly number[]) => pendingReviewCensusHomes(context.pool, homes, Date.now() + 30_000),
+    { name: 'content.review-census.homes', retriesAllowed: true, intervalSeconds: 1, backoffRate: 2, maxAttempts: 10 },
+  );
   DBOS.registerWorkflow(
     async (_scheduledDate: Date, _context: unknown) => {
       const sweep = DBOS.workflowID!;
-      for (let offset = 0; offset < partitions.length; offset += concurrency) {
-        // Children execute directly: placing them behind their waiting parent on
-        // the maintenance queue would deadlock overlapping sweeps.
-        const handles = await Promise.all(
-          partitions
-            .slice(offset, offset + concurrency)
-            .map((partition) =>
-              DBOS.startWorkflow(maintain, { workflowID: `${sweep}:partition:${partition}` })(partition),
-            ),
-        );
-        await Promise.all(handles.map((handle) => handle.getResult()));
+      const selectDue = await DBOS.patch('content.review-census.select-homes');
+      const width = selectDue ? REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT : concurrency;
+      for (let offset = 0; offset < partitions.length; offset += width) {
+        const window = partitions.slice(offset, offset + width);
+        const homes = selectDue ? await due(window) : window;
+        for (let n = 0; n < homes.length; n += concurrency) {
+          // Children execute directly so overlapping parent sweeps can finish.
+          const handles = await Promise.all(
+            homes
+              .slice(n, n + concurrency)
+              .map((partition) =>
+                DBOS.startWorkflow(maintain, { workflowID: `${sweep}:partition:${partition}` })(partition),
+              ),
+          );
+          await Promise.all(handles.map((handle) => handle.getResult()));
+        }
       }
     },
     { name: REVIEW_CENSUS_WORKFLOW },

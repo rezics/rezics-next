@@ -7,6 +7,7 @@ import {
   readConversationActivitySources,
   toConversationActivityReplyCount,
 } from '../../src/content/conversation-activity.ts';
+import { pendingConversationActivityHomes } from '../../src/content/conversation-activity-repair.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   createRankingWorld,
@@ -26,6 +27,11 @@ test.serial(
       const created = await world.thread(boardId, world.start);
       const thread = created.thread;
       const partition = partitionOf(routeOf(thread.id)!);
+      const emptyHome = (partition + 1) % 4096;
+      const due = () => pendingConversationActivityHomes(world.pool, [emptyHome, partition], Date.now() + 30_000);
+      expect(await due()).toContain(emptyHome);
+      await repairConversationActivityPage(world.pool, emptyHome, Date.now() + 30_000);
+      expect(await due()).not.toContain(emptyHome);
       runtime = await startRankingWorker(world, [partition]);
       await runtime.consume(created.envelopes);
       const source = async () =>

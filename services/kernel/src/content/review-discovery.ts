@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -15,6 +15,7 @@ import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, 
 import type { ReadContext } from './model.ts';
 import {
   createReviewCensus,
+  sameReviewCensusCut,
   REVIEW_CENSUS_PAGE_SIZE,
   type ReviewCensusCoverage,
   type ReviewCensusCut,
@@ -28,7 +29,7 @@ export const REVIEW_DISCOVERY_CANDIDATE_FACTOR = 4;
 export const REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES = REVIEW_DISCOVERY_PAGE_LIMIT * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
 export const REVIEW_DISCOVERY_MAX_DEPENDENCIES = 512;
 export const REVIEW_DISCOVERY_MAX_CUT_HOMES = 256;
-const REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT = 100;
+export const REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT = 100;
 const pendingInvalidation = 'EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false)';
 
 /** Candidate fields only. Author presentation is read from Accounts during final hydration. */
@@ -496,6 +497,69 @@ function emptyReviewHomes(partitions: readonly number[]) {
   for (const partition of requested) assertPartition(partition);
   if (new Set(requested).size !== requested.length) throw new TypeError('Review discovery partitions must be distinct');
   return requested;
+}
+
+/** A scheduling decision never advances the installation. A changed or multi-home cut takes the ordinary page. */
+export async function pendingReviewCensusHomes(
+  pool: Pool,
+  homes: readonly number[],
+  deadline: number,
+): Promise<number[]> {
+  const partitions = emptyReviewHomes(homes);
+  if (!partitions.length) return [];
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const { rows } = await client.query<{
+        home: number;
+        installed: boolean;
+        active: boolean;
+        continuing: boolean;
+        multiple: boolean;
+        exhausted: boolean;
+        cut: ReviewCensusCut | null;
+        pending: boolean;
+      }>(
+        `SELECT h.home, i.route IS NOT NULL AS installed, p.write_state='active' AS active, i.after_token IS NOT NULL AS continuing, i.exhausted,
+          jsonb_array_length(i.cut->'homes') IS DISTINCT FROM 1 AND i.cut IS NOT NULL AS multiple,
+          CASE WHEN jsonb_array_length(i.cut->'homes')=1 THEN i.cut END AS cut, ${pendingInvalidation} AS pending
+         FROM unnest($1::integer[]) WITH ORDINALITY h(home,n)
+         LEFT JOIN content.review_census_installation i ON i.route=h.home*16
+         LEFT JOIN core.partition p ON p.partition_no=h.home ORDER BY h.n`,
+        [partitions],
+      );
+      // A live lifecycle invalidation withholds every original native page. New homes still initialize.
+      if (rows[0]?.pending)
+        return rows
+          .filter((row) => !row.installed || !row.active || row.continuing || row.multiple)
+          .map((row) => row.home);
+      const local = rows.filter(
+        (row) => row.exhausted && row.cut?.homes?.length === 1 && row.cut.homes[0]?.partition === row.home,
+      );
+      if (!local.length) return partitions;
+      const current = await captureEmptyCuts(
+        client,
+        local.map((row) => row.home),
+      );
+      const unchanged = new Set<number>();
+      for (const row of local) {
+        const native = current.get(row.home);
+        if (!native) continue;
+        const state = cutState(row.home, [native], 1);
+        if (
+          state.status === 'ready' &&
+          row.cut &&
+          sameReviewCensusCut(row.cut, {
+            frontier: state.cut.frontier.toString(),
+            homes: tokenObservation(state.cut),
+          })
+        )
+          unchanged.add(row.home);
+      }
+      return partitions.filter((home) => !unchanged.has(home));
+    },
+    deadline,
+  );
 }
 
 function sameCut(left: PopulationCut, right: PopulationCut): boolean {

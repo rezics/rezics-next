@@ -14,7 +14,7 @@ const registerContent = createContentWorkModule({
   now: () => Date.now(),
 });
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
-import { readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
+import { BATCH_ENVELOPES, readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -232,22 +232,25 @@ export class RankingWorld {
     const consumer = `ranking_capture_${randomUUID().replaceAll('-', '')}`;
     await this.pool.query(
       'INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)',
-      [partition, consumer, before.epoch, before.position],
+      [partition, consumer, BigInt(before.position) === 0n ? null : before.epoch, before.position],
     );
     const value = await action();
     const after = await readPartitionPosition(this.pool, partition);
     const envelopes: Envelope[] = [];
-    if (BigInt(after.position) > BigInt(before.position)) {
+    let position = BigInt(before.position);
+    const through = BigInt(after.position);
+    while (position < through) {
       const batch = await readBatch(this.pool, {
         consumer,
         partition,
-        envelopes: 100,
+        envelopes: Math.min(BATCH_ENVELOPES, Number(through - position)),
         apply: async (items) => {
           envelopes.push(...items);
         },
       });
-      if (batch.status !== 'read' || !envelopes.some((item) => item.position === BigInt(after.position)))
+      if (batch.status !== 'read' || batch.position <= position)
         throw new Error('The native command envelope was not captured through the production log reader');
+      position = batch.position;
     }
     return { value, envelopes };
   }

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { deadlineClient, within } from './access-port.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessClient } from '../request/access.ts';
 import { PARTITIONS } from '../route/route.ts';
@@ -91,6 +91,41 @@ type RepairPostRow = Readonly<{
   contributed_at: string | null;
   has_publication_source: boolean;
 }>;
+
+export const CONVERSATION_ACTIVITY_HOME_WINDOW = 128;
+
+/** Scheduler hint only. The page rechecks and locks the live owner before advancing any frontier. */
+export async function pendingConversationActivityHomes(
+  pool: Pool,
+  homes: readonly number[],
+  deadline: number,
+): Promise<number[]> {
+  if (
+    homes.length > CONVERSATION_ACTIVITY_HOME_WINDOW ||
+    homes.some((home) => !Number.isInteger(home) || home < 0 || home >= PARTITIONS)
+  )
+    throw new RangeError('Invalid conversation activity home window');
+  if (!homes.length) return [];
+  const { rows } = await withBoundedReadConnection(pool, deadline, (client) =>
+    client.query<{ home: number }>(
+      `SELECT h.home
+       FROM unnest($1::integer[]) WITH ORDINALITY AS h(home,n)
+       LEFT JOIN core.partition p ON p.partition_no=h.home
+       LEFT JOIN content.conversation_activity_repair_frontier f ON f.partition_no=h.home
+      WHERE p.partition_no IS NULL OR p.write_state='moved' OR f.complete IS DISTINCT FROM true
+         OR (SELECT true FROM content.conversation_activity_board_frontier b
+                     WHERE NOT b.complete AND b.route BETWEEN h.home*16 AND h.home*16+15
+                     ORDER BY b.route,b.board_id LIMIT 1) IS TRUE
+         OR (SELECT true FROM content.conversation_activity_episode e
+                     WHERE e.opening AND e.coverage_state IN ('uncovered','repairing')
+                       AND e.route BETWEEN h.home*16 AND h.home*16+15
+                     ORDER BY e.route,e.thread_id LIMIT 1) IS TRUE
+      ORDER BY h.n`,
+      [homes],
+    ),
+  );
+  return rows.map((row) => row.home);
+}
 
 /**
  * Advances exactly one resumable native prefix: the raw thread census, one
