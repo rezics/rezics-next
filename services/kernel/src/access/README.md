@@ -3738,6 +3738,9 @@ as required by the participant contract, while subject/account-resource grants a
 - `access.resource_denial`, subject: [the schema](../../db/access/schema.sql) retains private reasons, scope and
   temporal ban/suspension history, without an account-erasure deadline or adopted moderation exception.
 
+Both current-role tables reference the source interval by its resource route and interval key.
+Deleting a grant cascades to its retained memberships and boundaries on that route.
+
 ### Zone grant minimization
 
 Decision: Access consumes a typed Semantic-admitted Zone branch on the same command transaction, binds a separate

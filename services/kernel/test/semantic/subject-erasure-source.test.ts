@@ -183,6 +183,27 @@ test('repeated native Source capture keeps one write-basis row and reopens a com
         [route, id],
       )
     ).rows[0]!;
+    const stores = ['fact', 'identity_epoch_home_gate', 'identity_epoch_mapping', 'revision', 'subject'];
+    const enrolled = await client.query<{ store: string; present: boolean }>(
+      `SELECT store,bool_and(native_present) AS present FROM semantic.erasure_source_record
+       WHERE partition_no=$1 AND account_id=$2 AND source_transaction_id=$3 AND store=ANY($4)
+       GROUP BY store ORDER BY store`,
+      [home, actor.accountId, revision.tx, stores],
+    );
+    expect(enrolled.rows).toEqual(stores.map((store) => ({ store, present: true })));
+    const otherHome = (home + 1) % 4096;
+    await client.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,NULL)", [
+      otherHome,
+      actor.accountId,
+      revision.key,
+      revision.tx,
+    ]);
+    const misplaced = await client.query(
+      `SELECT native_present FROM semantic.erasure_source_record
+       WHERE partition_no=$1 AND account_id=$2 AND store='revision' AND record_key=$3 AND role='actor'`,
+      [otherHome, actor.accountId, revision.key],
+    );
+    expect(misplaced.rows).toEqual([{ native_present: false }]);
     const capture = () =>
       client.query("SELECT semantic.capture_erasure_roles($1,'revision',$2,$3)", [home, revision.key, revision.tx]);
     const row = async () =>

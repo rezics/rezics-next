@@ -5133,6 +5133,14 @@ ALTER TABLE ONLY access.resource_role_grant
 
 
 --
+-- Name: resource_role_grant resource_role_grant_route_interval; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.resource_role_grant
+    ADD CONSTRAINT resource_role_grant_route_interval UNIQUE (route, erasure_key);
+
+
+--
 -- Name: resource_role_provenance resource_role_provenance_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -6951,7 +6959,7 @@ ALTER TABLE ONLY access.committed_continuation
 --
 
 ALTER TABLE ONLY access.current_resource_role_due
-    ADD CONSTRAINT current_resource_role_due_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
+    ADD CONSTRAINT current_resource_role_due_interval_key_fkey FOREIGN KEY (route, interval_key) REFERENCES access.resource_role_grant(route, erasure_key) ON DELETE CASCADE;
 
 
 --
@@ -6959,7 +6967,7 @@ ALTER TABLE ONLY access.current_resource_role_due
 --
 
 ALTER TABLE ONLY access.current_resource_role_key
-    ADD CONSTRAINT current_resource_role_key_interval_key_fkey FOREIGN KEY (interval_key) REFERENCES access.resource_role_grant(erasure_key) ON DELETE CASCADE;
+    ADD CONSTRAINT current_resource_role_key_interval_key_fkey FOREIGN KEY (route, interval_key) REFERENCES access.resource_role_grant(route, erasure_key) ON DELETE CASCADE;
 
 
 --

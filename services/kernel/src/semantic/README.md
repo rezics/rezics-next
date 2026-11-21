@@ -2491,6 +2491,11 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
 
 ### Distinct origins in the erasure Source directory
 
+Subject creation captures the Subject, revision, facts, identity mapping and home gate by the
+locator's partition and erasure key. Their generated keys increase across all homes. Source
+uses a home-first lookup so independent creations acquire read predicates on their own home
+ranges. A key from another home yields an absent native record.
+
 The physical `erasure_locator` queue minimizes one account/role/physical record. It is not the
 identity of a Source delivery. `erasure_source_record` retains every authentic transaction and
 source-position pair at each native delivery position. Its generated `origin_key` encodes that

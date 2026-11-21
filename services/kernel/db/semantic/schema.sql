@@ -1134,8 +1134,8 @@ BEGIN
  END IF;
  CASE NEW.store
  WHEN 'release_composite' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.release_composite r WHERE r.erasure_key=NEW.record_key AND extension_route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
- WHEN 'fact' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.statement_id,r.property,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.fact r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
- WHEN 'revision' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.revision r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'fact' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.statement_id,r.property,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.fact r WHERE r.erasure_key=NEW.record_key AND r.route/16=NEW.partition_no;
+ WHEN 'revision' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.revision r WHERE r.erasure_key=NEW.record_key AND r.route/16=NEW.partition_no;
  WHEN 'candidate' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.candidate_id,r.property,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.candidate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'acceptance' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.acceptance r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'acceptance_current' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.candidate_id,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.acceptance_current r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
@@ -1153,15 +1153,15 @@ BEGIN
  WHEN 'provider_review_queue_key' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.provider_review_queue_key r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'provider_review_queue_entry' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.provider_review_queue_entry r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'statement_disclosure' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,r.property,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.statement_disclosure r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
- WHEN 'subject' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.subject r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'subject' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.subject r WHERE r.erasure_key=NEW.record_key AND r.route/16=NEW.partition_no;
  WHEN 'redirect' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.redirect r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'account_agent_subject' THEN SELECT true,r.agent_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.account_agent_subject r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'account_agent_moved_link' THEN SELECT true,r.source_subject_id,NULL::uuid,NULL::uuid,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.account_agent_moved_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'outbound_link' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.outbound_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'inbound_link' THEN SELECT true,r.source_subject_id,NULL::uuid,NULL::uuid,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.inbound_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
  WHEN 'identity_epoch_job' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_job r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
- WHEN 'identity_epoch_home_gate' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_home_gate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
- WHEN 'identity_epoch_mapping' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_mapping r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'identity_epoch_home_gate' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_home_gate r WHERE r.erasure_key=NEW.record_key AND r.route/16=NEW.partition_no;
+ WHEN 'identity_epoch_mapping' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_mapping r WHERE r.erasure_key=NEW.record_key AND r.route/16=NEW.partition_no;
  WHEN 'identity_epoch_ack' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_ack r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
  WHEN 'identity_epoch_admission_attempt' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_attempt r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
  WHEN 'identity_epoch_admission_plan' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_plan r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
@@ -13247,6 +13247,13 @@ CREATE INDEX fact_current_relation_key_seek ON semantic.fact USING btree (route,
 
 
 --
+-- Name: fact_erasure_home_lookup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_erasure_home_lookup ON semantic.fact USING btree (((route / 16)), erasure_key);
+
+
+--
 -- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -13401,6 +13408,13 @@ CREATE INDEX identity_epoch_group_generation ON semantic.identity_epoch_group US
 
 
 --
+-- Name: identity_epoch_home_gate_erasure_home_lookup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_home_gate_erasure_home_lookup ON semantic.identity_epoch_home_gate USING btree (((route / 16)), erasure_key);
+
+
+--
 -- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -13468,6 +13482,13 @@ CREATE INDEX identity_epoch_mapping_effect_native_frame ON semantic.identity_epo
 --
 
 CREATE INDEX identity_epoch_mapping_effect_source_point ON semantic.identity_epoch_mapping_effect USING btree (partition_no, job_id, source_original, unit DESC) WHERE (source_action = 'source'::text);
+
+
+--
+-- Name: identity_epoch_mapping_erasure_home_lookup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_mapping_erasure_home_lookup ON semantic.identity_epoch_mapping USING btree (((route / 16)), erasure_key);
 
 
 --
@@ -14304,6 +14325,13 @@ CREATE UNIQUE INDEX retraction_erasure_key ON semantic.retraction USING btree (e
 
 
 --
+-- Name: revision_erasure_home_lookup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX revision_erasure_home_lookup ON semantic.revision USING btree (((route / 16)), erasure_key);
+
+
+--
 -- Name: revision_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14441,6 +14469,13 @@ CREATE INDEX statement_disclosure_outbound ON semantic.statement_disclosure USIN
 --
 
 CREATE INDEX subject_canonical_name_seek ON semantic.subject USING btree (((route / 16)), ((canonical_name IS NULL)), COALESCE(canonical_name, ''::text), subject_id);
+
+
+--
+-- Name: subject_erasure_home_lookup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_erasure_home_lookup ON semantic.subject USING btree (((route / 16)), erasure_key);
 
 
 --

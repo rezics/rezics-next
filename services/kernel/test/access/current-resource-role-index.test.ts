@@ -31,6 +31,24 @@ test('a new resource grant skips old interval keys while replacement and mainten
         )
       ).rows[0];
     expect(await state()).toEqual({ held: 1, boundaries: 0 });
+    const otherRoute = route + 1;
+    const otherResource = newId(otherRoute);
+    for (const [table, insert] of [
+      [
+        'current_resource_role_key',
+        `INSERT INTO access.current_resource_role_key
+         SELECT $1,$2,grant_role,subject_kind,subject_id,subject_role,interval_key
+         FROM access.current_resource_role_key WHERE interval_key=$3`,
+      ],
+      ['current_resource_role_due', 'INSERT INTO access.current_resource_role_due VALUES ($1,$2,now(),$3)'],
+    ] as const) {
+      await client.query('SAVEPOINT other_route');
+      await expect(client.query(insert, [otherRoute, otherResource, key])).rejects.toMatchObject({
+        code: '23503',
+        constraint: table + '_interval_key_fkey',
+      });
+      await client.query('ROLLBACK TO SAVEPOINT other_route');
+    }
     await client.query(
       `UPDATE access.resource_role_grant g
        SET valid=tstzrange(f.processed_at + interval '1 day',f.processed_at + interval '2 days')
