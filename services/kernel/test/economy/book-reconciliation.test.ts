@@ -86,13 +86,21 @@ const audit = (bookId: string, pageLimit?: number) =>
     ...(pageLimit === undefined ? {} : { pageLimit }),
   });
 
+test('an uninstalled book has an absent audit instead of passing with zero assets', async () => {
+  await fixture();
+  const bookId = `uninstalled:${crypto.randomUUID()}`;
+  const view = await audit(bookId);
+  expect(view).toMatchObject({ kind: 'absent', bookId, findingCount: 0, pages: 1 });
+  expect(view).not.toHaveProperty('assets');
+});
+
 test('one selected book reconstructs signed controls, independent holds, creator payable and pending deposits', async () => {
   const f = await fixture();
   await f.ledger.provisionAsset({ id: 'other-asset', scale: 0, transferable: true });
   await obligations(f);
   const view = await audit(f.bookId);
   expect(view).toMatchObject({ kind: 'consistent', bookId: f.bookId, findingCount: 0 });
-  if (view.kind === 'incomplete') throw new Error('Expected a complete selected book');
+  if (!('assets' in view)) throw new Error('Expected a complete selected book');
   expect(view.snapshot.watermark).toMatch(/^[a-f0-9]{32}$/);
   expect(view.assets).toMatchObject([
     { assetId: f.wallet.assetId, journalNet: '0', pendingDeposits: { projected: '15', reconstructed: '15' } },
@@ -174,7 +182,7 @@ test('keysets cross page boundaries without promoting a page-limited audit to co
   expect(partial).not.toHaveProperty('assets');
   const complete = await audit(f.bookId);
   expect(complete.kind).toBe('consistent');
-  if (complete.kind === 'incomplete') throw new Error('Expected complete keyset scan');
+  if (!('assets' in complete)) throw new Error('Expected complete keyset scan');
   expect(complete.assets[0]?.components).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -212,14 +220,14 @@ test('a later writer commit cannot enter any page of a pinned book snapshot', as
   const pinned = await reconcileBook(intercepted, { bookId: f.bookId, deadline: Date.now() + 8000 });
   expect(committed).toBe(true);
   expect(pinned.kind).toBe('consistent');
-  if (pinned.kind === 'incomplete') throw new Error('Expected complete pinned cut');
+  if (!('assets' in pinned)) throw new Error('Expected complete pinned cut');
   expect(pinned.assets[0]?.components.find((row) => row.role === 'wallet')?.posted).toEqual({
     projected: '100',
     reconstructed: '100',
   });
   const after = await audit(f.bookId);
   expect(after.kind).toBe('consistent');
-  if (after.kind === 'incomplete') throw new Error('Expected complete later cut');
+  if (!('assets' in after)) throw new Error('Expected complete later cut');
   expect(after.assets[0]?.components.find((row) => row.role === 'wallet')?.posted).toEqual({
     projected: '150',
     reconstructed: '150',

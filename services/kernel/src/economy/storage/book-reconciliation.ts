@@ -141,6 +141,16 @@ async function readSnapshotMarker(client: Query) {
   return marker;
 }
 
+async function verifySnapshotMarker(client: Query, pinned: Awaited<ReturnType<typeof readSnapshotMarker>>) {
+  const end = await readSnapshotMarker(client);
+  if (
+    end.backend !== pinned.backend ||
+    end.transactionStart !== pinned.transactionStart ||
+    end.watermark !== pinned.watermark
+  )
+    throw new Error('Economy reconciliation snapshot changed before completion');
+}
+
 async function auditSnapshot(client: Query, bookId: string, limit: number) {
   const pinned = await readSnapshotMarker(client);
   const snapshot: Snapshot = { watermark: pinned.watermark, openedAt: pinned.openedAt.toISOString() };
@@ -213,6 +223,10 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       '',
     ))
       assets.set(assetId, { components: new Map(), pending: 0n, intentPending: 0n, journalNet: 0n });
+    if (assets.size === 0) {
+      await verifySnapshotMarker(client, pinned);
+      return { kind: 'absent' as const, bookId, snapshot, pages: meter.pages, findingCount, findings };
+    }
 
     const creatorReserves = new Map<string, SourceAmount>();
     for await (const payout of pages<CreatorSource, string>(
@@ -392,13 +406,7 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
     if (error !== outOfPages) throw error;
     complete = false;
   }
-  const end = await readSnapshotMarker(client);
-  if (
-    end.backend !== pinned.backend ||
-    end.transactionStart !== pinned.transactionStart ||
-    end.watermark !== pinned.watermark
-  )
-    throw new Error('Economy reconciliation snapshot changed before completion');
+  await verifySnapshotMarker(client, pinned);
   if (!complete) return { kind: 'incomplete' as const, bookId, snapshot, pages: meter.pages, findingCount, findings };
   return {
     kind: findingCount === 0 ? ('consistent' as const) : ('divergent' as const),
