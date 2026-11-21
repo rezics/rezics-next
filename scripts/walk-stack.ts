@@ -527,6 +527,10 @@ export function walkStackEnvironment(
 ): Record<string, string> {
   const names = walkStackNames(task, index);
   const ports = walkStackPorts(index);
+  const catalogue = env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+  const searchCapacity = !catalogue && env.REZICS_WALK_SEARCH_CAPACITY === '1';
+  // Catalogue publication crossed the 128 MiB heap's parent breaker during indexing.
+  const searchHeapMiB = catalogue ? 160 : searchCapacity ? 512 : 128;
   const origin = (port: number) => `http://127.0.0.1:${port}`;
   return {
     KERNEL_DATABASE_CONTAINER: names.database,
@@ -540,11 +544,10 @@ export function walkStackEnvironment(
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: origin(ports.native),
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(ports.kernel),
     REZICS_WALK_STACK_SLOT: String(index),
-    // Seeded indexes stay on niofs; docker memory ceilings stop volume file cache filling the 6 GiB run slice.
-    // Catalogue publication crossed the 128 MiB heap's parent breaker during indexing.
-    OPENSEARCH_JAVA_OPTS: env.REZICS_WALK_IMPORT_CATALOGUE === '1' ? '-Xms160m -Xmx160m' : '-Xms128m -Xmx128m',
+    // Seeded indexes stay on niofs. The capacity pair leaves 768 MiB for native memory and file cache.
+    OPENSEARCH_JAVA_OPTS: `-Xms${searchHeapMiB}m -Xmx${searchHeapMiB}m`,
     KERNEL_SEARCH_ALLOW_MMAP: '0',
-    KERNEL_SEARCH_MEMORY: '768m',
+    KERNEL_SEARCH_MEMORY: searchCapacity ? '1280m' : '768m',
     // The caller can fund concurrent database backends within a larger admitted walk.
     KERNEL_DATABASE_MEMORY: env.KERNEL_DATABASE_MEMORY || '768m',
     KERNEL_DATABASE_BOUNDED: '1',

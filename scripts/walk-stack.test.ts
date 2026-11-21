@@ -108,18 +108,20 @@ test('walk Stripe fixture bindings stay loopback HTTP with HTTPS Checkout return
   });
 });
 
-test('only the admitted import catalogue gets more Search heap within its existing container ceiling', () => {
-  for (const [flags, heap] of [
-    [{ REZICS_WALK_IMPORT_CATALOGUE: '1', REZICS_WALK_DEFER_FRONTENDS: '0' }, '160m'],
-    [{ REZICS_WALK_FIRST_PUBLIC_WEB: '1' }, '128m'],
-    [{}, '128m'],
+test('walk Search profiles reach Docker with paired heap and container limits', () => {
+  for (const [flags, heap, memory] of [
+    [{ REZICS_WALK_IMPORT_CATALOGUE: '1', REZICS_WALK_SEARCH_CAPACITY: '1' }, '160m', '768m'],
+    [{ REZICS_WALK_IMPORT_CATALOGUE: '1' }, '160m', '768m'],
+    [{ REZICS_WALK_FIRST_PUBLIC_WEB: '1' }, '128m', '768m'],
+    [{ REZICS_WALK_SEARCH_CAPACITY: '1', REZICS_WALK_DEFER_FRONTENDS: '0' }, '512m', '1280m'],
+    [{}, '128m', '768m'],
   ] as const) {
     const env = walkProcessEnvironment('walk-profile', 1, flags);
     const args = searchRunArgs('fixture', env);
     expect(args).toContain(`OPENSEARCH_JAVA_OPTS=-Xms${heap} -Xmx${heap}`);
     expect(args).toContain('node.store.allow_mmap=false');
-    expect(args[args.indexOf('--memory') + 1]).toBe('768m');
-    expect(args[args.indexOf('--memory-swap') + 1]).toBe('768m');
+    expect(args[args.indexOf('--memory') + 1]).toBe(memory);
+    expect(args[args.indexOf('--memory-swap') + 1]).toBe(memory);
   }
 });
 
