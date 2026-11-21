@@ -2072,6 +2072,55 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     },
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
+    const consumer = work.bootstrap.consumer;
+    const job: PublicFilterConsumerJob = {
+      consumer,
+      job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
+    };
+    const readMaterializing = async (q: PublicFilterQueriedObservation) =>
+      (
+        await m.sql<{ state: string; queried: string; registration: string }>(
+          `SELECT state,queried,registration FROM search.public_filter_observation
+         WHERE (partition_no,observation)=($1,$2)`,
+          [locatorHome(q.snapshot.observation), q.snapshot.observation],
+        )
+      ).rows[0];
+    const resumedPit =
+      !publication &&
+      !config.discoveryTarget &&
+      work.bootstrap.coveragePublication &&
+      !work.adopted &&
+      !work.queried &&
+      work.materializing
+        ? await readMaterializing(work.materializing)
+        : undefined;
+    if (resumedPit?.state === 'closed' && work.materializing) {
+      if (
+        !binding.retireClosedPreparation ||
+        resumedPit.registration !== work.registration.id ||
+        !isDeepStrictEqual(work.materializing.consumer, work.bootstrap.consumer)
+      )
+        return m.unavailable('observation_lost');
+      await physical(work.materializing, m, context);
+      const retired = m.takePreparation(
+        await binding.retireClosedPreparation(
+          {
+            bootstrap: work.bootstrap.id,
+            registration: work.registration.id,
+            observation: work.materializing.snapshot.observation,
+            work: encoded,
+          },
+          context,
+        ),
+      );
+      if (retired.status === 'retired') {
+        owned.delete(work.materializing.snapshot.observation);
+        return { status: 'preparing', repair: job, cost: m.cost };
+      }
+      // A competing capture may already have retained the prepared observation.
+      // Recover its original adoption before deciding whether this turn can serve.
+      if (retired.reason !== 'binding_mismatch') return m.unavailable('source_pending');
+    }
     // Publication resumes its exact Source cut and this registration's Search materialization.
     // Source adopts the prepared observation after the original execution has been retained.
     // A resumed capture has no candidates yet. Its native bootstrap lookups
@@ -2081,11 +2130,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       : publication
         ? null
         : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
-    const consumer = work.bootstrap.consumer;
-    const job: PublicFilterConsumerJob = {
-      consumer,
-      job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
-    };
     if (recovery === null || recovery.status === 'pending') {
       const native = await advanceNativePublicFilterPreparation(
         binding,
@@ -2220,14 +2264,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         // A PIT renewal and the segment commit are separate owners. Re-read its
         // exact custody tuple before resuming so a lost consumer-work save can
         // still continue from the database frontier and current PIT locator.
-        const saved = (
-          await m.sql<{ queried: string; registration: string }>(
-            `SELECT queried,registration FROM search.public_filter_observation
-             WHERE (partition_no,observation)=($1,$2) AND state='open'`,
-            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation],
-          )
-        ).rows[0];
-        if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
+        const saved = resumedPit ?? (await readMaterializing(work.materializing));
+        if (saved?.state !== 'open' || saved.registration !== work.registration.id)
+          return m.unavailable('observation_lost');
         const q = decodeNative<PublicFilterQueriedObservation>(saved.queried);
         if (
           q.snapshot.kind !== 'pit' ||
@@ -3419,7 +3458,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { status: 'settled' as const, job, cost: m.cost };
     };
     try {
-      const loaded = await load(job, m);
+      const loaded = await load(job, m).catch(async (error: unknown) => {
+        const match = /^(0|[1-9][0-9]{0,3}):bootstrap:(.+)$/.exec(job.job);
+        if (
+          publication ||
+          config.discoveryTarget ||
+          !match ||
+          !(error instanceof ConsumerFailure) ||
+          error.reason !== 'observation_lost'
+        )
+          throw error;
+        // Only a repair delivery can consume the terminal marker. The original
+        // observation remains closed for page reads and signed continuations.
+        const row = (
+          await m.sql<{ queried: string }>(
+            `SELECT queried FROM search.public_filter_observation
+           WHERE partition_no=$1 AND consumer_bootstrap=$2 AND state='closed'
+             AND consumer_work IS NULL AND prepared_build IS NULL`,
+            [Number(match[1]), decodeURIComponent(match[2]!)],
+          )
+        ).rows[0];
+        if (!row) throw error;
+        const pit = decodeNative<PublicFilterQueriedObservation>(row.queried);
+        if (pit.snapshot.kind !== 'pit' || !isDeepStrictEqual(pit.consumer, job.consumer))
+          throw new ConsumerFailure('registration_missing');
+        await physical(pit, m, context);
+        return null;
+      });
+      if (!loaded) return { status: 'settled' as const, job, cost: m.cost };
       const execute = () =>
         run(loaded).finally(async () => {
           if (use) await releaseUse(use, context, m);

@@ -533,6 +533,10 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         }>
       | PublicFilterBindingFailure
     >;
+    retireClosedPreparation?(
+      request: Readonly<{ bootstrap: string; registration: string; observation: string; work: string }>,
+      context: PublicFilterConsumerContext,
+    ): Promise<Readonly<{ status: 'retired'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
     abort(
       request: Readonly<{ bootstrap: string }>,
       context: PublicFilterConsumerContext,
@@ -4869,6 +4873,54 @@ export function createNativePublicFilterSourceBinding(
           queried: joined.queried,
           cost,
         };
+      });
+    },
+    async retireClosedPreparation(request, context) {
+      const { registration, observation, work } = request;
+      return run(context, async (cost, db) => {
+        const cut = await loadBootstrap(request.bootstrap, db);
+        // Retire only this unadopted serving cut. A replay of its repair finds
+        // the bootstrap locator on the closed PIT while fresh requests can enroll.
+        const retired = await db.query(
+          `/* semantic.native-keyed:9:20:3 */
+           WITH claim AS MATERIALIZED (
+             SELECT r.partition_no,r.id,o.observation FROM search.public_filter_registration r
+             JOIN search.public_filter_target t USING (partition_no,physical_target)
+             JOIN search.public_filter_observation o ON (o.partition_no,o.registration)=(r.partition_no,r.id)
+             WHERE (r.partition_no,r.id)=(0,$1) AND r.consumer_work=$2 AND r.consumer_bootstrap=$3
+               AND r.state='active' AND r.consumer=$4 AND t.incarnation=$5 AND o.observation=$6
+               AND o.state='closed' AND o.covered=$7 AND o.prepared_build IS NULL AND o.consumer_work IS NULL
+               AND o.consumer_bootstrap IS NULL AND NOT EXISTS (
+                 SELECT FROM search.public_filter_observation prepared
+                 WHERE (prepared.partition_no,prepared.registration,prepared.prepared_build)=(0,r.id,$3)
+                   AND prepared.state='open'
+               )
+             FOR UPDATE OF r,o
+           ), barrier AS (
+             UPDATE semantic.public_filter_bootstrap b SET state='aborting' FROM claim, core.partition p
+             WHERE (b.partition_no,b.bootstrap)=(0,$8::uuid) AND b.coverage_publication IS NOT NULL
+               AND b.snapshot_kind='prepared' AND b.state='begun' AND b.queried IS NULL AND b.publication_job IS NULL
+               AND (p.partition_no,p.epoch,p.write_state)=(b.partition_no,b.owner_epoch,'active')
+             RETURNING claim.*
+           ), retired AS (
+             UPDATE search.public_filter_observation o SET consumer_bootstrap=$3 FROM barrier b
+             WHERE (o.partition_no,o.observation)=(b.partition_no,b.observation) RETURNING o.partition_no,o.registration
+           )
+           UPDATE search.public_filter_registration r SET consumer_work=NULL,consumer_bootstrap=NULL
+           FROM retired o WHERE (r.partition_no,r.id)=(o.partition_no,o.registration) RETURNING r.id`,
+          [
+            registration,
+            work,
+            request.bootstrap,
+            ports.search.encodeConsumer(cut.bootstrap.consumer),
+            cut.bootstrap.consumer.incarnation,
+            observation,
+            ports.search.encodeState(cut.bootstrap.covered),
+            cut.row.bootstrap,
+          ],
+        );
+        if (!retired.rowCount) throw new BindingError('binding_mismatch');
+        return { status: 'retired' as const, cost };
       });
     },
     async abort(request, context) {
