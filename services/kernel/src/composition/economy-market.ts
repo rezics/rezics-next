@@ -6,7 +6,7 @@ import { withBoundedCommandConnection, withBoundedReadConnection } from '../data
 import { isEconomyBookId } from '../economy/contract.ts';
 import { createEconomyLedger } from '../economy/ledger.ts';
 import type { EconomyMarketPort } from '../economy/market-routes.ts';
-import { marketTradeStatus, type MarketListing } from '../economy/market/trade.ts';
+import { marketTradeStatus, type MarketListing, type MarketTrade } from '../economy/market/trade.ts';
 import { createNativeMarket } from '../economy/storage/market-runner.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
@@ -142,6 +142,19 @@ function visibleListing(listing: MarketListing, accountId: string): boolean {
   );
 }
 
+function tradeReceipt(trade: MarketTrade) {
+  const { price } = trade.terms;
+  return {
+    tradeId: trade.buyer.tradeId,
+    listingId: trade.terms.listingId,
+    status: marketTradeStatus(trade),
+    assetId: price.assetId,
+    amount: price.units.toString(),
+    fee: price.feeUnits.toString(),
+    sellerNet: price.sellerUnits.toString(),
+  };
+}
+
 /** Local request and owner-worker bindings remain separate. Each request first locks the current native account grant. */
 export function createNativeEconomyMarket(pool: Pool, config: MarketConfig & { bookId: string; node: string }) {
   const { bookId, node, itemHomeId, feeAccountId, feeBps, policyVersion } = config;
@@ -175,6 +188,8 @@ export function createNativeEconomyMarket(pool: Pool, config: MarketConfig & { b
   }
 
   const port: EconomyMarketPort = {
+    bookId,
+    itemHomeId,
     readListing: (input) =>
       request(input, async (_, { market }, accountId) => {
         const listing = await market.readListing(input.listingId);
@@ -195,16 +210,22 @@ export function createNativeEconomyMarket(pool: Pool, config: MarketConfig & { b
         const trade = await market.readTrade(input.tradeId);
         if (!trade || (trade.buyer.buyerId !== accountId && trade.terms.item.holderId !== accountId))
           throw new ProblemError('not_found');
-        const { price } = trade.terms;
-        return {
-          tradeId: trade.buyer.tradeId,
-          listingId: trade.terms.listingId,
-          status: marketTradeStatus(trade),
-          assetId: price.assetId,
-          amount: price.units.toString(),
-          fee: price.feeUnits.toString(),
-          sellerNet: price.sellerUnits.toString(),
-        };
+        return tradeReceipt(trade);
+      }),
+    listTrades: (input) =>
+      request(input, async (_, { market }, accountId) => {
+        const { trades, more } = await market.readParticipantTrades({
+          accountId,
+          itemHomeId,
+          limit: input.limit,
+          after: input.after,
+        });
+        const receipts = trades.map((trade) => ({
+          ...tradeReceipt(trade),
+          startedAt: trade.buyer.startedAt.toString(),
+        }));
+        const last = receipts.at(-1);
+        return { trades: receipts, after: more && last ? [last.startedAt, last.tradeId] : null };
       }),
     createListing: (input) =>
       request(input, async (client, { market, item }, accountId) => {

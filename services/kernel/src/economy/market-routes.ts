@@ -7,6 +7,8 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, type Admission, type JobContext } from '../http/request.ts';
 import { AuthenticationError, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 
 type MarketScope = {
   actor: Actor;
@@ -35,11 +37,18 @@ type PrivateTrade = Readonly<{
   fee: string;
   sellerNet: string;
 }>;
+type MarketTradePosition = readonly [startedAt: string, tradeId: string];
+type ListedTrade = PrivateTrade & Readonly<{ startedAt: string }>;
 
 /** The mounted transport accepts a caller identity. The native port proves it again before each owner operation. */
 export interface EconomyMarketPort {
+  readonly bookId: string;
+  readonly itemHomeId: string;
   readListing(input: Request & { listingId: string }): Promise<PrivateListing>;
   readTrade(input: Request & { tradeId: string }): Promise<PrivateTrade>;
+  listTrades(
+    input: Request & { limit: number; after: MarketTradePosition | null },
+  ): Promise<{ trades: ListedTrade[]; after: MarketTradePosition | null }>;
   createListing(
     input: Command & { itemId: string; generation: string; assetId: string; amount: string },
   ): Promise<{ listingId: string }>;
@@ -68,24 +77,44 @@ const listing = t.Object(
   },
   closed,
 );
-const trade = t.Object(
+const tradeFields = {
+  tradeId: marketId,
+  listingId: marketId,
+  assetId: nativeId,
+  amount: positive,
+  fee: amount,
+  sellerNet: amount,
+  status: t.Union([
+    t.Literal('preparing'),
+    t.Literal('committing'),
+    t.Literal('aborting'),
+    t.Literal('completed'),
+    t.Literal('aborted'),
+  ]),
+};
+const trade = t.Object(tradeFields, closed);
+const tradesPath = '/v1/economy/market/trades';
+const maxPage = 100;
+const cursor = t.String({ minLength: 1, maxLength: 4096 });
+const tradePage = t.Object(
   {
-    tradeId: marketId,
-    listingId: marketId,
-    assetId: nativeId,
-    amount: positive,
-    fee: amount,
-    sellerNet: amount,
-    status: t.Union([
-      t.Literal('preparing'),
-      t.Literal('committing'),
-      t.Literal('aborting'),
-      t.Literal('completed'),
-      t.Literal('aborted'),
-    ]),
+    trades: t.Array(t.Object({ ...tradeFields, startedAt: amount }, closed), { maxItems: maxPage }),
+    next: t.Union([cursor, t.Null()]),
   },
   closed,
 );
+
+function isTradePosition(value: readonly (string | number)[]): value is MarketTradePosition {
+  const [startedAt, tradeId] = value;
+  return (
+    value.length === 2 &&
+    typeof startedAt === 'string' &&
+    /^(0|[1-9][0-9]{0,18})$/.test(startedAt) &&
+    BigInt(startedAt) <= (1n << 63n) - 1n &&
+    typeof tradeId === 'string' &&
+    /^[0-9a-f]{64}$/.test(tradeId)
+  );
+}
 
 function detail(operation: string, action: 'market:read' | 'market:list' | 'market:buy' | 'market:cancel') {
   return {
@@ -113,7 +142,7 @@ function failures() {
 
 export function economyMarketRoutes(
   app: ReturnType<typeof createApp>,
-  deps: { pool: Pool; market?: EconomyMarketPort },
+  deps: { pool: Pool; cursorKeys: KeyRing; clock: () => Date; market?: EconomyMarketPort },
 ) {
   const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
   async function run<Value>(ctx: MarketScope, work: (port: EconomyMarketPort, request: Request) => Promise<Value>) {
@@ -206,6 +235,47 @@ export function economyMarketRoutes(
             operationId: idempotencyKeyOf(ctx.headers[IDEMPOTENCY_HEADER]),
           }),
         );
+      },
+    )
+    .get(
+      tradesPath,
+      {
+        query: t.Object(
+          {
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: maxPage, multipleOf: 1 })),
+            cursor: t.Optional(cursor),
+          },
+          closed,
+        ),
+        response: { 200: tradePage, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('market.read_trades', 'market:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return run(ctx, async (port, request) => {
+          const limit = ctx.query.limit ?? 20;
+          const binding: ListCursorBinding = {
+            route: `GET ${tradesPath}`,
+            viewer: request.accountId.toLowerCase(),
+            query: { bookId: port.bookId, itemHomeId: port.itemHomeId, limit },
+          };
+          const at = deps.clock();
+          let after: MarketTradePosition | null = null;
+          if (ctx.query.cursor !== undefined) {
+            const decoded = await decodeListCursor(deps.cursorKeys, binding, ctx.query.cursor, at);
+            if (!decoded.ok || decoded.epoch !== 1 || !isTradePosition(decoded.after))
+              throw new ProblemError('invalid_cursor');
+            after = decoded.after;
+          }
+          const page = await port.listTrades({ ...request, limit, after });
+          return {
+            trades: page.trades,
+            next:
+              page.after === null
+                ? null
+                : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: page.after }, at),
+          };
+        });
       },
     )
     .get(

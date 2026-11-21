@@ -657,6 +657,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   });
   economyMarketRoutes(app as unknown as ReturnType<typeof createApp>, {
     pool: dependencies.pool,
+    cursorKeys: tokens,
+    clock,
     ...(dependencies.economyMarket === undefined ? {} : { market: dependencies.economyMarket }),
   });
   if (dependencies.economyTestFunding !== undefined)

@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { insertRetainedTrades, retainedTrade } from './fixtures/market-trades.ts';
 
 const issuer = 'https://auth.market.test';
 const audience = 'https://api.rezics.test';
@@ -15,11 +16,14 @@ const seller = newId(0x6531);
 const buyer = newId(0x6532);
 const viewer = newId(0x6533);
 const ordinary = newId(0x6534);
+const firstParticipant = newId(0x6535);
+const secondParticipant = newId(0x6536);
 const feeAccountId = crypto.randomUUID();
 const bookId = `http-market:${crypto.randomUUID()}`;
 const itemHomeId = `http-items:${crypto.randomUUID()}`;
 const marketScope = ['market:read', 'market:list', 'market:buy', 'market:cancel'];
 const base = '/v1/economy/market';
+const tradePath = `${base}/trades`;
 const assetId = 'test-market-credit';
 const price = '9007199254740993';
 let signer: (account: string, scopes: readonly string[]) => Promise<string>;
@@ -28,6 +32,17 @@ let app: ReturnType<typeof createKernel>;
 let closedApp: ReturnType<typeof createKernel>;
 let native: ReturnType<typeof createNativeEconomyMarket>;
 let ledger: ReturnType<typeof createNativeEconomyLedger>;
+let mount: (market?: typeof native.port) => ReturnType<typeof createKernel>;
+
+function marketFor(binding = { bookId, itemHomeId }) {
+  return createNativeEconomyMarket(db.pool, {
+    ...binding,
+    node: 'b',
+    feeAccountId,
+    feeBps: 2500n,
+    policyVersion: 12n,
+  });
+}
 
 async function grant(account: string, action = 'gate:economy') {
   await db.admin.query(
@@ -64,27 +79,21 @@ beforeAll(async () => {
       .setExpirationTime('5m')
       .sign(privateKey);
 
-  for (const id of [seller, buyer, viewer, ordinary]) {
+  for (const id of [seller, buyer, viewer, ordinary, firstParticipant, secondParticipant]) {
     await db.admin.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
       [routeOf(id), id],
     );
   }
-  for (const account of [seller, buyer, viewer]) await grant(account);
+  for (const account of [seller, buyer, viewer, firstParticipant, secondParticipant]) await grant(account);
   await grant(ordinary, 'gate:any');
-  native = createNativeEconomyMarket(db.pool, {
-    bookId,
-    node: 'b',
-    itemHomeId,
-    feeAccountId,
-    feeBps: 2500n,
-    policyVersion: 12n,
-  });
+  native = marketFor();
   ledger = createNativeEconomyLedger(db.pool, bookId);
-  const mount = (market?: typeof native.port) =>
+  mount = (market) =>
     createKernel({
       pool: db.pool,
       routeKey: new Uint8Array(32),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(37)]]) },
       ...(market === undefined ? {} : { economyMarket: market }),
       writeRate: {
         async spend() {
@@ -140,7 +149,7 @@ test('private market uses exact grant and operator policy through the native fix
   });
 
   const paths = Object.entries(openApiDocument(app).paths).filter(([path]) => path.startsWith(`${base}/`));
-  expect(paths).toHaveLength(5);
+  expect(paths).toHaveLength(6);
   for (const [, path] of paths)
     for (const entry of Object.values(path)) {
       expect(entry).toMatchObject({ 'x-exposure': 'gate:economy', security: [{ bearerAuth: [] }] });
@@ -208,6 +217,12 @@ test('private market uses exact grant and operator policy through the native fix
     fee: '2251799813685248',
     sellerNet: '6755399441055745',
   });
+  for (const token of [buyerToken, sellerToken]) {
+    const audit = await request(tradePath, token);
+    expect(audit.status).toBe(200);
+    expect(audit.headers.get('cache-control')).toBe('private, no-store');
+    expect(await audit.json()).toMatchObject({ trades: [{ tradeId, status: 'completed', amount: price }], next: null });
+  }
   expect(await native.custody.readItem('first-item')).toMatchObject({ holderId: buyer, generation: 2n });
   expect(await ledger.readBalance({ accountId: seller, assetId })).toMatchObject({
     kind: 'ok',
@@ -225,6 +240,105 @@ test('private market uses exact grant and operator policy through the native fix
   await revoke(buyer);
   expect((await request(`${base}/trades/${tradeId}`, buyerToken)).status).toBe(403);
   expect((await request(`${listingPath}/purchases`, buyerToken, operation('buy'))).status).toBe(403);
+});
+
+test('participants page private receipts by exact start time and trade ID within their book and home', async () => {
+  const at = 9007199254740993n;
+  const scopes = ['market:read'];
+  const firstToken = await signer(firstParticipant, scopes);
+  const secondToken = await signer(secondParticipant, scopes);
+  const foreignToken = await signer(viewer, scopes);
+  const ordinaryToken = await signer(ordinary, scopes);
+  const wrongScope = await signer(firstParticipant, ['market:list']);
+  const fixtures = [
+    ['2', at, 'committing'],
+    ['1', at, 'preparing'],
+    ['3', at - 1n, 'aborting'],
+    ['4', at - 2n, 'completed'],
+    ['5', at - 3n, 'aborted'],
+  ] as const;
+  const otherHome = `other-items:${crypto.randomUUID()}`;
+  const otherBook = `other-market:${crypto.randomUUID()}`;
+  const seed = (tradeId: string, startedAt: bigint, overrides: Partial<Parameters<typeof retainedTrade>[0]> = {}) =>
+    retainedTrade({
+      bookId,
+      itemHomeId,
+      buyerId: firstParticipant,
+      sellerId: secondParticipant,
+      tradeId,
+      startedAt,
+      ...overrides,
+    });
+  await insertRetainedTrades(db.admin, [
+    ...fixtures.map(([digit, startedAt, status], index) =>
+      seed(digit.repeat(64), startedAt, {
+        status,
+        ...(index % 2 === 0 ? { buyerId: secondParticipant, sellerId: firstParticipant } : {}),
+      }),
+    ),
+    seed('a'.repeat(64), at + 1n, { itemHomeId: otherHome }),
+    seed('b'.repeat(64), at + 2n, { bookId: otherBook }),
+  ]);
+  const expected = fixtures.map(([digit, startedAt, status]) => ({
+    tradeId: digit.repeat(64),
+    listingId: digit.repeat(64),
+    startedAt: startedAt.toString(),
+    status,
+    amount: price,
+    assetId,
+    fee: '2251799813685248',
+    sellerNet: '6755399441055745',
+  }));
+  expect(openApiDocument(app).paths[tradePath]?.get).toMatchObject({
+    operationId: 'market.read_trades',
+    'x-action': 'market:read',
+  });
+  for (const token of [undefined, ordinaryToken, wrongScope])
+    expect((await request(tradePath, token)).status).toBe(403);
+  expect((await request(tradePath, firstToken, undefined, closedApp)).status).toBe(503);
+  expect(await (await request(tradePath, foreignToken)).json()).toEqual({ trades: [], next: null });
+  expect(await (await request(tradePath, secondToken)).json()).toEqual({ trades: expected, next: null });
+  const { startedAt: _startedAt, ...individual } = expected[0]!;
+  expect(await (await request(`${tradePath}/${individual.tradeId}`, firstToken)).json()).toEqual(individual);
+  for (const limit of [0, 101, 1.5])
+    expect((await request(`${tradePath}?limit=${limit}`, firstToken)).status).toBe(400);
+
+  let cursor: string | null = null;
+  let originalCursor = '';
+  const address = (position: string | null, limit = 1) =>
+    `${tradePath}?limit=${limit}${position ? `&cursor=${encodeURIComponent(position)}` : ''}`;
+  for (const expectedTrade of expected) {
+    const page = await request(address(cursor), firstToken);
+    expect(page.status).toBe(200);
+    expect(page.headers.get('cache-control')).toBe('private, no-store');
+    const { trades, next } = (await page.json()) as { trades: unknown[]; next: string | null };
+    expect(trades).toEqual([expectedTrade]);
+    cursor = next;
+    if (!originalCursor && cursor) originalCursor = cursor;
+  }
+  expect(cursor).toBeNull();
+  expect(originalCursor).not.toBe('');
+
+  const mismatches = [
+    await request(address(originalCursor, 2), firstToken),
+    await request(address(originalCursor), secondToken),
+  ];
+  for (const [binding, digit] of [
+    [{ bookId, itemHomeId: otherHome }, 'a'],
+    [{ bookId: otherBook, itemHomeId }, 'b'],
+  ] as const) {
+    const alternate = mount(marketFor(binding).port);
+    const response = await request(tradePath, firstToken, undefined, alternate);
+    expect(await response.json()).toMatchObject({ trades: [{ tradeId: digit.repeat(64) }], next: null });
+    mismatches.push(await request(address(originalCursor), firstToken, undefined, alternate));
+  }
+  for (const invalid of mismatches) {
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({ code: 'invalid_cursor' });
+  }
+  await revoke(firstParticipant);
+  expect((await request(address(originalCursor), firstToken)).status).toBe(403);
+  expect(await (await request(tradePath, secondToken)).json()).toEqual({ trades: expected, next: null });
 });
 
 test('listing cancellation stays with the current seller and replays without another custody release', async () => {
