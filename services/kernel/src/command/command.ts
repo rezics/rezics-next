@@ -112,6 +112,7 @@ export type PrincipalCommandReceipt = { kind: string; key: string; digest: Uint8
 export type PrincipalCommandOptions = PrincipalCommandIdentity & {
   partition: number;
   deadline?: number;
+  serializationRetryGroup?: symbol;
   receipt?: PrincipalCommandReceipt;
   authorization?: CommandAuthorization | undefined;
   /** Trusted service configuration only, never a request timestamp. */
@@ -504,6 +505,7 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
 export type LegacyCommandOptions = {
   partition: number;
   deadline?: number;
+  serializationRetryGroup?: symbol;
   basis?: CommandBasis;
   receipt?: CommandReceipt;
   authorization?: CommandAuthorization | undefined;
@@ -710,6 +712,7 @@ async function executeCommand<T>(
   const deadline = dispatch || publisher ? declaredDeadline : Math.min(declaredDeadline, deadlineFor(2_147_483_647));
   if (!Number.isSafeInteger(deadline)) throw new TypeError('Invalid command deadline');
   let contentionAttempts = 0;
+  let retryGroup: symbol | undefined;
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
   while (Date.now() < deadline) {
@@ -734,7 +737,9 @@ async function executeCommand<T>(
         evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
       }
       dispatch?.checkpoint();
-      const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
+      const gate = await measureCommandPhase('gate_wait', () =>
+        enterCommandGate(pool, partition, deadline, retryGroup),
+      );
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
       const ordinary = !dispatch && !publisher;
@@ -1073,6 +1078,8 @@ async function executeCommand<T>(
             discardConnection(client, rollbackError as Error);
             throw rollbackError;
           }
+          if (error instanceof Error && 'code' in error && error.code === '40001')
+            retryGroup = options.serializationRetryGroup;
           throw error;
         } finally {
           releaseCommandHistory(tx);
