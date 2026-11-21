@@ -938,13 +938,15 @@ export async function readPublicSearchPage<T>(options: {
       },
       async release() {
         if (!finalized) throw readiness();
-        await dispose();
-        if (page.status === 'exhausted') {
-          try {
+        if (page.status !== 'exhausted') return dispose();
+        try {
+          if (coverage.closeExhausted) await coverage.closeExhausted();
+          else {
+            await dispose();
             await operations.closeObservation(queried, context);
-          } catch (error) {
-            return unavailable(coverage.failure(error), options.continuation !== undefined);
           }
+        } catch (error) {
+          return unavailable(coverage.failure(error), options.continuation !== undefined);
         }
       },
       dispose,

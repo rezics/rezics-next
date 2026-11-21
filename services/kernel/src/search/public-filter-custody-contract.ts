@@ -263,7 +263,10 @@ export interface PublicFilterCustody {
   acquire(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
-  ): Promise<Readonly<{ status: 'acquired'; use: CustodyUse; cost: CustodyCost }> | CustodyFailure>;
+    readConsumerWork?: boolean,
+  ): Promise<
+    Readonly<{ status: 'acquired'; use: CustodyUse; consumerWork?: string | null; cost: CustodyCost }> | CustodyFailure
+  >;
   appendExecution(
     request: Readonly<{ use: CustodyUse; execution: CustodyExecution }>,
     context: PublicFilterConsumerContext,
@@ -287,7 +290,8 @@ export interface PublicFilterCustody {
     queried: PublicFilterQueriedObservation,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
-  ): Promise<Readonly<{ status: 'closed'; cost: CustodyCost }> | CustodyFailure>;
+    release?: CustodyUse,
+  ): Promise<Readonly<{ status: 'closed'; consumerWork: string | null; cost: CustodyCost }> | CustodyFailure>;
   retire(
     registration: CustodyRegistration,
     context: PublicFilterConsumerContext,

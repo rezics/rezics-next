@@ -86,6 +86,13 @@ listener connection or checkout retained during waits. All probes and rejected/e
 owned PIT, even all three probes use at most nine SQL submissions; release uses two. Existing native PIT cleanup
 batching, deadline enforcement and recovery remain in place. Renewal probes the existing PIT and CASes its revision and tuple;
 confirmed native PIT loss closes admission only for that exact tuple and revision.
+A finished, exhausted page may release its own lease in the same committed statement that closes admission.
+The next native statement checks the last lease and reads at most 32 owned locators when the barrier has drained.
+Physical deletion still requires the engine response before custody records each release. On an ordinary serving
+PIT, the physical opener retains the exact claim, observation and locator together under publication admission.
+Page reservation records the charged attempt and child even when the observation's work comparison fails.
+Only a successful comparison permits the separate engine dispatch.
+
 Retirement and physical replacement never inherit retained coverage. No transaction spans engine I/O.
 Factory disposal drains local calls; committed state survives recovery and supplied resources remain open.
 

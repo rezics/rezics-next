@@ -51,7 +51,6 @@ export const pageControls = {
     `SELECT o.observation AS id,o.consumer_work FROM input i JOIN search.public_filter_observation o
      ON (o.partition_no,o.observation)=(i.home,i.observation) WHERE o.state='open'`,
   ),
-  saveReservation: saveObservation,
   saveWindow: saveObservation,
   plan: control(
     {
@@ -97,16 +96,22 @@ export const pageControls = {
       size: 'integer',
       payload: 'text',
       work: 'text',
+      previous_work: 'text',
+      next_work: 'text',
+      bootstrap: 'text',
+      next_rounds: 'integer',
+      next_charged: 'integer',
     },
     `, locked AS MATERIALIZED (
       SELECT i.* FROM input i JOIN search.public_filter_coverage_page p ON (p.partition_no,p.id)=(i.home,i.page)
       JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(p.partition_no,p.observation)
       JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,i.token)
       WHERE p.observation=i.observation AND p.reference_token=i.token AND p.state='open' AND p.pending IS NULL AND p.deadline>i.now
+        AND p.rounds+1=i.next_rounds AND p.charged+i.size=i.next_charged
         AND o.state='open' AND f.expires_at>i.now AND p.rounds<3 AND p.charged+i.size<=p.ceiling
         AND coalesce(p.tail,p.boundary) IS NOT DISTINCT FROM i.parent
         AND ((p.tail IS NOT NULL AND p.tail_consumed=i.consumed) OR (p.tail IS NULL AND p.boundary_consumed=i.consumed))
-      FOR UPDATE OF p FOR SHARE OF o,f), advanced AS (
+      FOR UPDATE OF p,o FOR SHARE OF f), advanced AS (
       UPDATE search.public_filter_coverage_page p SET pending=i.execution,rounds=p.rounds+1,charged=p.charged+i.size,
         revision=p.revision+1,work=i.work FROM locked i
       WHERE (p.partition_no,p.id)=(i.home,i.page)
@@ -114,8 +119,12 @@ export const pageControls = {
       INSERT INTO search.public_filter_execution
         (partition_no,observation,id,execution,page_id,page_ordinal,page_parent,page_consumed,page_size,page_status,page_engine_started)
       SELECT partition_no,observation,execution,payload,id,rounds,parent,consumed,size,'dispatched',false
-      FROM advanced RETURNING partition_no,page_id)
-    SELECT p.id,p.rounds,p.charged FROM advanced p JOIN appended a ON (a.partition_no,a.page_id)=(p.partition_no,p.id)`,
+      FROM advanced RETURNING partition_no,page_id), saved AS (
+      UPDATE search.public_filter_observation o SET consumer_work=i.next_work,consumer_bootstrap=i.bootstrap
+      FROM input i JOIN appended a ON (a.partition_no,a.page_id)=(i.home,i.page)
+      WHERE (o.partition_no,o.observation)=(i.home,i.observation) AND o.state='open'
+        AND o.consumer_work IS NOT DISTINCT FROM i.previous_work RETURNING o.partition_no,i.page)
+    SELECT p.id,p.rounds,p.charged FROM advanced p JOIN saved s ON (s.partition_no,s.page)=(p.partition_no,p.id)`,
   ),
   dispatch: control(
     {

@@ -187,6 +187,30 @@ test('cold Subject publication discloses the originals and preserves relevance t
         cursor = next;
       }
     }
+    const prior = (await database.pool.query('SELECT id::text FROM search.public_filter_coverage_page')).rows;
+    await database.pool.query(`CREATE FUNCTION search.refuse_test_reservation() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER refuse_test_reservation BEFORE UPDATE OF consumer_work ON search.public_filter_observation
+      FOR EACH ROW WHEN (OLD.consumer_work IS NOT NULL AND NEW.consumer_work IS DISTINCT FROM OLD.consumer_work)
+      EXECUTE FUNCTION search.refuse_test_reservation()`);
+    try {
+      const refused = await fixture.request('alice', 'POST', '/v1/subjects:search', query);
+      expect(refused.status).toBe(503);
+      const held = await database.pool.query(
+        `SELECT p.state,p.rounds,p.charged,e.page_engine_started FROM search.public_filter_coverage_page p
+         JOIN search.public_filter_execution e ON (e.partition_no,e.page_id,e.id)=(p.partition_no,p.id,p.pending)
+         WHERE NOT (p.id=ANY($1::uuid[]))`,
+        [prior.map((row) => row.id)],
+      );
+      expect(held.rows).toEqual([
+        { state: 'failed', rounds: 1, charged: expect.any(Number), page_engine_started: false },
+      ]);
+      expect(held.rows[0]!.charged).toBeGreaterThan(0);
+    } finally {
+      await database.pool.query(
+        'DROP TRIGGER refuse_test_reservation ON search.public_filter_observation; DROP FUNCTION search.refuse_test_reservation()',
+      );
+    }
     expect(await projectionBuilds()).toEqual(before);
     console.info('Cold Subject publication', {
       generation: published.generation,

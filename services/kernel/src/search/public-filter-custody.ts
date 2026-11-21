@@ -83,6 +83,7 @@ import {
   type PublicFilterPreparationSegmentKey,
 } from './public-filter-preparation-segment.ts';
 
+const retainServing = readFileSync(new URL('./public-filter-custody-retain-serving.sql', import.meta.url), 'utf8');
 const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.meta.url), 'utf8');
 // Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
 const drainWaiters = new Map<string, Set<() => void>>();
@@ -1453,6 +1454,7 @@ export function createPublicFilterCustody(
     input: I,
     meter: Meter,
     read: (items: readonly I[], shared: Meter, context: PublicFilterConsumerContext) => Promise<QueryResult>,
+    writesPerRow = 0,
   ) {
     const { context } = lifetimes.get(meter)!;
     const batch = bookBindingStep(
@@ -1471,7 +1473,13 @@ export function createPublicFilterCustody(
             { deadline },
           );
           const rows = new Map(result.rows.map((r) => [r.id, r]));
-          return members.map((m, i) => ({ row: rows.get(m.key), cost: bookCostShare(shared, i, members.length) }));
+          const common = { ...shared, resultWrites: shared.resultWrites - writesPerRow * rows.size };
+          return members.map((member, i) => {
+            const row = rows.get(member.key);
+            const cost = bookCostShare(common, i, members.length);
+            if (row) cost.resultWrites += writesPerRow;
+            return { row, cost };
+          });
         } catch (error) {
           const failed = failure(error, shared);
           return members.map((_, i) => ({ ...failed, cost: bookCostShare(shared, i, members.length) }));
@@ -1484,7 +1492,7 @@ export function createPublicFilterCustody(
       return result.row;
     });
   }
-  async function registered(value: CustodyRegistration, meter: Meter) {
+  async function registeredEncoding(value: CustodyRegistration, meter: Meter) {
     registration(value);
     const result = await sql(
       pool,
@@ -1494,7 +1502,10 @@ export function createPublicFilterCustody(
       [value.partition, value.id],
     );
     if (!result.rows[0]) throw new Failure('definition_missing');
-    const consumer = decode<PublicFilterConsumer>(result.rows[0].consumer);
+    return result.rows[0].consumer as string;
+  }
+  async function registered(value: CustodyRegistration, meter: Meter) {
+    const consumer = decode<PublicFilterConsumer>(await registeredEncoding(value, meter));
     publicFilterCatalogue(consumer);
     return consumer;
   }
@@ -1819,9 +1830,8 @@ export function createPublicFilterCustody(
         );
         const owner = await owners;
         if (owners && !owner) throw new Failure('definition_missing');
-        const consumer = owner
-          ? decode<PublicFilterConsumer>(owner.consumer)
-          : await registered(input.registration, meter);
+        const encoding: string = owner?.consumer ?? (await registeredEncoding(input.registration, meter));
+        const consumer = decode<PublicFilterConsumer>(encoding);
         publicFilterCatalogue(consumer);
         const checkTarget = async (step: 'beforePit' | 'afterPit') => {
           const batch = bookBindingStep(
@@ -1897,30 +1907,69 @@ export function createPublicFilterCustody(
               pit: opened.pit_id,
             },
           };
-          const batch =
-            !input.claim &&
-            bookRows(
+          if (input.claim) {
+            const item = {
+              registration: input.registration.id,
+              bootstrap: input.claim.slice(2),
+              observation: q.snapshot.observation,
+              consumer: encoding,
+              queried: encode(q),
+              covered: encode(input.covered),
+              expires: openedAt + input.keepAliveMs,
+              hash: digest(opened.pit_id),
+              pit: opened.pit_id,
+            };
+            const persist = (items: readonly (typeof item)[], shared: Meter) =>
+              transaction(shared, async (client) => {
+                // Read the gate in a fresh snapshot after acquiring the publication lock.
+                await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
+                // The gate and target are shared. Each opener retains its own registration,
+                // bootstrap, claim, observation and PIT locator by their complete native keys.
+                const count = items.length;
+                const result = await sql(
+                  client,
+                  shared,
+                  retainServing,
+                  [consumer.physicalTarget, consumer.incarnation, JSON.stringify(items), Date.now()],
+                  { points: 2 + 5 * count, keys: 4 + 12 * count, writes: 0 },
+                );
+                shared.resultWrites += 3 * (result.rowCount ?? 0);
+                return result;
+              });
+            const group = bookRows(
               'retain',
-              JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
-              input.registration.id,
-              {
-                id: input.registration.id,
-                observation: q.snapshot.observation,
-                queried: encode(q),
-                consumer: encode(consumer),
-                covered: encode(input.covered),
-                expires: openedAt + input.keepAliveMs,
-                pit: opened.pit_id,
-                hash: digest(opened.pit_id),
-              },
+              JSON.stringify(['serving', consumer.physicalTarget, consumer.incarnation]),
+              item.observation,
+              item,
               meter,
-              (items, shared) =>
-                transaction(shared, async (client) => {
-                  await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
-                  return sql(
-                    client,
-                    shared,
-                    `WITH target AS MATERIALIZED (
+              persist,
+              3,
+            );
+            if (!(group ? await group : (await persist([item], meter)).rows[0])) throw new Failure('binding_mismatch');
+            return { status: 'retained' as const, queried: q, cost: meter };
+          }
+          const batch = bookRows(
+            'retain',
+            JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
+            input.registration.id,
+            {
+              id: input.registration.id,
+              observation: q.snapshot.observation,
+              queried: encode(q),
+              consumer: encode(consumer),
+              covered: encode(input.covered),
+              expires: openedAt + input.keepAliveMs,
+              pit: opened.pit_id,
+              hash: digest(opened.pit_id),
+            },
+            meter,
+            (items, shared) =>
+              transaction(shared, async (client) => {
+                await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
+                return sql(
+                  client,
+                  shared,
+                  `WITH target AS MATERIALIZED (
                 SELECT partition_no,physical_target FROM search.lock_retained_copy_target($2,$3)
                 WHERE incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                     WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)), admitted AS MATERIALIZED (
@@ -1931,36 +1980,16 @@ export function createPublicFilterCustody(
                 SELECT partition_no,observation,id,queried,covered,expires,'open' FROM admitted RETURNING partition_no,observation,registration),
                 owned AS (INSERT INTO search.public_filter_pit SELECT r.partition_no,r.observation,i.hash,i.pit,'owned'
                   FROM retained r JOIN admitted i USING(observation)) SELECT registration AS id FROM retained`,
-                    [
-                      JSON.stringify(items),
-                      input.registration.partition,
-                      consumer.physicalTarget,
-                      consumer.incarnation,
-                    ],
-                  );
-                }),
-            );
+                  [JSON.stringify(items), input.registration.partition, consumer.physicalTarget, consumer.incarnation],
+                );
+              }),
+          );
           if (batch) {
             if (!(await batch)) throw new Failure('binding_mismatch');
             return { status: 'retained' as const, queried: q, cost: meter };
           }
           return await transaction(meter, async (client) => {
             await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
-            if (input.claim) {
-              const admitted = await sql(
-                client,
-                meter,
-                `UPDATE search.public_filter_pit_claim c SET state='retained'
-                 FROM semantic.public_filter_bootstrap b
-                 WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2) AND c.state='opening'
-                   AND c.deadline>$3 AND c.consumer_work IS NOT NULL
-                   AND (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap)
-                   AND b.state='begun' AND b.snapshot_kind='pit' AND b.queried IS NULL
-                   AND b.coverage_publication IS NOT NULL AND b.publication_job IS NULL RETURNING c.bootstrap`,
-                [input.registration.id, input.claim.slice(2), Date.now()],
-              );
-              if (admitted.rowCount !== 1) throw new Failure('binding_mismatch');
-            }
             return retain(input.registration, q, input.covered, openedAt + input.keepAliveMs, null, meter, client);
           });
         } catch (error) {
@@ -2511,11 +2540,12 @@ export function createPublicFilterCustody(
         }),
       );
     },
-    acquire(q, context) {
+    acquire(q, context, readConsumerWork = false) {
       const input = decode<typeof q>(encode(q));
       queried(input);
       return run(context, async (meter, context) => {
         const token = randomUUID();
+        const workColumn = readConsumerWork ? 'o.consumer_work' : 'NULL::text';
         const home = partition(input.snapshot.observation);
         const bootstrap = repairBootstrap(input);
         const batch =
@@ -2523,7 +2553,7 @@ export function createPublicFilterCustody(
           bootstrap === null &&
           bookRows(
             'reference',
-            JSON.stringify([home, input.consumer.physicalTarget, input.consumer.incarnation]),
+            JSON.stringify([home, input.consumer.physicalTarget, input.consumer.incarnation, readConsumerWork]),
             input.snapshot.observation,
             { observation: input.snapshot.observation, queried: encode(input), token, deadline: context.deadline },
             meter,
@@ -2534,7 +2564,7 @@ export function createPublicFilterCustody(
                   client,
                   shared,
                   `WITH locked AS MATERIALIZED (
-              SELECT o.partition_no,i.observation,i.token,i.deadline FROM jsonb_to_recordset($1)
+              SELECT o.partition_no,i.observation,i.token,i.deadline,${workColumn} AS work FROM jsonb_to_recordset($1)
                 i(observation text,queried text,token uuid,deadline bigint)
               JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=($2,i.observation)
               JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
@@ -2542,16 +2572,23 @@ export function createPublicFilterCustody(
               WHERE o.queried=i.queried AND o.state='open' AND o.expires_at>$3 AND r.state='active'
                 AND r.physical_target=$4 AND t.incarnation=$5 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                   WHERE partition_no=0 AND physical_target=$4 AND publication_fence IS NOT NULL)
-              ORDER BY o.observation FOR UPDATE OF o FOR SHARE OF r,t)
-              INSERT INTO search.public_filter_reference SELECT partition_no,observation,token,least(deadline,$3::bigint+300000) FROM locked
-              RETURNING observation AS id`,
+              ORDER BY o.observation FOR UPDATE OF o FOR SHARE OF r,t), enrolled AS (
+                INSERT INTO search.public_filter_reference SELECT partition_no,observation,token,least(deadline,$3::bigint+300000) FROM locked
+                RETURNING observation)
+              SELECT l.observation AS id,l.work FROM enrolled JOIN locked l USING(observation)`,
                   [JSON.stringify(items), home, Date.now(), input.consumer.physicalTarget, input.consumer.incarnation],
                 );
               }),
           );
         if (batch) {
-          if (!(await batch)) throw new Failure('observation_lost');
-          return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
+          const row = await batch;
+          if (!row) throw new Failure('observation_lost');
+          return {
+            status: 'acquired' as const,
+            use: { observation: input.snapshot.observation, token },
+            consumerWork: row.work as string | null,
+            cost: meter,
+          };
         }
         return transaction(meter, async (client) => {
           // Serialize reader enrollment with the ordinary publication admission fence.
@@ -2561,7 +2598,7 @@ export function createPublicFilterCustody(
             client,
             meter,
             `WITH locked AS (
-          SELECT o.partition_no,o.observation FROM search.public_filter_observation o
+          SELECT o.partition_no,o.observation,${workColumn} AS work FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
           WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open'
@@ -2572,8 +2609,9 @@ export function createPublicFilterCustody(
             AND NOT EXISTS (SELECT 1 FROM search.public_filter_prepared p
               WHERE (p.partition_no,p.registration,p.build,p.generation)=(r.partition_no,r.id,$8::text,$9::bigint)
                 AND (p.state='erasing' OR (p.segment_state='building' AND p.raw_exhausted=false)))
-          FOR UPDATE OF o FOR SHARE OF r,t)
-          INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
+          FOR UPDATE OF o FOR SHARE OF r,t), enrolled AS (
+              INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING observation)
+          SELECT l.work FROM enrolled JOIN locked l USING(observation)`,
             [
               partition(input.snapshot.observation),
               input.snapshot.observation,
@@ -2588,7 +2626,12 @@ export function createPublicFilterCustody(
             ],
           );
           if (!result.rowCount) throw new Failure('observation_lost');
-          return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
+          return {
+            status: 'acquired' as const,
+            use: { observation: input.snapshot.observation, token },
+            consumerWork: result.rows[0].work as string | null,
+            cost: meter,
+          };
         });
       });
     },
@@ -2825,20 +2868,36 @@ export function createPublicFilterCustody(
         }
       });
     },
-    closeObservation(q, search, context) {
+    closeObservation(q, search, context, release) {
       const input = decode<typeof q>(encode(q));
       queried(input);
+      if (release) requireValue(release.observation === input.snapshot.observation);
       return run(context, async (meter, context) => {
         const values = [partition(input.snapshot.observation), input.snapshot.observation];
+        const gate = `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN 'closed' ELSE 'closing' END
+          WHERE (partition_no,observation)=($1,$2) AND queried=$3
+          RETURNING state,CASE WHEN state='closed' THEN consumer_work END AS consumer_work`;
         const barrier = await sql(
           pool,
           meter,
-          `UPDATE search.public_filter_observation SET state=CASE WHEN state='closed' THEN 'closed' ELSE 'closing' END WHERE (partition_no,observation)=($1,$2) AND queried=$3 RETURNING state`,
-          [...values, encode(input)],
+          release
+            ? `WITH barrier AS (${gate}), released AS (
+               DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$4)
+                 AND EXISTS (SELECT FROM barrier) RETURNING token)
+             SELECT barrier.*, (SELECT count(*)::integer FROM released) AS releases FROM barrier`
+            : gate,
+          [...values, encode(input), ...(release ? [release.token] : [])],
         );
+        if (release) meter.resultWrites += barrier.rows[0]?.releases ?? 0;
         if (!barrier.rowCount) throw new Failure('observation_lost');
-        if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
+        if (barrier.rows[0].state === 'closed')
+          return {
+            status: 'closed' as const,
+            consumerWork: barrier.rows[0].consumer_work as string | null,
+            cost: meter,
+          };
         let expiredReference = false;
+        let owned: { id: string; locator: string }[] | undefined;
         const signal = drainSignal(input.snapshot.observation);
         try {
           // At most three indexed maximum probes, including stale delivery and cross-process fallback.
@@ -2849,11 +2908,22 @@ export function createPublicFilterCustody(
             const refs = await sql(
               pool,
               meter,
-              'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1',
+              `WITH last_ref AS MATERIALIZED (
+                 SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2)
+                 ORDER BY expires_at DESC LIMIT 1)
+               SELECT expires_at,NULL::text AS id,NULL::text AS locator FROM last_ref
+               UNION ALL (SELECT NULL::bigint,id,locator FROM search.public_filter_pit
+                 WHERE (partition_no,observation)=($1,$2) AND state='owned' AND NOT EXISTS (SELECT FROM last_ref)
+                 ORDER BY id LIMIT 32)`,
               values,
             );
-            if (!refs.rowCount) break;
-            if (Number(refs.rows[0].expires_at) <= Date.now()) {
+            const last = refs.rows[0]?.expires_at;
+            if (last == null) {
+              owned = refs.rows as { id: string; locator: string }[];
+              if (release) for (const wake of drainWaiters.get(release.observation) ?? []) wake();
+              break;
+            }
+            if (Number(last) <= Date.now()) {
               expiredReference = true;
               break;
             }
@@ -2861,7 +2931,7 @@ export function createPublicFilterCustody(
             const now = Date.now();
             const remaining = context.deadline - now;
             const next = attempt === 0 ? now + remaining / 2 : context.deadline - Math.min(100, remaining / 4);
-            await signal.wait(Math.min(Number(refs.rows[0].expires_at) + 1, next));
+            await signal.wait(Math.min(Number(last) + 1, next));
           }
         } finally {
           signal.dispose();
@@ -2892,15 +2962,17 @@ export function createPublicFilterCustody(
         check(context);
         // One funded PIT batch per invocation. The owned-only index prevents
         // released locator history from turning a bounded probe into a scan.
-        const owned = await sql(
-          pool,
-          meter,
-          "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
-          values,
-        );
-        for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
+        owned ??= (
+          await sql(
+            pool,
+            meter,
+            "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
+            values,
+          )
+        ).rows as { id: string; locator: string }[];
+        for (const pit of owned) await deletePit(pit.locator, search, context, meter);
         check(context);
-        const ids = owned.rows.map((row) => row.id);
+        const ids = owned.map((row) => row.id);
         // The delete receipts and the terminal state commit together. Excluding those exact IDs
         // lets the sibling CTE see whether any other owned locator remains in the same snapshot.
         const settled = await sql(
@@ -2913,12 +2985,12 @@ export function createPublicFilterCustody(
            WHERE (o.partition_no,o.observation)=($1,$2) AND o.state IN ('closing','closed')
              AND NOT EXISTS (SELECT 1 FROM search.public_filter_pit p
                WHERE (p.partition_no,p.observation)=($1,$2) AND p.state='owned' AND p.id<>ALL($3::text[]) LIMIT 1)
-           RETURNING o.observation`,
+           RETURNING o.consumer_work`,
           [...values, ids],
           { points: 2 * ids.length + 2, keys: ids.length + 6, writes: ids.length + 1 },
         );
         if (!settled.rowCount) throw new Failure('deadline');
-        return { status: 'closed' as const, cost: meter };
+        return { status: 'closed' as const, consumerWork: settled.rows[0].consumer_work as string | null, cost: meter };
       });
     },
     retire(value, context) {

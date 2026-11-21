@@ -49,6 +49,8 @@ export type PublicFilterCoveragePage = Readonly<{
   finish(): Promise<void>;
   /** Abandons admission; it cannot stand in for finish or certify an uncertain child. */
   dispose(): Promise<void>;
+  /** Release this finished page's reference while closing its exhausted observation. */
+  closeExhausted?(): Promise<void>;
   /** Translate native refusal without treating an unknown serving error as authority. */
   failure(error: unknown): PublicFilterConsumerUnavailable;
 }>;

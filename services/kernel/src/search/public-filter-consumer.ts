@@ -859,6 +859,11 @@ type ConsumerWork = {
 function encodeWork(work: ConsumerWork): string {
   return work.repair || work.repairPage?.repairs.length ? encodeStagedRepairWork(work) : encodeState(work);
 }
+function boundedWork(work: ConsumerWork): string {
+  const encoded = encodeWork(work);
+  if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
+  return encoded;
+}
 function decodeWork(encoded: string): ConsumerWork {
   try {
     return decodeNative<ConsumerWork>(encoded);
@@ -1277,20 +1282,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     q: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
     abortSource: boolean,
+    release?: CustodyUse,
+    m?: Meter,
   ) {
-    const result = await custody.closeObservation(q, config.search, { deadline: context.deadline });
+    const result = await custody.closeObservation(q, config.search, { deadline: context.deadline }, release);
+    m?.add(result.cost);
     if (result.status !== 'closed') throw new ConsumerFailure('observation_lost');
     owned.delete(q.snapshot.observation);
-    if (abortSource && bootstrapBinding(binding)) {
-      const m = meter(context);
-      const row = (
-        await m.sql<{ consumer_work: string | null }>(
-          'SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)',
-          [locatorHome(q.snapshot.observation), q.snapshot.observation],
-        )
-      ).rows[0];
-      if (row?.consumer_work) await binding.abort({ bootstrap: decodeWork(row.consumer_work).bootstrap.id }, context);
-    }
+    if (abortSource && bootstrapBinding(binding) && result.consumerWork)
+      await binding.abort({ bootstrap: decodeWork(result.consumerWork).bootstrap.id }, context);
   }
 
   const undelivered = new Map<string, { q: PublicFilterQueriedObservation; abortSource: boolean }>();
@@ -1480,13 +1480,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     execution: string,
     prefix: PublicFilterConsumerRefill | undefined,
     size: number,
+    work: ConsumerWork,
+    previous: string,
   ) {
+    work.rounds = page.rounds + 1;
+    work.charged = page.charged + size;
+    const encoded = boundedWork(work);
     const reserved = await pageControl(
       page,
       'reserve',
       use.observation,
       page.id!,
-      { points: 8, keys: 20, writes: 2 },
+      { points: 9, keys: 23, writes: 3 },
       () => [
         locatorHome(use.observation),
         page.id,
@@ -1499,11 +1504,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         size,
         encodeNative({ id: execution, start: page.start!, ownRows: [] }),
         encodeState(page.m.cost),
+        previous,
+        encoded,
+        work.bootstrap.id,
+        work.rounds,
+        work.charged,
       ],
     );
     if (reserved.rounds === undefined || reserved.charged === undefined) throw new ConsumerFailure('observation_lost');
     page.rounds = reserved.rounds;
     page.charged = reserved.charged;
+    return encoded;
   }
   async function dispatchPageEngine(page: Page, use: CustodyUse, execution: string) {
     // Commit the fence and its self-inclusive root reservation before engine I/O.
@@ -1616,6 +1627,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     job: PublicFilterConsumerJob,
     m: Meter,
     page?: Page,
+    enrolledWork?: string | null,
   ): Promise<{ work: ConsumerWork; encoded: string; registration: boolean }> {
     if (job.consumer.physicalTarget !== target) throw new ConsumerFailure('registration_missing');
     const home = locatorHome(job.job);
@@ -1644,15 +1656,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { work, encoded: row.consumer_work, registration: row.registration };
     }
     const registration = false;
-    const grouped = page && groupControl(page, 'load', job.job, job.job, null, () => [home, job.job]);
-    const row = grouped
-      ? await grouped
-      : (
-          await m.sql<{ consumer_work: string | null }>(
-            "SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2) AND state='open'",
-            [home, job.job],
-          )
-        ).rows[0];
+    const grouped =
+      enrolledWork === undefined && page && groupControl(page, 'load', job.job, job.job, null, () => [home, job.job]);
+    const row =
+      enrolledWork !== undefined
+        ? { consumer_work: enrolledWork }
+        : grouped
+          ? await grouped
+          : (
+              await m.sql<{ consumer_work: string | null }>(
+                "SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2) AND state='open'",
+                [home, job.job],
+              )
+            ).rows[0];
     if (!row?.consumer_work) throw new ConsumerFailure('observation_lost');
     const work = decodeWork(row.consumer_work);
     if (!isDeepStrictEqual(work.bootstrap.consumer, job.consumer)) throw new ConsumerFailure('registration_missing');
@@ -1664,12 +1680,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     registration: boolean,
     m: Meter,
     page?: Page,
-    phase?: 'claim' | 'savePit' | 'saveReservation' | 'saveWindow',
+    phase?: 'claim' | 'savePit' | 'saveWindow',
   ) {
     const firstWindow = !registration && work.independentPit && phase === 'saveWindow';
     if (firstWindow) delete work.independentPit;
-    const encoded = encodeWork(work);
-    if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
+    const encoded = boundedWork(work);
     const q = work.queried ?? work.materializing;
     const values = [
       work.registration.partition,
@@ -3176,6 +3191,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page?: Page,
   ): Promise<PublicFilterConsumerQuery | DiscoveryConsumerQuery> {
     let q = structuredClone(input);
+    let enrolledWork: string | null | undefined;
     if (config.discoveryPreparation) throw new ConsumerFailure('source_pending');
     const prefix = refill === undefined ? undefined : structuredClone(refill);
     const m = page?.m ?? meter(context);
@@ -3189,9 +3205,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (publicFilterCatalogue(q.consumer, mixed) !== null) throw new ConsumerFailure('registration_missing');
       if (page?.use) use = page.use;
       else {
-        const acquired = m.take(await custody.acquire(q, context));
+        const acquired = m.take(await custody.acquire(q, context, true));
         if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
         use = acquired.use;
+        enrolledWork = acquired.consumerWork;
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
@@ -3215,7 +3232,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if ('representation' in plan !== mixed || ('purpose' in plan && mixed))
         return m.unavailable('registration_missing');
       if (page && cut.bookPopulation) page.bookPopulation = cut.bookPopulation;
-      const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m, page);
+      const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m, page, enrolledWork);
       const { work } = loaded;
       if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, cut.covered))
         return m.unavailable('observation_lost');
@@ -3268,15 +3285,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       await physical(q, m, context);
       // Reserve this attempt before external dispatch. An uncertain engine result cannot regain allowance.
       const execution = randomUUID();
+      let encoded: string;
       if (page) {
-        await reservePage(page, use, execution, prefix, size);
-        work.rounds = page.rounds;
-        work.charged = page.charged;
+        encoded = await reservePage(page, use, execution, prefix, size, work, loaded.encoded);
       } else {
         work.rounds++;
         work.charged += size;
+        encoded = await save(work, loaded.encoded, false, m);
       }
-      let encoded = await save(work, loaded.encoded, false, m, page, 'saveReservation');
       let raw: RetainedWindow['raw'];
       let exhausted: boolean;
       let total: SearchResult['total'] | undefined;
@@ -4260,6 +4276,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const page = retained ?? newPage(Object.freeze({ deadline: incoming.deadline }));
     const context = page.context;
     let disposal: Promise<void> | undefined;
+    let exhaustion: Promise<void> | undefined;
     async function run<T>(body: () => Promise<T>): Promise<T> {
       if (page.busy || page.failed || page.finished || page.disposed) throw new ConsumerFailure('observation_lost');
       page.busy = true;
@@ -4351,6 +4368,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           page.m.check();
           page.finished = true;
         }),
+      closeExhausted() {
+        if (page.busy || !page.finished || !page.queried)
+          return Promise.reject(new ConsumerFailure('observation_lost'));
+        if (exhaustion) return exhaustion;
+        const q = page.queried;
+        if (disposal) return (exhaustion = disposal.then(() => closeExact(q, context, true)));
+        page.disposed = true;
+        const use = page.use;
+        page.use = null;
+        return (exhaustion = disposal =
+          closeExact(q, context, true, use ?? undefined, page.m).catch(async (error) => {
+            if (use) await releaseUse(use, context, page.m);
+            throw error;
+          }));
+      },
       dispose() {
         if (page.busy) return Promise.reject(new ConsumerFailure('observation_lost'));
         if (disposal) return disposal;
