@@ -1,13 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { accountDiscoverySource } from '../../src/access/account-discovery-source.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
 import { createDiscoveryProjection, type DiscoveryTarget } from '../../src/search/account-discovery.ts';
 import { discoveryDocumentId, parseDiscoveryDocumentId } from '../../src/search/discovery-documents.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
-import type { DiscoveryKey, IndexedAccount } from '../../src/search/discovery.ts';
+import type { DiscoveryKey } from '../../src/search/discovery.ts';
 import { createDiscoveryIndexer } from '../../src/search/indexer.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import {
@@ -49,7 +50,7 @@ function bulkKeys(registry: ReturnType<typeof createDiscoveryRegistry>, body: st
   return actions;
 }
 
-test('replay of a Subject changing between released Types deletes its old kind and indexes the current kind', async () => {
+test('mixed replay replaces an old Subject kind and recovers a lost Account write for the same UUID', async () => {
   const partition = 394;
   const route = partition * 16;
   const id = newId(route);
@@ -65,13 +66,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     descriptions: [],
     statements: [],
   };
-  const account: IndexedAccount = {
-    id,
-    accountKind: 'actor',
-    handle: null,
-    displayName: 'Same UUID account',
-    revision: 1n,
-  };
+  const accounts = accountDiscoverySource(pool);
   async function position() {
     const { rows } = await admin.query<{ position: string }>(
       'SELECT position::text FROM core.partition WHERE partition_no=$1',
@@ -103,11 +98,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
           const observe = observeAccountRead;
           observeAccountRead = undefined;
           if (observe) await observe();
-          return {
-            partition,
-            position: await position(),
-            accounts: ids.includes(id) ? [account] : [],
-          };
+          return accounts.read(requested, ids);
         },
         async count(): Promise<never> {
           throw new Error('Ordinary projection must not census Source');
@@ -128,12 +119,15 @@ test('replay of a Subject changing between released Types deletes its old kind a
   };
   const bodies: string[] = [];
   let failWrite = false;
+  let loseResponse = false;
   const search: OpenSearch = {
     ...native,
-    async bulkRaw(body, options) {
+    async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
       bodies.push(body);
       if (failWrite) throw new Error('injected discovery write failure');
-      return native.bulkRaw!(body, options);
+      const response = await native.bulkRaw!<T>(body, options);
+      if (loseResponse) throw new Error('lost discovery bulk response');
+      return response;
     },
   };
   const personKey: DiscoveryKey = { owner: 'semantic', kind: 'schema:Person', route, id };
@@ -170,21 +164,17 @@ test('replay of a Subject changing between released Types deletes its old kind a
     return rows;
   }
   async function hit(documentId: string) {
-    const { body } = await native.request<{ hits: { hits: { _id: string; _source: { kind: string } }[] } }>(
-      'POST',
-      `/${index}/_search`,
-      { size: 1, query: { ids: { values: [documentId] } } },
-    );
+    const { body } = await native.request<{
+      hits: { hits: { _id: string; _version: number; _source: { kind: string; source_position: string } }[] };
+    }>('POST', `/${index}/_search`, { size: 1, version: true, query: { ids: { values: [documentId] } } });
     return body.hits.hits.find((row) => row._id === documentId);
   }
   try {
-    const nativeAccount = await admin.query<{ revision: string }>(
+    await admin.query(
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete,display_name)
-       VALUES ($1,$2,'actor','active',$2,true,$3)
-       RETURNING discovery_revision::text AS revision`,
-      [route, id, account.displayName],
+       VALUES ($1,$2,'actor','active',$2,true,'Same UUID account')`,
+      [route, id],
     );
-    account.revision = BigInt(nativeAccount.rows[0]!.revision);
     const baseline = await append([{ type: 'com.rezics.fixture.created.v1', subject: 'walk-b-374d19', data: {} }]);
     expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: baseline });
     await projection.project(partition, [personKey]);
@@ -265,6 +255,27 @@ test('replay of a Subject changing between released Types deletes its old kind a
       resume.resolve();
       await repair;
     }
+
+    const retryAccount = () => writer.repairAccount(id, 'lost-response', { deadline: Date.now() + 10_000 });
+    const book = await hit(bookId);
+    loseResponse = true;
+    await expect(retryAccount()).rejects.toThrow('lost discovery bulk response');
+    loseResponse = false;
+    const dispatched = bodies.at(-1)!;
+    const version = BigInt(JSON.parse(dispatched.split('\n')[0]!).index.version);
+    expect(await position()).toBeGreaterThan(version);
+    expect(await hit(accountId)).toMatchObject({
+      _version: Number(version),
+      _source: { source_position: String(version) },
+    });
+    const recovered = await retryAccount();
+    expect(bodies.at(-1)).toBe(dispatched);
+    expect(recovered).toMatchObject({
+      owner: 'accounts',
+      sourcePosition: version,
+      effects: [{ key: accountKey, evidence: { kind: 'recovered' }, action: { version } }],
+    });
+    expect(await hit(bookId)).toEqual(book);
   } finally {
     await native.request('DELETE', `/${index}`).catch(() => undefined);
     await admin.query('DELETE FROM search.discovery_copy WHERE prefix=$1', [prefix]);

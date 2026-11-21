@@ -655,12 +655,28 @@ export function createDiscoveryRepairWriter(options: {
   }
   async function repair(
     subject: string,
-    obligation: bigint,
+    source: { owner: 'semantic'; position: bigint } | { owner: 'accounts' },
     locator: string,
     context: PublicFilterConsumerContext,
-    owner: 'semantic' | 'accounts' = 'semantic',
   ): Promise<DiscoveryRepairWriterReceipt> {
-    if (!locator || locator.length > 8192 || obligation < 0n) throw new TypeError('Invalid mixed repair locator');
+    if (!locator || locator.length > 8192 || (source.owner === 'semantic' && source.position < 0n))
+      throw new TypeError('Invalid mixed repair locator');
+    const { owner } = source;
+    // Account preparation retains its native observation with the action. Writer commands
+    // advance the home position, so a fresh read on replay can only check the original facts.
+    function obligation(account?: AccountDiscoveryRepairObservation) {
+      if (source.owner === 'semantic') return source.position;
+      if (!account) throw unavailable('Mixed repair original Account input is unavailable');
+      return account.position;
+    }
+    async function checkAccount(original: AccountDiscoveryRepairObservation, detail: string) {
+      const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
+      if (
+        current.position < original.position ||
+        !isDeepStrictEqual({ ...current, position: original.position }, original)
+      )
+        throw unavailable(detail);
+    }
     const partition = subjectPartition(subject);
     const commandOptions = { partition, deadline: context.deadline };
     const physical = await readDiscoveryWriterPhysicalTarget(pool, search, index);
@@ -726,11 +742,9 @@ export function createDiscoveryRepairWriter(options: {
       const receipt: PublicFilterRepairWriterReceipt = JSON.parse(row.repair_receipt, repairReviver);
       if (!isDiscoveryRepairWriterReceipt(receipt) || (receipt.owner ?? 'semantic') !== owner)
         throw unavailable('Mixed repair retained a different native owner');
-      if (owner === 'accounts') {
-        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-        if (!receipt.account || !isDeepStrictEqual({ ...current, position: receipt.account.position }, receipt.account))
-          throw unavailable('Retained Account repair input changed');
-      }
+      if (receipt.sourcePosition < obligation(receipt.account))
+        throw unavailable('Mixed repair did not cover its own-home Source version');
+      if (receipt.account) await checkAccount(receipt.account, 'Retained Account repair input changed');
       return receipt;
     }
     if (!row.repair_action && row.dispatch_state === 'enrolled' && row.writer_token) {
@@ -738,12 +752,8 @@ export function createDiscoveryRepairWriter(options: {
       const epoch = row.owner_epoch;
       const account =
         owner === 'accounts' ? await readAccountDiscoveryRepairObservation(pool, subject, context) : undefined;
-      const actions = await projection.prepareRepair(subject, obligation, owner);
-      if (account) {
-        const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-        if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-          throw unavailable('Account repair changed during preparation');
-      }
+      const actions = await projection.prepareRepair(subject, obligation(account), owner);
+      if (account) await checkAccount(account, 'Account repair changed during preparation');
       const body = repairEncode(actions);
       if (Buffer.byteLength(body) > 1048576) throw unavailable('Mixed repair actions exceed native custody');
       await runCommand(pool, commandOptions, async (tx, command) => {
@@ -807,27 +817,18 @@ export function createDiscoveryRepairWriter(options: {
       : undefined;
     if ((owner === 'accounts') !== (account !== undefined))
       throw unavailable('Mixed repair original Account input is unavailable');
-    if (account) {
-      const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-      if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-        throw unavailable('Account repair changed before dispatch');
-    }
-    const effects = await projection.applyRepair(actions);
-    if (!effects.length) throw unavailable('Mixed repair produced no native action');
-    const sourcePosition = effects.reduce(
-      (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),
-      effects[0]!.action.version,
+    if (account) await checkAccount(account, 'Account repair changed before dispatch');
+    if (!actions.length) throw unavailable('Mixed repair produced no native action');
+    const sourcePosition = actions.reduce(
+      (floor, action) => (action.version < floor ? action.version : floor),
+      actions[0]!.version,
     );
-    if (sourcePosition < obligation) throw unavailable('Mixed repair did not cover its own-home Source version');
+    if (sourcePosition < obligation(account))
+      throw unavailable('Mixed repair did not cover its own-home Source version');
+    const effects = await projection.applyRepair(actions);
     if (!isDeepStrictEqual(await readDiscoveryWriterPhysicalTarget(pool, search, index), physical))
       throw unavailable('Mixed repair allocation changed after dispatch');
-    if (account) {
-      const current = await readAccountDiscoveryRepairObservation(pool, subject, context);
-      // Native writer commands advance core.position themselves. Compare the
-      // independent Account/claim facts, retaining the original writer floor.
-      if (!isDeepStrictEqual({ ...current, position: account.position }, account))
-        throw unavailable('Account repair changed during dispatch');
-    }
+    if (account) await checkAccount(account, 'Account repair changed during dispatch');
     const completed = await runCommand(pool, commandOptions, async (tx, context) => {
       const completion = await native(tx, context.transactionId);
       if (completion.epoch !== enrollment.epoch) throw unavailable('Mixed repair home moved before settlement');
@@ -873,11 +874,10 @@ export function createDiscoveryRepairWriter(options: {
   }
   return {
     repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext) {
-      return repair(subject, obligation, locator, context);
+      return repair(subject, { owner: 'semantic', position: obligation }, locator, context);
     },
-    async repairAccount(account: string, locator: string, context: PublicFilterConsumerContext) {
-      const original = await readAccountDiscoveryRepairObservation(pool, account, context);
-      return repair(account, original.position, locator, context, 'accounts');
+    repairAccount(account: string, locator: string, context: PublicFilterConsumerContext) {
+      return repair(account, { owner: 'accounts' }, locator, context);
     },
   };
 }
