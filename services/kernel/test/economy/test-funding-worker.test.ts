@@ -1,6 +1,5 @@
-import { afterAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createNativeEconomyDatabase, createNativeEconomyLedger } from '../../src/composition/economy.ts';
 import {
@@ -13,12 +12,14 @@ import { createFundingStore } from '../../src/economy/storage/funding-store.ts';
 import { createConfirmedFundingTestRail } from '../../src/economy/storage/funding-test-rail.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = new Pool({ connectionString: databaseUrl });
-afterAll(() => pool.end());
+let db: GrowthDatabase;
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+}, 90_000);
+afterAll(() => db?.close());
 
 function success<T>(result: { kind: 'ok'; value: T } | { kind: string }): T {
   if (result.kind !== 'ok' || !('value' in result)) throw new Error(`Expected success, received ${result.kind}`);
@@ -63,7 +64,7 @@ async function runWorker(environment: 'development' | 'production', target: Econ
   const child = Bun.spawn([process.execPath, '-e', program], {
     cwd: import.meta.dir + '/../..',
     env: workerTestEnv({
-      DATABASE_URL: databaseUrl,
+      DATABASE_URL: db.url,
       REYLO_CONFIG: process.env.REYLO_CONFIG,
       NODE_ENV: environment,
       TEST_BINDING: JSON.stringify(target),
@@ -92,7 +93,8 @@ async function runWorker(environment: 'development' | 'production', target: Econ
   }
 }
 
-test('a local worker recovers a lost claim while live and obsolete test work stay pending', async () => {
+test('a local worker recovers legacy intake and a lost claim while live and obsolete test work stay pending', async () => {
+  const { pool } = db;
   const target = {
     bookId: `test-funding-worker:${randomUUID()}`,
     node: 'b',
@@ -121,9 +123,31 @@ test('a local worker recovers a lost claim while live and obsolete test work sta
   for (const id of [target.assetId, 'different-asset'])
     success(await ledger.provisionAsset({ id, scale: 0, transferable: true }));
 
+  const migration = await Bun.file(
+    new URL('../../db/economy/migrations/20261121080500_economy_test_funding_lane.sql', import.meta.url),
+  ).text();
+  const [upgrade, downgrade] = migration.split('-- migrate:down') as [string, string];
+  await db.admin.query(downgrade);
+  function digest(values: string[]) {
+    return createHash('sha256').update(JSON.stringify(values)).digest('hex');
+  }
+  const legacyDestination = digest(['test-funding-destination', target.bookId, target.namespace, accountId]);
+  const legacyIntentId = digest(['test-funding-intent', target.bookId, accountId, 'pre-upgrade']);
+  const legacy = {
+    bookId: target.bookId,
+    walletId: accountId,
+    assetId: target.assetId,
+    intentId: legacyIntentId,
+    direction: 'deposit' as const,
+    units: '7',
+    provider: { namespace: target.namespace, mode: 'test' as const, destinationRef: legacyDestination },
+  };
+  expect(success(await store.begin(legacy))).toMatchObject({ kind: 'created' });
+  expect(success(await store.prepare(legacyIntentId))).toMatchObject({ kind: 'queued' });
+
   const unrelated: string[] = [];
   for (let index = 0; index < 19; index++) {
-    const intentId = `unrelated-${index}`;
+    const intentId = digest(['unrelated', String(index)]);
     unrelated.push(intentId);
     expect(
       success(
@@ -134,12 +158,27 @@ test('a local worker recovers a lost claim while live and obsolete test work sta
           intentId,
           direction: 'deposit',
           units: '1',
-          provider: { namespace: target.namespace, mode: index ? 'live' : 'test', destinationRef: 'foreign' },
+          provider: {
+            namespace: target.namespace,
+            mode: index ? 'live' : 'test',
+            destinationRef: index === 1 ? legacyDestination : 'foreign',
+          },
         }),
       ),
     ).toMatchObject({ kind: 'created' });
     expect(success(await store.prepare(intentId))).toMatchObject({ kind: 'queued' });
   }
+  await db.admin.query(upgrade);
+  const lane = await db.admin.query(
+    'SELECT intent_id, test_lane FROM economy.funding_dispatch WHERE book_id = $1 AND test_lane IS NOT NULL',
+    [target.bookId],
+  );
+  expect(lane.rows).toEqual([
+    {
+      intent_id: legacyIntentId,
+      test_lane: digest(['test-funding-lane', target.bookId, target.assetId, target.namespace]),
+    },
+  ]);
 
   function deposit(operationId: string, amount: string) {
     return { accountId, deadline: Date.now() + 2_000, operationId, direction: 'deposit' as const, amount };
@@ -171,17 +210,18 @@ test('a local worker recovers a lost claim while live and obsolete test work sta
      WHERE book_id = $1 AND intent_id = $2`,
     [target.bookId, intentId],
   );
-  const client = await createWorkClient(databaseUrl);
+  const client = await createWorkClient(db.url);
   try {
     expect(await runWorker('development', target)).toMatchObject({
       installed: { schedule: '*/10 * * * * *', queueName: 'maintenance', context: target },
       stale: { kind: 'disabled' },
-      advanced: { kind: 'advanced', attempted: 1, acknowledged: 1 },
+      advanced: { kind: 'advanced', attempted: 2, acknowledged: 2 },
     });
     expect(success(await store.read(intentId))).toMatchObject({
       phase: 'confirmed',
       confirmedMovementId: evidence.observation.movementId,
     });
+    expect(success(await store.read(legacyIntentId))).toMatchObject({ phase: 'confirmed' });
     const claimRows = await pool.query(
       `SELECT action, acknowledgment IS NOT NULL AS acknowledged FROM economy.funding_dispatch_claim
        WHERE book_id = $1 AND intent_id = $2 ORDER BY action DESC`,
@@ -197,7 +237,7 @@ test('a local worker recovers a lost claim while live and obsolete test work sta
       [target.bookId, unrelated],
     );
     expect(untouched.rows).toEqual([{ count: unrelated.length }]);
-    expect(success(await ledger.readBalance({ accountId, assetId: target.assetId })).posted).toBe('500');
+    expect(success(await ledger.readBalance({ accountId, assetId: target.assetId })).posted).toBe('507');
 
     const pending = await native.port.begin(deposit('production-disabled', '25'));
     expect(await runWorker('production', target)).toEqual({
@@ -206,7 +246,7 @@ test('a local worker recovers a lost claim while live and obsolete test work sta
       advanced: null,
     });
     expect(success(await store.read(pending.intentId))).toMatchObject({ phase: 'submitted' });
-    expect(success(await ledger.readBalance({ accountId, assetId: target.assetId })).posted).toBe('500');
+    expect(success(await ledger.readBalance({ accountId, assetId: target.assetId })).posted).toBe('507');
   } finally {
     await client.deleteSchedule(ECONOMY_TEST_FUNDING_WORK.scheduleName);
     await client.close();
