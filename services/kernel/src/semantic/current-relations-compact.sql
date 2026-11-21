@@ -46,9 +46,12 @@ WITH input AS MATERIALIZED (
     SELECT f.kind, f.language, f.property, f.statement_id, f.operation, f.relation, f.body,
            revision.release, revision.revision
     FROM semantic.fact AS f
-    JOIN semantic.revision AS revision
-      ON revision.route = f.route AND revision.subject_id = f.subject_id
-     AND revision.recorded_transaction_id = f.recorded_transaction_id
+    JOIN LATERAL (
+      SELECT r.release, r.revision FROM semantic.revision AS r
+      WHERE r.recorded_transaction_id = f.recorded_transaction_id
+        AND r.route = f.route AND r.subject_id = f.subject_id
+      LIMIT 1
+    ) AS revision ON true
     WHERE f.route = slot_state.route AND f.subject_id = slot_state.subject_id
       AND f.slot_id = slot_state.slot_id AND f.statement_id = slot_state.candidate_id
       AND f.statement_id IS NOT NULL AND f.kind = 'statement'

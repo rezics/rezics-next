@@ -21,6 +21,7 @@ LEFT JOIN LATERAL (
     SELECT statement_id, body, operation, log_seq FROM semantic.fact
     WHERE route = requested.route AND subject_id = requested.id AND slot_id = requested.original
       AND route >= requested.partition_no * 16 AND route < (requested.partition_no + 1) * 16
+    ORDER BY log_seq DESC
   ), live AS (
     SELECT statement_id AS id, body, log_seq::bigint AS ordinal FROM (
       SELECT DISTINCT ON (statement_id) statement_id, body, operation, log_seq

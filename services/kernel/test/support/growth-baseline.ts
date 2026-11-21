@@ -97,11 +97,6 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
     file: 'services/kernel/test/relay-effects.test.ts',
     reason: 'B: docs/research/growth-shadow-triage-other.md',
   },
-  {
-    name: 'A subject read examines the same rows whatever the number of relations it holds',
-    file: 'services/kernel/test/semantic/growth-relations.test.ts',
-    reason: 'B: docs/research/growth-shadow-triage-other.md',
-  },
 ] as const;
 
 const repositoryRoot = resolve(import.meta.dir, '../../../../');

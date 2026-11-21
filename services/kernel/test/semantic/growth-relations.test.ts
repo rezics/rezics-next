@@ -27,17 +27,18 @@ import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const role = newId(513 * 16);
-const arc = newId(513 * 16);
 const NIL = '00000000-0000-0000-0000-000000000000';
 const BASE_ROUTE = 513 * 16;
+const role = newId(BASE_ROUTE);
+const arc = newId(BASE_ROUTE);
 const PREVIEW = 12;
 const PAGE_SIZE = 25;
 const properties = bundledRelease.types['schema:Book']!.properties;
 const relationProperties = properties.filter((property) => isRelationProperty(bundledRelease, property));
 const DESCRIPTIVE_FACTS = 1;
 const descriptiveProperties = properties.length - relationProperties.length;
-// Native descents into growing subject/fact/revision/outbound/counter indexes, from Semantic Cost:
+// Retain the block allowance derived for the original access paths. The assertions below verify
+// the current, batched paths independently. The original allocation was:
 // F=1 descriptive label; p=the fixed Book relation properties; only author has a nonempty preview.
 // Initial read: subject + latest revision + fact_terms + F revision_transaction probes.
 // Each empty descriptive slot: operation + compact fact_pkey probes (no provenance rows).
@@ -417,9 +418,9 @@ function assertPlans(raw: Capture, scale: number): void {
   assertUnforcedIndexes('A subject read and forward page', scale, raw, {
     'semantic.subject': 'subject_pkey',
     'semantic.revision': 'revision_pkey',
-    'semantic.fact': ['fact_terms', 'fact_label'],
+    'semantic.fact': 'search_fact_terms',
+    'semantic.term_head': 'term_head_active',
     'semantic.outbound_link': 'outbound_link_present',
-    'semantic.outbound_link_count': 'outbound_link_count_pkey',
   });
   function requireIndex(plans: unknown, index: string, keys: string[], bound: number): void {
     const matching = nodes(plans).filter((node) => node['Index Name'] === index && Number(node['Actual Loops']) > 0);
@@ -430,7 +431,8 @@ function assertPlans(raw: Capture, scale: number): void {
     }
   }
   requireIndex(initial, 'subject_pkey', ['route', 'subject_id'], 1);
-  requireIndex(initial, 'fact_terms', ['route', 'subject_id'], DESCRIPTIVE_FACTS);
+  requireIndex(initial, 'term_head_active', ['route', 'subject_id'], DESCRIPTIVE_FACTS);
+  requireIndex(initial, 'search_fact_terms', ['route', 'subject_id', 'slot_id', 'log_seq'], DESCRIPTIVE_FACTS);
   requireIndex(initial, 'revision_pkey', ['route', 'subject_id'], 1);
   requireIndex(initial, 'revision_transaction', ['recorded_transaction_id', 'route', 'subject_id'], 1);
   const all = nodes(raw.plans);
@@ -450,40 +452,74 @@ function assertPlans(raw: Capture, scale: number): void {
     )
       expect(node['Node Type']).not.toBe('Seq Scan');
   }
-  // Summaries preserve label retractions, so the source predicate uses fact_terms rather than the assert-only
-  // fact_label partial index. Require the keyed source access and bound its examined rows.
+  // Current labels must have a live term head. Both qualifier Subjects are disclosed with the page targets.
   const summaries = raw.plans.filter((plan) => JSON.stringify(plan).includes('AS latest WHERE operation'));
   expect(summaries).toHaveLength(2);
   for (const [index, plan] of summaries.entries()) {
-    const subjects = index === 0 ? 1 : PAGE_SIZE;
+    const subjects = index === 0 ? 1 : PAGE_SIZE + 2;
     requireIndex(plan, 'subject_pkey', ['route', 'subject_id'], subjects);
-    requireIndex(plan, 'fact_terms', ['route', 'subject_id'], subjects);
+    requireIndex(plan, 'term_head_active', ['route', 'subject_id'], subjects);
+    requireIndex(plan, 'fact_label', ['route', 'subject_id'], subjects);
+    for (const node of nodes(plan).filter((node) => node['Relation Name'] === 'fact'))
+      expect(examined(node)).toBeLessThanOrEqual(subjects);
   }
+  const compact = raw.plans.filter((plan) => JSON.stringify(plan).includes('AS fact_statement_id'));
+  expect(compact).toHaveLength(2);
+  for (const [index, plan] of compact.entries()) {
+    requireIndex(
+      plan,
+      'revision_transaction',
+      ['recorded_transaction_id', 'route', 'subject_id'],
+      index === 0 ? PREVIEW : PAGE_SIZE,
+    );
+  }
+  const scalarHeads = raw.plans.filter((plan) => JSON.stringify(plan).includes('AS wanted(slot_id)'));
+  expect(scalarHeads).toHaveLength(1);
+  const slotSeek = nodes(scalarHeads).filter((node) => node['Relation Name'] === 'fact');
+  expect(slotSeek).toHaveLength(1);
+  expect(slotSeek[0]!['Node Type']).toBe('Index Scan');
+  expect(Number(slotSeek[0]!['Actual Loops'])).toBe(descriptiveProperties);
+  for (const key of ['route', 'subject_id', 'slot_id']) expect(String(slotSeek[0]!['Index Cond'])).toContain(key);
+  expect(examined(slotSeek[0]!)).toBeLessThanOrEqual(descriptiveProperties);
+  const linkKeys = [
+    'route',
+    'subject_id',
+    'context_id',
+    'property',
+    'filter_value',
+    'order_key',
+    'target_subject_id',
+    'statement_id',
+  ];
+  const global = raw.plans.filter((plan) => JSON.stringify(plan).includes('AS wanted(property)'));
+  expect(global).toHaveLength(1);
+  const globalNodes = nodes(global[0]);
+  // Only schema:author is populated. Its preview includes the sentinel and the other properties remain empty.
+  expect(Number(globalNodes[0]!['Actual Rows'])).toBe(PREVIEW + 1);
+  const limits = globalNodes.filter((node) => node['Node Type'] === 'Limit');
+  expect(limits).toHaveLength(1);
+  expect(Number(limits[0]!['Actual Loops'])).toBe(relationProperties.length);
+  const seeks = nodes(limits[0]).filter((node) => node['Relation Name'] === 'outbound_link');
+  expect(seeks).toHaveLength(1);
+  expect(seeks[0]!['Index Name']).toBe('outbound_link_present');
+  expect(Number(seeks[0]!['Actual Loops'])).toBe(relationProperties.length);
+  requireIndex(limits[0], 'outbound_link_present', linkKeys, relationProperties.length * (PREVIEW + 1));
+  const payload = globalNodes.filter((node) => node['Alias'] === 'payload');
+  expect(payload).toHaveLength(1);
+  expect(Number(payload[0]!['Actual Loops'])).toBe(PREVIEW + 1);
+  requireIndex(global[0], 'outbound_link_pkey', linkKeys, PREVIEW + 1);
+
   const ranges = raw.plans.filter(
     (plan) => JSON.stringify(plan).includes('r_after_order') && JSON.stringify(plan).includes('sort_statement'),
   );
-  expect(ranges).toHaveLength(relationProperties.length + 1);
-  for (const [index, plan] of ranges.entries()) {
-    const limit = index < relationProperties.length ? PREVIEW + 1 : PAGE_SIZE + 1;
-    requireIndex(
-      plan,
-      'outbound_link_present',
-      [
-        'route',
-        'subject_id',
-        'context_id',
-        'property',
-        'filter_value',
-        'order_key',
-        'target_subject_id',
-        'statement_id',
-      ],
-      limit,
-    );
-    for (const node of nodes(plan).filter((node) => node['Relation Name'] === 'outbound_link'))
-      expect(examined(node)).toBeLessThanOrEqual(limit);
-  }
-  requireIndex(raw.plans, 'outbound_link_count_pkey', ['route', 'subject_id', 'property', 'filter_value'], 1);
+  expect(ranges).toHaveLength(1);
+  requireIndex(ranges[0], 'outbound_link_present', linkKeys, PAGE_SIZE + 1);
+  for (const node of nodes(ranges[0]).filter((node) => node['Relation Name'] === 'outbound_link'))
+    expect(examined(node)).toBeLessThanOrEqual(PAGE_SIZE + 1);
+  // Neither the full preview nor a middle page proves exhaustion of the public relation set.
+  expect(
+    all.filter((node) => node['Relation Name'] === 'outbound_link_count' && Number(node['Actual Loops']) > 0),
+  ).toHaveLength(0);
   console.info(
     'Native index plans',
     JSON.stringify({
@@ -511,6 +547,7 @@ function middleCursor(size: number): string {
         filter: arc,
         type: null,
         language: null,
+        release: bundledDigest,
       },
     },
     { epoch: 1, after: [key, target, statementId] },
@@ -538,17 +575,14 @@ async function setCheckpoint(database: GrowthDatabase, position: bigint): Promis
   );
 }
 
-async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise<void> {
-  anchor = newId(BASE_ROUTE);
-  anchorRoute = routeOf(anchor)!;
-  unrelatedPopulation = unrelatedSemanticPopulation(`growth-relations-${label}`, partitionOf(anchorRoute)).population;
+async function createVisibleFixtureSubject(id: string, type: string, label: string) {
   const editor = await authenticatedEditor();
   await createSubject(db.pool, {
     actor: editor,
-    target: { route: anchorRoute, id: anchor },
+    target: { route: routeOf(id)!, id },
     idempotencyKey: randomUUID(),
     digest,
-    item: { type: 'schema:Book', labels: { en: label } },
+    item: { type, labels: { en: label } },
     release: { digest: bundledDigest, release: bundledRelease },
     authorization: await accessCommandAuthorization(
       access,
@@ -559,6 +593,13 @@ async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise
       () => new Error('Relation growth fixture authorization denied'),
     ),
   });
+}
+
+async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise<void> {
+  anchor = newId(BASE_ROUTE);
+  anchorRoute = routeOf(anchor)!;
+  unrelatedPopulation = unrelatedSemanticPopulation(`growth-relations-${label}`, partitionOf(anchorRoute)).population;
+  await createVisibleFixtureSubject(anchor, 'schema:Book', label);
   const head = await actualHead(db);
   historyPositionBase = Number(head.position) + 1_000;
   people = Array.from({ length: 4_096 }, () => newId(anchorRoute));
@@ -579,6 +620,9 @@ beforeAll(async () => {
   await realAccess.grant(globalResource, 'editor', 'subject:create');
   await bootstrapRelease(db.pool, bundledRelease);
   await activeRelease(db.pool);
+  // Each displayed author references two independently disclosed qualifier Subjects.
+  await createVisibleFixtureSubject(role, 'skos:Concept', 'Author role');
+  await createVisibleFixtureSubject(arc, 'skos:Concept', 'Narrative arc');
   await initializeGrowthAnchor();
 }, 60_000);
 
@@ -607,7 +651,6 @@ test('A subject read examines the same rows whatever the number of relations it 
     warmups: 1,
     repetitions: 5,
     includeBackends: true,
-    rule: 'series',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     indexProbes,
     warmup: operation,
@@ -626,6 +669,7 @@ test('A subject read examines the same rows whatever the number of relations it 
     },
     operation,
   });
+  expect(report.rule).toBe('series');
   expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
   logGrowthSeeding(report);
   mkdirSync(evidenceDirectory, { recursive: true });
