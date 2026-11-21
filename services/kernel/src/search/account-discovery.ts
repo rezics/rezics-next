@@ -814,9 +814,7 @@ export function createDiscoveryProjection(options: {
           actions.some((action) => discoveryPartition(parseDiscoveryDocumentKey(registry, action.id).id) !== partition)
         )
           throw new RangeError('Foreign discovery action');
-        await applyActions(actions, repair, null, {
-          ordinaryHome: !repair && actions.length > 0 ? partition : undefined,
-        });
+        await applyActions(actions, repair, null, !repair && actions.length > 0 ? { ordinaryHome: partition } : {});
       }
     }
   }
