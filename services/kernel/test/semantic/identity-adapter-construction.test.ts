@@ -229,7 +229,7 @@ test('ordinary identity, reviewed Person and Rating participant use the same con
 
     const mappings = await readIdentityMappings(pool, [original]);
     expect(reads.length).toBeGreaterThan(0);
-    expect(mappings).toEqual([{ state: 'unavailable', reason: 'bootstrap' }]);
+    expect(mappings).toEqual([{ state: 'unavailable', reason: 'missing-owner' }]);
 
     await expect(
       observeReviewedPersonIdentity(tx(), original, { source: 'vndb', externalId: 's1' }, new Uint8Array(32), {
@@ -432,8 +432,8 @@ test('two constructed applications retain independent capabilities across store,
 
     const mappingsA = await applicationA.read.readIdentityMappings(pool, [original]);
     const mappingsB = await readIdentityMappings(pool, [original]);
-    expect(mappingsA).toEqual([{ state: 'unavailable', reason: 'bootstrap' }]);
-    expect(mappingsB).toEqual([{ state: 'unavailable', reason: 'bootstrap' }]);
+    expect(mappingsA).toEqual([{ state: 'unavailable', reason: 'missing-owner' }]);
+    expect(mappingsB).toEqual([{ state: 'unavailable', reason: 'missing-owner' }]);
 
     await expect(
       applicationA.reviewedPerson.guard(

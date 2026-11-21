@@ -40,6 +40,7 @@ export type NativeIdentityQueryable = Readonly<{
 /** Narrow released-home read used by mapping and rating-review readers. */
 export type NativeIdentityRead = Readonly<{
   requestDeadline(): number;
+  withReadStatement?<T>(pool: Pool, read: (client: PoolClient) => Promise<T>, deadline: number): Promise<T>;
   withReadTransaction<T>(pool: Pool, read: (client: PoolClient) => Promise<T>, deadline?: number): Promise<T>;
 }>;
 

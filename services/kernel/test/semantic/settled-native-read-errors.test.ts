@@ -7,7 +7,7 @@ import { DefinitionAccessDeniedError } from '../../src/semantic/contract/definit
 import { createNativeDefinitionCatalogue } from '../../src/semantic/definition-catalogue.ts';
 import type { NativeIdentityCapabilities } from '../../src/semantic/identity-adapter-port.ts';
 import { createIdentityReaders } from '../../src/semantic/identity-adapters/identity-epoch-read.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadStatement, withReadTransaction } from '../../src/semantic/read.ts';
 
 type Consumer = 'catalogue' | 'identity';
 type Row = Record<string, unknown>;
@@ -65,7 +65,7 @@ function fixture(consumer: Consumer) {
           };
         },
         release() {
-          if (transaction) controls.cleanup();
+          if (transaction || consumer === 'identity') controls.cleanup();
         },
       } as unknown as PoolClient;
     },
@@ -78,7 +78,7 @@ function fixture(consumer: Consumer) {
   };
   const catalogue = createNativeDefinitionCatalogue({ pool, access });
   const identity = createIdentityReaders({
-    read: { withReadTransaction, requestDeadline: () => deadline },
+    read: { withReadStatement, withReadTransaction, requestDeadline: () => deadline },
   } as NativeIdentityCapabilities);
   const read = (requestDeadline = deadline) =>
     consumer === 'catalogue'
@@ -163,6 +163,7 @@ for (const consumer of ['catalogue', 'identity'] as const) {
         try {
           f.controls.read = async (rows, current) => {
             if (current !== observation) return rows;
+            f.controls.cleanup = f.expire;
             if (kind !== 'decode') throw failure;
             Object.defineProperty(rows[0]!, consumer === 'catalogue' ? 'root_digest' : 'basis', {
               get() {
@@ -171,7 +172,6 @@ for (const consumer of ['catalogue', 'identity'] as const) {
             });
             return rows;
           };
-          f.controls.cleanup = f.expire;
           if (reason) {
             const error = await f.read().catch((error: unknown) => error);
             expect(error).toBeInstanceOf(AccessUnavailableError);
@@ -191,7 +191,8 @@ for (const consumer of ['catalogue', 'identity'] as const) {
     try {
       await expect(f.read(Date.now())).rejects.toMatchObject({ reason: 'deadline' });
       expect(f.checkouts()).toBe(0);
-      f.controls.commit = f.expire;
+      if (consumer === 'identity') f.controls.cleanup = f.expire;
+      else f.controls.commit = f.expire;
       await expect(f.read()).rejects.toMatchObject({ reason: 'deadline' });
       await f.recover();
     } finally {

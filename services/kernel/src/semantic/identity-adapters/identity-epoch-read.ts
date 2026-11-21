@@ -645,15 +645,13 @@ async function readIdentityBasisWith(
   options: { deadline: number },
 ): Promise<BasisRead> {
   const { deadline } = options;
+  // Each ordered vector comes from a single statement snapshot. Keep the two observations independent.
+  const observe = capabilities.read.withReadStatement ?? capabilities.read.withReadTransaction;
   try {
     requireAccessDeadline(deadline);
-    const first = await withRequestDeadline(deadline, () =>
-      capabilities.read.withReadTransaction(pool, readIdentityShards, deadline),
-    );
+    const first = await withRequestDeadline(deadline, () => observe(pool, readIdentityShards, deadline));
     requireAccessDeadline(deadline);
-    const second = await withRequestDeadline(deadline, () =>
-      capabilities.read.withReadTransaction(pool, readIdentityShards, deadline),
-    );
+    const second = await withRequestDeadline(deadline, () => observe(pool, readIdentityShards, deadline));
     requireAccessDeadline(deadline);
     if (first === null || first !== second) return { state: 'not_ready' };
     return { state: 'ready', basis: { digest: first } };

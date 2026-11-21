@@ -45,8 +45,11 @@ export function currentReadSnapshot(pool: Pool): PoolClient | undefined {
 }
 
 /** A single native SELECT has its own snapshot. Reuse a caller's repeatable-read snapshot when present. */
-export function withReadStatement<T>(pool: Pool, read: (client: PoolClient) => Promise<T>): Promise<T> {
-  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+export function withReadStatement<T>(
+  pool: Pool,
+  read: (client: PoolClient) => Promise<T>,
+  deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
+): Promise<T> {
   if (currentReadSnapshot(pool)) return withReadTransaction(pool, read, deadline);
   requireAccessDeadline(deadline);
   return withBoundedReadConnection(pool, deadline, read, readLifetimeOptions);

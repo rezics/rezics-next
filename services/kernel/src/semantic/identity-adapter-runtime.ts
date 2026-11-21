@@ -20,7 +20,7 @@ import {
   classifyUnavailability as classifyAccessUnavailability,
 } from '../access/unavailable.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadStatement, withReadTransaction } from './read.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { nativeRatingReview } from './adapters/rating-review.ts';
 import { EditorialConflictError } from './contract/subject-errors.ts';
@@ -43,6 +43,7 @@ function nativeLeaves(): Omit<NativeIdentityCapabilities, 'reviewedPerson' | 'ad
     read: Object.freeze({
       requestDeadline: () => deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
       withReadTransaction,
+      withReadStatement,
     }),
     command: Object.freeze({
       currentCommand,
