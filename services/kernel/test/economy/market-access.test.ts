@@ -149,7 +149,7 @@ test('private market uses exact grant and operator policy through the native fix
   });
 
   const paths = Object.entries(openApiDocument(app).paths).filter(([path]) => path.startsWith(`${base}/`));
-  expect(paths).toHaveLength(7);
+  expect(paths).toHaveLength(6);
   for (const [, path] of paths)
     for (const entry of Object.values(path)) {
       expect(entry).toMatchObject({ 'x-exposure': 'gate:economy', security: [{ bearerAuth: [] }] });
