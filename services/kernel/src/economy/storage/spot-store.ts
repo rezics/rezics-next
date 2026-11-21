@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import type { EconomyFailure, EconomyLedger, SpotFillSettlement } from '../contract.ts';
+import { isEconomyBookId, type EconomyFailure, type EconomyLedger, type SpotFillSettlement } from '../contract.ts';
 import {
   acceptSpotOrder,
   cancelSpotOrder,
@@ -235,7 +235,7 @@ async function save<T>(tx: Query, work: () => Promise<Result<T>>): Promise<Resul
 
 /** Private owner port. All ledger calls participate in the book's native transaction. */
 export function createSpotStore(database: EconomyDatabase, bookId: string) {
-  if (!key.test(bookId)) throw new TypeError('Invalid Economy spot book ID');
+  if (!isEconomyBookId(bookId)) throw new TypeError('Invalid Economy spot book ID');
 
   async function run<T>(
     operation: 'transaction' | 'read',

@@ -1,3 +1,5 @@
+import { isEconomyBookId } from '../contract.ts';
+
 export const SPOT_MATCH_FILL_LIMIT = 32;
 export const SPOT_MATCH_PRICE_LEVEL_LIMIT = 16;
 export const SPOT_MATCH_WINDOW_LIMIT = SPOT_MATCH_FILL_LIMIT + 1;
@@ -128,7 +130,7 @@ function perLotFee(quoteUnits: bigint, feeBps: bigint): bigint {
 function validInstrument(instrument: SpotInstrument): boolean {
   return (
     keyPattern.test(instrument.id) &&
-    keyPattern.test(instrument.ledgerBookId) &&
+    isEconomyBookId(instrument.ledgerBookId) &&
     keyPattern.test(instrument.baseAssetId) &&
     keyPattern.test(instrument.quoteAssetId) &&
     instrument.baseAssetId !== instrument.quoteAssetId &&

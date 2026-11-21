@@ -3,6 +3,7 @@ import { createNativeRatingCapabilities } from './rating/module.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
 import { isEconomyBookId } from './economy/contract.ts';
 import { createNativeEconomyWallet } from './composition/economy.ts';
+import { createNativeEconomySpot } from './composition/economy-spot.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
@@ -249,12 +250,17 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       clock: defaults.clock,
       ...(search === undefined ? {} : { search }),
     });
-    const economy =
+    const economyConfig =
       config.economyBookId === undefined || config.economyNode === undefined
         ? undefined
-        : createNativeEconomyWallet(pool, { bookId: config.economyBookId, node: config.economyNode });
+        : { bookId: config.economyBookId, node: config.economyNode };
     app = createKernel({
-      ...(economy === undefined ? {} : { economy }),
+      ...(economyConfig === undefined
+        ? {}
+        : {
+            economy: createNativeEconomyWallet(pool, economyConfig),
+            economySpot: createNativeEconomySpot(pool, economyConfig),
+          }),
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
       pool,

@@ -1,9 +1,9 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { lockNativeEconomyAdmission } from '../access/index.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { BoundedReadDeadlineError, withBoundedCommandConnection, withBoundedReadConnection } from '../database/pool.ts';
 import type { EconomyLedger, EconomyResult, EconomyWalletPort } from '../economy/contract.ts';
-import { createEconomyLedger } from '../economy/ledger.ts';
+import { createEconomyLedger, type EconomyDatabase } from '../economy/ledger.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
 const budgetMillis = 2_000;
@@ -26,37 +26,37 @@ async function classify<T>(run: () => Promise<EconomyResult<T>>): Promise<Econom
   }
 }
 
-function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<EconomyResult<T>>) {
-  return classify(() =>
-    withBoundedCommandConnection(pool, Date.now() + budgetMillis, async (client) => {
-      await client.query('BEGIN');
-      const result = await work(client);
-      await client.query('COMMIT');
-      return result;
-    }),
-  );
+export function createNativeEconomyDatabase(pool: Pool, requestDeadline = Number.POSITIVE_INFINITY): EconomyDatabase {
+  const deadline = () => Math.min(requestDeadline, Date.now() + budgetMillis);
+  return {
+    transaction: (work) =>
+      classify(() =>
+        withBoundedCommandConnection(pool, deadline(), async (client) => {
+          await client.query('BEGIN');
+          const result = await work(client);
+          await client.query('COMMIT');
+          return result;
+        }),
+      ),
+    read: (work) => classify(() => withBoundedReadConnection(pool, deadline(), work)),
+  };
 }
 
 /** Book-owner storage for test issuance and source-bound settlement. Private HTTP uses the wallet port below. */
 export function createNativeEconomyLedger(pool: Pool, bookId: string): EconomyLedger {
-  return createEconomyLedger(
-    {
-      transaction: (work) => transaction(pool, work),
-      read: (work) => classify(() => withBoundedReadConnection(pool, Date.now() + budgetMillis, work)),
-    },
-    bookId,
-  );
+  return createEconomyLedger(createNativeEconomyDatabase(pool), bookId);
 }
 
 export function createNativeEconomyWallet(
   pool: Pool,
   { bookId, node }: { bookId: string; node: string },
 ): EconomyWalletPort {
+  const database = createNativeEconomyDatabase(pool);
   function admitted<T>(
     parties: { accountId: string; recipientId?: string },
     operation: (ledger: EconomyWalletPort) => Promise<EconomyResult<T>>,
   ): Promise<EconomyResult<T>> {
-    return transaction<T>(pool, async (client) => {
+    return database.transaction<T>(async (client) => {
       const admission = await lockNativeEconomyAdmission(client, { node, ...parties });
       if (admission === 'unavailable') return { kind: 'unavailable' };
       if (admission === 'source_denied') throw new ProblemError('platform_closed');
