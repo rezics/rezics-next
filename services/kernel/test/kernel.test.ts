@@ -266,6 +266,7 @@ const typed = [
   'POST /v1/economy/spot/:instrumentId/orders',
   'POST /v1/economy/spot/:instrumentId/orders/:orderId/cancel',
   'POST /v1/economy/market/listings',
+  'GET /v1/economy/market/listings',
   'GET /v1/economy/market/listings/:listingId',
   'POST /v1/economy/market/listings/:listingId/purchases',
   'POST /v1/economy/market/listings/:listingId/cancel',

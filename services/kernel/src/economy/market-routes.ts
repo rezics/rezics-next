@@ -37,7 +37,8 @@ type PrivateTrade = Readonly<{
   fee: string;
   sellerNet: string;
 }>;
-type MarketTradePosition = readonly [startedAt: string, tradeId: string];
+type MarketPagePosition = readonly [time: string, id: string];
+type PageRequest = Request & { limit: number; after: MarketPagePosition | null };
 type ListedTrade = PrivateTrade & Readonly<{ startedAt: string }>;
 
 /** The mounted transport accepts a caller identity. The native port proves it again before each owner operation. */
@@ -45,10 +46,9 @@ export interface EconomyMarketPort {
   readonly bookId: string;
   readonly itemHomeId: string;
   readListing(input: Request & { listingId: string }): Promise<PrivateListing>;
+  listListings(input: PageRequest): Promise<{ listings: PrivateListing[]; after: MarketPagePosition | null }>;
   readTrade(input: Request & { tradeId: string }): Promise<PrivateTrade>;
-  listTrades(
-    input: Request & { limit: number; after: MarketTradePosition | null },
-  ): Promise<{ trades: ListedTrade[]; after: MarketTradePosition | null }>;
+  listTrades(input: PageRequest): Promise<{ trades: ListedTrade[]; after: MarketPagePosition | null }>;
   createListing(
     input: Command & { itemId: string; generation: string; assetId: string; amount: string },
   ): Promise<{ listingId: string }>;
@@ -93,9 +93,21 @@ const tradeFields = {
   ]),
 };
 const trade = t.Object(tradeFields, closed);
+const listingsPath = '/v1/economy/market/listings';
 const tradesPath = '/v1/economy/market/trades';
 const maxPage = 100;
 const cursor = t.String({ minLength: 1, maxLength: 4096 });
+const pageQuery = t.Object(
+  {
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: maxPage, multipleOf: 1 })),
+    cursor: t.Optional(cursor),
+  },
+  closed,
+);
+const listingPage = t.Object(
+  { listings: t.Array(listing, { maxItems: maxPage }), next: t.Union([cursor, t.Null()]) },
+  closed,
+);
 const tradePage = t.Object(
   {
     trades: t.Array(t.Object({ ...tradeFields, startedAt: amount }, closed), { maxItems: maxPage }),
@@ -104,15 +116,15 @@ const tradePage = t.Object(
   closed,
 );
 
-function isTradePosition(value: readonly (string | number)[]): value is MarketTradePosition {
-  const [startedAt, tradeId] = value;
+function isMarketPosition(value: readonly (string | number)[]): value is MarketPagePosition {
+  const [time, id] = value;
   return (
     value.length === 2 &&
-    typeof startedAt === 'string' &&
-    /^(0|[1-9][0-9]{0,18})$/.test(startedAt) &&
-    BigInt(startedAt) <= (1n << 63n) - 1n &&
-    typeof tradeId === 'string' &&
-    /^[0-9a-f]{64}$/.test(tradeId)
+    typeof time === 'string' &&
+    /^(0|[1-9][0-9]{0,18})$/.test(time) &&
+    BigInt(time) <= (1n << 63n) - 1n &&
+    typeof id === 'string' &&
+    /^[0-9a-f]{64}$/.test(id)
   );
 }
 
@@ -163,9 +175,38 @@ export function economyMarketRoutes(
     }
   }
 
+  function readPage<Page extends { after: MarketPagePosition | null }>(
+    ctx: MarketScope,
+    path: string,
+    query: { limit?: number; cursor?: string },
+    read: (port: EconomyMarketPort, input: PageRequest) => Promise<Page>,
+  ) {
+    return run(ctx, async (port, request) => {
+      const limit = query.limit ?? 20;
+      const binding: ListCursorBinding = {
+        route: `GET ${path}`,
+        viewer: request.accountId.toLowerCase(),
+        query: { bookId: port.bookId, itemHomeId: port.itemHomeId, limit },
+      };
+      const at = deps.clock();
+      let after: MarketPagePosition | null = null;
+      if (query.cursor !== undefined) {
+        const decoded = await decodeListCursor(deps.cursorKeys, binding, query.cursor, at);
+        if (!decoded.ok || decoded.epoch !== 1 || !isMarketPosition(decoded.after))
+          throw new ProblemError('invalid_cursor');
+        after = decoded.after;
+      }
+      const { after: next, ...fields } = await read(port, { ...request, limit, after });
+      return {
+        ...fields,
+        next: next === null ? null : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: next }, at),
+      };
+    });
+  }
+
   return app
     .post(
-      '/v1/economy/market/listings',
+      listingsPath,
       {
         headers,
         body: t.Object({ itemId: nativeId, generation: positive, assetId: nativeId, amount: positive }, closed),
@@ -181,6 +222,18 @@ export function economyMarketRoutes(
             operationId: idempotencyKeyOf(ctx.headers[IDEMPOTENCY_HEADER]),
           }),
         );
+      },
+    )
+    .get(
+      listingsPath,
+      {
+        query: pageQuery,
+        response: { 200: listingPage, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('market.read_listings', 'market:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return readPage(ctx, listingsPath, ctx.query, (port, input) => port.listListings(input));
       },
     )
     .get(
@@ -240,42 +293,13 @@ export function economyMarketRoutes(
     .get(
       tradesPath,
       {
-        query: t.Object(
-          {
-            limit: t.Optional(t.Numeric({ minimum: 1, maximum: maxPage, multipleOf: 1 })),
-            cursor: t.Optional(cursor),
-          },
-          closed,
-        ),
+        query: pageQuery,
         response: { 200: tradePage, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
         detail: detail('market.read_trades', 'market:read'),
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return run(ctx, async (port, request) => {
-          const limit = ctx.query.limit ?? 20;
-          const binding: ListCursorBinding = {
-            route: `GET ${tradesPath}`,
-            viewer: request.accountId.toLowerCase(),
-            query: { bookId: port.bookId, itemHomeId: port.itemHomeId, limit },
-          };
-          const at = deps.clock();
-          let after: MarketTradePosition | null = null;
-          if (ctx.query.cursor !== undefined) {
-            const decoded = await decodeListCursor(deps.cursorKeys, binding, ctx.query.cursor, at);
-            if (!decoded.ok || decoded.epoch !== 1 || !isTradePosition(decoded.after))
-              throw new ProblemError('invalid_cursor');
-            after = decoded.after;
-          }
-          const page = await port.listTrades({ ...request, limit, after });
-          return {
-            trades: page.trades,
-            next:
-              page.after === null
-                ? null
-                : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: page.after }, at),
-          };
-        });
+        return readPage(ctx, tradesPath, ctx.query, (port, input) => port.listTrades(input));
       },
     )
     .get(

@@ -149,7 +149,7 @@ test('private market uses exact grant and operator policy through the native fix
   });
 
   const paths = Object.entries(openApiDocument(app).paths).filter(([path]) => path.startsWith(`${base}/`));
-  expect(paths).toHaveLength(6);
+  expect(paths).toHaveLength(7);
   for (const [, path] of paths)
     for (const entry of Object.values(path)) {
       expect(entry).toMatchObject({ 'x-exposure': 'gate:economy', security: [{ bearerAuth: [] }] });
@@ -177,6 +177,12 @@ test('private market uses exact grant and operator policy through the native fix
   const listingPath = `${base}/listings/${listingId}`;
   const listed = await request(listingPath, buyerToken);
   expect(listed.status).toBe(200);
+  const discovered = await request(`${base}/listings`, viewerToken);
+  expect(discovered.status).toBe(200);
+  expect(await discovered.json()).toMatchObject({
+    listings: [{ listingId, amount: price, status: 'open' }],
+    next: null,
+  });
   expect(listed.headers.get('cache-control')).toBe('private, no-store');
   expect(await listed.json()).toMatchObject({
     listingId,
