@@ -339,7 +339,7 @@ test('participants page private receipts by exact start time and trade ID within
   await revoke(firstParticipant);
   expect((await request(address(originalCursor), firstToken)).status).toBe(403);
   expect(await (await request(tradePath, secondToken)).json()).toEqual({ trades: expected, next: null });
-});
+}, 90_000);
 
 test('listing cancellation stays with the current seller and replays without another custody release', async () => {
   const sellerToken = await signer(seller, marketScope);

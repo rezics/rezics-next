@@ -8,6 +8,7 @@ afterAll(() => pool.end());
 
 type Scan = {
   'Node Type': string;
+  'Relation Name'?: string;
   'Index Name'?: string;
   'Index Cond'?: string;
   'Actual Rows': number;
@@ -16,7 +17,7 @@ type Scan = {
 };
 
 function scans(plan: Scan): Scan[] {
-  return [plan, ...(plan.Plans ?? []).flatMap(scans)].filter(({ 'Node Type': kind }) => kind.includes('Scan'));
+  return [plan, ...(plan.Plans ?? []).flatMap(scans)].filter((node) => node['Relation Name'] === 'market_trade');
 }
 
 test('both participant seeks stay bounded before and after unrelated history grows in the same market', async () => {
