@@ -1,20 +1,30 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, expect, test } from 'bun:test';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { createAccess } from '../../src/access/index.ts';
+import { readReceiptKeyRing } from '../../src/command/receipt-key.ts';
 import { createNativeEconomyDatabase, createNativeEconomyLedger } from '../../src/composition/economy.ts';
 import {
   ECONOMY_CREDIT_EXPIRY_WORK,
   ECONOMY_MARKET_OWNER_WORK,
   ECONOMY_SPOT_OWNER_WORK,
 } from '../../src/composition/economy-owner-work.ts';
+import { createNativeEconomySpot } from '../../src/composition/economy-spot.ts';
+import { ECONOMY_SPOT_MATCH_WAKE, withCommittedSpotWake } from '../../src/composition/economy-spot-wake.ts';
+import type { SpotAccessPort } from '../../src/economy/spot-routes.ts';
 import type { AssetProgram } from '../../src/economy/contract.ts';
 import { createEconomyLedger } from '../../src/economy/ledger.ts';
 import { marketTradeStatus } from '../../src/economy/market/trade.ts';
 import { createNativeMarket } from '../../src/economy/storage/market-runner.ts';
 import type { MarketStoreDatabase } from '../../src/economy/storage/market-store.ts';
 import { createSpotStore } from '../../src/economy/storage/spot-store.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { openBroadEconomyAdmission } from './fixtures/broad-admission.ts';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
 const databaseUrl = process.env.DATABASE_URL;
@@ -33,7 +43,9 @@ async function runWorker(
 ): Promise<unknown> {
   const program = `
     import { startWorker, readWorkerConfig } from './src/worker.ts';
-    import { createWorkClient } from './src/work/client.ts';
+    import { createKernel } from '../../src/http/kernel.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { createWorkClient } from './src/work/client.ts';
     import {
       ECONOMY_CREDIT_EXPIRY_WORK as expiry,
       ECONOMY_MARKET_OWNER_WORK as market,
@@ -90,17 +102,16 @@ async function runWorker(
   }
 }
 
-async function spotFixture(bookId: string) {
+async function spotFixture(bookId: string, seller: string = randomUUID()) {
   const ledger = createNativeEconomyLedger(pool, bookId);
   const store = createSpotStore(createNativeEconomyDatabase(pool), bookId);
   const buyer = randomUUID();
-  const seller = randomUUID();
   const feeAccountId = randomUUID();
   for (const id of ['base', 'quote']) value(await ledger.provisionAsset({ id, scale: 0, transferable: true }));
   value(await ledger.issue({ accountId: seller, assetId: 'base', amount: '100', operationId: 'base-opening' }));
   value(await ledger.issue({ accountId: buyer, assetId: 'quote', amount: '100', operationId: 'quote-opening' }));
 
-  async function acceptSell(id: string) {
+  async function provisionInstrument(id: string) {
     value(
       await store.provision({
         id,
@@ -115,6 +126,10 @@ async function spotFixture(bookId: string) {
         feeAccountId,
       }),
     );
+  }
+
+  async function acceptSell(id: string) {
+    await provisionInstrument(id);
     value(await store.place(id, { orderId: 'ask', accountId: seller, side: 'sell', price: 10n, lots: 1n }));
   }
 
@@ -124,7 +139,7 @@ async function spotFixture(bookId: string) {
     value(await store.place(id, { orderId: 'bid', accountId: buyer, side: 'buy', price: 10n, lots: 1n }));
   }
 
-  return { ledger, store, buyer, seller, acceptSell, acceptCross };
+  return { ledger, store, buyer, seller, provisionInstrument, acceptSell, acceptCross };
 }
 
 async function marketFixture(bookId: string, itemHomeId: string) {
@@ -245,23 +260,28 @@ test('absent Economy bindings remove only their schedules and leave already queu
     const spotJob = await enqueue(ECONOMY_SPOT_OWNER_WORK.workflow);
     const marketJob = await enqueue(ECONOMY_MARKET_OWNER_WORK.workflow);
     const expiryJob = await enqueue(ECONOMY_CREDIT_EXPIRY_WORK.workflow);
+    const wakeJob = await client.enqueue(
+      { workflowName: ECONOMY_SPOT_MATCH_WAKE, queueName: 'maintenance' },
+      { bookId, node: settings.node, instrumentId: 'unconfigured', sequence: '1' },
+    );
     const truth = await runWorker(
       `
-        const [spotJob, marketJob, expiryJob] = await Promise.all(
-          [env.SPOT_JOB, env.MARKET_JOB, env.EXPIRY_JOB].map(id => client.retrieveWorkflow(id).getResult()),
+        const [spotJob, marketJob, expiryJob, wakeJob] = await Promise.all(
+          [env.SPOT_JOB, env.MARKET_JOB, env.EXPIRY_JOB, env.WAKE_JOB].map(id => client.retrieveWorkflow(id).getResult()),
         );
         return {
           spotSchedule: (await client.getSchedule(spot.name)) ?? null,
           marketSchedule: (await client.getSchedule(market.name)) ?? null,
           expirySchedule: (await client.getSchedule(expiry.name)) ?? null,
           neighbor: (await client.getSchedule(env.NEIGHBOR))?.status,
-          spotJob, marketJob, expiryJob,
+          spotJob, marketJob, expiryJob, wakeJob,
         };
       `,
       {
         SPOT_JOB: spotJob.workflowID,
         MARKET_JOB: marketJob.workflowID,
         EXPIRY_JOB: expiryJob.workflowID,
+        WAKE_JOB: wakeJob.workflowID,
         NEIGHBOR: neighbor,
       },
     );
@@ -273,6 +293,7 @@ test('absent Economy bindings remove only their schedules and leave already queu
       spotJob: { kind: 'disabled' },
       marketJob: { kind: 'disabled' },
       expiryJob: { kind: 'disabled' },
+      wakeJob: { kind: 'disabled' },
     });
   } finally {
     await client.deleteSchedule(neighbor);
@@ -533,3 +554,235 @@ test('an expired programme cannot retire ahead of issuance admitted immediately 
   expect(await ledger.retireExpiredAssetProgram(wallet.assetId)).toEqual({ kind: 'ok', value: true });
   expect(await ledger.nextExpiredAssetProgram()).toEqual({ kind: 'ok', value: null });
 });
+
+test('the API producer bounds pending wake submissions and preserves all acceptance receipts', async () => {
+  const book = { bookId: 'test-book', node: 'b' };
+  const native: SpotAccessPort = {
+    ...createNativeEconomySpot(pool, book),
+    place: async ({ orderId }) => ({ kind: 'ok', value: { orderId, sequence: 1n } }),
+  };
+  let release!: () => void;
+  const disconnected = new Promise<never>((_resolve, reject) => {
+    release = () => reject(new Error('Work admission unavailable'));
+  });
+  const requests: string[] = [];
+  const port = withCommittedSpotWake(native, book, {
+    enqueue(options, ..._args) {
+      requests.push(options.workflowID!);
+      return disconnected;
+    },
+  });
+  async function place(index: number) {
+    const instrumentId = `pair-${index}`;
+    const orderId = `order-${index}`;
+    const receipt = await port.place({
+      accountId: randomUUID(),
+      instrumentId,
+      orderId,
+      deadline: Date.now() + 2000,
+      side: 'buy',
+      price: 1n,
+      lots: 1n,
+    });
+    expect(receipt).toEqual({ kind: 'ok', value: { orderId, sequence: 1n } });
+  }
+  await place(0);
+  await place(0);
+  expect(requests).toHaveLength(1);
+  for (let index = 1; index <= 32; index++) await place(index);
+  expect(requests).toHaveLength(32);
+  release();
+  await place(0);
+  expect(requests).toHaveLength(33);
+  expect(requests.at(-1)).toBe(requests[0]);
+});
+
+test('a committed native HTTP acceptance wakes the exact order and retains cold and stale recovery behavior', async () => {
+  const bookId = `economy:${randomUUID()}`;
+  const seller = newId(0x6241);
+  const node = 'b';
+  const fixture = await spotFixture(bookId, seller);
+  await fixture.provisionInstrument('wake');
+  await fixture.provisionInstrument('fallback');
+
+  const issuer = 'https://auth.spot-wake.test';
+  const audience = 'https://kernel.spot-wake.test';
+  const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
+  const jwk = { ...(await exportJWK(publicKey)), alg: 'ES256', kid: 'spot-wake-test' };
+  const token = await new SignJWT({
+    client_id: 'web',
+    authn_epoch: 1,
+    scope: 'spot:read spot:place',
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: jwk.kid })
+    .setIssuer(issuer)
+    .setAudience(audience)
+    .setSubject(seller)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(privateKey);
+
+  const directGrant = randomUUID();
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [routeOf(seller), seller],
+  );
+  await pool.query(
+    `INSERT INTO access.resource_grant (route, resource_id, subject_id, subject_kind, action, valid, transaction_id)
+     VALUES (0,$1,$2,'identity','gate:economy','(,)',$3)`,
+    [GLOBAL_CONTEXT.id, seller, directGrant],
+  );
+  const closeEconomy = await openBroadEconomyAdmission(pool);
+  const client = await createWorkClient(databaseUrl);
+  let worker: Promise<unknown> | undefined;
+  try {
+    const binding = { bookId, node };
+    const native = createNativeEconomySpot(pool, binding);
+    const attempts: Promise<{ workflowID: string }>[] = [];
+    let failedWake = false;
+    const hooked = withCommittedSpotWake(native, binding, {
+      async enqueue(options, ...args) {
+        const [wake] = args as readonly unknown[];
+        if (typeof wake === 'object' && wake !== null && 'instrumentId' in wake && wake.instrumentId === 'fallback') {
+          failedWake = true;
+          throw new Error('Injected work admission failure');
+        }
+        const admitted = client.enqueue(options, ...args);
+        attempts.push(admitted);
+        return admitted;
+      },
+    });
+    const app = createKernel({
+      pool,
+      routeKey: new Uint8Array(32),
+      receiptKeys: readReceiptKeyRing(workerTestEnv()),
+      economySpot: hooked,
+      writeRate: {
+        async spend() {
+          return { allowed: true as const };
+        },
+      },
+      access: (config) =>
+        createAccess({
+          ...config,
+          auth: { issuer, audience, jwksUrl: issuer + '/jwks', fetch: async () => Response.json({ keys: [jwk] }) },
+        }),
+    });
+    async function place(instrumentId: string, key: string, authorized = true) {
+      const response = await app.handle(
+        new Request('http://kernel.test/v1/economy/spot/' + instrumentId + '/orders', {
+          method: 'POST',
+          headers: {
+            ...(authorized ? { authorization: 'Bearer ' + token } : {}),
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(key),
+          },
+          body: JSON.stringify({ side: 'sell', price: '10', lots: '1' }),
+        }),
+      );
+      const receipt = (await response.json()) as { orderId: string; sequence: string };
+      return { status: response.status, receipt };
+    }
+
+    expect((await place('wake', 'denied', false)).status).toBe(403);
+    expect(attempts).toHaveLength(0);
+    const hash = createHash('sha256')
+      .update(JSON.stringify([bookId, node, 'wake', '1']))
+      .digest('hex');
+    const expectedWakeId = `economy:spot:accepted:${hash}`;
+    worker = runWorker(
+      `
+        const { Pool } = await import('pg');
+        const { createNativeEconomyDatabase } = await import('./src/composition/economy.ts');
+        const { createSpotStore } = await import('./src/economy/storage/spot-store.ts');
+        const binding = { bookId: env.KERNEL_ECONOMY_BOOK_ID, node: env.KERNEL_ECONOMY_NODE };
+        const pool = new Pool({ connectionString: env.DATABASE_URL });
+        const store = createSpotStore(createNativeEconomyDatabase(pool), binding.bookId);
+        async function waitUntil(ready) {
+          const deadline = Date.now() + 12000;
+          while (!(await ready())) {
+            if (Date.now() >= deadline) throw new Error('Expected committed spot work');
+            await Bun.sleep(25);
+          }
+        }
+        try {
+          await waitUntil(() => client.getWorkflow(env.WAKE_ID));
+          await client.retrieveWorkflow(env.WAKE_ID).getResult();
+          await waitUntil(async () => (await store.readBook('fallback')).value.matchingSequence !== null);
+          const next = (await store.place('wake', {
+            orderId: 'next', accountId: env.WAKE_SELLER, side: 'sell', price: 10n, lots: 1n,
+          })).value;
+          const staleInputs = [
+            { ...binding, instrumentId: 'wake', sequence: '1' },
+            { ...binding, instrumentId: 'fallback', sequence: '1', node: 'old-node' },
+            { ...binding, instrumentId: 'fallback', sequence: '1', bookId: 'old-book' },
+          ];
+          const staleJobs = await Promise.all(staleInputs.map(input =>
+            client.enqueue({ workflowName: env.WAKE_WORKFLOW, queueName: 'maintenance' }, input),
+          ));
+          const stale = await Promise.all(staleJobs.map(job => job.getResult()));
+          const beforeSweep = [
+            (await store.readBook('wake')).value.matchingSequence.toString(),
+            (await store.readBook('fallback')).value.matchingSequence.toString(),
+          ];
+          const recovered = await run(spot);
+          return { stale, beforeSweep, nextSequence: next.sequence.toString(), recovered };
+        } finally { await pool.end(); }
+      `,
+      {
+        KERNEL_ECONOMY_BOOK_ID: bookId,
+        KERNEL_ECONOMY_NODE: node,
+        WAKE_SELLER: seller,
+        WAKE_ID: expectedWakeId,
+        WAKE_WORKFLOW: ECONOMY_SPOT_MATCH_WAKE,
+      },
+      34_000,
+    );
+    void worker.catch(() => {});
+
+    const startupDeadline = Date.now() + 15_000;
+    for (;;) {
+      const schedule = await client.getSchedule(ECONOMY_SPOT_OWNER_WORK.name);
+      if (schedule?.status === 'PAUSED' && (schedule.context as { bookId?: string })?.bookId === bookId) break;
+      if (Date.now() >= startupDeadline) throw new Error('Spot owner worker did not install its schedule');
+      await Bun.sleep(25);
+    }
+
+    const started = performance.now();
+    const first = await place('wake', 'accepted');
+    expect(first).toMatchObject({ status: 200, receipt: { orderId: expect.any(String), sequence: '1' } });
+    expect((await attempts[0])?.workflowID).toBe(expectedWakeId);
+    expect(await client.retrieveWorkflow(expectedWakeId).getResult()).toEqual({ kind: 'advanced' });
+    const wakeMilliseconds = Math.round(performance.now() - started);
+    expect(value(await fixture.store.readOwnOrder('wake', first.receipt.orderId, seller)).status).toBe('resting');
+    expect(await place('wake', 'accepted')).toEqual(first);
+    expect((await attempts[1])?.workflowID).toBe(expectedWakeId);
+    expect(await client.listWorkflows({ workflowIDs: [expectedWakeId] })).toHaveLength(1);
+
+    const colder = await place('fallback', 'without-wake');
+    expect(colder).toMatchObject({ status: 200, receipt: { orderId: expect.any(String), sequence: '1' } });
+    expect(failedWake).toBe(true);
+    expect(await worker).toMatchObject({
+      stale: [{ kind: 'stale' }, { kind: 'disabled' }, { kind: 'disabled' }],
+      beforeSweep: ['3', '1'],
+      nextSequence: '3',
+      recovered: { kind: 'advanced', matched: 2, deferred: 0 },
+    });
+    expect(value(await fixture.store.readOwnOrder('wake', 'next', seller)).status).toBe('resting');
+    expect(value(await fixture.store.readOwnOrder('fallback', colder.receipt.orderId, seller)).status).toBe('resting');
+    expect(wakeMilliseconds).toBeLessThan(10_000);
+    process.stdout.write(`Spot HTTP acceptance to exact DBOS result: ${wakeMilliseconds}ms\n`);
+  } finally {
+    await worker?.catch(() => {});
+    try {
+      await client.deleteSchedule(ECONOMY_SPOT_OWNER_WORK.name);
+      await client.deleteSchedule(ECONOMY_CREDIT_EXPIRY_WORK.name);
+      await client.close();
+    } finally {
+      await closeEconomy();
+      await pool.query('DELETE FROM access.resource_grant WHERE route = 0 AND transaction_id = $1', [directGrant]);
+    }
+  }
+}, 45_000);
