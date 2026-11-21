@@ -2940,7 +2940,7 @@ export function createNativePublicFilterSourceBinding(
               // The new UUID belongs to this invocation. Validate the current population and the
               // stored bytes from both owners before handing this exact physical receipt to its page.
               const result = await store.query({
-                name: 'semantic_fresh_ranked_pit_handoff_v1',
+                name: 'semantic_fresh_ranked_pit_handoff_v2',
                 text: handoffServingPit,
                 values: [
                   id,
