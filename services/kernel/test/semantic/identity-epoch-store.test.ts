@@ -3,7 +3,8 @@ import type { PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { writeSubject } from '../../src/semantic/subject.ts';
+import { CREATE_SUBJECT, writeSubject } from '../../src/semantic/subject.ts';
+import { declareCommandHistory } from '../../src/history/application/index.ts';
 import type { IdentityIntent, IdentityJobRef, IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import {
   stepIdentityEpochAdmission,
@@ -355,8 +356,10 @@ test('native current mapping resolves a created original through the real Librar
 test('same native creation transaction initializes exact self and rolls back with the source', async () => {
   const original = newId(0x5f10);
   const actor = await f.actor();
+  const key = randomUUID();
   const options = {
     partition: home(original),
+    receipt: { kind: CREATE_SUBJECT, actorAccountId: actor.accountId, key, digest: digest(key) },
     basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
     authorization: await f.authorization('subject:create'),
   };
@@ -368,6 +371,10 @@ test('same native creation transaction initializes exact self and rolls back wit
         release,
       });
       await store().initializeSubject(tx, original);
+      await declareCommandHistory(tx, CREATE_SUBJECT, {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: result.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
       if (rollback) throw new Error('rollback exact self');
       return result;
     });
@@ -376,7 +383,7 @@ test('same native creation transaction initializes exact self and rolls back wit
   await create(false);
   expect(await store().readMapping(f.pool, original)).toMatchObject({ state: 'mapped', original, terminal: original });
   await expect(
-    runCommand(f.pool, options, async (tx) => {
+    runCommand(f.pool, { ...options, receipt: { ...options.receipt, key: randomUUID() } }, async (tx) => {
       await store().initializeSubject(tx, original);
       return noEffect(null);
     }),
