@@ -100,7 +100,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       JSON.stringify({ event: 'search.public_preparation.failed', prefix: options.prefix, kind, name, message }),
     );
   };
-  const reportUnavailable = (phase: PublicationPhase, generation: number, result: PublicFilterConsumerUnavailable) => {
+  const reportUnavailable = (
+    phase: PublicationPhase,
+    generation: number,
+    result: Pick<PublicFilterConsumerUnavailable, 'reason'>,
+  ) => {
     const state = `${generation}:${result.reason}`;
     if (unavailable.get(phase) === state) return;
     unavailable.set(phase, state);
@@ -158,7 +162,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           databaseLifetimeOptions,
         )
       ).rows[0];
-      if (existing) return advance({ ...state, publication: existing.job, phase: 'native' });
+      if (existing) return advance({ ...state, publication: existing.job, phase: 'native' }, 0, true);
       const release = await readRelease(context.deadline);
       if (!release) return advance(state, 5000);
       if (release.digest !== state.meaning) {
@@ -182,7 +186,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         return advance(state, 1000);
       }
       unavailable.delete('prepare');
-      return advance({ ...state, publication: prepared.job.job, phase: 'native' });
+      return advance({ ...state, publication: prepared.job.job, phase: 'native' }, 0, true);
     }
     const retained = await withBoundedReadConnection(
       options.pool,
@@ -200,10 +204,12 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
-      const reconciliation = await options.runtime.publication.step(job, context, {
-        enrollSource: true,
-        ...(retained.rows[0]!.subscription_protocol === 1 ? { batchSource: true } : {}),
-      });
+      // The claimed revision already points to this native job. Its independently
+      // committed Source and receiver cursors are the recovery point after each step.
+      const reconciliation =
+        retained.rows[0]!.subscription_protocol === 1
+          ? await options.runtime.enrollPublication(job, context, () => !paused && !stopped)
+          : await options.runtime.publication.step(job, context, { enrollSource: true });
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';

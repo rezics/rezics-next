@@ -447,40 +447,44 @@ export async function withDiscoveryTarget<T>(
 ): Promise<T> {
   const index = discoveryIndexName(target.prefix, target.generation);
   const transport = projectionSearch(search, context);
-  return withConnection(pool, async (client) => {
-    if (context) projectionRemaining(context);
-    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
-    try {
+  return withConnection(
+    pool,
+    async (client) => {
       if (context) projectionRemaining(context);
-      const {
-        rows: [row],
-      } = await client.query<{ index_uuid: string; incarnation: string; state: string }>(
-        `SELECT index_uuid,incarnation::text,state FROM search.discovery_generation
-         WHERE partition_no=0 AND prefix=$1 AND generation=$2`,
-        [target.prefix, target.generation],
-      );
-      if (
-        !row ||
-        row.index_uuid !== target.uuid ||
-        row.incarnation !== target.incarnation ||
-        (purge ? ['retired', 'allocated'] : ['retiring', 'retired', 'quarantined', 'allocated']).includes(row.state)
-      )
-        throw new DiscoveryPhysicalTargetChangedError();
-      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
-      if (context) projectionRemaining(context);
-      const value = await work(client, index);
-      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
-      return value;
-    } finally {
+      await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
       try {
         if (context) projectionRemaining(context);
-        await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
-      } catch (error) {
-        discardConnection(client, error instanceof Error ? error : new Error(String(error)));
-        throw error;
+        const {
+          rows: [row],
+        } = await client.query<{ index_uuid: string; incarnation: string; state: string }>(
+          `SELECT index_uuid,incarnation::text,state FROM search.discovery_generation
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2`,
+          [target.prefix, target.generation],
+        );
+        if (
+          !row ||
+          row.index_uuid !== target.uuid ||
+          row.incarnation !== target.incarnation ||
+          (purge ? ['retired', 'allocated'] : ['retiring', 'retired', 'quarantined', 'allocated']).includes(row.state)
+        )
+          throw new DiscoveryPhysicalTargetChangedError();
+        if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+        if (context) projectionRemaining(context);
+        const value = await work(client, index);
+        if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+        return value;
+      } finally {
+        try {
+          if (context) projectionRemaining(context);
+          await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
+        } catch (error) {
+          discardConnection(client, error instanceof Error ? error : new Error(String(error)));
+          throw error;
+        }
       }
-    }
-  });
+    },
+    context ? undefined : index,
+  );
 }
 
 /** Before the first external copy, persist its locator under the actual Account erasure fence. */

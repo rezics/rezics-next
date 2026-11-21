@@ -94,6 +94,7 @@ import { validateRefreshResponse } from './write-actions.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 
 export type GenerationPublicationJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
+type HeldLane = 'capture' | 'source';
 export type SearchGenerationPublication = Readonly<{
   prepare(
     consumer: PublicFilterConsumer,
@@ -105,7 +106,7 @@ export type SearchGenerationPublication = Readonly<{
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
-    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean; heldOffers?: number }>,
+    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean; heldOffers?: number; heldLane?: HeldLane }>,
   ): Promise<
     | {
         status: 'progress' | 'reconciled';
@@ -755,6 +756,7 @@ export function createSearchGenerationPublication(
     context: PublicFilterConsumerContext,
     meter: Meter,
     limit: number,
+    lane?: HeldLane,
   ) {
     // Read all three committed edges under the publication session lock. A torn
     // handoff returns to the existing single-page recovery from its original.
@@ -783,12 +785,17 @@ export function createSearchGenerationPublication(
          AND j.bootstrap IS NULL AND j.pit IS NULL AND j.previous_uuid IS NULL
          AND b.state IN ('capturing','begun') AND b.subscription_protocol=1 AND c.subscription_protocol=1
          AND NOT c.ack_retired AND (b.coverage_after,b.coverage_root)=(c.after_home,c.root)
-         AND b.coverage_after>0 AND b.coverage_after=(SELECT end_home FROM semantic.subject_access_page_v1
-           WHERE birth=m.birth ORDER BY first_home DESC LIMIT 1)
+         AND b.coverage_after>0 AND ($3::boolean OR b.coverage_after=(SELECT end_home FROM semantic.subject_access_page_v1
+           WHERE birth=m.birth ORDER BY first_home DESC LIMIT 1))
          AND (b.coverage_after<4096 OR (s.next_home<4096 AND s.next_ordinal=0))`,
-      [ref.job, ref.consumer],
+      [ref.job, ref.consumer, lane === 'source'],
     );
-    if (!job) return;
+    if (
+      !job ||
+      (lane === 'capture' && job.coverage_after === 4096) ||
+      (lane === 'source' && (job.end_home === null || job.next_home >= job.coverage_after))
+    )
+      return;
     const member = { job: job.job, birth: job.birth, bootstrap: job.original };
     const offers: Meter[] = [];
     meter[enrollmentOffers] = offers;
@@ -810,13 +817,16 @@ export function createSearchGenerationPublication(
       })());
     if (job.next_home === 0 && job.next_ordinal === 0) await checkTarget();
     const available = limit - 1;
-    const captureCount = Math.min(Math.floor(available / 4), Math.ceil((4096 - job.coverage_after) / 32));
+    const captureCount =
+      lane === 'source'
+        ? 0
+        : Math.min(Math.floor(available / (lane === 'capture' ? 2 : 4)), Math.ceil((4096 - job.coverage_after) / 32));
     const sourceCount = Math.min(8, Math.floor((available - 2 * captureCount) / 2));
     const captured = captureCount
       ? (async () => {
           for (let i = 0; i < captureCount; i++)
             reserve(176 + 18 * Math.min(32, 4096 - job.coverage_after - 32 * i), 2);
-          await captureHeldSubjectRange(pool, member, job.coverage_after, captureCount, context);
+          await captureHeldSubjectRange(client, member, job.coverage_after, captureCount);
         })()
       : Promise.resolve();
     const receive = async () => {
@@ -879,7 +889,7 @@ export function createSearchGenerationPublication(
         throw error;
       }
     };
-    const [receiver, source] = await Promise.allSettled([receive(), scan()]);
+    const [receiver, source] = await Promise.allSettled([receive(), lane === 'capture' ? false : scan()]);
     if (receiver.status === 'rejected') throw receiver.reason;
     if (source.status === 'rejected') throw source.reason;
     if (!captureCount && !source.value) throw new Pending('source_pending');
@@ -1119,6 +1129,7 @@ export function createSearchGenerationPublication(
     ) => Promise<T>,
     batchHeld = false,
     heldOffers = 16,
+    heldLane?: HeldLane,
   ): Promise<T> {
     const ref = structuredClone(input);
     const target = locator(ref.consumer);
@@ -1127,6 +1138,10 @@ export function createSearchGenerationPublication(
     const lockKey = target.family === 'subjects' ? subjectAlias(target.prefix) : ref.job;
     // This is a maintenance session lock, not a command transaction. Native owners acquire their own
     // bounded snapshot connections; do not wrap them in withConnection's single-command checkout scope.
+    // The two enrollment owners may run together. Each has one writer per alias,
+    // and every ordinary publication operation still requires exclusive custody.
+    const aliasMode = heldLane ? '_shared' : '';
+    const laneKey = heldLane ? JSON.stringify([lockKey, heldLane]) : undefined;
     let connection: PoolClient | undefined;
     let released = false;
     let broken: Error | undefined;
@@ -1160,16 +1175,29 @@ export function createSearchGenerationPublication(
           withRequestDeadline(context.deadline, async () => {
             mayOwnLock = true;
             const lock = await client.query<{ locked: boolean }>(
-              'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
+              `SELECT pg_try_advisory_lock${aliasMode}(hashtextextended($1,2)) AS locked`,
               [lockKey],
             );
             mayOwnLock = lock.rows[0]?.locked !== false;
             if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
+            let laneLocked = false;
             try {
+              if (laneKey) {
+                // A lost query reply can leave this session owning the lane.
+                laneLocked = true;
+                const lane = await client.query<{ locked: boolean }>(
+                  'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
+                  [laneKey],
+                );
+                laneLocked = lane.rows[0]?.locked !== false;
+                if (lane.rows[0]?.locked !== true) throw new Pending('source_pending');
+              }
               if (batchHeld && phase === 'step-enroll' && heldOffers >= 5) {
-                const enrolled = await enrollHeldRange(ref, client, context, meter, heldOffers);
+                const enrolled = await enrollHeldRange(ref, client, context, meter, heldOffers, heldLane);
                 if (enrolled) return work(enrolled, client, null, undefined, true, meter[enrollmentOffers]);
               }
+              // Only the exclusive owner may recover a torn receipt or change phase.
+              if (heldLane) throw new Pending('source_pending');
               const {
                 rows: [job],
               } = await client.query<
@@ -1476,8 +1504,15 @@ export function createSearchGenerationPublication(
               }
               return await work(job, client, current, adopted?.capture);
             } finally {
+              if (laneLocked) {
+                const released = await client.query<{ unlocked: boolean }>(
+                  'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
+                  [laneKey],
+                );
+                if (!released.rows[0]?.unlocked) throw new Error('Held enrollment lane lock was not released');
+              }
               const unlocked = await client.query<{ unlocked: boolean }>(
-                'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
+                `SELECT pg_advisory_unlock${aliasMode}(hashtextextended($1,2)) AS unlocked`,
                 [lockKey],
               );
               if (unlocked.rows[0]?.unlocked !== true)
@@ -2670,6 +2705,13 @@ export function createSearchGenerationPublication(
       const phase = options?.enrollSource === true ? 'step-enroll' : 'step';
       const offers = options?.heldOffers ?? 16;
       requireValue(Number.isSafeInteger(offers) && offers >= 1 && offers <= 16);
+      if (options?.heldLane !== undefined)
+        requireValue(
+          (options.heldLane === 'capture' || options.heldLane === 'source') &&
+            phase === 'step-enroll' &&
+            options.batchSource === true &&
+            offers >= 5,
+        );
       return run(context, (meter) =>
         locked(
           input,
@@ -2739,6 +2781,7 @@ export function createSearchGenerationPublication(
           },
           options?.batchSource && offers >= 3,
           offers,
+          options?.heldLane,
         ),
       );
     },

@@ -179,9 +179,9 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         expect(proof).toMatchObject({ first_home: 0, width: 4096, matched: true, independent: true, ack_after: 4096 });
         expect(proof.compact_nodes).toBeGreaterThan(0);
         expect(proof.compact_width).toBeGreaterThan(32);
-        expect(cleanLeaf).toBeDefined();
         const extended = (await prefix()).rows;
         expect(extended).toHaveLength(3);
+        if (cleanLeaf === undefined) throw new Error('Missing original clean leaf');
         expect(extended[0]!.revision).toBe(cleanLeaf);
         return;
       }
@@ -269,6 +269,46 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       [birth],
     );
     expect(accepted.rows[0]?.coverage_after).toBe(100);
+    const original = await frontier();
+    const capture = await publication.step(prepared.job, context(), {
+      enrollSource: true,
+      batchSource: true,
+      heldLane: 'capture',
+      heldOffers: 5,
+    });
+    expect(capture.status).toBe('progress');
+    expect(await frontier()).toEqual(original);
+    expect(
+      (await pool.query('SELECT max(end_home) AS covered FROM search.subject_receiver_page_v1 WHERE birth=$1', [birth]))
+        .rows[0]?.covered,
+    ).toBe(164);
+    const scan = await publication.step(prepared.job, context(), {
+      enrollSource: true,
+      batchSource: true,
+      heldLane: 'source',
+      heldOffers: 9,
+    });
+    expect(scan.status).toBe('progress');
+    expect(await frontier()).toEqual({ next_home: 164, next_ordinal: 0 });
+    for (const [result, slots] of [
+      [capture, 5],
+      [scan, 9],
+    ] as const) {
+      if (result.status !== 'progress') throw new Error('Missing held enrollment progress');
+      const costs = [result.cost, ...(result.additionalEnrollmentCosts ?? [])];
+      expect(costs.length).toBeLessThanOrEqual(slots);
+      expect(costs.every((cost) => cost.inputKeys <= 1000)).toBe(true);
+    }
+    const emptySteps = await pool.query(
+      `SELECT first_home,ordinal,evidence->'complete' AS complete,
+         jsonb_array_length(evidence->'evidence'->'windows') AS windows
+       FROM semantic.subject_source_step_v1 WHERE birth=$1 AND first_home>=100 ORDER BY first_home,ordinal`,
+      [birth],
+    );
+    expect(emptySteps.rows).toEqual([
+      { first_home: 100, ordinal: 0, complete: true, windows: 32 },
+      { first_home: 132, ordinal: 0, complete: true, windows: 32 },
+    ]);
     const { body } = await search.request<{ hits: { hits: { _id: string }[] } }>('POST', '/' + target + '/_search', {
       query: { match_all: {} },
     });

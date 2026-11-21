@@ -13,7 +13,7 @@ import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-o
 import { discoveryAliasMatches, discoveryCapabilityMatches } from './generations.ts';
 import { nativeDiscoveryRegistry, type DiscoveryTarget } from './account-discovery.ts';
 import { discoveryIndexName, discoveryPhysicalTargetMatches } from './indices.ts';
-import type { SearchGenerationPublication } from './generation-publication.ts';
+import type { GenerationPublicationJob, SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { KernelClock } from '../clock.ts';
@@ -81,6 +81,14 @@ export type DefaultPublicFilterRuntime = Readonly<{
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerJob | undefined>;
   publication: SearchGenerationPublication;
+  enrollPublication(
+    job: GenerationPublicationJob,
+    context: PublicFilterConsumerContext,
+    active: () => boolean,
+  ): Promise<
+    | { status: 'progress' | 'reconciled'; sourceAdvanced?: boolean }
+    | Pick<PublicFilterConsumerUnavailable, 'status' | 'reason'>
+  >;
   preparePublication(
     generation: number,
     context: PublicFilterConsumerContext,
@@ -514,6 +522,60 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       });
     },
     publication,
+    enrollPublication(job: GenerationPublicationJob, context: PublicFilterConsumerContext, active: () => boolean) {
+      return track(async () => {
+        const native = await publicationFor(job.consumer, context);
+        // Delivery consumes scheduling progress. Each native invocation owns and
+        // checks its own offers, including the turns overlapped by the other owner.
+        const progress = (result: Awaited<ReturnType<typeof native.step>>) =>
+          'reason' in result
+            ? { status: result.status, reason: result.reason }
+            : { status: result.status, sourceAdvanced: result.sourceAdvanced === true };
+        try {
+          const options = { enrollSource: true, batchSource: true };
+          const started = Date.now();
+          const first = await native.step(job, context, options);
+          if (first.status !== 'progress' || !first.sourceAdvanced) return progress(first);
+          let longest = Date.now() - started;
+          let capturing: ReturnType<typeof native.step> | undefined;
+          const ready = () => active() && Date.now() + 2 * longest < context.deadline;
+          const advance = async (heldLane: 'capture' | 'source') => {
+            while (ready()) {
+              const start = Date.now();
+              const turn = native.step(job, context, { ...options, heldLane });
+              if (heldLane === 'capture') capturing = turn;
+              const result = await turn;
+              longest = Math.max(longest, Date.now() - start);
+              if (result.status === 'progress' && result.sourceAdvanced) continue;
+              // A Source that has caught the producer waits for its committed
+              // successor. An occupied writer never holds the producer here.
+              if (
+                heldLane === 'source' &&
+                result.status === 'unready' &&
+                result.reason === 'source_pending' &&
+                capturing
+              ) {
+                const producer = await capturing;
+                if (producer.status === 'progress' && producer.sourceAdvanced) continue;
+              }
+              return result;
+            }
+          };
+          const producer = advance('capture').finally(() => {
+            capturing = undefined;
+          });
+          const turns = await Promise.allSettled([producer, advance('source')]);
+          for (const turn of turns) {
+            if (turn.status === 'rejected') throw turn.reason;
+            if (turn.value?.status === 'unavailable') return progress(turn.value);
+          }
+          // The ordinary exclusive step owns phase changes and torn handoffs.
+          return progress(ready() ? await native.step(job, context, options) : first);
+        } finally {
+          await native.close();
+        }
+      });
+    },
     preparePublication(generation, context) {
       return track(async () => {
         checkDeadline(context);

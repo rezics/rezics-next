@@ -124,7 +124,7 @@ async function produce(
   cursor: Cursor,
   cuts: readonly Cut[],
   context: Context,
-  received: boolean,
+  closeEmptyInventory: boolean,
 ): Promise<Step> {
   const { ordinal, bootstrap, birth, firstHome, endHome } = page;
   const evidence: Step['evidence'] = {};
@@ -183,7 +183,7 @@ async function produce(
   // A fresh empty inventory has no outstanding writer. If every head is
   // still its retained base, this snapshot closes every command window too.
   const emptyAtCut =
-    received &&
+    closeEmptyInventory &&
     cursor.phase === 'inventory' &&
     ordinal === 0 &&
     evidence.inventory?.length === cuts.length &&
@@ -313,7 +313,13 @@ function validatedPage(input: Page) {
   return page;
 }
 
-async function readOrSaveStep(db: PoolClient, page: Page, context: Context, acceptReceiver = false): Promise<Step> {
+async function readOrSaveStep(
+  db: PoolClient,
+  page: Page,
+  context: Context,
+  acceptReceiver = false,
+  closeEmptyInventory = acceptReceiver,
+): Promise<Step> {
   const { job, bootstrap, birth, firstHome, endHome, ordinal } = page;
   const { rows } = await db.query<{ cuts: Cut[] }>(
     acceptReceiver
@@ -343,7 +349,7 @@ async function readOrSaveStep(db: PoolClient, page: Page, context: Context, acce
   const cursor: Cursor | null =
     ordinal === 0 ? { phase: 'inventory', partition: firstHome, after: null } : (prior?.evidence.next ?? null);
   if (!cursor) return pending(firstHome);
-  const step = await produce(db, page, cursor, cuts, context, acceptReceiver);
+  const step = await produce(db, page, cursor, cuts, context, closeEmptyInventory);
   await db.query('INSERT INTO semantic.subject_source_step_v1 VALUES($1,$2,$3,$4)', [birth, firstHome, ordinal, step]);
   return step;
 }
@@ -393,13 +399,7 @@ export async function reconcileHeldSubjectPage(
 /** Resolve every interval from the original birth. The producer can keep taking
  * retention cuts while the independent Source cursor waits for a writer.
  */
-export async function captureHeldSubjectRange(
-  pool: Pool,
-  member: Member,
-  start: number,
-  count: number,
-  context: Context,
-) {
+export async function captureHeldSubjectRange(db: PoolClient, member: Member, start: number, count: number) {
   if (
     !Number.isInteger(count) ||
     count < 1 ||
@@ -409,7 +409,10 @@ export async function captureHeldSubjectRange(
     start + 32 * (count - 1) >= 4096
   )
     throw new TypeError('Invalid held capture range');
-  await transaction(pool, context, async (db) => {
+  // The publication session owns the deadline. End this transaction before the
+  // independently committed receiver opens the cut on the same connection.
+  await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+  try {
     // The next call starts at the end actually certified by its predecessor.
     const result = await db.query<{ after_home: number }>(
       `WITH RECURSIVE admitted AS MATERIALIZED (
@@ -427,7 +430,11 @@ export async function captureHeldSubjectRange(
       [member.birth, member.job, member.bootstrap, start, count],
     );
     if (result.rows[0]?.after_home !== Math.min(4096, start + 32 * count)) return pending(start);
-  });
+    await db.query('COMMIT');
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  }
 }
 
 /** Inventory commits before the writer comparison and the finite command ends.
@@ -445,7 +452,7 @@ export async function prepareHeldSubjectRange<T>(
   windowOffer: (homes: number) => void,
 ) {
   if (!Number.isInteger(count) || count < 1 || count > 8) throw new TypeError('Invalid held page count');
-  const inventory = await transaction(pool, context, async (db) => {
+  const { steps: inventory, advanced } = await transaction(pool, context, async (db) => {
     const result = await db.query<{ first_home: number; end_home: number }>(
       `SELECT p.first_home,p.end_home FROM core.subject_subscription_v1 m
        JOIN semantic.subject_source_preparation_v1 s USING(birth,bootstrap)
@@ -455,17 +462,26 @@ export async function prepareHeldSubjectRange<T>(
       [member.birth, member.job, member.bootstrap, first, count],
     );
     const steps = [];
+    let advanced = false;
     let start = first;
     for (const { first_home, end_home } of result.rows) {
       if (first_home !== start) return pending(start);
       const page = validatedPage({ ...member, firstHome: start, endHome: end_home, ordinal: 0 });
       const offer = inventoryOffer(end_home - start);
-      const step = await readOrSaveStep(db, page, context);
+      // A fresh empty inventory and its unchanged finite ends are observed in
+      // this same snapshot. Advance only the uninterrupted prefix before a writer.
+      const step = await readOrSaveStep(db, page, context, false, steps.length === 0);
+      if (!steps.length && step.complete && !step.obligations.length) {
+        await advanceFrontier(db, page, step, false);
+        advanced = true;
+        start = end_home;
+        continue;
+      }
       steps.push({ page, step, offer });
       if (step.next?.phase !== 'window') break;
       start = end_home;
     }
-    return steps;
+    return { steps, advanced };
   });
   const results = await Promise.allSettled(
     inventory.map(({ step, offer }) => (step.obligations.length ? settle(step.obligations, offer) : true)),
@@ -473,7 +489,7 @@ export async function prepareHeldSubjectRange<T>(
   for (const result of results) if (result.status === 'rejected') throw result.reason;
   const pendingIndex = results.findIndex((result) => result.status === 'fulfilled' && !result.value);
   const settled = pendingIndex < 0 ? inventory.length : pendingIndex;
-  if (!settled) return false;
+  if (!settled) return advanced;
   await transaction(pool, context, async (db) => {
     for (const { page, step } of inventory.slice(0, settled)) {
       windowOffer(page.endHome - page.firstHome);

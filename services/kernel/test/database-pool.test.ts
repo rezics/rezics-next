@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { ConfigError, readConfig, startServer } from '../src/server.ts';
-import { createPool } from '../src/database/pool.ts';
+import { createPool, NestedPoolCheckoutError, withConnection } from '../src/database/pool.ts';
 import { newId } from '../src/route/route.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -85,5 +85,36 @@ test('a started server fills its pool before serving and retains every connectio
     expect(pool.idleCount).toBe(pool.max);
   } finally {
     await server.stop();
+  }
+});
+
+test('serialized writers leave a pool slot for other targets and continue after a failed writer', async () => {
+  const pool = createPool(databaseUrl!, { max: 2 });
+  const acquired = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<void>();
+  const failure = new Error('writer failed');
+  const first = withConnection(
+    pool,
+    async () => {
+      acquired.resolve();
+      await finish.promise;
+      throw failure;
+    },
+    'one',
+  ).catch((error: unknown) => error);
+  try {
+    await acquired.promise;
+    const read = (client: import('pg').PoolClient) => client.query('SELECT 1 AS value');
+    const second = withConnection(pool, read, 'one');
+    expect((await withConnection(pool, read, 'two')).rows).toEqual([{ value: 1 }]);
+    await withConnection(pool, async () => {
+      await expect(withConnection(pool, read, 'one')).rejects.toBeInstanceOf(NestedPoolCheckoutError);
+    });
+    finish.resolve();
+    expect(await first).toBe(failure);
+    expect((await second).rows).toEqual([{ value: 1 }]);
+  } finally {
+    finish.resolve();
+    await pool.end();
   }
 });
