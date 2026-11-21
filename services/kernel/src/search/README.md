@@ -2247,7 +2247,11 @@ checkpoints, occupied home heads, placement, receiver and writer clocks must mat
 population or a physical mismatch continues on the paged pass. An inconclusive read or changed cut retains the
 fence for one more bounded comparison. Activation rechecks the original Source completion and drain on that
 turn. A second inconclusive comparison resumes the paged pass. Activation rechecks the retained digest against
-the live fence before alias intent, switch and confirmation. Source evidence comes from
+the live fence before alias intent, switch and confirmation. If the alias is still absent and that digest has moved,
+a funded activation can refresh it by repeating the complete sparse comparison on the original drained fence.
+A separate offer verifies Source and the new digest before switching. Another crossing resumes the paged proof on
+the same fence. When a command advances an occupied home during a paged engine comparison, Search replays that
+home and resumes the same PIT if the fenced owner epoch still matches. Source evidence comes from
 `readNativePublicFilterPublicationCompletion` for the original persisted job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
 dispatch or adoption, and resumes the same repair after restart. Changed-since-start remains a disclosure fact;
 verified original repair, current ACK, independent settlement and no pending or unresolved homes still gate

@@ -9,7 +9,7 @@ import type { SearchWriterPublicationFence } from './writer-guard.ts';
 export const SPARSE_SUBJECT_KEYS = 32;
 
 type Candidate = { id: string; home: number; epoch: number; position: string };
-type Cut = { keys: Candidate[]; digest: Buffer };
+export type SparseSubjectCut = { keys: Candidate[]; digest: Buffer };
 
 /** The installed receiver topology covers empty homes. Every occupied native home
  * contributes its actual command clock, and the writer and physical shard clocks
@@ -19,7 +19,7 @@ export async function readSparseSubjectCut(
   client: PoolClient,
   search: OpenSearch,
   owner: SearchWriterPublicationFence,
-): Promise<Cut | 'dense' | null> {
+): Promise<SparseSubjectCut | 'dense' | null> {
   const { consumer, job, fence } = owner;
   const result = await client.query<{ keys: Candidate[]; authority: string | null; gate_revision: string }>(
     `WITH inventory AS MATERIALIZED (

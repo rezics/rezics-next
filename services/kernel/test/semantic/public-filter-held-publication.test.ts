@@ -284,15 +284,22 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         // The same drained writer must retry against the original completed Source.
         proofReads = 0;
         let retryFence: string | undefined;
+        let reopened = false;
         for (let offer = 0; offer < 32; offer++) {
           const result = await publication.activate(prepared.job, context(), { batchSource: true });
           if (result.status === 'activated') {
-            expect(proofReads).toBe(2);
+            expect(proofReads).toBe(3);
+            expect(reopened).toBe(true);
             expect(retryFence).toBeString();
             expect((await subjectGenerations(search, prefix)).active).toBe(1);
             return;
           }
           expect(result).toMatchObject({ status: 'preparing', next: 'activate' });
+          if (result.status === 'preparing' && reopened && proofReads === 3) {
+            expect(result.additionalSourceCosts).toHaveLength(2);
+            for (const turn of [result.cost, ...result.additionalSourceCosts!])
+              expect(turn.inputKeys).toBeLessThanOrEqual(1000);
+          }
           if (proofReads) {
             const job = (
               await pool.query(
@@ -307,6 +314,26 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
             } else {
               expect(job).toMatchObject({ phase: 'intent', pass: '2', fence: retryFence });
               expect(job.subject_fenced_cut).toHaveLength(32);
+              if (!reopened) {
+                // A second consumer replaces projection bookkeeping without changing the Book.
+                const projection = () =>
+                  source.readPublicFilterProjectionPage({
+                    subject: resident,
+                    meaning: f.meaning,
+                    inputLimit: 32,
+                    frontier: null,
+                    context: context(),
+                  });
+                const initial = await projection();
+                await quietCommand(0);
+                const replacement = await projection();
+                if (initial.status !== 'complete' || replacement.status !== 'complete')
+                  throw new Error('Both native projections must complete');
+                expect(replacement.frontier.build).not.toBe(initial.frontier.build);
+                await publication.close();
+                publication = createSearchGenerationPublication(publicationConfig);
+                reopened = true;
+              }
             }
           }
         }

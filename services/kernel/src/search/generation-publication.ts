@@ -16,7 +16,12 @@ import {
   nativeSourceForHeldPublication,
   readSearchWriterGenerationActions,
 } from './writer-guard.ts';
-import { matchSparseSubjectKeys, readSparseSubjectCut, SPARSE_SUBJECT_KEYS } from './generation-publication-sparse.ts';
+import {
+  matchSparseSubjectKeys,
+  readSparseSubjectCut,
+  SPARSE_SUBJECT_KEYS,
+  type SparseSubjectCut,
+} from './generation-publication-sparse.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -199,6 +204,11 @@ const same = isDeepStrictEqual;
 class Pending extends Error {
   constructor(readonly reason: PublicFilterConsumerUnavailable['reason']) {
     super(reason);
+  }
+}
+class ChangedSparseCut extends Pending {
+  constructor(readonly cut: SparseSubjectCut) {
+    super('source_pending');
   }
 }
 const publicationLifetime = {
@@ -1067,10 +1077,65 @@ export function createSearchGenerationPublication(
     if (!retained) persistPin(job, pin);
     if (job.subject_fenced_cut) {
       const current = await sparseCut(job, client, context, meter);
-      if (!current || current === 'dense' || !current.digest.equals(job.subject_fenced_cut))
-        throw new Pending('source_pending');
+      if (!current || current === 'dense') throw new Pending('source_pending');
+      if (!current.digest.equals(job.subject_fenced_cut)) throw new ChangedSparseCut(current);
     }
     return pin.queried;
+  }
+  async function confirmHeldIntent(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    currentAlias: string | null,
+    proofCosts?: Meter[],
+  ): Promise<boolean> {
+    let opened: SparseSubjectCut;
+    try {
+      await adoptHeld(job, client, context, meter);
+      return true;
+    } catch (error) {
+      // An exposed or replaced alias retains its rollback intent.
+      if (!(error instanceof ChangedSparseCut) || currentAlias !== null) throw error;
+      opened = error.cut;
+    }
+    if (proofCosts) {
+      const physical = cost();
+      proofCosts.push(physical);
+      let cut: Buffer | null = null;
+      try {
+        cut = await reconcileSparseSubject(job, client, context, physical, opened);
+      } catch (error) {
+        if (
+          !(error instanceof SearchUnavailableError || (error instanceof Pending && error.reason === 'source_pending'))
+        )
+          throw error;
+      }
+      if (cut) {
+        // Reopen the original Source between matching physical cuts before switching.
+        const confirmation = cost();
+        proofCosts.push(confirmation);
+        job.subject_fenced_cut = cut;
+        try {
+          await adoptHeld(job, client, context, confirmation);
+        } catch (error) {
+          if (!(error instanceof ChangedSparseCut)) throw error;
+          cut = null;
+        }
+        if (cut) {
+          await save(client, job, confirmation);
+          return true;
+        }
+      }
+    }
+    // The absent alias needs no rollback. Continue with the paged physical proof
+    // on this drained fence. A required ordinary write still cancels through restart.
+    if ((await aliasTarget(job, context, meter)) !== null) throw new Pending('source_pending');
+    job.subject_fenced_cut = null;
+    job.home = 0;
+    job.phase = 'subject';
+    await save(client, job, meter);
+    return false;
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
     // A stale publication or a released/replaced writer must never commit a sparse frontier.
@@ -2134,8 +2199,9 @@ export function createSearchGenerationPublication(
     client: PoolClient,
     context: PublicFilterConsumerContext,
     meter: Meter,
+    opened?: SparseSubjectCut,
   ) {
-    const before = await sparseCut(job, client, context, meter);
+    const before = opened ?? (await sparseCut(job, client, context, meter));
     if (before === 'dense') return null;
     if (!before) throw new Pending('source_pending');
     const transport = validationSearch(context, meter);
@@ -2488,7 +2554,12 @@ export function createSearchGenerationPublication(
             : undefined;
         if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
         await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
-        if (!same(before, await head(group.partition, context))) throw new Pending('source_pending');
+        const observed = await head(group.partition, context);
+        if (!same(before, observed)) {
+          if (advancedUnderSubjectFence(job, before, observed.epoch, BigInt(observed.position)))
+            return rewindSubjectHome(job, before.partition, client, meter);
+          throw new Pending('source_pending');
+        }
       }
       job.engine_after = page.after ?? null;
       if (page.after === undefined) {
@@ -2978,8 +3049,22 @@ export function createSearchGenerationPublication(
             const before = await aliasTarget(job, context, meter);
             if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
-            if (before !== job.physical_target || job.family === 'subjects')
-              await adoptHeld(job, client, context, meter);
+            const proofCosts: Meter[] = [];
+            if (before !== job.physical_target || job.family === 'subjects') {
+              const ready = await confirmHeldIntent(
+                job,
+                client,
+                context,
+                meter,
+                before,
+                options?.batchSource ? proofCosts : undefined,
+              );
+              if (!ready)
+                return {
+                  ...preparing('step', true),
+                  ...(proofCosts.length ? { additionalSourceCosts: proofCosts } : {}),
+                };
+            }
             if (job.family === 'subjects') {
               await publicationRefresh(job, context, meter, false);
               const activationSearch: OpenSearch = {
@@ -3008,7 +3093,11 @@ export function createSearchGenerationPublication(
               );
               // The retained intent and fence own confirmation on the next metered turn.
               bookPreparationTiming?.mark('aliasWrite');
-              if (job.family === 'subjects') return preparing('activate', true);
+              if (job.family === 'subjects')
+                return {
+                  ...preparing('activate', true),
+                  ...(proofCosts.length ? { additionalSourceCosts: proofCosts } : {}),
+                };
             }
             if (job.family === 'discovery') await adoptHeld(job, client, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
