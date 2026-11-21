@@ -77,6 +77,7 @@ import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts
 import { economyRoutes } from '../economy/routes.ts';
 import { economySpotRoutes, type SpotAccessPort } from '../economy/spot-routes.ts';
 import { economyMarketRoutes, type EconomyMarketPort } from '../economy/market-routes.ts';
+import { economyMarketRepairRoutes, type EconomyMarketRepairPort } from '../economy/market-repair-routes.ts';
 import { economyTestFundingRoutes, type EconomyTestFundingPort } from '../economy/test-funding-routes.ts';
 import type { EconomyWalletPort } from '../economy/contract.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
@@ -202,6 +203,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   economy?: EconomyWalletPort;
   economySpot?: SpotAccessPort;
   economyMarket?: EconomyMarketPort;
+  economyMarketRepair?: EconomyMarketRepairPort;
   economyTestFunding?: EconomyTestFundingPort;
   moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime &
@@ -661,6 +663,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     clock,
     ...(dependencies.economyMarket === undefined ? {} : { market: dependencies.economyMarket }),
   });
+  if (dependencies.economyMarketRepair !== undefined)
+    economyMarketRepairRoutes(app as unknown as ReturnType<typeof createApp>, dependencies.economyMarketRepair);
   if (dependencies.economyTestFunding !== undefined)
     economyTestFundingRoutes(app as unknown as ReturnType<typeof createApp>, {
       pool: dependencies.pool,
@@ -1220,6 +1224,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof economyRoutes> &
   ReturnType<typeof economySpotRoutes> &
   ReturnType<typeof economyMarketRoutes> &
+  ReturnType<typeof economyMarketRepairRoutes> &
   ReturnType<typeof economyTestFundingRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof readingInsightsRoutes> &

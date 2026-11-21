@@ -27,6 +27,7 @@ function productEventTypes() {
           { additionalProperties: false },
         ),
         'com.rezics.history.minimized.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.economy.market.repair_accepted.v1': Type.Object({}, { additionalProperties: false }),
         ...RECENT_SEARCH_EVENTS,
         ...TRENDING_SEARCH_EVENTS,
         ...ZONE_EVENTS,

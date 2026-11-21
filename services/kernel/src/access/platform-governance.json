@@ -37,6 +37,7 @@
     "media:erase",
     "offer:create",
     "payout_statement:mark_paid",
+    "market:repair",
     "space:create",
     "space:restore",
     "realm:create",
