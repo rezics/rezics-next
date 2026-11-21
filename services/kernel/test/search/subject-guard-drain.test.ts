@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import pg from 'pg';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { withQueryAccounting } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { createKernelCreditSearchSource } from '../../src/composition/runtime-defaults.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndexer, type SubjectApplyGuard } from '../../src/search/indexer.ts';
@@ -365,7 +364,8 @@ test('live Subject replay batches foreign creator identities and reaches later c
       error: expect.objectContaining({ message: 'Search writer was revoked before dispatch' }),
     });
     await ageEnrollment(replacement.writer_position);
-    await expect(relay(true).run(t.partition)).rejects.toThrow('Search writer is enrolled');
+    await expect(relay(true).run(t.partition)).rejects.toThrow('Search relay original dispatch is not visible');
+    expect(await writerState()).toEqual(replacement);
     expect(await checkpoint(t)).toBe(previous);
     bulk.release();
     expect(await replay.outcome).toEqual({ ok: true });
@@ -385,6 +385,87 @@ test('live Subject replay batches foreign creator identities and reaches later c
     await old.outcome;
     await replay?.outcome;
   }
+}, 30_000);
+
+test('original Subject relay cancels a committed dispatch when its COMMIT response is lost before bulk', async () => {
+  const t = await target();
+  let bulkCalls = 0;
+  const options = {
+    ...f.options(t.prefix, {
+      ...f.search,
+      async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
+        bulkCalls++;
+        return f.search.bulk<T>(...args);
+      },
+    }),
+    ...t,
+  };
+  const relay = createSubjectIndexer({
+    ...options,
+    writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
+  });
+  const row = async () =>
+    (
+      await f.admin.query(
+        `SELECT writer_token, dispatch_state, source_position, visible_transaction_id, visible_position,
+                relay_intent, relay_receipt
+         FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+        [t.partition, t.index, t.id],
+      )
+    ).rows[0]!;
+  await relay.run(t.partition);
+  const { source_position, visible_transaction_id, visible_position } = await row();
+  const previous = await checkpoint(t);
+  await runCommand(f.pool, { partition: t.partition }, async () => ({
+    value: null,
+    events: [{ type: 'com.rezics.subject.created.v1', subject: t.id, data: { id: t.id } }],
+  }));
+  const before = bulkCalls;
+  let marking = false;
+  let committed: Awaited<ReturnType<typeof row>> | undefined;
+  const lost = new Error('Injected lost COMMIT response before transport');
+  const attempt = await observe(
+    withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(sql, _operands, dispatch) {
+          const result = await dispatch();
+          if (sql.includes("SET dispatch_state='dispatched',relay_intent=input.intent")) marking = true;
+          if (marking && !committed && sql === 'COMMIT') {
+            committed = await row();
+            throw lost;
+          }
+          return result;
+        },
+      },
+      () => relay.run(t.partition),
+    ),
+  ).outcome;
+  expect(committed).toMatchObject({
+    dispatch_state: 'dispatched',
+    writer_token: expect.any(String),
+    relay_intent: expect.any(String),
+    relay_receipt: null,
+  });
+  expect(bulkCalls).toBe(before);
+  expect(await checkpoint(t)).toBe(previous);
+  expect(await row()).toEqual({
+    writer_token: null,
+    dispatch_state: 'cancelled',
+    source_position,
+    visible_transaction_id,
+    visible_position,
+    relay_intent: null,
+    relay_receipt: null,
+  });
+  expect(attempt).toEqual({
+    ok: false,
+    error: expect.objectContaining({ name: 'CommandCommitUncertainError', cause: lost }),
+  });
+  await relay.run(t.partition);
+  expect(bulkCalls).toBe(before + 1);
+  expect((await row()).dispatch_state).toBe('settled');
+  expect(await checkpoint(t)).toBeGreaterThan(previous);
 }, 30_000);
 
 test.each(['intent', 'legacy', 'mismatch'])(
@@ -526,8 +607,8 @@ test.each(['open', 'closed', 'previous writer'])(
   'Subject relay settles the retained original receipt with %s',
   async (mode) => {
     const t = await target();
-    const relay = (search = f.search) => {
-      const options = { ...f.options(t.prefix, search), ...t };
+    const relay = (search = f.search, pool = f.pool) => {
+      const options = { ...f.options(t.prefix, search), ...t, pool };
       return createSubjectIndexer({
         ...options,
         writer: createSearchWriterGuard({ ...options, recoverRelayEnrollment: true }),
@@ -592,7 +673,7 @@ test.each(['open', 'closed', 'previous writer'])(
       return;
     }
     let replayed = false;
-    const retry = relay({
+    const retrySearch = {
       ...f.search,
       async bulk<T>(...args: Parameters<typeof f.search.bulk>) {
         const next = await row();
@@ -602,31 +683,34 @@ test.each(['open', 'closed', 'previous writer'])(
         replayed = true;
         return f.search.bulk<T>(...args);
       },
-    });
+    };
     if (mode === 'previous writer') {
       const previousSql = await Bun.file(
         new URL('./support/previous-identity-writer-settle.sql.txt', import.meta.url),
       ).text();
-      const originalQuery = pg.Client.prototype.query;
+      const previousPool = createPool(process.env.DATABASE_URL!);
       let previousSettlements = 0;
-      pg.Client.prototype.query = new Proxy(originalQuery, {
-        apply(query, client, args) {
-          const statement = args[0];
-          if (!replayed && statement?.text?.includes('/* search:identity-writer:settle */')) {
-            previousSettlements++;
-            args[0] = { ...statement, text: previousSql };
-          }
-          return Reflect.apply(query, client, args);
-        },
+      previousPool.on('connect', (client) => {
+        client.query = new Proxy(client.query, {
+          apply(query, receiver, args) {
+            const statement = args[0];
+            const sql = typeof statement === 'string' ? statement : statement.text;
+            if (!replayed && sql.includes('/* search:identity-writer:settle */')) {
+              previousSettlements++;
+              args[0] = typeof statement === 'string' ? previousSql : { ...statement, text: previousSql };
+            }
+            return Reflect.apply(query, receiver, args);
+          },
+        });
       });
       try {
-        await retry.run(t.partition);
+        await relay(retrySearch, previousPool).run(t.partition);
       } finally {
-        pg.Client.prototype.query = originalQuery;
+        await previousPool.end();
       }
       expect(previousSettlements).toBe(1);
     } else {
-      await retry.run(t.partition);
+      await relay(retrySearch).run(t.partition);
     }
     expect(replayed).toBe(true);
     const settled = await row();

@@ -55,6 +55,13 @@ structural close check and atomic token replacement serialize recovery with disp
 receipt and Source position survive until the replacement settles. The worker resumes from the existing
 checkpoint on its normal relay scan, re-reads current Source and advances only after refresh-visible settlement.
 
+The original live relay can cancel its own enrollment when it knows it never called the bulk transport,
+including after PostgreSQL committed the dispatch marker and its response was lost. The cancellation command
+uses the caller's deadline. It matches every original key, token, enrollment transaction and position under the same
+owner epoch and physical incarnation, requires an empty relay receipt, and preserves the visible receipt and Source position.
+Calling bulk ends this cancellation authority, even if the call fails. A later process needs durable evidence
+to resolve an uncertain dispatch.
+
 Each newly created physical Subject index receives a fresh opaque write alias in the same engine creation request.
 The guard never installs or repairs an alias on an existing index. Missing legacy allocation metadata is unavailable.
 Guarded bulk uses that alias with `require_alias`, all active shards, external versions and refresh visibility,
@@ -70,14 +77,13 @@ receipt and Source position. No Subject body is stored in the temporary receipt.
 An existing proof can drain under a closed gate. A replay batch that needs new Source writes still requires admission
 before those writes can advance its checkpoint.
 
-If OpenSearch's original response never reached durable receipt storage, the token still holds the writer.
-Older dispatched rows start in that state after migration. A current hit, absence, refresh, conflict or elapsed
-time supplies neither the original successful response nor proof that delayed mutations have drained. A later
-delete can lose its engine version tombstone, which makes superseding an unproved dispatch unsafe. Reconciliation
-requires the original action identity and its verified successful bulk item or a native handoff proving that the
-original allocation can no longer receive the dispatch. The Subject writer has no producer for that historical
-evidence. The [index erasure protocol](../../../../docs/search-index-erasure-plan.md#physical-replacement-and-capacity)
-specifies the replacement and retirement path when the original response is unavailable. Old UUID, token,
+After a bulk call, loss of its response leaves the dispatched token in custody. A replay can settle an index
+action from a complete refresh-visible read of the exact physical key, external version and original document
+digest under the same allocation. A legacy row without an intent also needs a reconstructible index action at
+its original enrollment version. A delete requires its successful bulk item. Absence, a conflict, a different
+winner, or elapsed time leaves the dispatch unresolved. The
+[index erasure protocol](../../../../docs/search-index-erasure-plan.md#physical-replacement-and-capacity)
+specifies the native replacement and retirement path for unresolved dispatches. The original UUID, token,
 checkpoint and last-visible state stay intact until authorized native reconciliation.
 
 Native confirmed settlement retains the copy

@@ -2608,15 +2608,14 @@ export function createSearchWriterGuard(options: {
         return enrollWriter();
       });
       const receipt = enrollment.value;
-      let dispatched = false;
-      let revoked = false;
+      let mayCancel = true;
       let sourcePosition: bigint | null = null;
       let renewedEffect: { action: IndexAction; bulk: unknown } | undefined;
       const release = async () => {
         await runCommand(options.pool, commandOptions, async (tx, context) => {
           const completion = await native(tx, context.transactionId);
           if (completion.epoch !== receipt.epoch) throw unavailable('Search writer owner changed before custody');
-          const result = await tx.query(settle.sql, [
+          const custody = [
             partition,
             options.index,
             incarnation,
@@ -2627,8 +2626,19 @@ export function createSearchWriterGuard(options: {
             ids,
             completion.transactionId,
             completion.position.toString(),
-            sourcePosition?.toString() ?? null,
-          ]);
+          ];
+          // Only this live relay can know its transport was never invoked after the native dispatch commit.
+          const result = relay
+            ? await tx.query(
+                `UPDATE search.identity_writer SET writer_token=NULL, relay_intent=NULL, dispatch_state='cancelled',
+                   settled_transaction_id=$9, settled_position=$10
+                 WHERE partition_no=$1 AND physical_target=$2 AND incarnation=$3 AND owner_epoch=$4
+                   AND writer_token=$5 AND writer_transaction_id=$6 AND writer_position=$7
+                   AND original_id=ANY($8::uuid[]) AND dispatch_state IN ('enrolled','dispatched')
+                   AND relay_receipt IS NULL`,
+                custody,
+              )
+            : await tx.query(settle.sql, [...custody, sourcePosition?.toString() ?? null]);
           if (result.rowCount !== ids.length) throw unavailable('Search writer enrollment changed before custody');
           if (renewal && renewedEffect) {
             const fresh: SearchRepairWriterReceipt = {
@@ -2673,19 +2683,20 @@ export function createSearchWriterGuard(options: {
               )
             : await tx.query(dispatchSql.sql, parameters);
           if (result.rowCount !== ids.length) {
-            revoked = true;
+            mayCancel = false;
             throw unavailable('Search writer was revoked before dispatch');
           }
           return { value: null, events: changed() };
         });
-        // Set BEFORE calling the transport: a thrown/lost response says nothing about native application.
-        dispatched = true;
+        // Other guarded writers transfer custody at native dispatch. The live relay transfers it at bulk.
+        if (!relay) mayCancel = false;
         let bulk: unknown;
         const transport: OpenSearch =
           renewal || relay
             ? {
                 ...options.search,
                 async bulk(lines, opts) {
+                  mayCancel = false;
                   const response = await options.search.bulk(lines, opts);
                   bulk = response;
                   return response as never;
@@ -2732,7 +2743,7 @@ export function createSearchWriterGuard(options: {
         if (renewal) renewedEffect = { action: actions[0]!, bulk };
       } catch (error) {
         // No engine mutation was invoked on this branch. A failed release still retains native custody.
-        if (!dispatched && !revoked) await release();
+        if (mayCancel) await release();
         throw error;
       }
       // Source and engine have released before this one-home native command. Failure retains enrollment.
