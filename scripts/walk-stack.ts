@@ -545,8 +545,8 @@ export function walkStackEnvironment(
     OPENSEARCH_JAVA_OPTS: env.REZICS_WALK_IMPORT_CATALOGUE === '1' ? '-Xms160m -Xmx160m' : '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
     KERNEL_SEARCH_MEMORY: '768m',
-    // Concurrent graph writes need room for several Postgres backends alongside the populated catalogue.
-    KERNEL_DATABASE_MEMORY: '768m',
+    // The caller can fund concurrent database backends within a larger admitted walk.
+    KERNEL_DATABASE_MEMORY: env.KERNEL_DATABASE_MEMORY || '768m',
     KERNEL_DATABASE_BOUNDED: '1',
     REZICS_WALK_SMOL: '1',
     // The lightweight host serves Kernel HTTP itself and starts frontends after seeding.

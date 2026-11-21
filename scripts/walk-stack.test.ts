@@ -84,6 +84,12 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(database[database.indexOf('--memory-swap') + 1]).toBe('768m');
   expect(database).toContain('shared_buffers=32MB');
   expect(database).toContain('max_connections=50');
+  const capacity = walkProcessEnvironment('capacity', 1, { KERNEL_DATABASE_MEMORY: '1536m' });
+  expect(capacity.KERNEL_SEARCH_MEMORY).toBe('768m');
+  expect(capacity.KERNEL_DATABASE_BOUNDED).toBe('1');
+  const capacityDatabase = databaseRunArgs(capacity);
+  expect(capacityDatabase[capacityDatabase.indexOf('--memory') + 1]).toBe('1536m');
+  expect(capacityDatabase[capacityDatabase.indexOf('--memory-swap') + 1]).toBe('1536m');
   expect(searchRunArgs('native-policy-test-image', {})).not.toContain('--memory');
   expect(databaseRunArgs({})).not.toContain('--memory');
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(

@@ -276,6 +276,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    and fetches that exact public document from native Auth. Full-effect walks start Auth pages before Kernel so
    issuer-origin JWKS is available during seed; Web waits until the journey seeds. An admitted stack runs Kernel
    without `--watch`.
+   PostgreSQL defaults to a 768 MiB container cap. An admitted capacity walk can set `KERNEL_DATABASE_MEMORY` to a
+   larger limit in MiB, such as `1536m`, within its host reservation. Record the limit alongside the results.
    Before database setup, the isolated `--import-catalogue` walk sets its fixture routing key. Native creation
    places the reviewed Bangumi `person:1916` and VNDB `s224` claims and Subject births in partition 692.
    Seed reopen uses the same database and key. Walk teardown restores the previous Kernel environment.
