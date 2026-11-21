@@ -24,12 +24,16 @@ const routeKey = new Uint8Array(32).fill(81);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) };
 const readScope = 'wallet:read';
 const gate = 'gate:economy';
-const grantScopes = ['access:grant', 'gate:any', readScope] as const;
+const readScopes = [readScope, 'spot:read', 'market:read'] as const;
+const grantScopes = ['access:grant', 'exposure:open', 'gate:any', ...readScopes] as const;
 const bookId = 'governance-acceptance';
 const assetId = 'points';
-const wallet = `/v1/economy/wallets/${assetId}`;
+const wallets = '/v1/economy/wallets';
+const wallet = `${wallets}/${assetId}`;
 const statement = `${wallet}/statement?limit=1`;
-const publicWallet = '/v1/economy/wallets/{assetId}';
+const publicWallet = `${wallets}/{assetId}`;
+const spot = '/v1/economy/spot/pair';
+const market = `/v1/economy/market/trades/${'a'.repeat(64)}`;
 const authName = `economy_auth_${crypto.randomUUID().replaceAll('-', '')}`;
 
 let database: Awaited<ReturnType<typeof openIsolatedEconomyDatabase>>;
@@ -163,7 +167,7 @@ function directGrant(accountId: string) {
   return { resource: PLATFORM_RESOURCE, subject: { kind: 'account', id: accountId }, actions: [gate], valid: '(,)' };
 }
 
-async function walletDiscovery(bearer: string | undefined, visible: boolean) {
+async function economyDiscovery(bearer: string | undefined, visible: boolean) {
   const exposure = await call('/v1/platform/exposure', bearer);
   expect(exposure.status).toBe(200);
   const { admitted } = (await exposure.json()) as { admitted: string[] };
@@ -172,8 +176,15 @@ async function walletDiscovery(bearer: string | undefined, visible: boolean) {
   expect(openapi.status).toBe(200);
   const { paths } = (await openapi.json()) as { paths: Record<string, unknown> };
   if (visible) {
-    for (const path of [publicWallet, `${publicWallet}/statement`])
-      expect(paths[path]).toMatchObject({ get: { 'x-exposure': gate, 'x-action': readScope } });
+    for (const [path, action] of [
+      [wallets, readScope],
+      [publicWallet, readScope],
+      [`${publicWallet}/statement`, readScope],
+      ['/v1/economy/spot/{instrumentId}', 'spot:read'],
+      ['/v1/economy/spot/{instrumentId}/trades', 'spot:read'],
+      ['/v1/economy/market/trades/{tradeId}', 'market:read'],
+    ] as const)
+      expect(paths[path]).toMatchObject({ get: { 'x-exposure': gate, 'x-action': action } });
   } else {
     expect(Object.keys(paths).some((path) => path.startsWith('/v1/economy/'))).toBe(false);
   }
@@ -182,12 +193,12 @@ async function walletDiscovery(bearer: string | undefined, visible: boolean) {
 }
 
 async function expectClosed(bearer?: string) {
-  for (const path of [wallet, statement]) {
+  for (const path of [wallets, wallet, statement, spot, market]) {
     const response = await call(path, bearer);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: 'platform_closed' });
   }
-  await walletDiscovery(bearer, false);
+  await economyDiscovery(bearer, false);
 }
 
 async function expectOwnWallet(bearer: string, amount: string) {
@@ -195,6 +206,12 @@ async function expectOwnWallet(bearer: string, amount: string) {
   expect(balance.status).toBe(200);
   expect(balance.headers.get('cache-control')).toBe('private, no-store');
   expect(await balance.json()).toMatchObject({ posted: amount, available: amount, pending: '0' });
+  const page = await call(wallets, bearer);
+  expect(page.status).toBe(200);
+  expect(await page.json()).toMatchObject({
+    balances: [{ asset: { id: assetId }, posted: amount, available: amount, pending: '0' }],
+    next: null,
+  });
   const history = await call(statement, bearer);
   expect(history.status).toBe(200);
   expect(history.headers.get('cache-control')).toBe('private, no-store');
@@ -210,12 +227,15 @@ async function expectOwnWallet(bearer: string, amount: string) {
   });
 }
 
-test('Global governance explicitly admits and revokes native wallet access and discovery for an Auth account', async () => {
+test('Global governance grants Economy access individually and cannot open its routes platform-wide', async () => {
   const operator = await person('economy_operator', grantScopes);
-  const member = await person('economy_member', [readScope]);
+  const member = await person('economy_member', readScopes);
   const other = await person('economy_other', grantScopes);
   const noWallet = await issue(member.email, ['exposure:read', gate]);
   await bootstrapGovernance(pool, operator.accountId);
+  const opening = await call('/v1/platform/exposure/economy:open', operator.bearer, {});
+  expect(opening.status).toBe(403);
+  expect(await opening.json()).toMatchObject({ code: 'forbidden' });
   const ledger = createNativeEconomyLedger(pool, bookId);
   expect(await ledger.provisionAsset({ id: assetId, scale: 0, transferable: true })).toMatchObject({ kind: 'ok' });
   const amount = '9007199254740993';
@@ -232,11 +252,16 @@ test('Global governance explicitly admits and revokes native wallet access and d
   const granted = await call('/v1/grants', operator.bearer, grant);
   expect({ status: granted.status, body: await granted.json() }).toEqual({ status: 201, body: { grant } });
 
-  await walletDiscovery(member.bearer, true);
+  await economyDiscovery(member.bearer, true);
   await expectOwnWallet(member.bearer, amount);
+  for (const path of [spot, market]) {
+    const unbound = await call(path, member.bearer);
+    expect(unbound.status).toBe(503);
+    expect(await unbound.json()).toMatchObject({ code: 'dependency_unavailable' });
+  }
   expect((await call(`/v1/economy/test-funding/intents/${'a'.repeat(64)}`, member.bearer)).status).toBe(404);
   expect((await call(wallet, noWallet)).status).toBe(403);
-  await walletDiscovery(noWallet, false);
+  await economyDiscovery(noWallet, false);
   await expectClosed(other.bearer);
   expect((await call('/v1/grants', operator.bearer, directGrant(other.accountId))).status).toBe(201);
   await expectOwnWallet(other.bearer, '37');
