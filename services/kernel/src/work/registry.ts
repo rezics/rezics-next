@@ -9,9 +9,9 @@ import type { WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
 import type { SelectedRuntime } from './selected-runtime.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
-import type { WorkModule as ContractModule, WorkComposeOptions } from './contract/index.ts';
+import type { WorkModule as ContractModule, WorkComposeOptions, WorkService } from './contract/index.ts';
 
-export type WorkService = { stop(): Promise<void> };
+export type { WorkService } from './contract/index.ts';
 
 export type WorkContext = {
   readonly pool: Pool;

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 test('work services start after launch and stop before shutdown, in reverse order', async () => {
   const program = `
@@ -47,3 +48,25 @@ test('work services start after launch and stop before shutdown, in reverse orde
   expect(exitCode, errors).toBe(0);
   expect(output).toContain('services-ok');
 }, 30_000);
+
+test('an accepted Search step drains, a pending original recovers, and new queue admission waits', async () => {
+  const prefix = crypto.randomUUID();
+  for (const phase of ['drain', 'recover']) {
+    const child = Bun.spawn([process.execPath, `${import.meta.dir}/support/service-drain.ts`, phase, prefix], {
+      env: { ...process.env, ...workerTestEnv() },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    try {
+      const [status, output, errors] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(status, output + errors).toBe(0);
+      expect(output).toContain('Search service ' + phase + ' verified');
+    } finally {
+      child.kill();
+    }
+  }
+}, 60_000);

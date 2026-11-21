@@ -52,6 +52,7 @@ export type SdkRuntimePort = {
   setConfig(config: WorkSdkConfig): void;
   registerQueue(client: WorkSdkClient, name: string, options: WorkQueueOptions): Promise<void>;
   launch(): Promise<void>;
+  deactivateEventReceivers(): Promise<void>;
   shutdown(options: { workflowCompletionTimeoutMS: number }): Promise<void>;
   registerWorkflow(body: () => Promise<unknown>, config: { name: string }): void;
   runStep<T>(

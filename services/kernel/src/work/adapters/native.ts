@@ -159,6 +159,9 @@ export function createNativeWorkPorts(
       launch() {
         return DBOS.launch();
       },
+      deactivateEventReceivers() {
+        return DBOS.deactivateEventReceivers();
+      },
       shutdown(options) {
         return DBOS.shutdown(options);
       },

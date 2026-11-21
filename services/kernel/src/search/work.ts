@@ -484,6 +484,8 @@ export function createSearchWorkModule(
           scopeStopped = true;
           clearInterval(scopeTimer);
           await scopeTick;
+        };
+        const closeGates = () => {
           preparationGate.stop();
           scopeGate.stop();
         };
@@ -500,6 +502,7 @@ export function createSearchWorkModule(
           preparationGate.offer(preparation);
         } catch (error) {
           await halt();
+          closeGates();
           await publicRuntime.close();
           throw error;
         }
@@ -516,6 +519,7 @@ export function createSearchWorkModule(
           });
         } catch (error) {
           await halt();
+          closeGates();
           try {
             await preparation.stop();
           } finally {
@@ -527,8 +531,12 @@ export function createSearchWorkModule(
           pause: runner.pause,
           resume: runner.resume,
           refresh: runner.refresh,
+          async stopAdmission() {
+            await Promise.all([halt(), runner.stopPolling()]);
+          },
           async stop() {
             await halt();
+            closeGates();
             try {
               await runner.stop();
             } finally {

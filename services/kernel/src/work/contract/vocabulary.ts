@@ -155,7 +155,11 @@ export type WorkDispatchCost = Readonly<{
 
 export type WorkAuthorization = Readonly<{ access: unknown; readConsent: unknown }>;
 
-export type WorkService = { stop(): Promise<void> };
+export type WorkService = {
+  /** Stop new producers while an accepted workflow can still use this service. */
+  stopAdmission?(): Promise<void>;
+  stop(): Promise<void>;
+};
 
 export type WorkHistoryRegistry = { seal(): void };
 

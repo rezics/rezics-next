@@ -74,7 +74,7 @@ async function eventually(check: () => Promise<boolean>, timeoutMs = 15_000): Pr
 }
 
 type WorkServiceStart = Parameters<WorkContext['addService']>[0];
-type SearchRunner = Awaited<ReturnType<typeof startSearchIndexing>>;
+type SearchRunner = Pick<Awaited<ReturnType<typeof startSearchIndexing>>, 'pause' | 'resume' | 'refresh' | 'stop'>;
 type SearchWorkHost = {
   context: WorkContext;
   services: WorkServiceStart[];

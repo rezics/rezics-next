@@ -24,7 +24,10 @@ The completed assembly reads Elysia's composed route view once for write rates, 
 path declarations and the native action catalogue. Those consumers share the same final declarations instead of
 recomposing hooks and schemas for each validation; HTTP handler compilation keeps its own transport lifecycle.
 Decision: the installed Worker reports bounded shutdown phases for relay, runtime, client, Content and pool
-settlement and each native service drain, preserving its original deadline and drain order. Registry authorization fixtures prepare the ordinary
+settlement and each native service drain. On shutdown the worker stops native SDK receivers, seals service polling
+and lets already accepted workflows finish on their original execution. Service dependencies used by workflow steps
+outlive that drain. The SDK has a ten-second grace period within the Auth-bound worker's twenty-second process limit.
+An incomplete durable step remains recoverable on its original workflow. Registry authorization fixtures prepare the ordinary
 SDK client and bind Rating, Access and Community operands before replacing queue writes and forbidding further I/O.
 The original no-launch assertion and native Access checks remain.
 

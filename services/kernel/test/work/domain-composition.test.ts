@@ -57,6 +57,7 @@ function fakePorts(overrides: Partial<WorkApplicationPorts> = {}): WorkApplicati
       async launch() {
         initialized = true;
       },
+      async deactivateEventReceivers() {},
       async shutdown() {
         initialized = false;
       },

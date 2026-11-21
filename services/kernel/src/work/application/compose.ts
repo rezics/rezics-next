@@ -109,11 +109,13 @@ export function createComposer(
       const effects = ports.effects.register(collectedEffects, options.pool);
       history.seal();
 
-      const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {
+      const stopServices = async (services: readonly WorkService[], admissionOnly = false): Promise<unknown> => {
         let failure: unknown;
         for (let index = services.length - 1; index >= 0; index -= 1) {
           try {
-            await services[index]!.stop();
+            const service = services[index]!;
+            if (admissionOnly && service.stopAdmission) await service.stopAdmission();
+            else await service.stop();
           } catch (error) {
             failure ??= error;
           }
@@ -123,38 +125,55 @@ export function createComposer(
 
       let launching: Promise<void> | undefined;
       let stopping: Promise<void> | undefined;
+      let draining: Promise<void> | undefined;
+      const drain = (): Promise<void> =>
+        (draining ??= (async () => {
+          // The Auth-bound process has a 20 s shutdown boundary. Leave time for
+          // SDK teardown, the retained workflow dependencies, IPC and pool closure.
+          const drainUntil = performance.now() + 10_000;
+          let failure: unknown;
+          try {
+            if (ports.sdkRuntime.isInitialized()) await ports.sdkRuntime.deactivateEventReceivers();
+          } catch (error) {
+            failure = error;
+          }
+          const services = started.splice(0);
+          const stopFailure = await stopServices(services, true);
+          failure ??= stopFailure;
+          try {
+            await ports.sdkRuntime.shutdown({
+              workflowCompletionTimeoutMS: Math.max(0, Math.floor(drainUntil - performance.now())),
+            });
+          } catch (error) {
+            failure ??= error;
+          }
+          const releaseFailure = await stopServices(services.filter((service) => service.stopAdmission));
+          failure ??= releaseFailure;
+          if (failure) throw failure;
+        })());
       return {
         effects,
         launch(): Promise<void> {
           if (stopping) return Promise.reject(new WorkCompositionError('Work launch refused after shutdown'));
           return (launching ??= (async () => {
             await ports.sdkRuntime.launch();
-            const running: WorkService[] = [];
             try {
-              for (const start of serviceStarters) running.push(await start());
+              for (const start of serviceStarters) started.push(await start());
             } catch (error) {
-              await stopServices(running);
+              // The SDK can already have recovered a workflow using an earlier service.
+              await drain().catch(() => {});
               throw error;
             }
-            started.push(...running);
           })());
         },
         shutdown(): Promise<void> {
           return (stopping ??= (async () => {
-            let failure: unknown;
+            // A failed registrar/launch still owns any initialized SDK resources.
             try {
               await launching;
-            } catch (error) {
-              failure = error;
+            } finally {
+              await drain();
             }
-            const stopFailure = await stopServices(started.splice(0));
-            failure ??= stopFailure;
-            try {
-              await ports.sdkRuntime.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
-            } catch (error) {
-              failure ??= error;
-            }
-            if (failure) throw failure;
           })());
         },
       };

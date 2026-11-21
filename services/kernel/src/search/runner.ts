@@ -125,6 +125,7 @@ export async function startSearchIndexing(options: {
 }): Promise<{
   pause(): Promise<void>;
   resume(): void;
+  stopPolling(): Promise<void>;
   stop(): Promise<void>;
   refresh(context?: SearchTurnContext): Promise<void>;
 }> {
@@ -156,6 +157,7 @@ export async function startSearchIndexing(options: {
   let discovery = Promise.resolve();
   let pauseDrain = Promise.resolve();
   let resumeAfter: Promise<void> | undefined;
+  let pollingStopped: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const clearSchedule = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -344,6 +346,27 @@ export async function startSearchIndexing(options: {
   void refresh().catch(() => undefined);
   void discovery.then(schedule);
 
+  function stopPolling() {
+    if (pollingStopped) return pollingStopped;
+    stopped = true;
+    paused = true;
+    resumeAfter = undefined;
+    clearSchedule();
+    const reason = new Error('Search runner stopped');
+    const previous = current;
+    // Seal batch admission before cancelling discovery. Admitted Subject batches still
+    // own the bulk response, allocation check and checkpoint under their existing bounds.
+    const subjectDrain = (previous?.stop() ?? Promise.resolve()).finally(() => relayLifetime.abort(reason));
+    lifetime.abort(reason);
+    const projection = Promise.all([subjectDrain, mixed?.stop()]);
+    pollingStopped = Promise.all([discovery, projection]).then(async () => {
+      if (current && current !== previous) await current.stop();
+      current = undefined;
+      currentGenerations = undefined;
+    });
+    return pollingStopped;
+  }
+
   return {
     pause() {
       paused = true;
@@ -378,26 +401,9 @@ export async function startSearchIndexing(options: {
         },
       );
     },
+    stopPolling,
     stop() {
-      if (closing) return closing;
-      stopped = true;
-      paused = true;
-      resumeAfter = undefined;
-      clearSchedule();
-      const reason = new Error('Search runner stopped');
-      const previous = current;
-      // Seal batch admission before cancelling discovery. Admitted Subject batches still
-      // own the bulk response, allocation check and checkpoint under their existing bounds.
-      const subjectDrain = (previous?.stop() ?? Promise.resolve()).finally(() => relayLifetime.abort(reason));
-      lifetime.abort(reason);
-      const projection = Promise.all([subjectDrain, mixed?.stop()]);
-      const preparing = options.publicPreparation?.stop();
-      closing = Promise.all([discovery, projection, preparing]).then(async () => {
-        if (current && current !== previous) await current.stop();
-        current = undefined;
-        currentGenerations = undefined;
-      });
-      return closing;
+      return (closing ??= Promise.all([stopPolling(), options.publicPreparation?.stop()]).then(() => {}));
     },
     async refresh(context?: SearchTurnContext) {
       // Both families spend the same admission time, even when one is queued behind maintenance.
