@@ -1,6 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { isEconomyBookId, type EconomyFailure, type EconomyLedger, type SpotFillSettlement } from '../contract.ts';
+import {
+  isEconomyBookId,
+  isSpotFillId,
+  isSpotTradePosition,
+  SPOT_TRADE_PAGE_LIMIT,
+  type EconomyFailure,
+  type EconomyLedger,
+  type SpotFillSettlement,
+  type SpotTrade,
+  type SpotTradePage,
+  type SpotTradePosition,
+} from '../contract.ts';
 import {
   acceptSpotOrder,
   cancelSpotOrder,
@@ -83,10 +94,6 @@ function failure<K extends Failure>(kind: K): Readonly<{ kind: K }> {
 
 function accountId(value: string): string | null {
   return uuid.test(value) && value !== nilAccount ? value.toLowerCase() : null;
-}
-
-function validFillId(value: string): boolean {
-  return /^[a-zA-Z0-9_/-]{1,255}$/.test(value);
 }
 
 async function readInstrument(tx: Query, bookId: string, id: string, lock = false): Promise<Instrument | null> {
@@ -301,6 +308,39 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
       });
     },
 
+    readTrades(instrumentId: string, limit: number, after: SpotTradePosition | null): Promise<Result<SpotTradePage>> {
+      if (!key.test(instrumentId)) return Promise.resolve(failure('not_found'));
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > SPOT_TRADE_PAGE_LIMIT ||
+        (after && !isSpotTradePosition(after))
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return run('read', async (tx) => {
+        const instrument = await tx.query(
+          'SELECT 1 FROM economy.spot_instrument WHERE book_id = $1 AND instrument_id = $2',
+          [bookId, instrumentId],
+        );
+        if (!instrument.rowCount) return failure('not_found');
+        const { rows } = await tx.query<SpotTrade & { fillId: string }>(
+          `SELECT price::text, lots::text, base_units::text AS "baseUnits", quote_units::text AS "quoteUnits",
+             to_char(settled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "settledAt", fill_id AS "fillId"
+           FROM economy.spot_fill
+           WHERE book_id = $1 AND instrument_id = $2 AND settled_at IS NOT NULL
+           ${after ? 'AND (settled_at, fill_id) < ($4::timestamptz, $5::text)' : ''}
+           ORDER BY settled_at DESC, fill_id DESC LIMIT $3`,
+          [bookId, instrumentId, limit + 1, ...(after ?? [])],
+        );
+        const shown = rows.slice(0, limit);
+        const last = shown.at(-1);
+        return ok({
+          trades: shown.map(({ fillId, ...trade }) => trade),
+          after: rows.length > limit && last ? [last.settledAt, last.fillId] : null,
+        });
+      });
+    },
+
     readOwnOrder(instrumentId: string, orderId: string, owner: string): Promise<Result<SpotOrder>> {
       const ownerId = accountId(owner);
       return run('read', async (tx) => {
@@ -489,7 +529,7 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
     },
 
     claimFill(fillId: string): Promise<Result<Claim>> {
-      if (!validFillId(fillId)) return Promise.resolve(failure('not_found'));
+      if (!isSpotFillId(fillId)) return Promise.resolve(failure('not_found'));
       return run('transaction', async (tx) => {
         const token = randomUUID();
         const { rows } = await tx.query<{ until: Date }>(
@@ -502,7 +542,7 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
     },
 
     settleFill(fillId: string, token: string): Promise<Result<Readonly<{ operationId: string }>>> {
-      if (!validFillId(fillId) || !uuid.test(token)) return Promise.resolve(failure('invalid_operation'));
+      if (!isSpotFillId(fillId) || !uuid.test(token)) return Promise.resolve(failure('invalid_operation'));
       return run('transaction', async (tx) => {
         const { rows } = await tx.query<FillRow>(
           `SELECT fill.fill_id AS "fillId", fill.instrument_id AS "instrumentId", instrument.policy_version::text AS "policyVersion",

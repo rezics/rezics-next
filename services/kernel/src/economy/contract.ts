@@ -91,6 +91,36 @@ export type HoldAllocation = Readonly<{
 }>;
 type AllocationCommand = HoldAllocationKey & Pick<WalletCommand, 'operationId'>;
 
+/** Settled quantities in the instrument’s native units. */
+export type SpotTrade = Readonly<{
+  price: string;
+  lots: string;
+  baseUnits: string;
+  quoteUnits: string;
+  settledAt: string;
+}>;
+/** Native keyset position with sub-millisecond precision. */
+export type SpotTradePosition = readonly [settledAt: string, fillId: string];
+export type SpotTradePage = Readonly<{ trades: SpotTrade[]; after: SpotTradePosition | null }>;
+
+export const SPOT_TRADE_PAGE_LIMIT = 100;
+
+export function isSpotFillId(value: string): boolean {
+  return /^[a-zA-Z0-9_/-]{1,255}$/.test(value);
+}
+
+export function isSpotTradePosition(after: readonly unknown[]): after is SpotTradePosition {
+  const [settledAt, fillId] = after;
+  return (
+    after.length === 2 &&
+    typeof settledAt === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(settledAt) &&
+    Number.isFinite(Date.parse(settledAt)) &&
+    typeof fillId === 'string' &&
+    isSpotFillId(fillId)
+  );
+}
+
 /** Trusted terms captured by the instrument owner for one same-book fill. */
 export type SpotFillSettlement = Readonly<{
   fillId: string;

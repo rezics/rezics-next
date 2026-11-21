@@ -260,6 +260,7 @@ const typed = [
   'GET /v1/economy/wallets/:assetId/statement',
   'POST /v1/economy/wallets/:assetId/transfers',
   'GET /v1/economy/spot/:instrumentId',
+  'GET /v1/economy/spot/:instrumentId/trades',
   'GET /v1/economy/spot/:instrumentId/orders/:orderId',
   'POST /v1/economy/spot/:instrumentId/orders',
   'POST /v1/economy/spot/:instrumentId/orders/:orderId/cancel',
