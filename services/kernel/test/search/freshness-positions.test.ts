@@ -287,3 +287,71 @@ test('a concurrent head and checkpoint preserve the same committed freshness com
     }
   }
 }, 30_000);
+
+test('cutover reconciles native checkpoints that replica replay delivered before their homes', async () => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  const [bound, restore] = (
+    await Bun.file(
+      new URL('../../db/search/migrations/20261122012700_bound_shared_freshness_writes.sql', import.meta.url),
+    ).text()
+  ).split('-- migrate:down');
+  const [reconcile] = (
+    await Bun.file(
+      new URL('../../db/search/migrations/20261122014300_reconcile_replayed_freshness_ceilings.sql', import.meta.url),
+    ).text()
+  ).split('-- migrate:down');
+  const first = 65536 + (crypto.getRandomValues(new Uint32Array(1))[0]! % 32768);
+  const homes = [first, first + 1];
+  await db.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query(restore!);
+    await db.query('SET LOCAL session_replication_role=replica');
+    await db.query(
+      "INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) SELECT n,'generic_orphan_freshness',1,50 FROM unnest($1::int[]) n",
+      [homes],
+    );
+    await db.query('SET LOCAL session_replication_role=origin');
+    await db.query(bound!);
+    await db.query(
+      "INSERT INTO core.partition(partition_no,node,write_state,position) VALUES($1,'freshness-test','fenced',100)",
+      [first],
+    );
+    expect((await db.query('SELECT position FROM search.freshness_home WHERE partition_no=$1', [first])).rows).toEqual([
+      { position: '1' },
+    ]);
+    const homeWrites = async () =>
+      Number(
+        (
+          await db.query(
+            "SELECT n_tup_ins+n_tup_upd AS writes FROM pg_stat_xact_user_tables WHERE relid='search.freshness_home'::regclass",
+          )
+        ).rows[0]!.writes,
+      );
+    const before = await homeWrites();
+    await db.query(reconcile!);
+    const repaired = await homeWrites();
+    expect(repaired - before).toBeGreaterThanOrEqual(2);
+    await db.query(reconcile!);
+    expect(await homeWrites()).toBe(repaired);
+    await db.query(
+      "INSERT INTO core.partition(partition_no,node,write_state,position) VALUES($1,'freshness-test','fenced',100)",
+      [first + 1],
+    );
+    expect(
+      (
+        await db.query(
+          'SELECT head,checkpoint_ceiling,position FROM search.freshness_home WHERE partition_no=ANY($1::int[]) ORDER BY partition_no',
+          [homes],
+        )
+      ).rows,
+    ).toEqual(homes.map(() => ({ head: '100', checkpoint_ceiling: '50', position: '51' })));
+  } finally {
+    try {
+      await db.query('ROLLBACK');
+    } finally {
+      await db.end();
+    }
+  }
+}, 30_000);
