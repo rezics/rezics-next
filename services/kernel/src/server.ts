@@ -2,10 +2,12 @@ import { composeRatingDependencies } from './composition/rating.ts';
 import { createNativeRatingCapabilities } from './rating/module.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
 import { isEconomyBookId } from './economy/contract.ts';
+import { enqueueMarketRepair } from './economy/storage/market-repair.ts';
 import { createNativeEconomyWallet } from './composition/economy.ts';
 import { createNativeEconomySpot } from './composition/economy-spot.ts';
 import { withCommittedSpotWake } from './composition/economy-spot-wake.ts';
 import { createNativeEconomyMarket, readEconomyMarketConfig } from './composition/economy-market.ts';
+import { createNativeEconomyMarketRepair } from './composition/economy-market-repair.ts';
 import { createNativeEconomyTestFunding, readEconomyTestFundingConfig } from './composition/economy-test-funding.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
@@ -266,10 +268,10 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       config.economyBookId === undefined || config.economyNode === undefined
         ? undefined
         : { bookId: config.economyBookId, node: config.economyNode };
-    const economyMarket =
+    const economyMarketBinding =
       economyConfig === undefined || config.economyMarket === undefined
         ? undefined
-        : createNativeEconomyMarket(pool, { ...config.economyMarket, ...economyConfig }).port;
+        : { ...config.economyMarket, ...economyConfig };
     const economyTestFunding =
       process.env.NODE_ENV !== 'development' || economyConfig === undefined || config.economyTestFunding === undefined
         ? undefined
@@ -285,7 +287,12 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               await client,
             ),
           }),
-      ...(economyMarket === undefined ? {} : { economyMarket }),
+      ...(economyMarketBinding === undefined
+        ? {}
+        : {
+            economyMarket: createNativeEconomyMarket(pool, economyMarketBinding).port,
+            economyMarketRepair: createNativeEconomyMarketRepair(pool, economyMarketBinding, enqueueMarketRepair),
+          }),
       ...(economyTestFunding === undefined ? {} : { economyTestFunding }),
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,

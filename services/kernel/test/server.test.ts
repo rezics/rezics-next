@@ -20,6 +20,7 @@ const env = {
   DATABASE_URL: databaseUrl,
   KERNEL_ROUTE_KEY: routeKey,
   KERNEL_SESSION_KEYS: `7:${current},3:${previous}`,
+  KERNEL_RECEIPT_KEYS: `1:${key()}`,
   KERNEL_WRITE_RATE_SECRET: 'server-test-write-rate-secret-with-at-least-32-bytes',
 };
 const parse = (text: string) =>
@@ -91,6 +92,64 @@ test('a started server answers health and the subject routes over HTTP, then sto
     await server.stop();
   }
   await expect(fetch(`${origin}/health`)).rejects.toThrow();
+});
+
+test('production Economy starts closed and configured routes still require admission', async () => {
+  const previousEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  const repairPath = `/v1/economy/market/trades/${'a'.repeat(64)}:repair`;
+  const requestRepair = (origin: URL) =>
+    fetch(new URL(repairPath, origin), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+      body: '{}',
+    });
+
+  try {
+    const unconfigured = await startServer(readConfig({ ...env, KERNEL_PORT: '0', NODE_ENV: 'production' }));
+    try {
+      const wallet = await fetch(new URL('/v1/economy/wallets', unconfigured.url));
+      expect(wallet.status).toBe(403);
+      expect(await wallet.json()).toMatchObject({ code: 'platform_closed' });
+      expect((await requestRepair(unconfigured.url)).status).toBe(404);
+    } finally {
+      await unconfigured.stop();
+    }
+
+    const configured = readConfig({
+      ...env,
+      KERNEL_PORT: '0',
+      NODE_ENV: 'development',
+      KERNEL_ECONOMY_BOOK_ID: 'server-economy-book',
+      KERNEL_ECONOMY_NODE: 'server-economy-node',
+      KERNEL_ECONOMY_MARKET_ITEM_HOME_ID: 'server-economy-items',
+      KERNEL_ECONOMY_MARKET_FEE_ACCOUNT_ID: '00000000-0000-0000-0000-000000000001',
+      KERNEL_ECONOMY_MARKET_FEE_BPS: '100',
+      KERNEL_ECONOMY_MARKET_POLICY_VERSION: '1',
+      KERNEL_ECONOMY_TEST_FUNDING_MODE: 'test',
+      KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID: 'server-test-credit',
+      KERNEL_ECONOMY_TEST_FUNDING_NAMESPACE: 'server-funding-fixture',
+    });
+    expect(configured.economyTestFunding).toBeDefined();
+    const server = await startServer(configured);
+    try {
+      const wallet = await fetch(new URL('/v1/economy/wallets', server.url));
+      expect(wallet.status).toBe(403);
+      const repair = await requestRepair(server.url);
+      expect(repair.status).toBe(403);
+      expect(await repair.json()).toMatchObject({ code: 'platform_closed' });
+      expect((await fetch(new URL('/v1/economy/test-funding/intents/fixture', server.url))).status).toBe(404);
+      const discovery = await fetch(new URL('/v1/openapi.json', server.url));
+      expect(discovery.status).toBe(200);
+      const { paths } = (await discovery.json()) as { paths: Record<string, unknown> };
+      expect(Object.keys(paths).filter((path) => path.startsWith('/v1/economy/'))).toEqual([]);
+    } finally {
+      await server.stop();
+    }
+  } finally {
+    if (previousEnvironment === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnvironment;
+  }
 });
 
 test('a server with a missing Turnstile secret serves public reads while reports fail closed', async () => {
@@ -496,7 +555,7 @@ async function nativeWorker(databaseUrl: string) {
     }
   `;
   const child = Bun.spawn([process.execPath, '-e', source], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: { ...process.env, DATABASE_URL: databaseUrl, KERNEL_RECEIPT_KEYS: env.KERNEL_RECEIPT_KEYS },
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -550,10 +609,13 @@ test('db up writes development secrets once and keeps them across restarts', () 
     'AUTH_ISSUER',
     'AUTH_JWKS_URL',
     'DATABASE_URL',
+    'KERNEL_POOL_ACQUIRE_TIMEOUT_MS',
     'KERNEL_RATING_COUNTER_SECRET',
     'KERNEL_RECEIPT_KEYS',
     'KERNEL_ROUTE_KEY',
+    'KERNEL_SEARCH_PREFIX',
     'KERNEL_SESSION_KEYS',
+    'KERNEL_WRITE_RATE_OVERRIDES',
     'KERNEL_WRITE_RATE_SECRET',
   ]);
   expect(values.AUTH_ISSUER).toBe('http://127.0.0.1:4200');

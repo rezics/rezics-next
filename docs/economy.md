@@ -146,14 +146,14 @@ bounded set of ready, already issued instructions using the same native claims, 
 scheduled worker. A retained commit or abort remains authoritative. Work whose lease is still live stays with its
 current owner. A trade awaiting a decision continues through the normal decision rules.
 
-A mounted market repair command requires the caller's current direct Economy grant, the `market:repair` client
-scope and independent `market:repair` authority on Global Context. Check both grants before reading or replaying a
-command receipt. Apply the same authorization to discovery. Platform governance can delegate the exact repair action
-through the existing Global grant controls. Mount the command with the configured market owner. Acceptance queues
-only the named book, item home and trade in a private work record keyed by its command transaction. The configured market worker leases one bounded
-repair pass and can reclaim an interrupted request after the lease expires. A successful pass completes that request;
-the normal market sweep continues subsequent work. An already accepted repair uses the retained decision and native
-owner leases.
+`POST /v1/economy/market/trades/:tradeId:repair` is mounted with the configured market owner. It requires the caller's
+current direct Economy grant, the `market:repair` client scope and independent `market:repair` authority on Global
+Context. Check both grants before reading or replaying a command receipt and apply the same authorization to discovery.
+Platform governance can delegate the exact repair action through the existing Global grant controls. Acceptance queues
+only the named book, item home and trade in a private work record keyed by its command transaction. The market worker
+leases one bounded repair pass and can reclaim an interrupted request after the lease expires. A successful pass
+completes that request. The normal market sweep continues subsequent work. An already accepted repair uses the retained
+decision and native owner leases.
 
 Run `bun --no-env-file services/kernel/scripts/economy-book-audit.ts --book BOOK` with a read-only database credential
 in `ECONOMY_RECONCILIATION_DATABASE_URL`. The command writes one JSON result to standard output. An optional
@@ -163,9 +163,9 @@ Use an explicit PostgreSQL URI. TLS validates the server by default, and disposa
 `sslmode=disable`.
 
 Run `bun services/kernel/scripts/economy-book-restore.ts` to exercise a PostgreSQL custom dump and restore in disposable
-databases. The exercise restores an uncertain synthetic withdrawal and an escrowed fixed-price trade. It fences the
-source before resuming the previously accepted operations, then verifies the original withdrawal identity, item
-delivery, seller proceeds and fee posting.
+databases. The exercise restores an uncertain synthetic withdrawal, an escrowed fixed-price trade and its leased
+repair request. It fences the source before resuming the previously accepted operations, then verifies the original
+withdrawal identity, repair lease takeover, item delivery, seller proceeds and fee posting.
 
 The [engine and implementation research](research/economy-system-design-codex.md) records the alternatives and pinned
 reference source. Engine replacement or deployment separation must preserve the ledger and operating contract.

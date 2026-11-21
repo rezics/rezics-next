@@ -12,6 +12,11 @@ import {
   createDeterministicFundingRail,
   runDeterministicFundingDispatch,
 } from '../src/economy/storage/funding-test-rail.ts';
+import {
+  createMarketRepairQueue,
+  enqueueMarketRepair,
+  runMarketRepairWindow,
+} from '../src/economy/storage/market-repair.ts';
 import { createNativeMarket } from '../src/economy/storage/market-runner.ts';
 import { POSTGRES_IMAGE } from './database.ts';
 
@@ -207,6 +212,16 @@ async function run(): Promise<void> {
     const beforeEscrow = await escrow(source.pool);
     assert.equal(beforeEscrow.phase, 'escrowed');
     assert.equal((await market.item.readItem(item.itemId))?.holderId, seller);
+    const repairBinding = { bookId, itemHomeId, node: 'restore-node' };
+    const repair = { ...repairBinding, transactionId: crypto.randomUUID(), tradeId: 'trade' };
+    const sourceQueue = createMarketRepairQueue(database, repairBinding);
+    assert.deepEqual(await database.transaction((client) => enqueueMarketRepair(client, repair)), {
+      kind: 'queued',
+    });
+    const originalRepairClaim = await sourceQueue.claim();
+    assert.ok(originalRepairClaim);
+    assert.equal(originalRepairClaim.transactionId, repair.transactionId);
+    assert.equal(originalRepairClaim.tradeId, repair.tradeId);
     const before = await audit(source.pool, bookId);
 
     // Retire every source writer before export. The fixture's test provider remains the external witness.
@@ -253,6 +268,7 @@ async function run(): Promise<void> {
     const restoredLedger = createEconomyLedger(restoredDatabase, bookId);
     const restoredFunding = createFundingStore(restoredDatabase, bookId, createFundingLedgerBinder(bookId));
     const restoredMarket = createNativeMarket(restoredDatabase, { bookId, itemHomeId });
+    const restoredQueue = createMarketRepairQueue(restoredDatabase, repairBinding);
     assert.equal(ok(await restoredLedger.readAllocation(hold)).status, 'protected');
     assert.deepEqual(ok(await restoredFunding.prepare(original.intentId)), {
       kind: 'queued',
@@ -278,8 +294,42 @@ async function run(): Promise<void> {
     const statement = ok(await restoredLedger.readStatement({ ...wallet, limit: 10 }));
     assert.equal(statement.entries.filter((item) => item.kind === 'withdrawal').length, 1);
 
+    const retainedRepair = await restored.pool.query(
+      `SELECT claim_id AS "claimId", attempts, finished_at AS "finishedAt"
+       FROM economy.market_repair_request WHERE transaction_id = $1 AND book_id = $2 AND trade_id = $3`,
+      [repair.transactionId, bookId, repair.tradeId],
+    );
+    assert.deepEqual(retainedRepair.rows, [{ claimId: originalRepairClaim.claimId, attempts: 1, finishedAt: null }]);
+    assert.deepEqual(await restoredDatabase.transaction((client) => enqueueMarketRepair(client, repair)), {
+      kind: 'replayed',
+    });
+    // Reproduce the source worker's lost lease without sleeping through another lease period.
+    await restored.pool.query(
+      `UPDATE economy.market_repair_request SET available_at = statement_timestamp() - interval '1 second'
+       WHERE transaction_id = $1`,
+      [repair.transactionId],
+    );
+    assert.equal(await restoredQueue.settle(originalRepairClaim, { finish: 'completed' }), false);
+    let repairPasses = 0;
+    const resume = async (tradeId: string) => {
+      repairPasses++;
+      assert.equal(tradeId, repair.tradeId);
+      const result = await restoredMarket.resumeTrade(tradeId);
+      assert.deepEqual(ok(result), { decisions: [], acknowledged: ['market:deliver_item:trade'], retry: [] });
+      return result;
+    };
+    await runMarketRepairWindow(restoredQueue, resume);
+    await runMarketRepairWindow(restoredQueue, resume);
+    assert.equal(repairPasses, 1);
+    const completedRepair = await restored.pool.query(
+      `SELECT attempts, outcome, finished_at IS NOT NULL AS finished
+       FROM economy.market_repair_request WHERE transaction_id = $1`,
+      [repair.transactionId],
+    );
+    assert.deepEqual(completedRepair.rows, [{ attempts: 2, outcome: 'completed', finished: true }]);
+
     const delivery = await restoredMarket.sweep(10);
-    assert.deepEqual(delivery.acknowledged, ['market:deliver_item:trade', 'market:release_proceeds:trade']);
+    assert.deepEqual(delivery.acknowledged, ['market:release_proceeds:trade']);
     assert.deepEqual(delivery.retry, []);
     assert.deepEqual(await restoredMarket.sweep(10), { decisions: [], acknowledged: [], retry: [] });
     const delivered = await restoredMarket.market.readTrade('trade');
@@ -298,7 +348,7 @@ async function run(): Promise<void> {
       assert.equal(ok(await restoredLedger.readBalance({ accountId, assetId })).posted, posted);
     await audit(restored.pool, bookId);
     process.stdout.write(
-      `Economy restore proved one withdrawal and one escrow delivery from ${backup.byteLength} native dump bytes.\n`,
+      `Economy restore proved one withdrawal, one named repair and one escrow delivery from ${backup.byteLength} native dump bytes.\n`,
     );
   } catch (error) {
     originalFailure = error;

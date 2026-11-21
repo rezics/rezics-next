@@ -633,6 +633,31 @@ CREATE TABLE economy.market_listing (
 
 
 --
+-- Name: market_repair_request; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.market_repair_request (
+    transaction_id uuid NOT NULL,
+    book_id text NOT NULL,
+    node text NOT NULL,
+    item_home_id text NOT NULL,
+    trade_id text NOT NULL,
+    available_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    claim_id uuid,
+    attempts smallint DEFAULT 0 NOT NULL,
+    last_failure text,
+    finished_at timestamp with time zone,
+    outcome text,
+    CONSTRAINT market_repair_request_attempts_check CHECK (((attempts >= 0) AND (attempts <= 5))),
+    CONSTRAINT market_repair_request_check CHECK (((finished_at IS NULL) = (outcome IS NULL))),
+    CONSTRAINT market_repair_request_check1 CHECK (((finished_at IS NULL) OR ((claim_id IS NULL) AND (last_failure IS NULL)))),
+    CONSTRAINT market_repair_request_last_failure_check CHECK ((last_failure = ANY (ARRAY['owner_retry'::text, 'unavailable'::text]))),
+    CONSTRAINT market_repair_request_node_check CHECK (((length(btrim(node)) > 0) AND (length(node) <= 255))),
+    CONSTRAINT market_repair_request_outcome_check CHECK ((outcome = ANY (ARRAY['completed'::text, 'not_found'::text])))
+);
+
+
+--
 -- Name: market_trade; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -1193,6 +1218,14 @@ ALTER TABLE ONLY economy.market_listing
 
 
 --
+-- Name: market_repair_request market_repair_request_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_repair_request
+    ADD CONSTRAINT market_repair_request_pkey PRIMARY KEY (transaction_id);
+
+
+--
 -- Name: market_trade market_trade_book_id_listing_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1328,6 +1361,13 @@ CREATE INDEX market_listing_open_expiry_idx ON economy.market_listing USING btre
 --
 
 CREATE UNIQUE INDEX market_one_active_item_listing ON economy.market_item_listing USING btree (home_id, item_id) WHERE (phase = ANY (ARRAY['reserved'::text, 'prepared'::text, 'fenced'::text]));
+
+
+--
+-- Name: market_repair_ready_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX market_repair_ready_idx ON economy.market_repair_request USING btree (book_id, node, item_home_id, available_at, transaction_id) WHERE (finished_at IS NULL);
 
 
 --
@@ -1832,6 +1872,14 @@ ALTER TABLE ONLY economy.market_item_listing
 
 ALTER TABLE ONLY economy.market_item_trade
     ADD CONSTRAINT market_item_trade_home_id_book_id_listing_id_fkey FOREIGN KEY (home_id, book_id, listing_id) REFERENCES economy.market_item_listing(home_id, book_id, listing_id);
+
+
+--
+-- Name: market_repair_request market_repair_request_book_id_trade_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.market_repair_request
+    ADD CONSTRAINT market_repair_request_book_id_trade_id_fkey FOREIGN KEY (book_id, trade_id) REFERENCES economy.market_trade(book_id, trade_id);
 
 
 --
