@@ -46,6 +46,11 @@ and a debit checks current availability in the same commit. Issuance uses a name
 both legs in the same book and asset. Immutable journal entries, balance changes, hold state and the durable economic
 identity commit together. Corrections append linked entries.
 
+`GET /v1/economy/wallets` lists the current account's asset balances under `wallet:read`. Include assets with an
+existing wallet position or a positive pending deposit. Return the same posted, held, restricted, pending and available
+values as the individual asset view. Page in ascending asset ID with a bounded exclusive continuation. The list
+includes a pending-only asset before its first credit and preserves zero positions with statement history.
+
 Economic identities scope replay by business operation and authorized initiating principal. The same key and operands
 return the same outcome. A semantic change with the same key conflicts. The ledger verifies balanced groups and
 amount bounds before committing. Lock affected keys in a consistent order. Provider I/O and foreign owner work run
