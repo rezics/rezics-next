@@ -4,6 +4,7 @@ import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/mo
 import { isEconomyBookId } from './economy/contract.ts';
 import { createNativeEconomyWallet } from './composition/economy.ts';
 import { createNativeEconomySpot } from './composition/economy-spot.ts';
+import { createNativeEconomyMarket, readEconomyMarketConfig } from './composition/economy-market.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
@@ -74,6 +75,7 @@ export type ServerConfig = {
   commerce: CommerceConfig | null;
   economyBookId?: string;
   economyNode?: string;
+  economyMarket?: NonNullable<ReturnType<typeof readEconomyMarketConfig>>;
   content: ContentRuntime & { shelfTitleInputs?: ReturnType<typeof composeNativeContentShelfTitleInputs> };
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
@@ -101,6 +103,9 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const economyNode = env.KERNEL_ECONOMY_NODE;
   if (economyNode !== undefined && (!economyNode.trim() || economyNode.length > 255))
     throw new ConfigError('KERNEL_ECONOMY_NODE');
+  const economyMarket = readEconomyMarketConfig(env);
+  if (economyMarket && economyBookId === undefined) throw new ConfigError('KERNEL_ECONOMY_BOOK_ID');
+  if (economyMarket && economyNode === undefined) throw new ConfigError('KERNEL_ECONOMY_NODE');
   return {
     databaseUrl,
     poolAcquireTimeoutMillis,
@@ -115,6 +120,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     commerce,
     ...(economyBookId === undefined ? {} : { economyBookId }),
     ...(economyNode === undefined ? {} : { economyNode }),
+    ...(economyMarket === undefined ? {} : { economyMarket }),
     moneyPolicy: readCommerceMoneyPolicy(env),
     content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
@@ -254,6 +260,10 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       config.economyBookId === undefined || config.economyNode === undefined
         ? undefined
         : { bookId: config.economyBookId, node: config.economyNode };
+    const economyMarket =
+      economyConfig === undefined || config.economyMarket === undefined
+        ? undefined
+        : createNativeEconomyMarket(pool, { ...config.economyMarket, ...economyConfig }).port;
     app = createKernel({
       ...(economyConfig === undefined
         ? {}
@@ -261,6 +271,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             economy: createNativeEconomyWallet(pool, economyConfig),
             economySpot: createNativeEconomySpot(pool, economyConfig),
           }),
+      ...(economyMarket === undefined ? {} : { economyMarket }),
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
       pool,

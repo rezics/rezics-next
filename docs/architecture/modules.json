@@ -1036,6 +1036,7 @@
         "services/kernel/src/http/**",
         "services/kernel/src/economy/routes.ts",
         "services/kernel/src/economy/spot-routes.ts",
+        "services/kernel/src/economy/market-routes.ts",
         "services/kernel/src/events/**",
         "services/kernel/src/tokens/**",
         "services/kernel/src/partition/**",
@@ -1057,6 +1058,7 @@
       ],
       "publicEntries": [
         "services/kernel/src/economy/spot-routes.ts",
+        "services/kernel/src/economy/market-routes.ts",
         "services/kernel/src/http/problem.ts",
         "services/kernel/src/http/request.ts",
         "services/kernel/src/command/receipt-key.ts",
@@ -1181,6 +1183,7 @@
         "kernel-commerce",
         "kernel-economy-adapter",
         "kernel-economy-contract",
+        "kernel-economy-core",
         "kernel-community",
         "kernel-content",
         "kernel-content-application",

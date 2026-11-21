@@ -76,6 +76,7 @@ import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import { economyRoutes } from '../economy/routes.ts';
 import { economySpotRoutes, type SpotAccessPort } from '../economy/spot-routes.ts';
+import { economyMarketRoutes, type EconomyMarketPort } from '../economy/market-routes.ts';
 import type { EconomyWalletPort } from '../economy/contract.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { continueRoutes } from '../library/continue-routes.ts';
@@ -199,6 +200,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   commerce?: CommerceDependencies;
   economy?: EconomyWalletPort;
   economySpot?: SpotAccessPort;
+  economyMarket?: EconomyMarketPort;
   moneyPolicy?: CommerceMoneyPolicy;
   content?: ContentRuntime &
     Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
@@ -648,6 +650,10 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   economySpotRoutes(app as unknown as ReturnType<typeof createApp>, {
     pool: dependencies.pool,
     ...(dependencies.economySpot === undefined ? {} : { spot: dependencies.economySpot }),
+  });
+  economyMarketRoutes(app as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    ...(dependencies.economyMarket === undefined ? {} : { market: dependencies.economyMarket }),
   });
   let progress: ReturnType<typeof progressRoutes>;
   progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
@@ -1202,6 +1208,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof economyRoutes> &
   ReturnType<typeof economySpotRoutes> &
+  ReturnType<typeof economyMarketRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof readingInsightsRoutes> &
   ReturnType<typeof yearlyCompletionGoalRoutes> &
