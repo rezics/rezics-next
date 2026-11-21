@@ -40,6 +40,7 @@ const cost: PublicFilterCost = {
 
 beforeAll(async () => {
   await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
+  await work.registerQueue('workflows', WORK_QUEUES.workflows);
 });
 
 afterAll(async () => {
@@ -105,7 +106,7 @@ function population(key = '1'): PopulationFrontier {
 }
 
 function identity(id: string, revision: string, kind: 'repair' | 'population' = 'repair'): string {
-  return `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${kind === 'population' ? ':population' : ''}`;
+  return `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}:${kind}`;
 }
 
 async function read(owner: string, id: string) {
@@ -175,7 +176,9 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   expect(await read(owner, repairId)).toEqual(repairBefore);
   expect(await read(owner, populationId)).toEqual(populationBefore);
   expect(await read(isolated, otherId)).toEqual(otherBefore);
-  expect(await workflows(repairId)).toEqual([identity(repairId, repairBefore!.revision)]);
+  const repairDelivery = identity(repairId, repairBefore!.revision);
+  expect(await workflows(repairId)).toEqual([repairDelivery]);
+  expect((await work.getWorkflow(repairDelivery))?.queueName).toBe('workflows');
   expect(await workflows(populationId)).toEqual([identity(populationId, populationBefore!.revision, 'population')]);
   await active.run(repairId, repairBefore!.revision);
   expect(settled).toBe(1);
@@ -184,6 +187,27 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   expect(claimed?.locator).toEqual(frontier);
   await store.advance(claimed!, { ...frontier, phase: 'replay' });
   expect((await read(owner, populationId))?.locator).toMatchObject({ kind: 'population', phase: 'replay' });
+});
+
+test('due discovery schedules a legacy maintenance repair on workflows under the original revision', async () => {
+  const owner = prefix();
+  const store = createPublicPreparationStore(pool, work, owner);
+  const job = repairJob();
+  const id = track(await store.retain({ kind: 'repair', key: JSON.stringify(job), job }, Date.now() + 60_000));
+  const { revision } = (await read(owner, id))!;
+  const current = identity(id, revision);
+  await work.deleteWorkflows([current], false);
+  const legacy = `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}`;
+  await work.enqueue(
+    { workflowName: PUBLIC_PREPARATION_WORKFLOW, workflowID: legacy, queueName: 'maintenance' },
+    { accounts: [], id, prefix: owner, revision, notBefore: Date.now() },
+  );
+  await store.due();
+  expect((await work.getWorkflow(legacy))?.status).toBe('ENQUEUED');
+  expect((await work.getWorkflow(current))?.queueName).toBe('workflows');
+  await preparation(owner).run(id, revision);
+  expect(await read(owner, id)).toBeNull();
+  expect(await store.claim(id, revision, Date.now() + 30_000)).toBeNull();
 });
 
 test('due discovery recovers a ready enrollment successor after an interrupted delivery', async () => {
@@ -225,7 +249,6 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
   });
   let ready = stopped.ready;
   registerPublicPreparationWork(() => ready());
-  await work.registerQueue('workflows', WORK_QUEUES.workflows);
   const launch = async () => {
     DBOS.setConfig({
       name: WORK_APPLICATION,

@@ -43,15 +43,14 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     locator.kind === 'repair' && locator.job.consumer.physicalTarget.startsWith(`${prefix}discovery-g`)
       ? 'discovery'
       : locator.kind;
-  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = Date.now()) => {
-    const maintenance = kind === 'repair';
-    return {
-      queue: maintenance ? ('maintenance' as const) : ('workflows' as const),
-      workflowName: PUBLIC_PREPARATION_WORKFLOW,
-      workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${maintenance ? '' : ':' + kind}`,
-      input: { accounts: [], id, prefix, revision, notBefore },
-    };
-  };
+  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = Date.now()) => ({
+    queue: 'workflows' as const,
+    workflowName: PUBLIC_PREPARATION_WORKFLOW,
+    // A queued maintenance delivery from an older worker retains its DBOS identity.
+    // Both deliveries must still claim the same revision before they can run.
+    workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}:${kind}`,
+    input: { accounts: [], id, prefix, revision, notBefore },
+  });
   async function transaction<T>(deadline: number, run: (client: PoolClient) => Promise<T>) {
     let closed = true;
     return withBoundedReadLifetime(
