@@ -2652,6 +2652,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         // Keep the reclaimable intent until the final immutable Source join succeeds.
         const joined = await join(q, undefined, m, context);
         if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+        // This page owns the original native registration, adoption and immutable definition.
+        // Its real START and FINAL independently bind the physical observation, current
+        // coverage and all original/terminal rows persisted by completePage.
+        if (freshPit && page) page.bookCut = { definition: joined.definition, covered: joined.covered };
       }
       // Adoption can survive a lost reply. Move the exact work and release its registration together.
       const moved = await m.sql(work.independentPit ? transferServingPit : pageControls.transfer(1), [
