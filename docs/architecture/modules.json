@@ -1035,6 +1035,7 @@
         "services/kernel/src/work/**",
         "services/kernel/src/http/**",
         "services/kernel/src/economy/routes.ts",
+        "services/kernel/src/economy/spot-routes.ts",
         "services/kernel/src/events/**",
         "services/kernel/src/tokens/**",
         "services/kernel/src/partition/**",
@@ -1055,6 +1056,7 @@
         "services/kernel/src/route/contract.ts"
       ],
       "publicEntries": [
+        "services/kernel/src/economy/spot-routes.ts",
         "services/kernel/src/http/problem.ts",
         "services/kernel/src/http/request.ts",
         "services/kernel/src/command/receipt-key.ts",
@@ -1128,6 +1130,7 @@
         "kernel-access-contract",
         "kernel-commerce",
         "kernel-economy-contract",
+        "kernel-economy-core",
         "kernel-community",
         "kernel-content",
         "kernel-history-application",
