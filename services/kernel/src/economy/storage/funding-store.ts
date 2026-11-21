@@ -250,6 +250,7 @@ export function createFundingStore(database: EconomyDatabase, bookId: string, bi
              provider_namespace, provider_mode, destination_ref, phase, reversed_units)
            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0
             WHERE EXISTS (SELECT 1 FROM economy.asset WHERE book_id = $1 AND asset_id = $4)
+              AND NOT EXISTS (SELECT 1 FROM economy.asset_program WHERE book_id = $1 AND asset_id = $4)
            ON CONFLICT DO NOTHING`,
           [
             bookId,

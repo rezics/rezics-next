@@ -114,6 +114,54 @@ CREATE TABLE economy.asset (
 
 
 --
+-- Name: asset_program; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.asset_program (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    program_id text NOT NULL,
+    version bigint NOT NULL,
+    issuance_source text NOT NULL,
+    supply_cap bigint NOT NULL,
+    redeemable boolean NOT NULL,
+    expires_at timestamp with time zone,
+    CONSTRAINT asset_program_issuance_source_check CHECK (((char_length(issuance_source) >= 1) AND (char_length(issuance_source) <= 64))),
+    CONSTRAINT asset_program_program_id_check CHECK (((char_length(program_id) >= 1) AND (char_length(program_id) <= 64))),
+    CONSTRAINT asset_program_supply_cap_check CHECK ((supply_cap > 0)),
+    CONSTRAINT asset_program_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: asset_program_recipient; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.asset_program_recipient (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    account_id uuid NOT NULL,
+    CONSTRAINT asset_program_recipient_account_id_check CHECK ((account_id <> '00000000-0000-0000-0000-000000000000'::uuid))
+);
+
+
+--
+-- Name: asset_program_source; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.asset_program_source (
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    program_id text NOT NULL,
+    kind text NOT NULL,
+    source_reference text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT asset_program_source_kind_check CHECK ((kind = ANY (ARRAY['mint'::text, 'redeem'::text]))),
+    CONSTRAINT asset_program_source_source_reference_check CHECK (((char_length(source_reference) >= 1) AND (char_length(source_reference) <= 255)))
+);
+
+
+--
 -- Name: command_receipt; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -127,7 +175,7 @@ CREATE TABLE economy.command_receipt (
     CONSTRAINT command_receipt_digest_check CHECK ((octet_length(digest) = 32)),
     CONSTRAINT command_receipt_namespace_check CHECK ((namespace = ANY (ARRAY['wallet'::text, 'owner'::text]))),
     CONSTRAINT command_receipt_operation_id_check CHECK (((char_length(operation_id) >= 1) AND (char_length(operation_id) <= 255))),
-    CONSTRAINT command_receipt_outcome_check CHECK ((outcome = ANY (ARRAY['ok'::text, 'asset_missing'::text, 'operation_conflict'::text, 'insufficient_funds'::text, 'asset_not_transferable'::text, 'hold_missing'::text, 'hold_closed'::text, 'allocation_missing'::text, 'allocation_closed'::text, 'invalid_amount'::text, 'invalid_operation'::text])))
+    CONSTRAINT command_receipt_outcome_check CHECK ((outcome = ANY (ARRAY['ok'::text, 'asset_missing'::text, 'operation_conflict'::text, 'insufficient_funds'::text, 'asset_not_transferable'::text, 'hold_missing'::text, 'hold_closed'::text, 'allocation_missing'::text, 'allocation_closed'::text, 'invalid_amount'::text, 'invalid_operation'::text, 'program_ineligible'::text, 'program_expired'::text, 'program_supply_exceeded'::text])))
 );
 
 
@@ -390,9 +438,9 @@ CREATE TABLE economy.journal (
     kind text NOT NULL,
     hold_id text,
     recorded_at timestamp with time zone NOT NULL,
-    CONSTRAINT journal_check CHECK (((kind = 'transfer'::text) = (namespace = 'wallet'::text))),
     CONSTRAINT journal_hold_kind_check CHECK (((kind = ANY (ARRAY['reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'withdrawal'::text, 'withdrawal_refusal'::text])) = (hold_id IS NOT NULL))),
-    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'deposit'::text, 'withdrawal'::text, 'withdrawal_return'::text, 'chargeback'::text, 'withdrawal_refusal'::text, 'creator_accrual'::text, 'creator_payout_reserve'::text, 'creator_payout'::text, 'creator_payout_refusal'::text, 'creator_payout_return'::text])))
+    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'deposit'::text, 'withdrawal'::text, 'withdrawal_return'::text, 'chargeback'::text, 'withdrawal_refusal'::text, 'creator_accrual'::text, 'creator_payout_reserve'::text, 'creator_payout'::text, 'creator_payout_refusal'::text, 'creator_payout_return'::text, 'redeem'::text, 'credit_expiry'::text]))),
+    CONSTRAINT journal_wallet_kind_check CHECK (((kind = ANY (ARRAY['transfer'::text, 'redeem'::text])) = (namespace = 'wallet'::text)))
 );
 
 
@@ -750,6 +798,54 @@ CREATE TABLE economy.spot_settlement (
 
 ALTER TABLE ONLY economy.asset
     ADD CONSTRAINT asset_pkey PRIMARY KEY (book_id, asset_id);
+
+
+--
+-- Name: asset_program asset_program_book_id_asset_id_program_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program
+    ADD CONSTRAINT asset_program_book_id_asset_id_program_id_key UNIQUE (book_id, asset_id, program_id);
+
+
+--
+-- Name: asset_program asset_program_book_id_program_id_version_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program
+    ADD CONSTRAINT asset_program_book_id_program_id_version_key UNIQUE (book_id, program_id, version);
+
+
+--
+-- Name: asset_program asset_program_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program
+    ADD CONSTRAINT asset_program_pkey PRIMARY KEY (book_id, asset_id);
+
+
+--
+-- Name: asset_program_recipient asset_program_recipient_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_recipient
+    ADD CONSTRAINT asset_program_recipient_pkey PRIMARY KEY (book_id, asset_id, account_id);
+
+
+--
+-- Name: asset_program_source asset_program_source_book_id_asset_id_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_source
+    ADD CONSTRAINT asset_program_source_book_id_asset_id_transaction_id_key UNIQUE (book_id, asset_id, transaction_id);
+
+
+--
+-- Name: asset_program_source asset_program_source_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_source
+    ADD CONSTRAINT asset_program_source_pkey PRIMARY KEY (book_id, program_id, kind, source_reference);
 
 
 --
@@ -1162,6 +1258,13 @@ CREATE INDEX market_work_ready ON economy.market_work USING btree (book_id, owne
 
 
 --
+-- Name: position_expirable_credit_idx; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX position_expirable_credit_idx ON economy."position" USING btree (book_id, asset_id, account_id) WHERE ((account_role = 'wallet'::text) AND (posted > 0));
+
+
+--
 -- Name: spot_ask_priority; Type: INDEX; Schema: economy; Owner: -
 --
 
@@ -1201,6 +1304,20 @@ CREATE UNIQUE INDEX spot_one_matching_order ON economy.spot_order USING btree (b
 --
 
 CREATE TRIGGER asset_immutable BEFORE DELETE OR UPDATE ON economy.asset FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: asset_program asset_program_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER asset_program_immutable BEFORE DELETE OR UPDATE ON economy.asset_program FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: asset_program_source asset_program_source_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER asset_program_source_immutable BEFORE DELETE OR UPDATE ON economy.asset_program_source FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -1320,6 +1437,38 @@ CREATE TRIGGER spot_order_terms_immutable BEFORE DELETE OR UPDATE OF book_id, in
 --
 
 CREATE TRIGGER spot_settlement_immutable BEFORE DELETE OR UPDATE ON economy.spot_settlement FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: asset_program asset_program_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program
+    ADD CONSTRAINT asset_program_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset(book_id, asset_id);
+
+
+--
+-- Name: asset_program_recipient asset_program_recipient_book_id_asset_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_recipient
+    ADD CONSTRAINT asset_program_recipient_book_id_asset_id_fkey FOREIGN KEY (book_id, asset_id) REFERENCES economy.asset_program(book_id, asset_id);
+
+
+--
+-- Name: asset_program_source asset_program_source_book_id_asset_id_program_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_source
+    ADD CONSTRAINT asset_program_source_book_id_asset_id_program_id_fkey FOREIGN KEY (book_id, asset_id, program_id) REFERENCES economy.asset_program(book_id, asset_id, program_id);
+
+
+--
+-- Name: asset_program_source asset_program_source_book_id_asset_id_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.asset_program_source
+    ADD CONSTRAINT asset_program_source_book_id_asset_id_transaction_id_fkey FOREIGN KEY (book_id, asset_id, transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
 
 
 --
