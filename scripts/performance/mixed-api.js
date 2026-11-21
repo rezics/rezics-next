@@ -293,7 +293,8 @@ export function handleSummary({ metrics }) {
   const probes = values('index_probe_visible');
   const dropped = values('dropped_iterations').count ?? 0;
   // The executor can schedule a final iteration exactly on the duration boundary.
-  const scheduled = Math.max(rate * seconds, dispatched + dropped);
+  const planned = rate * seconds;
+  const scheduled = dispatched + dropped;
   const report = {
     actorAndSubjectSha256: sha256(
       JSON.stringify([Array.from(accounts, (actor) => actor.id), Array.from(books, (book) => [book.id, book.text])]),
@@ -306,11 +307,11 @@ export function handleSummary({ metrics }) {
     targetRps: target ?? null,
     accounts: accounts.length,
     fixtureBooks: books.length || 1,
-    planned: rate * seconds,
+    planned,
     scheduled,
     dispatched,
     droppedByK6: dropped,
-    missedArrivals: scheduled - dispatched,
+    missedArrivals: Math.max(planned, scheduled) - dispatched,
     unfinished: dispatched - successful - failed,
     successful,
     failed,
