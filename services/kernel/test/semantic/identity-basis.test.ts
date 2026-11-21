@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { readIdentityBasis, readIdentityHome } from '../../src/semantic/identity-basis.ts';
 import { readIdentityMappings } from '../../src/semantic/identity-epoch-read.ts';
@@ -53,6 +54,12 @@ test('fresh shards bind native topology, ignore ordinary positions and invalidat
     const initial = await ready(db.pool);
     await db.pool.query('SELECT pg_stat_force_next_flush()');
     expect((await tuples()) - before).toBe(128);
+    const published = createHash('sha256').update('rezics.identity-basis.v2');
+    const shards = await client.query<{ basis: Buffer }>(
+      'SELECT basis FROM semantic.identity_basis_shard ORDER BY shard',
+    );
+    for (const row of shards.rows) published.update(row.basis);
+    expect(initial).toBe(published.digest('hex'));
     const token = await encodeSearchCursor(ring, binding(initial), { generation: 1, after: ['Book'] });
     await client.query('UPDATE core.partition SET position=position+1 WHERE partition_no=17');
     expect(await ready(db.pool)).toBe(initial);
@@ -102,6 +109,8 @@ test('fresh shards bind native topology, ignore ordinary positions and invalidat
     expect(moved).not.toBe(epoch);
     expect(await readIdentityHome(client, 17)).toMatchObject({ epoch: 2, home: 'new-writer' });
     expect((await decodeSearchCursor(ring, binding(moved), token)).ok).toBe(false);
+    await client.query('DELETE FROM semantic.identity_basis_shard WHERE shard=63');
+    expect(await observe(db.pool)).toEqual({ state: 'not_ready' });
   } finally {
     client.release();
     await db.close();

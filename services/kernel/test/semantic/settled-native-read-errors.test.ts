@@ -51,10 +51,7 @@ function fixture(consumer: Consumer) {
           } else if (sql.includes('FROM semantic.definition_catalogue_head')) {
             rows = await controls.read([{ root_digest: null, head: 1 }], ++observations);
           } else if (sql.includes('FROM semantic.identity_basis_shard')) {
-            rows = await controls.read(
-              Array.from({ length: 64 }, (_, shard) => ({ shard, ready: true, basis: Buffer.alloc(32) })),
-              ++observations,
-            );
+            rows = await controls.read([{ basis: '0'.repeat(64) }], ++observations);
           } else throw new Error(`Unexpected isolated read: ${sql}`);
           return {
             rows: config.rowMode === 'array' ? rows.map(Object.values) : rows,
@@ -231,8 +228,8 @@ test('identity basis retains missing, pending and changed currentness with later
     try {
       f.controls.read = async (rows, observation) => {
         if (state === 'missing') rows.pop();
-        if (state === 'pending') rows[0]!.ready = false;
-        if (state === 'changed' && observation === 2) rows[0]!.basis = Buffer.alloc(32, 1);
+        if (state === 'pending') rows[0]!.basis = null;
+        if (state === 'changed' && observation === 2) rows[0]!.basis = '1'.repeat(64);
         return rows;
       };
       await expect(f.read()).resolves.toEqual({ state: 'not_ready' });

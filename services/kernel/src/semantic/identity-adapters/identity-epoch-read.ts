@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS,
   IDENTITY_RATING_REVIEW_MAX_KEYS,
@@ -627,16 +626,14 @@ export async function readIdentityHome(client: PoolClient, partition: number): P
 }
 
 async function readIdentityShards(client: PoolClient): Promise<string | null> {
-  const { rows } = await client.query<{ shard: number; ready: boolean; basis: Buffer }>(
-    `SELECT shard,active_homes=64 AND pending=0 AS ready,basis FROM semantic.identity_basis_shard ORDER BY shard`,
+  // The primary key admits exactly shards 0..63. Hash their ordered bytes before crossing the wire.
+  const { rows } = await client.query<{ basis: string | null }>(
+    `SELECT CASE WHEN count(*)=64 AND bool_and(active_homes=64 AND pending=0)
+       THEN encode(sha256(convert_to('rezics.identity-basis.v2','UTF8') ||
+                          string_agg(basis,''::bytea ORDER BY shard)),'hex')
+     END AS basis FROM semantic.identity_basis_shard`,
   );
-  if (rows.length !== 64) return null;
-  const hash = createHash('sha256').update('rezics.identity-basis.v2');
-  for (const [shard, row] of rows.entries()) {
-    if (row.shard !== shard || !row.ready) return null;
-    hash.update(row.basis);
-  }
-  return hash.digest('hex');
+  return rows[0]?.basis ?? null;
 }
 
 async function readIdentityBasisWith(
