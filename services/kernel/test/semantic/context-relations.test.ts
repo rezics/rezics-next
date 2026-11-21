@@ -9,10 +9,16 @@ import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { LINKS_PROJECTED } from '../../src/semantic/events.ts';
+import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../src/semantic/identity-epoch-coordinator.ts';
+import selectJobById from '../../src/semantic/identity-epoch-store-select-job-by-id.sql';
 import { linkProjection, listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
+import { startWorker } from '../../src/worker.ts';
 import { createRealAccess } from './real-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -34,13 +40,14 @@ const actions = [
   'moderation:takedown',
 ];
 const access = await createRealAccess(admin, { editor }, actions);
+const routeKey = new Uint8Array(32).fill(48);
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(49)]]) };
 installNativeHistoryPreload();
 const kernel = createKernel({
   pool,
   access: access.access,
   writeRate: access.writeRate,
-  routeKey: new Uint8Array(32).fill(48),
+  routeKey,
   tokens: ring,
   receiptKeys: testReceiptKeys(),
 });
@@ -137,7 +144,7 @@ const statement = (property: string, target: string, position: number) => ({
   ],
   references: [],
 });
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, acceptedStatuses: readonly number[] = [200, 201]) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
@@ -150,7 +157,7 @@ async function call(method: string, path: string, body?: unknown) {
     }),
   );
   const result = (await response.json()) as any;
-  if (response.status !== 200 && response.status !== 201)
+  if (!acceptedStatuses.includes(response.status))
     throw new Error(`${method} ${path}: ${response.status} ${JSON.stringify(result)}`);
   return result;
 }
@@ -505,12 +512,41 @@ test('Context rows survive holder visibility changes and target redirects', asyn
   await call('POST', `/v1/subjects/${work}/candidates/${newCredit}:restore`, { reason: 'Projection test' });
   await drain();
   expect((await forward('ex:credit')).relations.map((row: any) => row.statement.id)).toEqual([newCredit]);
-  const merged = await call('POST', '/v1/subjects:merge', { subjects: [people[0], people[2]] });
+  const openSearchUrl = process.env.OPENSEARCH_URL;
+  if (!openSearchUrl) throw new Error('Native Subject merge publication requires OPENSEARCH_URL');
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:subject_identity');
+  await installIdentityEpochBootstrap(pool);
+  const workerPool = new pg.Pool({ connectionString: url, max: 32 });
+  const worker = await startWorker(
+    { databaseUrl: url, poolSize: 32, handleSignals: false, effectsRelay: false, kernelPool: () => workerPool },
+    undefined,
+    workerTestEnv({
+      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      KERNEL_SEARCH_PREFIX: `context-${randomUUID()}-`,
+      OPENSEARCH_URL: openSearchUrl,
+    }),
+  );
+  const subjects = [people[0]!, people[2]!].sort();
+  const [survivor, redirected] = subjects;
+  try {
+    const { operation } = await call('POST', '/v1/subjects:merge', { subjects }, [202]);
+    const jobId = operation.id as string;
+    const { rows } = await admin.query<{ epoch: string }>(selectJobById.sql, [partitionOf(routeOf(jobId)!), jobId]);
+    const saved = rows[0];
+    if (!saved) throw new Error(`Native Subject merge job ${jobId} was not retained`);
+    const job = { jobId, epoch: BigInt(saved.epoch) };
+    await resumeIdentityEpochJob(workerPool, job);
+    await waitIdentityEpochPublished(workerPool, job);
+    await stepIdentityEpochAdmission(workerPool, job);
+    expect(await call('GET', `/v1/subjectIdentityOperations/${jobId}`)).toEqual({
+      operation: { id: jobId, done: true, result: { survivor, redirected, revision: 2 } },
+    });
+  } finally {
+    await worker.stop();
+  }
   await drain();
   expect(
-    (
-      await call('GET', `/v1/subjects/${merged.survivor}/links?property=ex:appearance&context=${context}&limit=100`)
-    ).links
+    (await call('GET', `/v1/subjects/${survivor}/links?property=ex:appearance&context=${context}&limit=100`)).links
       .filter((row: any) => row.subject === work)
       .map((row: any) => row.statement),
   ).toEqual([newAppearance]);
@@ -574,7 +610,22 @@ test('native relationship preparation separates proposal, decision, selection an
     expect(operations(prepared)).toContain('subject.propose');
     expect(operations(prepared)).not.toContain('subject.accept_candidate');
     expect(operations(prepared)).not.toContain('subject.adopt');
-    expect(prepared[2]).toMatchObject({ type: 'semantic.subject', id: people[0], viewerActions: [] });
+    expect(prepared[2]).toEqual({
+      type: 'semantic.subject',
+      id: people[0],
+      viewerActions: [
+        {
+          action: 'subject:read',
+          operations: [
+            'knowledge_document.public_export',
+            'knowledge_document.public_read',
+            'rating.aggregate_get',
+            'rating.populations_get',
+            'subject.list_candidates',
+          ],
+        },
+      ],
+    });
     await access.revoke(parent, 'editor', 'statement:propose');
     expect(operations(await readActions())).not.toContain('subject.propose');
     const denied = await kernel.handle(
