@@ -4405,6 +4405,7 @@ $$;
 
 CREATE FUNCTION semantic.public_filter_committed_ack(original_bootstrap uuid, original_execution text, original_step uuid, original_binding text) RETURNS boolean
     LANGUAGE sql
+    SET join_collapse_limit TO '1'
     AS $$
   SELECT EXISTS (
     SELECT FROM search.public_filter_ack_manifest m
