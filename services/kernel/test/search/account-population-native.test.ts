@@ -45,9 +45,15 @@ test('native handled and handleless Accounts and catalogue Person converge; curr
     routeKey = new Uint8Array(32).fill(87);
   const prefix = `account-${crypto.randomUUID().slice(0, 8)}-`,
     key = () => crypto.randomUUID();
-  const actions = new Map(LIFECYCLE_ACTIONS);
-  actions.set('subject:create', { anonymous: false });
-  actions.set('subject:read', { anonymous: false });
+  const config = {
+    pool,
+    routeKey,
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
+    writeRate: createWriteRateLimiter({ secret: key() }),
+    receiptKeys: testReceiptKeys(),
+  };
+  const actions = actionCatalogue(createKernel(config), LIFECYCLE_ACTIONS);
+  const scopes = [...LIFECYCLE_ACTIONS.keys(), 'subject:create', 'subject:read'];
   const access = admittedAccess({ actions });
   const proofs = new Map<
     object,
@@ -75,7 +81,7 @@ test('native handled and handleless Accounts and catalogue Person converge; curr
     const actor = await authenticateAccount(
       access,
       { pool, deadline: Date.now() + 30_000 },
-      { accountId, clientId: 'account-population', scopes: [...actions.keys()] },
+      { accountId, clientId: 'account-population', scopes },
     );
     const context = { actor, deadline: Date.now() + 30_000 };
     const organizationId = newId(routeOf(accountId)!);
@@ -94,15 +100,8 @@ test('native handled and handleless Accounts and catalogue Person converge; curr
     const label = `Native shared label ${key()}`;
     for (const id of [accountId, organizationId])
       await commands.updateAccount(context, { accountId: id, patch: { displayName: label }, key: key() });
-    const kernel = createKernel({
-      pool,
-      access,
-      routeKey,
-      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
-      writeRate: createWriteRateLimiter({ secret: key() }),
-      receiptKeys: testReceiptKeys(),
-    });
-    const bearer = await accountToken({ accountId, clientId: 'account-population', scopes: [...actions.keys()] });
+    const kernel = createKernel({ ...config, access });
+    const bearer = await accountToken({ accountId, clientId: 'account-population', scopes });
     const created = await kernel.handle(
       new Request('http://kernel.test/v1/subjects', {
         method: 'POST',
