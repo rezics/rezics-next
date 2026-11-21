@@ -684,6 +684,114 @@ test('canonical retained observation execution joins preserve complete compiler 
   }
 }, 300000);
 
+test('adopted serving handoff preserves live work and releases only the exact interrupted registration', async () => {
+  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
+  const { createOpenSearch } = await import('../../src/search/opensearch.ts');
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const index = `adopted-handoff-${crypto.randomUUID()}`;
+  const custody = createPublicFilterCustody(f.db.pool);
+  try {
+    await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
+    const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+    const resolved = await binding.resolve(
+      {
+        source: publicFilterSource(f.config),
+        meaning: f.meaning,
+        capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined },
+      },
+      readContext(),
+    );
+    if (resolved.status !== 'resolved') throw new Error(resolved.reason);
+    const stored = await custody.register(
+      { definition: resolved.definition, physicalTarget: index, consumerGeneration: '1', projectionGeneration: '1' },
+      search,
+      readContext(),
+    );
+    if (stored.status !== 'registered') throw new Error(stored.reason);
+    const bootstrap = crypto.randomUUID();
+    const build = '0:' + bootstrap;
+    // Stage only the interrupted request. This fixture neither publishes a generation nor serves a search.
+    await f.db.pool.query(
+      `INSERT INTO semantic.public_filter_bootstrap
+         (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,owner_epoch,
+          source_position,state,coverage_publication,coverage_generation)
+       SELECT 0,$1,$2,$3,$4,'pit',pg_current_snapshot(),epoch,position,'begun',$5,0
+       FROM core.partition WHERE partition_no=0`,
+      [
+        bootstrap,
+        resolved.definition.readDefinition,
+        bootstrap,
+        JSON.stringify(tree(stored.consumer, 'value')),
+        crypto.randomUUID(),
+      ],
+    );
+    const pit = await custody.openPit(
+      { registration: stored.registration, covered: { observation: build }, keepAliveMs: 30_000 },
+      search,
+      readContext(),
+    );
+    if (pit.status !== 'retained') throw new Error(pit.reason);
+    const state = { registration: stored.registration, bootstrap: { id: build }, queried: pit.queried, adopted: false };
+    const work = JSON.stringify(tree(state, 'value'));
+    const observation = pit.queried.snapshot.observation;
+    const claim = () =>
+      f.db.pool.query(
+        'UPDATE search.public_filter_registration SET consumer_bootstrap=$2,consumer_work=$3 WHERE partition_no=0 AND id=$1',
+        [stored.registration.id, build, work],
+      );
+    const handoff = (encoded = work) =>
+      binding.releaseAdoptedRegistration!(
+        { bootstrap: build, registration: stored.registration.id, observation, work: encoded },
+        readContext(),
+      );
+    await claim();
+    expect((await handoff()).status).toBe('pending');
+    await f.db.pool.query(
+      "UPDATE semantic.public_filter_bootstrap SET state='adopted',queried=$2 WHERE partition_no=0 AND bootstrap=$1",
+      [bootstrap, observation],
+    );
+    expect((await handoff()).status).toBe('pending');
+    await f.db.pool.query(
+      'UPDATE search.public_filter_observation SET expires_at=$2 WHERE partition_no=0 AND observation=$1',
+      [observation, Date.now() - 1],
+    );
+    expect((await handoff(JSON.stringify(tree({ ...state, rounds: 1 }, 'value')))).status).toBe('pending');
+    const concurrent = await Promise.all([handoff(), handoff()]);
+    expect(concurrent.map((result) => result.status).sort()).toEqual(['pending', 'released']);
+    const retained = async () =>
+      (
+        await f.db.pool.query(
+          `SELECT r.consumer_work AS claim,o.consumer_bootstrap,o.consumer_work AS observed,b.state FROM search.public_filter_registration r
+       JOIN search.public_filter_observation o ON (o.partition_no,o.registration)=(r.partition_no,r.id)
+       JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(r.partition_no,$3)
+       WHERE (r.partition_no,r.id)=(0,$1) AND o.observation=$2`,
+          [stored.registration.id, observation, bootstrap],
+        )
+      ).rows[0];
+    expect(await retained()).toEqual({
+      claim: null,
+      consumer_bootstrap: build,
+      observed: JSON.stringify(tree({ ...state, adopted: true }, 'value')),
+      state: 'adopted',
+    });
+    // A legacy interrupted clear may have left an independently advanced page on that observation.
+    const advanced = JSON.stringify(tree({ ...state, adopted: true, rounds: 2 }, 'value'));
+    await claim();
+    await f.db.pool.query(
+      'UPDATE search.public_filter_observation SET consumer_work=$2 WHERE partition_no=0 AND observation=$1',
+      [observation, advanced],
+    );
+    expect((await handoff()).status).toBe('released');
+    expect(await retained()).toEqual({ claim: null, consumer_bootstrap: build, observed: advanced, state: 'adopted' });
+  } finally {
+    await custody.close();
+    await search.request('DELETE', `/${index}`);
+    await f.close();
+  }
+}, 300000);
+
 test('a closed materializing PIT retires only its matching unadopted build in bounded batches', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');

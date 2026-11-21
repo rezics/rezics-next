@@ -525,6 +525,11 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         }>
       | PublicFilterBindingFailure
     >;
+    /** Finish the original Search handoff after Source committed adoption and its serving request ended. */
+    releaseAdoptedRegistration?(
+      request: Readonly<{ bootstrap: string; registration: string; observation: string; work: string }>,
+      context: PublicFilterConsumerContext,
+    ): Promise<Readonly<{ status: 'released' | 'pending'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
     abort(
       request: Readonly<{
         bootstrap: string;
@@ -4392,6 +4397,63 @@ export function createNativePublicFilterSourceBinding(
           queried: joined.queried,
           cost,
         };
+      });
+    },
+    async releaseAdoptedRegistration(request, context) {
+      const { bootstrap, registration, observation, work } = request;
+      return run({ deadline: context.deadline }, async (cost, db) => {
+        const id = nativeId(bootstrap);
+        const previous = decode<{
+          registration: { partition: number; id: string };
+          bootstrap: { id: string };
+          queried: PublicFilterQueriedObservation | null;
+          adopted: boolean;
+        }>(work);
+        if (
+          previous.registration.partition !== 0 ||
+          previous.registration.id !== registration ||
+          previous.bootstrap.id !== bootstrap ||
+          previous.queried?.snapshot.observation !== observation
+        )
+          throw new BindingError('binding_mismatch');
+        // The independent observation may already have consumed a page. Never overwrite it.
+        // An expired, unclaimed observation still owns the exact adopted work and its erasure locator.
+        const result = await db.query(
+          `/* semantic.native-keyed:8:12:2 */
+           WITH claimed AS MATERIALIZED (
+             SELECT r.partition_no,r.id,o.state,o.expires_at,o.consumer_work,o.consumer_bootstrap
+             FROM semantic.public_filter_bootstrap b
+             JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+             JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
+             JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(r.partition_no,b.queried)
+             WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.queried=$3 AND b.state='adopted'
+               AND b.coverage_publication IS NOT NULL AND b.publication_job IS NULL AND b.consumer=$8
+               AND r.state='active' AND r.consumer_bootstrap=$4 AND r.consumer_work=$5 AND o.registration=r.id
+             FOR UPDATE OF r,o
+           ), moved AS (
+             UPDATE search.public_filter_observation o SET consumer_bootstrap=$4,consumer_work=$6
+             FROM claimed c WHERE (o.partition_no,o.registration,o.observation)=(c.partition_no,c.id,$3)
+               AND c.state='open' AND c.expires_at<=$7 AND c.consumer_work IS NULL AND c.consumer_bootstrap IS NULL
+             RETURNING o.registration
+           )
+           UPDATE search.public_filter_registration r SET consumer_bootstrap=NULL,consumer_work=NULL
+           FROM claimed c WHERE (r.partition_no,r.id)=(c.partition_no,c.id) AND
+             ((c.consumer_bootstrap=$4 AND c.consumer_work IS NOT NULL) OR EXISTS (SELECT FROM moved)
+               OR (c.state='closed' AND c.consumer_work IS NULL AND c.consumer_bootstrap IS NULL))
+           RETURNING (SELECT count(*)::integer FROM moved) AS transferred`,
+          [
+            id,
+            registration,
+            observation,
+            bootstrap,
+            work,
+            previous.adopted ? work : encode({ ...previous, adopted: true }),
+            Date.now(),
+            encode(previous.queried.consumer),
+          ],
+        );
+        if (result.rowCount === 1) cost.frontierWrites += 1 + Number(result.rows[0]!.transferred);
+        return { status: result.rowCount === 1 ? ('released' as const) : ('pending' as const), cost };
       });
     },
     async abort(request, context) {

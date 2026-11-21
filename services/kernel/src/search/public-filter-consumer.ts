@@ -2420,6 +2420,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const q = work.queried!;
     await physical(q, m, context);
     let transferred = false;
+    const servingSubject = !publication && !config.discoveryTarget && work.bootstrap.coveragePublication !== undefined;
     if (!work.adopted && !publication) {
       // Native adopt joins the exact PIT and performs the Source CAS. The
       // Book capture has already recovered the cut before opening that PIT.
@@ -2460,7 +2461,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!(await transfer)) return m.unavailable('source_pending');
         m.cost.frontierWrites += 2;
         transferred = true;
-      } else encoded = await save(work, encoded, true, m);
+      } else if (!servingSubject) encoded = await save(work, encoded, true, m);
     }
     if (config.discoveryPreparation === 'repair' && !work.bootstrap.coveragePublication) {
       // Move the original work and release the registration together. A retry
@@ -2485,7 +2486,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { status: 'preparing', repair: job, cost: m.cost };
     }
     // Transfer work to THIS immutable observation before clearing the registration's bootstrap intent.
-    if (!transferred) {
+    if (!transferred && servingSubject) {
+      // Adoption can survive a lost reply. Move the exact work and release its registration together.
+      const moved = await m.sql(pageControls.transfer(1), [
+        work.registration.partition,
+        work.registration.id,
+        encoded,
+        work.bootstrap.id,
+        q.snapshot.observation,
+        encodeWork(work),
+      ]);
+      if (moved.rowCount !== 1) return m.unavailable('source_pending');
+      m.cost.frontierWrites += 2;
+    } else if (!transferred) {
       await save(work, null, false, m);
       await m.sql(
         'UPDATE search.public_filter_registration SET consumer_work=NULL,consumer_bootstrap=NULL WHERE (partition_no,id)=($1,$2) AND consumer_work=$3',
@@ -2591,35 +2604,57 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             ).rows[0];
       if (old?.consumer_work) {
         const retained = decodeWork(old.consumer_work);
-        if (config.discoveryPreparation === 'enrollment' && retained.bootstrap.coveragePublication)
-          return m.unavailable('source_pending');
-        if (mixedPage)
-          mixedPage.captureWitness = {
-            stage: retained.bootstrap.coveragePublication ? 'published-coverage' : 'retained-population-bootstrap',
-          };
-        // The worker owns the original mixed enrollment through adoption and repair.
-        if (page && config.discoveryTarget && !retained.bootstrap.coveragePublication)
-          return {
-            status: 'preparing',
-            repair: {
-              consumer: retained.bootstrap.consumer,
-              job: `${registration.partition}:bootstrap:${encodeURIComponent(retained.bootstrap.id)}`,
-            },
-            cost: m.cost,
-          };
-        // A fresh Subject request can leave its original PIT and a partial
-        // segment behind. Fund the same bounded progress when resuming that cut.
-        const resumeSubjectPreparation =
-          page !== undefined && !config.discoveryTarget && !publication && retained.bootstrap.snapshot === 'prepared';
-        return await advanceCapture(
-          retained,
-          old.consumer_work,
-          m,
-          context,
-          page,
-          publication,
-          resumeSubjectPreparation,
-        );
+        // A previous request may have ended between physical adoption and the Search handoff.
+        const handoff =
+          !publication &&
+          !config.discoveryTarget &&
+          retained.bootstrap.coveragePublication &&
+          retained.queried &&
+          bootstrapBinding(binding) &&
+          binding.releaseAdoptedRegistration
+            ? m.takePreparation(
+                await binding.releaseAdoptedRegistration(
+                  {
+                    bootstrap: retained.bootstrap.id,
+                    registration: registration.id,
+                    observation: retained.queried.snapshot.observation,
+                    work: old.consumer_work,
+                  },
+                  context,
+                ),
+              )
+            : undefined;
+        if (handoff?.status !== 'released') {
+          if (config.discoveryPreparation === 'enrollment' && retained.bootstrap.coveragePublication)
+            return m.unavailable('source_pending');
+          if (mixedPage)
+            mixedPage.captureWitness = {
+              stage: retained.bootstrap.coveragePublication ? 'published-coverage' : 'retained-population-bootstrap',
+            };
+          // The worker owns the original mixed enrollment through adoption and repair.
+          if (page && config.discoveryTarget && !retained.bootstrap.coveragePublication)
+            return {
+              status: 'preparing',
+              repair: {
+                consumer: retained.bootstrap.consumer,
+                job: `${registration.partition}:bootstrap:${encodeURIComponent(retained.bootstrap.id)}`,
+              },
+              cost: m.cost,
+            };
+          // A fresh Subject request can leave its original PIT and a partial
+          // segment behind. Fund the same bounded progress when resuming that cut.
+          const resumeSubjectPreparation =
+            page !== undefined && !config.discoveryTarget && !publication && retained.bootstrap.snapshot === 'prepared';
+          return await advanceCapture(
+            retained,
+            old.consumer_work,
+            m,
+            context,
+            page,
+            publication,
+            resumeSubjectPreparation,
+          );
+        }
       }
       if (config.discoveryPreparation === 'enrollment') {
         const parent = await m.sql(
