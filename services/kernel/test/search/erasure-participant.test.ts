@@ -1,12 +1,19 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
+import { decodeJwt } from 'jose';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { acknowledgeErasure, readErasureStatus } from '../../src/access/erasure.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { SubjectDocument } from '../../src/search/document.ts';
-import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
+import {
+  createSubjectIndex,
+  ensureSubjectActivationMetadata,
+  subjectAlias,
+  subjectIndexName,
+} from '../../src/search/indices.ts';
+import { readSearchWriterPhysicalTarget } from '../../src/search/identity-epoch-participant-physical.ts';
 import { physicalSubjectGenerationsFromSettings } from '../../src/search/generation-inventory.ts';
 import { assertRetainedPitDeletion } from '../../src/search/erasure-pit.ts';
 import { createOpenSearch, OpenSearchError, SearchUnavailableError } from '../../src/search/opensearch.ts';
@@ -16,7 +23,7 @@ import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
-import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
+import { cookies, nativeFixture, password } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas, type Persona, type PersonasOptions } from '../support/personas.ts';
 import { testKernel, testRouteKey, testTokens, type TestKernel } from '../support/test-kernel.ts';
@@ -204,12 +211,30 @@ async function worker(prefix: string, endpoint?: string) {
   };
 }
 
+async function currentBearer(persona: Persona) {
+  const { exp, client_id, scope } = decodeJwt(persona.bearer);
+  if (exp && exp * 1000 > Date.now() + 10_000) return persona.bearer;
+  if (typeof client_id !== 'string' || typeof scope !== 'string')
+    throw new Error('Missing native persona client or scopes');
+  const signed = await auth!.request('/signin', {
+    account_id: persona.accountId,
+    password,
+    client_id,
+    scope: scope.split(' '),
+  });
+  expect(signed.status).toBe(200);
+  const token = await auth!.request('/token', {}, cookies(signed));
+  expect(token.status).toBe(200);
+  persona.bearer = ((await token.json()) as { access_token: string }).access_token;
+  return persona.bearer;
+}
+
 async function post(actor: Persona, path: string, body: unknown, expected = 200) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${actor.bearer}`,
+        authorization: `Bearer ${await currentBearer(actor)}`,
         'content-type': 'application/json',
         'idempotency-key': JSON.stringify(crypto.randomUUID()),
       },
@@ -222,8 +247,9 @@ async function post(actor: Persona, path: string, body: unknown, expected = 200)
   return result as { subject: { id: string }; candidate: string };
 }
 async function rename(owner: Persona, name: string) {
+  const bearer = await currentBearer(owner);
   const context = { pool, deadline: Date.now() + 10_000 };
-  const actor = await auth!.access.authenticate(owner.bearer, context);
+  const actor = await auth!.access.authenticate(bearer, context);
   if (actor.kind !== 'account') throw new Error('Native persona did not authenticate as an account');
   await auth!.COMMANDS.lifecycle.updateAccount(
     {
@@ -265,7 +291,8 @@ test.serial(
   'default Search registers the native account-tombstoned participant even without per-account data',
   async () => {
     await fixture();
-    const native = await worker(`erasure-empty-${crypto.randomUUID().slice(0, 8)}-`);
+    const prefix = `erasure-empty-${crypto.randomUUID().slice(0, 8)}-`;
+    const native = await worker(prefix);
     try {
       const observed = await native.registered;
       expect(observed.registered.map(({ name }) => name)).toEqual(observed.defaults);
@@ -279,6 +306,13 @@ test.serial(
           .sort(),
       ).toEqual(['search_account_erasure', 'search_erasure']);
       await native.ready;
+    } finally {
+      await native.close();
+    }
+    // Disabled Search still registers both effects. Attestation needs the live engine inventory.
+    const configured = await worker(prefix, process.env.OPENSEARCH_URL!);
+    try {
+      await configured.ready;
       await deletePersona(options, personas.delegated);
       await drainEffects(pool, partitionOf(routeOf(personas.delegated.accountId)!));
       await eventually(
@@ -287,7 +321,8 @@ test.serial(
         'actual no-data attestation',
       );
     } finally {
-      await native.close();
+      await configured.close();
+      await dispose(prefix);
     }
   },
   360_000,
@@ -328,8 +363,10 @@ function transportBarrier() {
         method: request.method,
         headers,
         body: body ?? null,
+        // Forward native wire bytes with their original Content-Encoding and Content-Length.
+        decompress: false,
       });
-      const bytes = await response.arrayBuffer();
+      const bytes = response.body === null ? null : await response.arrayBuffer();
       if (held) {
         applied.resolve();
         await settle.promise;
@@ -458,7 +495,7 @@ async function erasure(persona: () => Persona, delayed: boolean) {
     const retainedIds = [kept, holder].sort();
     for (const generation of [1, 2, 3]) await createSubjectIndex(search, prefix, generation);
     // Generation 1 is grace, 2 active, 3 rebuilding; no direct synthetic document population.
-    await search.request('PUT', `/${indices[1]}/_mapping`, { _meta: { activated_at: new Date().toISOString() } });
+    await ensureSubjectActivationMetadata(search, prefix, 2);
     await search.request('POST', '/_aliases', {
       actions: [{ add: { index: indices[1], alias: subjectAlias(prefix) } }],
     });
@@ -500,7 +537,8 @@ async function erasure(persona: () => Persona, delayed: boolean) {
     expect(await publicIds(title)).toContain(kept);
     await post(owner, `/v1/subjects/${removed}:hide`, { reason: 'Withdraw before account erasure' });
     if (delayed) {
-      barrier.arm(indices[0]!, agent);
+      const allocation = await readSearchWriterPhysicalTarget(search, indices[0]!);
+      barrier.arm(allocation.writeAlias, agent);
       await rename(owner, `${canary} delayed`);
       await Promise.race([
         barrier.entered,
