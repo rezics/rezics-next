@@ -111,51 +111,49 @@ export async function recordCommandRecordSourceSetCopy(
   const set = declaredLocator(tx, declaration);
   const command = currentCommand(tx);
   const key = recordSourceSetStorageKey(set);
-  await tx.query(
-    `INSERT INTO core.record_history_source_set
-     (source_partition,set_locator,set_revision,original_transaction,original_position,member_count,producer_version,
-      native_revision,snapshot_digest,metadata_state)
-     VALUES($1,$2,$3,$4,$5,NULL,1,$6,NULL,'building') ON CONFLICT DO NOTHING`,
-    [...key, set.transactionId, position?.toString() ?? null, set.revision],
+  // A just-inserted row is already owned by this transaction. For a prior
+  // association, keep its share lock until the command commits.
+  const accepted = await tx.query<{ original_ok: boolean; copy_ok: boolean }>(
+    `WITH inserted AS (
+       INSERT INTO core.record_history_source_set
+         (source_partition,set_locator,set_revision,original_transaction,original_position,member_count,
+          producer_version,native_revision,snapshot_digest,metadata_state)
+       VALUES($1,$2,$3,$4,$5,NULL,1,$6,NULL,'building') ON CONFLICT DO NOTHING
+       RETURNING original_transaction,original_position,native_revision,metadata_state
+     ), existing AS (
+       SELECT original_transaction,original_position,native_revision,metadata_state
+       FROM core.record_history_source_set
+       WHERE (source_partition,set_locator,set_revision)=($1,$2,$3) AND NOT EXISTS (SELECT 1 FROM inserted)
+       FOR SHARE
+     ), original AS (
+       SELECT * FROM inserted UNION ALL SELECT * FROM existing
+     ), eligible AS MATERIALIZED (
+       SELECT 1 FROM original WHERE original_transaction=$4 AND native_revision=$6 AND metadata_state<>'legacy'
+         AND (original_position IS NULL OR $5::bigint IS NULL OR original_position=$5)
+     ), copy AS (
+       INSERT INTO core.record_history_source_set_copy
+         (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,
+          original_transaction,original_position,producer_version)
+       SELECT $1,$2,$3,$7,$8,$9,$4,$5,1 FROM eligible
+       ON CONFLICT (partition_no,artifact_type,locator) DO SELECT FOR SHARE
+       RETURNING source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
+     )
+     SELECT EXISTS (SELECT 1 FROM eligible) AS original_ok,
+       EXISTS (SELECT 1 FROM copy WHERE (source_partition,set_locator,set_revision)=($1,$2,$3)
+         AND original_transaction=$4 AND producer_version=1
+         AND (original_position IS NULL OR $5::bigint IS NULL OR original_position=$5)) AS copy_ok`,
+    [
+      ...key,
+      set.transactionId,
+      position?.toString() ?? null,
+      set.revision,
+      command.partition,
+      locator.artifactType,
+      Buffer.from(encodeLocator(locator)),
+    ],
   );
-  const original = await tx.query(
-    `SELECT original_transaction,original_position,native_revision,metadata_state FROM core.record_history_source_set
-     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 FOR SHARE`,
-    key,
-  );
-  const row = original.rows[0];
-  if (
-    !row ||
-    row.original_transaction !== set.transactionId ||
-    row.native_revision !== set.revision ||
-    row.metadata_state === 'legacy' ||
-    (row.original_position !== null && position !== null && BigInt(row.original_position) !== position)
-  )
-    throw new TypeError('Conflicting immutable native record source set');
-  const encoded = Buffer.from(encodeLocator(locator));
-  await tx.query(
-    `INSERT INTO core.record_history_source_set_copy
-     (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,1) ON CONFLICT DO NOTHING`,
-    [...key, command.partition, locator.artifactType, encoded, command.transactionId, position?.toString() ?? null],
-  );
-  const accepted = await tx.query(
-    `SELECT source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
-     FROM core.record_history_source_set_copy
-     WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3 FOR SHARE`,
-    [command.partition, locator.artifactType, encoded],
-  );
-  const copy = accepted.rows[0];
-  if (
-    !copy ||
-    copy.source_partition !== key[0] ||
-    !Buffer.from(copy.set_locator).equals(key[1]) ||
-    !Buffer.from(copy.set_revision).equals(key[2]) ||
-    copy.original_transaction !== command.transactionId ||
-    copy.producer_version !== 1 ||
-    (copy.original_position !== null && position !== null && BigInt(copy.original_position) !== position)
-  )
-    throw new TypeError('Conflicting native record source set copy');
+  if (!accepted.rows[0]?.original_ok) throw new TypeError('Conflicting immutable native record source set');
+  if (!accepted.rows[0].copy_ok) throw new TypeError('Conflicting native record source set copy');
 }
 
 export async function finalizeCommandRecordSourceSet(tx: CommandTransaction, position: bigint): Promise<void> {
@@ -164,15 +162,14 @@ export async function finalizeCommandRecordSourceSet(tx: CommandTransaction, pos
   const locator = declaredLocator(tx, declaration);
   // Existing finalization order remains after generated coordinates, before native COMMIT.
   // Locator validation is not a seal or an immutable membership assertion.
-  await tx.query(
-    `UPDATE core.record_history_source_set SET original_position=$4
-     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 AND original_position IS NULL`,
-    [...recordSourceSetStorageKey(locator), position.toString()],
-  );
   const command = currentCommand(tx);
   await tx.query(
-    `UPDATE core.record_history_source_set_copy SET original_position=$3
-     WHERE partition_no=$1 AND original_transaction=$2 AND original_position IS NULL`,
-    [command.partition, command.transactionId, position.toString()],
+    `WITH positioned AS (
+       UPDATE core.record_history_source_set SET original_position=$4
+       WHERE (source_partition,set_locator,set_revision)=($1,$2,$3) AND original_position IS NULL
+     )
+     UPDATE core.record_history_source_set_copy SET original_position=$4
+     WHERE partition_no=$5 AND original_transaction=$6 AND original_position IS NULL`,
+    [...recordSourceSetStorageKey(locator), position.toString(), command.partition, command.transactionId],
   );
 }
