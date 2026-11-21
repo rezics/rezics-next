@@ -8,6 +8,7 @@ import type {
 import type { PoolClient } from 'pg';
 import {
   isEconomyBookId,
+  WALLET_BALANCE_PAGE_LIMIT,
   type AssetProgram,
   type EconomyAsset,
   type EconomyFailure,
@@ -19,6 +20,7 @@ import {
   type HoldAllocationKey,
   type HoldAllocationPurpose,
   type SpotFillSettlement,
+  type WalletBalance,
   type WalletEntry,
 } from './contract.ts';
 
@@ -59,6 +61,7 @@ type Position = Readonly<{
   restricted: string;
   revision: string;
 }>;
+type BalanceRow = EconomyAsset & Pick<Position, 'accountRole' | 'posted' | 'held' | 'restricted'> & { pending: string };
 type Delta = Readonly<{ position: Position; posted: bigint; held: bigint }>;
 type Hold = Readonly<{ remaining: string; allocated: string; expiresAt: Date }>;
 type HoldChange = Readonly<{ captured?: bigint; released?: bigint; allocated?: bigint }>;
@@ -130,8 +133,34 @@ function expiryDate(value: string): Date | null {
     : null;
 }
 
-function available(position: Position): bigint {
+function available(position: Pick<Position, 'posted' | 'held' | 'restricted'>): bigint {
   return BigInt(position.posted) - BigInt(position.held) - BigInt(position.restricted);
+}
+
+const walletBalanceColumns = `asset.asset_id AS id, asset.scale, asset.transferable,
+  COALESCE(position.account_role, 'wallet') AS "accountRole",
+  COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS held,
+  (CASE WHEN program.expires_at <= statement_timestamp()
+    THEN COALESCE(position.posted - position.held, 0)
+    ELSE COALESCE(position.restricted, 0) END)::text AS restricted,
+  COALESCE(pending.units, 0)::text AS pending`;
+const walletBalanceJoins = `LEFT JOIN economy.asset_program AS program
+    ON program.book_id = asset.book_id AND program.asset_id = asset.asset_id
+  LEFT JOIN economy.position AS position
+    ON position.book_id = asset.book_id AND position.asset_id = asset.asset_id AND position.account_id = $3
+  LEFT JOIN economy.pending_deposit AS pending
+    ON pending.book_id = asset.book_id AND pending.asset_id = asset.asset_id AND pending.wallet_id = $3`;
+
+function walletBalanceOf(row: BalanceRow): WalletBalance {
+  const { id, scale, transferable, posted, held, restricted, pending } = row;
+  return {
+    asset: { id, scale, transferable },
+    posted,
+    held,
+    restricted,
+    pending,
+    available: available(row).toString(),
+  };
 }
 
 async function getAsset(client: Query, bookId: string, assetId: string): Promise<EconomyAsset | undefined> {
@@ -1367,41 +1396,62 @@ export function createEconomyLedger(
       });
     },
 
+    listBalances(input) {
+      const accountId = walletAccount(input.accountId);
+      const { after = '', limit } = input;
+      if (
+        accountId === null ||
+        (input.after !== undefined && !validIdentifier(input.after)) ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > WALLET_BALANCE_PAGE_LIMIT
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return database.read(async (client) => {
+        // Cap both sources before deduplicating and project the page from the same statement snapshot.
+        const { rows } = await client.query<BalanceRow>(
+          `WITH candidates AS (
+             (SELECT asset_id FROM economy.position
+              WHERE book_id = $1 AND account_id = $3 AND account_role = 'wallet' AND asset_id > $2
+              ORDER BY asset_id LIMIT $4)
+             UNION
+             (SELECT asset_id FROM economy.pending_deposit
+              WHERE book_id = $1 AND wallet_id = $3 AND units > 0 AND asset_id > $2
+              ORDER BY asset_id LIMIT $4)
+           ), page AS (
+             SELECT asset_id FROM candidates ORDER BY asset_id LIMIT $4
+           )
+           SELECT ${walletBalanceColumns}
+           FROM page JOIN economy.asset AS asset ON asset.book_id = $1 AND asset.asset_id = page.asset_id
+           ${walletBalanceJoins}
+           ORDER BY page.asset_id`,
+          [bookId, after, accountId, limit + 1],
+        );
+        const shown = rows.slice(0, limit);
+        if (shown.some((row) => row.accountRole !== 'wallet')) return failure('invalid_operation');
+        return success({
+          balances: shown.map(walletBalanceOf),
+          next: rows.length > limit ? shown.at(-1)!.id : null,
+        });
+      });
+    },
+
     readBalance(input) {
       const accountId = walletAccount(input.accountId);
       const { assetId } = input;
       if (accountId === null || !validIdentifier(assetId)) return Promise.resolve(failure('invalid_operation'));
       return database.read(async (client) => {
-        const result = await client.query<EconomyAsset & Position & { pending: string }>(
-          `SELECT asset.asset_id AS id, asset.scale, asset.transferable, $3::uuid::text AS "accountId",
-                  COALESCE(position.account_role, 'wallet') AS "accountRole",
-                  COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS held,
-                  (CASE WHEN program.expires_at <= statement_timestamp()
-                    THEN COALESCE(position.posted - position.held, 0)
-                    ELSE COALESCE(position.restricted, 0) END)::text AS restricted,
-                  COALESCE(position.revision, 0)::text AS revision,
-                  COALESCE(pending.units, 0)::text AS pending
+        const { rows } = await client.query<BalanceRow>(
+          `SELECT ${walletBalanceColumns}
            FROM economy.asset AS asset
-           LEFT JOIN economy.asset_program AS program USING (book_id, asset_id)
-           LEFT JOIN economy.position AS position
-             ON position.book_id = asset.book_id AND position.asset_id = asset.asset_id AND position.account_id = $3
-           LEFT JOIN economy.pending_deposit AS pending
-             ON pending.book_id = asset.book_id AND pending.asset_id = asset.asset_id AND pending.wallet_id = $3
+           ${walletBalanceJoins}
            WHERE asset.book_id = $1 AND asset.asset_id = $2`,
           [bookId, assetId, accountId],
         );
-        const row = result.rows[0];
+        const row = rows[0];
         if (row === undefined) return failure('asset_missing');
         if (row.accountRole !== 'wallet') return failure('invalid_operation');
-        const { id, scale, transferable, posted, held, restricted, pending } = row;
-        return success({
-          asset: { id, scale, transferable },
-          posted,
-          held,
-          restricted,
-          pending,
-          available: available(row).toString(),
-        });
+        return success(walletBalanceOf(row));
       });
     },
 

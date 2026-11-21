@@ -256,6 +256,7 @@ const typed = [
   'GET /v1/payoutStatements/:statementId',
   'GET /v1/payoutStatements/:statementId/lines',
   'POST /v1/payoutStatements/:statementId/$markPaid',
+  'GET /v1/economy/wallets',
   'GET /v1/economy/wallets/:assetId',
   'GET /v1/economy/wallets/:assetId/statement',
   'POST /v1/economy/wallets/:assetId/transfers',

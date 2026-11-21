@@ -67,6 +67,7 @@ export function createNativeEconomyWallet(
     });
   }
   return {
+    listBalances: (input) => admitted({ accountId: input.accountId }, (ledger) => ledger.listBalances(input)),
     readBalance: (input) => admitted({ accountId: input.accountId }, (ledger) => ledger.readBalance(input)),
     readStatement: (input) => admitted({ accountId: input.accountId }, (ledger) => ledger.readStatement(input)),
     transfer: (input) =>

@@ -9,7 +9,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, type Admission, type JobContext }
 import { AuthenticationError, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { createApp } from '../http/app.ts';
-import type { EconomyResult, EconomyWalletPort } from './contract.ts';
+import { WALLET_BALANCE_PAGE_LIMIT, type EconomyResult, type EconomyWalletPort } from './contract.ts';
 
 type WalletScope = {
   actor: Actor;
@@ -152,6 +152,39 @@ export function economyRoutes(app: ReturnType<typeof createApp>, deps: { pool: P
   };
 
   return app
+    .get(
+      '/v1/economy/wallets',
+      {
+        query: t.Object(
+          {
+            after: t.Optional(assetId),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: WALLET_BALANCE_PAGE_LIMIT, multipleOf: 1 })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object(
+            { balances: t.Array(balance, { maxItems: WALLET_BALANCE_PAGE_LIMIT }), next: t.Union([assetId, t.Null()]) },
+            closed,
+          ),
+          ...failures(),
+        },
+        detail: detail('wallet.list', 'wallet:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        const accountId = await requireWalletOwner(deps.pool, ctx);
+        return ctx.admission.run('normal', ctx.job, async () =>
+          valueOf(
+            await port().listBalances({
+              accountId,
+              limit: ctx.query.limit ?? 20,
+              ...(ctx.query.after === undefined ? {} : { after: ctx.query.after }),
+            }),
+          ),
+        );
+      },
+    )
     .get(
       '/v1/economy/wallets/:assetId',
       {
