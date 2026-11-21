@@ -313,7 +313,7 @@ test('finite partition claims preserve priority, version, cross-application excl
       ],
     );
   try {
-    // This occupied partition fills the entire indexed prefix. Its other application's lease still excludes it.
+    // Another application's lease occupies the first prefix, with runnable heads in the wider prefix.
     await add('running', 'occupied', 0, 0, 'old', true);
     await pool.query(
       `INSERT INTO dbos.workflow_status
@@ -332,6 +332,15 @@ test('finite partition claims preserve priority, version, cross-application excl
     expect(await claim(1, true)).toEqual([id('implicit-version')]);
     const contested = (await Promise.all([claim(1, true), claim(1, true)])).flat();
     expect(contested).toEqual([id('following')]);
+    // A partition can hide every runnable head beyond both windows. The full search must still find that work.
+    await pool.query(
+      `INSERT INTO dbos.workflow_status
+         (workflow_uuid,name,queue_name,queue_partition_key,priority,created_at,application_version,status)
+       SELECT $1 || i, 'fixture', $2, 'occupied', 0, i, 'current', 'ENQUEUED' FROM generate_series(101,320) i`,
+      [id('waiting'), queue.name],
+    );
+    await add('beyond-window', 'oldest-runnable', 0, 321, 'current');
+    expect(await claim(1, true)).toEqual([id('beyond-window')]);
   } finally {
     await pool.query('DELETE FROM dbos.workflow_status WHERE queue_name=$1', [queue.name]);
     await pool.query('DELETE FROM dbos.queues WHERE name=$1', [queue.name]);

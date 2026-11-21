@@ -789,7 +789,7 @@ index 8f66187dfd..ea06b82e2f 100644
          keyedIDs?: boolean;
      }): Promise<WorkflowStatusInternal[]>;
 diff --git a/dist/src/system_database.js b/dist/src/system_database.js
-index 79ef595..d7e1183 100644
+index 79ef595..0bf82b7 100644
 --- a/dist/src/system_database.js
 +++ b/dist/src/system_database.js
 @@ -1835,6 +1835,9 @@ class SystemDatabase {
@@ -974,7 +974,7 @@ index 79ef595..d7e1183 100644
              const candidateParams = [
                  queue.name,
                  workflow_1.StatusString.ENQUEUED,
-@@ -3529,9 +3663,45 @@ class SystemDatabase {
+@@ -3529,9 +3663,51 @@ class SystemDatabase {
              ];
              const candidateScope = `${this.scoped(undefined, candidateParams)} AND ${this.appNameFilter('application_name', this.appName, candidateParams)}`;
              const probeScope = this.scoped(undefined, candidateParams);
@@ -986,36 +986,42 @@ index 79ef595..d7e1183 100644
 +                sweepLimit <= this.partitionedDequeueBatchSize) {
 +                // Read in the same order as fair admission. Only an exact priority-ordered
 +                // partition head can win; a later high-priority row may disqualify an older row.
-+                const prefixSize = 16 + 8 * sweepLimit;
++                const firstSize = 16 + 8 * sweepLimit;
 +                const order = 'created_at ASC, queue_partition_key ASC, workflow_uuid ASC';
-+                const oldest = (version) => `(SELECT workflow_uuid, queue_partition_key, created_at
-+                   FROM "${this.schemaName}".workflow_status
-+                   WHERE queue_name = $1 AND status = 'ENQUEUED' AND queue_partition_key IS NOT NULL
-+                     AND ${version} AND ${candidateScope}
-+                   ORDER BY ${order} LIMIT ${prefixSize})`;
-+                // Split the null-version branch so both branches seek in index order.
-+                const branches = [oldest('application_version = $3')];
-+                if (isLatestVersion)
-+                    branches.push(oldest('application_version IS NULL'));
-+                const candidate = await client.query(`WITH prefix AS MATERIALIZED (
-+                   SELECT * FROM (${branches.join(' UNION ALL ')}) versions
-+                   ORDER BY ${order} LIMIT ${prefixSize}
-+                 ), keys AS (
-+                   SELECT DISTINCT queue_partition_key AS pk FROM prefix
-+                 ), chosen AS (
-+                   SELECT keys.pk FROM keys
-+                   JOIN LATERAL (${headOf('keys.pk', 3, candidateScope)}) head ON TRUE
-+                   WHERE ${noPending('keys.pk', 4, probeScope)}
-+                     AND EXISTS (SELECT 1 FROM prefix WHERE workflow_uuid = head.workflow_uuid)
-+                   ORDER BY head.created_at ASC, keys.pk ASC LIMIT $5
-+                 )
-+                 SELECT ARRAY(SELECT pk FROM chosen ORDER BY pk) AS keys,
-+                        (SELECT count(*) FROM prefix) < ${prefixSize} AS exhausted`, candidateParams);
-+                const row = candidate.rows[0];
-+                // Every eligible head preceding a full selection was in this prefix.
-+                // A blocked or repeated prefix can still precede other runnable partitions.
-+                if (row.keys.length === sweepLimit || row.exhausted)
-+                    partitionKeys = row.keys;
++                // Busy partitions can occupy dozens of consecutive rows. Give the same
++                // ordered index one wider look before enumerating every partition.
++                for (const prefixSize of [firstSize, Math.max(128, 4 * firstSize)]) {
++                    const oldest = (version) => `(SELECT workflow_uuid, queue_partition_key, created_at
++                       FROM "${this.schemaName}".workflow_status
++                       WHERE queue_name = $1 AND status = 'ENQUEUED' AND queue_partition_key IS NOT NULL
++                         AND ${version} AND ${candidateScope}
++                       ORDER BY ${order} LIMIT ${prefixSize})`;
++                    // Split the null-version branch so both branches seek in index order.
++                    const branches = [oldest('application_version = $3')];
++                    if (isLatestVersion)
++                        branches.push(oldest('application_version IS NULL'));
++                    const candidate = await client.query(`WITH prefix AS MATERIALIZED (
++                       SELECT * FROM (${branches.join(' UNION ALL ')}) versions
++                       ORDER BY ${order} LIMIT ${prefixSize}
++                     ), keys AS (
++                       SELECT DISTINCT queue_partition_key AS pk FROM prefix
++                     ), chosen AS (
++                       SELECT keys.pk FROM keys
++                       JOIN LATERAL (${headOf('keys.pk', 3, candidateScope)}) head ON TRUE
++                       WHERE ${noPending('keys.pk', 4, probeScope)}
++                         AND EXISTS (SELECT 1 FROM prefix WHERE workflow_uuid = head.workflow_uuid)
++                       ORDER BY head.created_at ASC, keys.pk ASC LIMIT $5
++                     )
++                     SELECT ARRAY(SELECT pk FROM chosen ORDER BY pk) AS keys,
++                            (SELECT count(*) FROM prefix) < ${prefixSize} AS exhausted`, candidateParams);
++                    const row = candidate.rows[0];
++                    // Every eligible head preceding a full selection was in this prefix.
++                    // A blocked or repeated prefix can still precede other runnable partitions.
++                    if (row.keys.length === sweepLimit || row.exhausted) {
++                        partitionKeys = row.keys;
++                        break;
++                    }
++                }
 +            }
 +            if (partitionKeys === undefined) {
 +                // When the prefix cannot prove a complete selection, visit all distinct keys.
@@ -1023,7 +1029,7 @@ index 79ef595..d7e1183 100644
             (SELECT MIN(queue_partition_key) AS pk
              FROM "${this.schemaName}".workflow_status
              WHERE queue_name = $1 AND status = $2 AND queue_partition_key IS NOT NULL AND ${candidateScope})
-@@ -3542,21 +3712,19 @@ class SystemDatabase {
+@@ -3542,21 +3718,19 @@ class SystemDatabase {
              FROM partitions
              WHERE partitions.pk IS NOT NULL)
           )
@@ -1051,7 +1057,7 @@ index 79ef595..d7e1183 100644
              // Re-check queue/partition/version alongside status so a row resumeWorkflows moved to another queue mid-sweep is dropped, not hijacked.
              const claimGuard = (ids, status, name, version, scope) => `${ids}
             AND status = $${status}
-@@ -3672,6 +3840,12 @@ class SystemDatabase {
+@@ -3672,6 +3846,12 @@ class SystemDatabase {
      }
      // ==================== Queries & Maintenance ====================
      /** With `keyedIDs`, the listed workflow IDs are addressed by their shard keys, as a batch read of known workflows. */
