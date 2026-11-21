@@ -11989,7 +11989,7 @@ ALTER TABLE ONLY semantic.erasure_inbox
 --
 
 ALTER TABLE ONLY semantic.erasure_locator
-    ADD CONSTRAINT erasure_locator_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key);
+    ADD CONSTRAINT erasure_locator_pkey PRIMARY KEY (partition_no, store, record_key, account_id, role);
 
 
 --
@@ -12069,7 +12069,7 @@ ALTER TABLE ONLY semantic.erasure_source_page
 --
 
 ALTER TABLE ONLY semantic.erasure_source_record
-    ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key, delivery_position, origin_key);
+    ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY (partition_no, account_id, store, record_key, role, delivery_position, origin_key);
 
 
 --
@@ -14156,13 +14156,6 @@ CREATE INDEX erasure_locator_event ON semantic.erasure_locator USING btree (part
 
 
 --
--- Name: erasure_locator_record; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX erasure_locator_record ON semantic.erasure_locator USING btree (partition_no, store, record_key, account_id, role);
-
-
---
 -- Name: erasure_locator_source; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14181,13 +14174,6 @@ CREATE INDEX erasure_locator_work ON semantic.erasure_locator USING btree (parti
 --
 
 CREATE UNIQUE INDEX erasure_source_commit_native_position ON semantic.erasure_source_commit USING btree (partition_no, epoch, "position");
-
-
---
--- Name: erasure_source_record_key; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX erasure_source_record_key ON semantic.erasure_source_record USING btree (partition_no, account_id, store, record_key, role, delivery_position, origin_key);
 
 
 --
