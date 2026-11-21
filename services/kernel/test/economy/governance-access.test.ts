@@ -40,12 +40,22 @@ const statement = `${wallet}/statement?limit=1`;
 const publicWallet = `${wallets}/{assetId}`;
 const spotInstruments = '/v1/economy/spot';
 const spot = `${spotInstruments}/pair`;
+const spotQuote = `${spot}/quote`;
 const spotOrders = `${spot}/orders`;
 const spotFills = `${spotOrders}/order-id/fills`;
 const marketListings = '/v1/economy/market/listings';
 const marketTrades = '/v1/economy/market/trades';
 const market = `${marketTrades}/${'a'.repeat(64)}`;
-const unboundEconomyReads = [spotInstruments, spot, spotOrders, spotFills, marketListings, marketTrades, market];
+const unboundEconomyReads = [
+  spotInstruments,
+  spot,
+  spotQuote,
+  spotOrders,
+  spotFills,
+  marketListings,
+  marketTrades,
+  market,
+];
 const authName = `economy_auth_${crypto.randomUUID().replaceAll('-', '')}`;
 
 let database: Awaited<ReturnType<typeof openIsolatedEconomyDatabase>>;
@@ -227,6 +237,7 @@ async function economyDiscovery(bearer: string | undefined, visible: boolean) {
       [`${publicWallet}/statement`, readScope],
       [spotInstruments, 'spot:read'],
       ['/v1/economy/spot/{instrumentId}', 'spot:read'],
+      ['/v1/economy/spot/{instrumentId}/quote', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/orders', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/trades', 'spot:read'],
       ['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills', 'spot:read'],

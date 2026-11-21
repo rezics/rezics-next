@@ -219,6 +219,10 @@ preparation and gate/candidate work, and restrict mixed-batch action decisions a
 the matching native reference. All existing resource existence/privacy, current T, scopes, principal,
 floor, explicit grants and denials still apply.
 
+For a gated operation with a fixed Global authority binding, OpenAPI and admitted-group discovery apply the exact
+current Global action decision after exposure admission and client scope checks. Multiple eligible operations using
+the same Global action share one decision per discovery request.
+
 Consumers obtain both the type and fixed ID from the genuine mounted declaration, then request the existing
 `viewerActions` batch for that exact reference. Only an exact action and operation pair offers the control.
 Neither discovery/admission nor a configuration management read grants mutation authority; viewer actions

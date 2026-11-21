@@ -148,8 +148,9 @@ current owner. A trade awaiting a decision continues through the normal decision
 
 A mounted market repair command requires the caller's current direct Economy grant, the `market:repair` client
 scope and independent `market:repair` authority on Global Context. Check both grants before reading or replaying a
-command receipt. Apply the same authorization to discovery. Acceptance queues only the named book, item home and
-trade in a private work record keyed by its command transaction. The configured market worker leases one bounded
+command receipt. Apply the same authorization to discovery. Platform governance can delegate the exact repair action
+through the existing Global grant controls. Mount the command with the configured market owner. Acceptance queues
+only the named book, item home and trade in a private work record keyed by its command transaction. The configured market worker leases one bounded
 repair pass and can reclaim an interrupted request after the lease expires. A successful pass completes that request;
 the normal market sweep continues subsequent work. An already accepted repair uses the retained decision and native
 owner leases.
