@@ -91,6 +91,10 @@ events capped by their original payout. Wallet funding and creator payout use on
 Unique items transfer by generation at their item home. A trade protects both its item and its funding reservation
 before recording a durable commit or abort. After commit, reconcile ownership delivery and then release clearing
 funds to seller and fee accounts. Same-book fungible delivery can settle as a balanced multi-asset journal group.
+Under `market:read`, `GET /v1/economy/market/trades` lists receipts for the current account as buyer or seller in
+the configured book and item home. Return the same private receipt fields as the individual trade view, with the
+purchase start time for ordering. Include preparing, committing, aborting, completed and aborted trades. Order newest
+first with a stable trade-ID tie break. Bind the bounded continuation to the requesting account and market.
 Matching follows price-time priority with stable fill identities and protected allocations for partial fills. A bounded
 step can resume before crossing subsequent instructions. A canceled order frees only its unallocated remainder.
 The native worker schedules bounded spot work for the configured book and node. Market settlement also requires the
