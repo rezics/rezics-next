@@ -47,7 +47,7 @@ import {
   type PublicFilterConsumerCaptureInput,
 } from './public-filter-consumer-contract.ts';
 import { compileFilter } from './filter.ts';
-import { hasPublicBookSearchShape } from './request.ts';
+import { hasPublicBookSearchShape, isBasicSearchText } from './request.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
@@ -824,11 +824,16 @@ function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceB
     ...(bootstrap.coveragePublication ? { coveragePublication: bootstrap.coveragePublication } : {}),
   };
 }
-function isTextBookCapture(plan: PublicCanonicalCaptureInput): boolean {
+function isTextBookCapture(plan: PublicCanonicalCaptureInput, sort?: 'relevance'): boolean {
   return (
     !('representation' in plan) &&
-    'filterDocument' in plan &&
+    'sort' in plan &&
     plan.text !== undefined &&
+    (sort === undefined ||
+      (plan.sort === sort &&
+        isBasicSearchText(plan.text) &&
+        !plan.overflowProperties?.length &&
+        plan.rating === undefined)) &&
     hasPublicBookSearchShape({ filter: plan.filterDocument })
   );
 }
@@ -2329,9 +2334,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
             try {
               checked =
-                'representation' in recovery.bootstrap.definition.capture
+                'representation' in plan
                   ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
-                  : await ownRows(raw as readonly SearchResult['hits'][number][], m, context);
+                  : await ownRows(raw as SearchResult['hits'], m, context, isTextBookCapture(plan, 'relevance'));
             } catch (error) {
               if (error instanceof MixedOwnerPending) {
                 await save(work, encoded, true, m);
@@ -2461,6 +2466,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.bootstrap.coveragePublication &&
       q.snapshot.kind === 'prepared' &&
       isTextBookCapture(plan);
+    const relevancePage = preparedBook && isTextBookCapture(plan, 'relevance');
     if (preparedBook && work.materializing) {
       // Segment retention and its registration CAS have committed the prepared tuple.
       // Its input PIT can drain independently of checking the serving incarnation.
@@ -2478,11 +2484,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     } else await physical(q, m, context);
     let transferred = false;
     if (!work.adopted && !publication) {
-      // Native adopt joins the exact PIT and performs the Source CAS. The
-      // Book capture has already recovered the cut before opening that PIT.
-      const recovered = bookCut
-        ? recovery
-        : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+      // Native adoption joins the retained observation, rereads its original
+      // bootstrap and accepts a concurrent adoption only for that same tuple.
+      const recovered =
+        bookCut || relevancePage
+          ? recovery
+          : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
       if (recovered.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
@@ -2498,7 +2505,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (adopted.status !== 'adopted') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(adopted.queried, q) ||
-        !isDeepStrictEqual(retainedBootstrap(adopted.bootstrap), work.bootstrap)
+        !isDeepStrictEqual(retainedBootstrap(adopted.bootstrap), work.bootstrap) ||
+        (relevancePage &&
+          (!isDeepStrictEqual(adopted.bootstrap.definition, recovery.bootstrap.definition) ||
+            adopted.bootstrap.definition.readDefinition !== q.consumer.readDefinition ||
+            adopted.bootstrap.definition.meaning.digest !== meaning.digest))
       )
         return m.unavailable('observation_lost');
       work.adopted = true;
@@ -2520,6 +2531,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!(await transfer)) return m.unavailable('source_pending');
         m.cost.frontierWrites += 2;
         transferred = true;
+        if (relevancePage) {
+          const { definition, covered } = adopted.bootstrap;
+          // START and the execution join run on the acquired observation. Only
+          // this opening query may consume the exact cut joined by adoption.
+          page.capturedCut = { definition, covered, queried: structuredClone(q) };
+          return { status: 'captured', queried: q, repair: job, cost: m.cost };
+        }
       } else encoded = await save(work, encoded, true, m);
     }
     if (config.discoveryPreparation === 'repair' && !work.bootstrap.coveragePublication) {
@@ -2713,7 +2731,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           binding,
           {
             ...preparation,
-            ...('bookTypeList' in canonical && canonical.bookTypeList ? { definition: resolved.definition } : {}),
+            ...(('bookTypeList' in canonical && canonical.bookTypeList) || isTextBookCapture(canonical, 'relevance')
+              ? { definition: resolved.definition }
+              : {}),
             ...(!publication &&
             !('purpose' in canonical) &&
             ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
@@ -2989,13 +3009,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         positions = checked.accepted;
       } else {
         if (raw.some((hit) => 'key' in hit)) return m.unavailable('observation_lost');
-        // The installed Book TypeList uses only its released kind and name order.
-        // The receiver still checks current predicate, names and disclosure after this identity proof.
+        // Own rows need current original/terminal anchors. The receiver checks the
+        // released type, current text and disclosure before the final Source fence.
         const checked = await ownRows(
           raw as SearchResult['hits'],
           m,
           context,
-          q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList === true,
+          (q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList === true) ||
+            isTextBookCapture(plan, 'relevance'),
         );
         rows = checked.rows;
         positions = checked.accepted;

@@ -5,7 +5,7 @@ import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import { routeOf } from '../route/route.ts';
 import { validateHitOptions, validateSearchLimit, type HitOptions } from './hits.ts';
-import { parseText, textSyntaxProblem, TextSyntaxError } from './text.ts';
+import { parseText, textSyntaxProblem, TextSyntaxError, type TextNode } from './text.ts';
 import type { AdmittedSearchRequest, SearchFilterDocument, SearchRequest } from './service-contract.ts';
 
 export function invalid(pointer: string, code: FieldErrorCode): never {
@@ -149,19 +149,23 @@ export function admitSearchRequest(request: SearchRequest): AdmittedSearchReques
   };
 }
 
+export function isBasicSearchText(node: TextNode): boolean {
+  return (
+    node.kind === 'term' ||
+    node.kind === 'phrase' ||
+    ((node.kind === 'and' || node.kind === 'or') && node.children.every(isBasicSearchText))
+  );
+}
+
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export function requiresAdvancedSearch(request: SearchRequest): boolean {
   const { text, filter, sort } = admitSearchRequest(request);
-  const basicText = (node: NonNullable<typeof text>): boolean =>
-    node.kind === 'term' ||
-    node.kind === 'phrase' ||
-    ((node.kind === 'and' || node.kind === 'or') && node.children.every(basicText));
   const basicFilter = (node: NonNullable<typeof filter>): boolean =>
     'type' in node || ('and' in node && node.and.every(basicFilter)) || ('or' in node && node.or.every(basicFilter));
   return (
     sort === 'rating' ||
     sort === 'collections' ||
-    (text !== undefined && !basicText(text)) ||
+    (text !== undefined && !isBasicSearchText(text)) ||
     (filter !== undefined && !basicFilter(filter))
   );
 }
