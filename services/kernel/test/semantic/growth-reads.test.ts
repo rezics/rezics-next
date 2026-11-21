@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
-import { createContext } from '../../src/semantic/context.ts';
+import { accessCommandAuthorization, type Access } from '../../src/request/access.ts';
+import { createRealAccess, type RealAccessFixture } from './real-access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { itemFacts } from '../../src/semantic/item.ts';
+import { itemFacts, type Item } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { moderateStatement } from '../../src/semantic/moderation.ts';
 import { adoptCandidates, decideCandidate, proposeStatement } from '../../src/semantic/candidates.ts';
@@ -39,23 +38,18 @@ const RELATED_PARTITIONS = [510, 511, 512] as const;
 const BOOK_PARTITION = 513;
 const HISTORY_PARTITION = 520;
 const routeKey = new Uint8Array(32).fill(61);
-const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-6a0010000001',
-  clientId: 'growth',
-  scopes: [
-    'subject:create',
-    'subject:read',
-    'statement:propose',
-    'context:accept',
-    'context:adopt',
-    'context:create',
-    'moderation:hide',
-  ],
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(73)]]) };
+const editorId = '019a1b2c-3d4e-7f00-8a00-6a0010000001';
+const actions = [
+  'subject:create',
+  'statement:propose',
+  'context:accept',
+  'context:adopt',
+  'context:create',
+  'moderation:hide',
+] as const;
+let realAccess: RealAccessFixture<'editor'>;
+let access: Access;
 
 let db: GrowthDatabase;
 let kernel: ReturnType<typeof createKernel>;
@@ -68,7 +62,16 @@ const bookId = newId(BOOK_PARTITION * 16);
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
-  kernel = createKernel({ pool: db.pool, routeKey, tokens });
+  realAccess = await createRealAccess(db.admin, { editor: editorId }, actions);
+  access = realAccess.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  for (const action of actions) await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  kernel = createKernel({
+    pool: db.pool,
+    routeKey,
+    tokens,
+    writeRate: realAccess.writeRate,
+    access: realAccess.access,
+  });
   expect(await bootstrapRelease(db.pool, bundledRelease)).toBe(bundledDigest);
   for (const [index, id] of labelIds.entries()) {
     await createFixed(routeOf(id)!, id, 'schema:Book', { en: `Label ${index}` });
@@ -98,12 +101,7 @@ beforeAll(async () => {
       })),
     },
   );
-  const projection = linkProjection(db.pool);
-  for (let step = 0; step < 200; step++) {
-    const result = await projection.run(BOOK_PARTITION);
-    if (result.status !== 'busy' && result.envelopes === 0) break;
-    if (step === 199) throw new Error('Semantic link projection did not catch up');
-  }
+  await projectLinks(BOOK_PARTITION);
   await seed({ pool: db.pool, admin: db.admin }, accessGrants(), { from: 0, to: 2_000 });
 }, 60_000);
 
@@ -115,17 +113,50 @@ function digest(value: string): Uint8Array {
   return createHash('sha256').update(value).digest();
 }
 
-function auth(id: string, action: string): CommandAuthorization {
-  const route = routeOf(id);
-  if (route === null) throw new TypeError('Expected a routed resource id');
+async function projectLinks(partition: number): Promise<void> {
+  const projection = linkProjection(db.pool);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status !== 'busy' && result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
+
+async function authorized(action: (typeof actions)[number], id = GLOBAL_CONTEXT) {
+  const route = id === GLOBAL_CONTEXT ? 0 : routeOf(id);
+  if (route === null) throw new TypeError('Expected a routed authority resource');
+  const context = { pool: db.pool, deadline: Date.now() + 30_000 };
+  const actor = await access.authenticate(await realAccess.refreshBearer('editor'), context);
+  if (actor.kind !== 'account') throw new Error('Growth commands require an authenticated editor');
   return {
-    action,
-    resource: { route, id },
-    denied: () => new Error('Growth fixture authorization denied'),
-    async authorize() {
-      return 'execute';
-    },
+    actor,
+    deadline: context.deadline,
+    authorization: await accessCommandAuthorization(
+      access,
+      actor,
+      action,
+      { route, id },
+      context,
+      () => new Error('Growth fixture authorization denied'),
+    ),
   };
+}
+
+async function createFixtureContext(label: string): Promise<string> {
+  const response = await kernel.handle(
+    new Request('http://localhost/v1/contexts', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer ' + (await realAccess.refreshBearer('editor')),
+        'idempotency-key': JSON.stringify(randomUUID()),
+      },
+      body: JSON.stringify({ labels: { en: label } }),
+    }),
+  );
+  const body = (await response.json()) as { context: { id: string } };
+  expect(response.status, JSON.stringify(body)).toBe(201);
+  return body.context.id;
 }
 
 async function createFixed(
@@ -136,13 +167,12 @@ async function createFixed(
   statements?: Record<string, unknown>,
 ): Promise<void> {
   await createSubject(db.pool, {
-    actor,
+    ...(await authorized('subject:create')),
     target: { route, id },
     idempotencyKey: randomUUID(),
     digest: digest(id),
     item: { type, labels, ...(statements ? { statements } : {}) },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
   });
 }
 
@@ -180,7 +210,7 @@ function subjectRows(name: string, ordinal: number, route: number): Record<strin
       {
         partition_no: partition,
         principal_kind: 'account',
-        principal_id: actor.accountId,
+        principal_id: editorId,
         command_kind: 'subject.create',
         idempotency_key: `${name}-${ordinal}-${randomUUID()}`,
         request_digest: digest(`${name}-${ordinal}`),
@@ -210,8 +240,8 @@ function subjectRows(name: string, ordinal: number, route: number): Record<strin
         epoch: 1,
         position,
         principal_kind: 'account',
-        principal_id: actor.accountId,
-        client_id: actor.clientId,
+        principal_id: editorId,
+        client_id: 'web',
         requested_by: null,
       },
     ],
@@ -258,7 +288,7 @@ function accessGrants(): Population {
         {
           route,
           resource_id: newId(route),
-          subject_id: actor.accountId,
+          subject_id: editorId,
           subject_role: '',
           action: 'subject:read',
           valid: '(,)',
@@ -401,7 +431,7 @@ function editorialBaseline(): Population {
           {
             partition_no: route >>> 4,
             principal_kind: 'account',
-            principal_id: actor.accountId,
+            principal_id: editorId,
             command_kind: 'subject.create',
             idempotency_key: `history-base-${ordinal}-${randomUUID()}`,
             request_digest: digest(`history-base-${ordinal}`),
@@ -431,8 +461,8 @@ function editorialBaseline(): Population {
             epoch: 1,
             position,
             principal_kind: 'account',
-            principal_id: actor.accountId,
-            client_id: actor.clientId,
+            principal_id: editorId,
+            client_id: 'web',
             requested_by: null,
           },
         ],
@@ -449,17 +479,14 @@ async function growPopulation(population: Population, scale: number, previous: n
   await db.admin.query('CHECKPOINT');
 }
 
-async function readAnchor(
-  id: string,
-  includeViewerActions = false,
-): Promise<{ related: Record<string, { labels?: Record<string, string> }> }> {
+async function readAnchor(id: string, includeViewerActions = false) {
   const query = includeViewerActions
     ? `?${new URLSearchParams({ context: GLOBAL_CONTEXT, language: 'en', includeViewerActions: 'true' })}`
     : '';
   const response = await kernel.handle(new Request(`http://localhost/v1/subjects/${id}${query}`));
   const text = await response.text();
   if (response.status !== 200) throw new Error(`subject read ${response.status}: ${text}`);
-  return JSON.parse(text) as { related: Record<string, { labels?: Record<string, string> }> };
+  return JSON.parse(text) as { subject: Item; related: Record<string, { labels?: Record<string, string> }> };
 }
 
 test('Batch label fill stays within its bound as its partition grows', async () => {
@@ -529,25 +556,16 @@ test("Anchored subject read stays within its bound as the subject's history grow
   const route = HISTORY_PARTITION * 16;
   const subject = newId(route);
   await createFixed(route, subject, 'schema:Book', { en: 'History anchor' });
-  const contextTarget = { route, id: newId(route) };
-  const context = await createContext(db.pool, {
-    actor,
-    target: contextTarget,
-    idempotencyKey: randomUUID(),
-    digest: digest(contextTarget.id),
-    input: { labels: { en: 'History context' } },
-    authorize: async () => true,
-  });
-  const contextId = context.context.id;
+  const contextId = await createFixtureContext('History context');
   await seed({ pool: db.pool, admin: db.admin }, editorialBaseline(), { from: 0, to: 2_000 });
   const unrelated = unrelatedSemanticPopulation('growth-reads-history-unrelated', HISTORY_PARTITION);
-  const command = (action: string) => ({
-    actor,
+  for (const action of ['context:accept', 'context:adopt'])
+    await realAccess.grant({ route: routeOf(contextId)!, id: contextId }, 'editor', action);
+  const command = async (action: (typeof actions)[number], authority = GLOBAL_CONTEXT) => ({
+    ...(await authorized(action, authority)),
     subject,
     idempotencyKey: randomUUID(),
     digest: digest(`${action}-${randomUUID()}`),
-    authorization: auth(subject, action),
-    deadline: Date.now() + 30_000,
   });
   const statement = {
     property: { id: 'schema:inLanguage' },
@@ -567,12 +585,33 @@ test("Anchored subject read stays within its bound as the subject's history grow
   let selectedCandidate = '';
   let globalHead: number | null = null;
   let contextHead: number | null = null;
-  const operation = async () => readAnchor(subject);
+  let hidden = false;
+  const operation = async () => {
+    const body = await readAnchor(subject);
+    expect(body.subject.id).toBe(subject);
+    expect(body.subject.labels).toEqual({ en: 'History anchor' });
+    const statements = body.subject.statements['schema:inLanguage'] ?? [];
+    expect(statements.map((row) => row.id)).toEqual(hidden ? [] : [selectedCandidate]);
+    return body;
+  };
+  // Each declared Book property needs one scalar-slot head or one outbound relation range.
+  // The anchor has one label, one expanded language candidate and one self summary at every scale.
+  const probeOperands = {
+    propertyHeadsAndRelationRanges: bundledRelease.types['schema:Book']!.properties.length,
+    eligibilitySubjectChecks: 4,
+    subjectAndLatestRevision: 2,
+    termHeadLabelAndRevisionProvenance: 3,
+    expandedAdoptionCandidateAndRejection: 3,
+    selfSubjectAndLabel: 2,
+    selfLanguageSlotAdoptionAndCandidate: 3,
+    selfImageDateAndRepresentativeSlots: 3,
+  };
   const indexedScales = new Set<number>();
   const report = await checkGrowth(db, {
     name: "Anchored subject read stays within its bound as the subject's history grows",
     scales: [8, 64, 512],
     bounds,
+    indexProbes: Object.values(probeOperands).reduce((sum, n) => sum + n, 0),
     repetitions: 3,
     grow: async (_database, scale, previous) => {
       for (let ordinal = previous; ordinal < scale; ordinal++) {
@@ -580,7 +619,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
           case 0:
             latestCandidate = (
               await proposeStatement(db.pool, {
-                ...command('statement:propose'),
+                ...(await command('statement:propose')),
                 statement,
                 release: { digest: bundledDigest, release: bundledRelease },
               })
@@ -588,7 +627,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
             break;
           case 1:
             await decideCandidate(db.pool, {
-              ...command('context:accept'),
+              ...(await command('context:accept')),
               candidate: latestCandidate,
               context: GLOBAL_CONTEXT,
               decision: 'accept',
@@ -597,7 +636,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
             break;
           case 2:
             await decideCandidate(db.pool, {
-              ...command('context:accept'),
+              ...(await command('context:accept', contextId)),
               candidate: latestCandidate,
               context: contextId,
               decision: 'accept',
@@ -607,7 +646,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
           case 3:
             globalHead = (
               await adoptCandidates(db.pool, {
-                ...command('context:adopt'),
+                ...(await command('context:adopt')),
                 context: GLOBAL_CONTEXT,
                 property: 'schema:inLanguage',
                 mode: 'replace',
@@ -621,7 +660,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
           case 4:
             contextHead = (
               await adoptCandidates(db.pool, {
-                ...command('context:adopt'),
+                ...(await command('context:adopt', contextId)),
                 context: contextId,
                 property: 'schema:inLanguage',
                 mode: 'replace',
@@ -639,13 +678,15 @@ test("Anchored subject read stays within its bound as the subject's history grow
       });
       if (scale === 512) {
         await moderateStatement(db.pool, {
-          ...command('moderation:hide'),
+          ...(await command('moderation:hide')),
           subject,
           candidate: selectedCandidate,
           action: 'hide',
           body: { reason: 'Growth fixture hidden statement' },
         });
+        hidden = true;
       }
+      await projectLinks(HISTORY_PARTITION);
     },
     operation,
     prepare: async (_database, scale) => {
@@ -656,9 +697,8 @@ test("Anchored subject read stays within its bound as the subject's history grow
         'semantic.revision': 'revision_pkey',
         'semantic.fact': ['fact_label', 'fact_terms'],
         'semantic.outbound_link': 'outbound_link_present',
-        'semantic.outbound_link_count': 'outbound_link_count_pkey',
-        'semantic.candidate': 'candidate_page',
-        'semantic.adoption': 'adoption_pkey',
+        'semantic.candidate': 'candidate_pkey',
+        'semantic.adoption': ['adoption_pkey', 'search_adoption_rebuild'],
         'semantic.acceptance_current': 'acceptance_current_rejected',
         'semantic.hidden_candidate': 'hidden_candidate_pkey',
       });
@@ -708,16 +748,7 @@ test('semantic covering reads use unforced indexed access as their populations g
   const nil = '00000000-0000-0000-0000-000000000000';
   await createFixed(route, holder, 'schema:Book', { en: 'Community seek holder' });
   await createFixed(route, target, 'schema:Person', { en: 'Community seek target' });
-  const contextTarget = { route, id: newId(route) };
-  const created = await createContext(db.pool, {
-    actor,
-    target: contextTarget,
-    idempotencyKey: randomUUID(),
-    digest: digest(contextTarget.id),
-    input: { labels: { en: 'Community covering seeks' } },
-    authorize: async () => true,
-  });
-  const context = created.context.id;
+  const context = await createFixtureContext('Community covering seeks');
   const unrelated = unrelatedSemanticPopulation('growth-reads-community-unrelated', partition);
   const page = async (scale: number, selectedContext: string, middle: boolean) => {
     const start = middle ? Math.floor(scale / 2) : 0;

@@ -4,9 +4,9 @@ SELECT * FROM (
   JOIN semantic.acceptance_current a ON a.route = input.route
   JOIN LATERAL (
     SELECT * FROM semantic.candidate
-    WHERE route = input.route AND subject_id = a.subject_id AND candidate_id = a.candidate_id
-    LIMIT 1
-  ) c ON true
+    WHERE route = input.route AND subject_id = a.subject_id AND candidate_id >= a.candidate_id
+    ORDER BY candidate_id LIMIT 1
+  ) c ON c.candidate_id = a.candidate_id
   WHERE a.subject_id = :subject_id::uuid AND a.context_id = :context_id::uuid AND a.slot_id = :slot_id::uuid
     AND a.verdict = 'reject'
   ORDER BY a.revision DESC, a.candidate_id

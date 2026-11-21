@@ -42,10 +42,10 @@ LEFT JOIN LATERAL (
     JOIN LATERAL (
       SELECT candidate_id, statement FROM semantic.candidate
       WHERE route = requested.route AND subject_id = requested.id
-        AND candidate_id = (selected.entry->>'candidate')::uuid
+        AND candidate_id >= (selected.entry->>'candidate')::uuid
         AND route >= requested.partition_no * 16 AND route < (requested.partition_no + 1) * 16
-      LIMIT 1
-    ) AS c ON true
+      ORDER BY candidate_id LIMIT 1
+    ) AS c ON c.candidate_id = (selected.entry->>'candidate')::uuid
     WHERE adoption.mode = 'replace'
   )
   SELECT body->'value'->>'content' AS language FROM live
@@ -132,10 +132,10 @@ LEFT JOIN LATERAL (
     JOIN LATERAL (
       SELECT candidate_id, statement FROM semantic.candidate
       WHERE route = requested.route AND subject_id = requested.id
-        AND candidate_id = (selected.entry->>'candidate')::uuid
+        AND candidate_id >= (selected.entry->>'candidate')::uuid
         AND route >= requested.partition_no * 16 AND route < (requested.partition_no + 1) * 16
-      LIMIT 1
-    ) AS c ON true
+      ORDER BY candidate_id LIMIT 1
+    ) AS c ON c.candidate_id = (selected.entry->>'candidate')::uuid
     WHERE adoption.mode = 'replace'
   ) AS live
   WHERE COALESCE(live.body->>'rank', 'normal') <> 'deprecated'
