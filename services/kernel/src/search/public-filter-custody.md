@@ -19,6 +19,8 @@ Migration `20261030090000_public_filter_custody.sql` creates `search.public_filt
 Registration IDs digest the consumer identity and native Source ID; the retained definition also has a
 canonical digest. Tagged canonical encoding preserves undefined, arbitrary JSON objects and bigint losslessly.
 Consumer, Source configuration, release identity, expanded input and compiler dependency keys cannot be overwritten.
+An exact replay reads the active registration, current target incarnation and retained definition in one snapshot.
+A missing or different binding enters the publication-fenced registration transaction.
 
 Definitions admit releases through `RELEASE_LIMITS`: at most 1024 types, 4096 properties, 64 properties and 16
 facets per type, and **4 MiB of JSON**. That is the release body alone, before capture, dependency keys or custody's

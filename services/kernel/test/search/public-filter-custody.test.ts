@@ -139,6 +139,27 @@ test('expired preparation custody is usable only inside the original native repa
   }
 });
 
+test('an exact registration replays while a concurrent transaction owns the target row', async () => {
+  const { input, physical, registration, queried } = await setup();
+  const writer = await pool.connect();
+  try {
+    await writer.query('BEGIN');
+    await writer.query(
+      'SELECT 1 FROM search.public_filter_target WHERE partition_no=$1 AND physical_target=$2 FOR UPDATE',
+      [registration.partition, physical.index],
+    );
+    const replay = await registry.register(input, search, { deadline: Date.now() + 2000 });
+    expect(replay).toMatchObject({ status: 'registered', registration, consumerWork: null, cost: { resultWrites: 0 } });
+  } finally {
+    try {
+      await writer.query('ROLLBACK');
+    } finally {
+      writer.release();
+      await registry.closeObservation(queried, search, context());
+    }
+  }
+});
+
 test('concurrent copies on one target enroll every retained observation', async () => {
   const { registration, physical, queried } = await setup();
   const copyRevision = async () =>
@@ -881,8 +902,9 @@ function wideRelease() {
   const release = structuredClone(bundledRelease);
   release.catalogue = { ...release.catalogue, version: crypto.randomUUID() };
   release.prefixes.custody = 'https://example.test/custody/';
-  release.types['schema:Book']!.properties.push('custody:reference0');
-  release.types['schema:Book']!.facets.push('custody:reference0');
+  const book = release.types['schema:Book']!;
+  book.properties = [...book.properties, 'custody:reference0'].sort();
+  book.facets = [...book.facets, 'custody:reference0'].sort();
   let bytes = Buffer.byteLength(JSON.stringify(release));
   let last = '';
   for (let index = 0; index < RELEASE_LIMITS.properties; index++) {

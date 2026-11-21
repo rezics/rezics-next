@@ -1584,6 +1584,35 @@ export function createPublicFilterCustody(
     };
     return { consumer, identity };
   }
+  // An exact registration can already be replayed under a publication fence.
+  // Observe it at one current snapshot without rewriting the target shared by every query.
+  async function registeredWork(
+    meter: Meter,
+    partition: number,
+    target: string,
+    incarnation: string,
+    members: readonly { id: string; consumer: string; definition: string }[],
+  ) {
+    const rows = await sql(
+      pool,
+      meter,
+      `SELECT r.id,r.consumer_work
+       FROM unnest($4::text[],$5::text[],$6::text[]) AS i(id,consumer,definition)
+       JOIN search.public_filter_registration r ON (r.partition_no,r.id)=($1,i.id)
+       JOIN search.public_filter_target t USING(partition_no,physical_target)
+       WHERE r.physical_target=$2 AND t.incarnation=$3 AND r.state='active'
+         AND r.consumer=i.consumer AND r.definition=i.definition`,
+      [
+        partition,
+        target,
+        incarnation,
+        members.map((m) => m.id),
+        members.map((m) => m.consumer),
+        members.map((m) => m.definition),
+      ],
+    );
+    return new Map(rows.rows.map((r) => [r.id as string, r.consumer_work as string | null]));
+  }
   const api: PublicFilterCustody = {
     register(request, search, context) {
       // Copy before the first await, so concurrent caller mutation never changes persisted identity.
@@ -1620,43 +1649,53 @@ export function createPublicFilterCustody(
                   };
                 });
                 const home = input.definition.source.partition;
-                const accepted = await transaction(shared, async (client) => {
-                  // Take a fresh statement snapshot after waiting for publication.
-                  await sql(client, shared, lockPublicationAdmission, [input.physicalTarget]);
-                  const target = await sql(
-                    client,
-                    shared,
-                    `INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation)
+                const current = await registeredWork(
+                  shared,
+                  home,
+                  input.physicalTarget,
+                  incarnation,
+                  members.map((m) => m.row),
+                );
+                const accepted =
+                  current.size === members.length
+                    ? current
+                    : await transaction(shared, async (client) => {
+                        // Take a fresh statement snapshot after waiting for publication.
+                        await sql(client, shared, lockPublicationAdmission, [input.physicalTarget]);
+                        const target = await sql(
+                          client,
+                          shared,
+                          `INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation)
                      SELECT $1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                        WHERE partition_no=0 AND physical_target=$2 AND publication_fence IS NOT NULL)
                      ON CONFLICT (partition_no,physical_target) DO UPDATE SET incarnation=EXCLUDED.incarnation`,
-                    [home, input.physicalTarget, incarnation],
-                  );
-                  const fenced = !target.rowCount;
-                  const rows = await sql(
-                    client,
-                    shared,
-                    fenced
-                      ? `SELECT r.id,r.consumer_work FROM jsonb_to_recordset($1) i(id text,consumer text,definition text)
+                          [home, input.physicalTarget, incarnation],
+                        );
+                        const fenced = !target.rowCount;
+                        const rows = await sql(
+                          client,
+                          shared,
+                          fenced
+                            ? `SELECT r.id,r.consumer_work FROM jsonb_to_recordset($1) i(id text,consumer text,definition text)
                      JOIN search.public_filter_registration r ON (r.partition_no,r.id)=($2,i.id)
                      JOIN search.public_filter_target t USING(partition_no,physical_target)
                      WHERE r.physical_target=$3 AND t.incarnation=$4 AND r.consumer=i.consumer
                        AND r.definition=i.definition AND r.state='active'`
-                      : `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
+                            : `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
                      SELECT $2,i.id,$3,i.consumer,i.definition,'active' FROM jsonb_to_recordset($1)
                        i(id text,consumer text,definition text) ORDER BY i.id
                      ON CONFLICT(partition_no,id) DO UPDATE SET id=EXCLUDED.id
                        WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition
                          AND public_filter_registration.state='active' RETURNING id,consumer_work`,
-                    [
-                      JSON.stringify(members.map((m) => m.row)),
-                      home,
-                      input.physicalTarget,
-                      ...(fenced ? [incarnation] : []),
-                    ],
-                  );
-                  return new Map(rows.rows.map((r) => [r.id, r.consumer_work as string | null]));
-                });
+                          [
+                            JSON.stringify(members.map((m) => m.row)),
+                            home,
+                            input.physicalTarget,
+                            ...(fenced ? [incarnation] : []),
+                          ],
+                        );
+                        return new Map(rows.rows.map((r) => [r.id, r.consumer_work as string | null]));
+                      });
                 return members.map(({ consumer, identity }, i) => ({
                   consumer,
                   identity,
@@ -1686,8 +1725,21 @@ export function createPublicFilterCustody(
         const incarnation = await native(search, meter, context, input.physicalTarget);
         const { consumer, identity } = registrationIdentity(input, incarnation);
         const retained = await retainedDefinition(pool, meter, input.definition);
+        const encodedConsumer = encode(consumer);
+        const current = await registeredWork(meter, identity.partition, consumer.physicalTarget, incarnation, [
+          { id: identity.id, consumer: encodedConsumer, definition: retained.encoded },
+        ]);
+        const consumerWork = current.get(identity.id);
+        if (consumerWork !== undefined) {
+          return {
+            status: 'registered' as const,
+            registration: identity,
+            consumer,
+            consumerWork,
+            cost: meter,
+          };
+        }
         await transaction(meter, async (client) => {
-          const encodedConsumer = encode(consumer);
           if ((await lockCopyAdmission(client, meter, consumer.physicalTarget)).rowCount) {
             // An exact registration replay needs no new target or copy and cannot change incarnation.
             const replay = (encoded: string) =>
