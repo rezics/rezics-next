@@ -9,7 +9,7 @@ import {
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
-import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
 export { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable };
@@ -23,10 +23,33 @@ function isSettledServerError(error: unknown): boolean {
   return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
 }
 
+const readLifetimeOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    try {
+      // The bounded lifetime selects the deadline race; classify its settled failure without checking time again.
+      throwAccessUnavailable(error);
+    } catch (mapped) {
+      return mapped;
+    }
+    return error;
+  },
+  isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+  isUncertainSettledQueryError: (error: unknown) => !isSettledServerError(error),
+};
+
 /** Only this executor's live checked-out RR clients qualify; a pool.query facade never does. */
 export function currentReadSnapshot(pool: Pool): PoolClient | undefined {
   const snapshot = snapshots.getStore()?.get(pool);
   return snapshot?.live ? snapshot.client : undefined;
+}
+
+/** A single native SELECT has its own snapshot. Reuse a caller's repeatable-read snapshot when present. */
+export function withReadStatement<T>(pool: Pool, read: (client: PoolClient) => Promise<T>): Promise<T> {
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  if (currentReadSnapshot(pool)) return withReadTransaction(pool, read, deadline);
+  requireAccessDeadline(deadline);
+  return withBoundedReadConnection(pool, deadline, read, readLifetimeOptions);
 }
 
 /** One physical-pool snapshot across independently bound logical partition reads. */
@@ -66,20 +89,7 @@ export function withReadTransaction<T>(
         ownedSnapshot.live = false;
       }
     },
-    {
-      deadlineError: () => new AccessUnavailableError('deadline'),
-      mapError(error) {
-        try {
-          // The bounded lifetime selects the deadline race; classify its settled failure without checking time again.
-          throwAccessUnavailable(error);
-        } catch (mapped) {
-          return mapped;
-        }
-        return error;
-      },
-      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
-      isUncertainSettledQueryError: (error) => !isSettledServerError(error),
-    },
+    readLifetimeOptions,
   );
   return visit.finally(() => {
     if (snapshot) snapshot.live = false;

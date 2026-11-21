@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { RetiredReadClientError } from '../../src/database/pool.ts';
-import { currentReadSnapshot, withReadTransaction } from '../../src/semantic/read.ts';
+import { currentReadSnapshot, withReadStatement, withReadTransaction } from '../../src/semantic/read.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -134,7 +134,10 @@ test('expiry retires escaped callbacks and narrower children cannot use the snap
       );
       await expect(child).rejects.toBeInstanceOf(AccessUnavailableError);
       expect(currentReadSnapshot(nested)).toBe(outer);
-      await outer.query('SELECT parent');
+      await withReadStatement(nested, async (point) => {
+        expect(point).toBe(outer);
+        await point.query('SELECT parent');
+      });
     },
     Date.now() + 500,
   );

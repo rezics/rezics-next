@@ -18,7 +18,7 @@ import readCommunity from './context-read-community.sql';
 import readContextOwner from './context-read-creator.sql';
 import pointer from './extension-active.sql';
 import read from './extension-read.sql';
-import { withReadTransaction } from './read.ts';
+import { withReadStatement, withReadTransaction } from './read.ts';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const releases = new Map<string, Release>();
@@ -35,9 +35,13 @@ export async function readRelease(
   options: { composed?: boolean } = {},
 ): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
+  const cached = releases.get(digest);
+  if (cached) {
+    const exists = (db: Db) => nativeSourceQuery(db, releaseExists, { route: 0, digest });
+    const found = await (pool instanceof Pool ? withReadStatement(pool, exists) : exists(pool));
+    return found ? cached : null;
+  }
   return definitionRead(pool, async (db) => {
-    const cached = releases.get(digest);
-    if (cached) return (await nativeSourceQuery(db, releaseExists, { route: 0, digest })) ? cached : null;
     const row = await nativeSourceQuery(db, releaseRead, { route: 0, digest });
     if (!row) return options.composed === false ? null : readComposedRelease(db, digest);
     const release = validated(row.body);
@@ -83,10 +87,17 @@ export async function activeRelease(
   pool: Pool | CommandTransaction,
   mode?: 'native',
 ): Promise<{ digest: string; head: number; release: Release } | null> {
+  const pointer = (db: Db) =>
+    mode === 'native' ? nativeSourceQuery(db, releasePointer, { route: 0 }) : releasePointer.run(db, { route: 0 });
+  if (pool instanceof Pool) {
+    const active = await withReadStatement(pool, pointer);
+    if (!active) return null;
+    const release = releases.get(active.digest);
+    if (release) return { ...active, release };
+  }
+  // A cold body and its pointer still come from the same snapshot.
   return definitionRead(pool, async (db) => {
-    const active = await (mode === 'native'
-      ? nativeSourceQuery(db, releasePointer, { route: 0 })
-      : releasePointer.run(db, { route: 0 }));
+    const active = await pointer(db);
     if (!active) return null;
     const release = releases.get(active.digest) ?? (await readRelease(db, active.digest));
     if (!release) throw new Error('Active definition release is missing');
