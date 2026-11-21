@@ -27,6 +27,12 @@ and `KERNEL_ECONOMY_MARKET_POLICY_VERSION`. Native requests lock the current acc
 transaction as protected reads and writes. Both sides of a wallet transfer and of a new market purchase require the
 current grant. Provision assets and balances through trusted owner operations in the configured test environment.
 
+The synthetic deposit and withdrawal routes are available only with explicit development settings and the
+`wallet:test_funding` client action. The kernel server requires `NODE_ENV=development`, the book and node, and
+`KERNEL_ECONOMY_TEST_FUNDING_MODE=test`, `KERNEL_ECONOMY_TEST_FUNDING_ASSET_ID` and
+`KERNEL_ECONOMY_TEST_FUNDING_NAMESPACE`. The server omits the routes and their discovery entries without these
+bindings, including in production.
+
 ## Book and wallet
 
 The configured book is the native home of an atomic transaction, its asset accounts, positions and holds. A wallet
@@ -76,6 +82,8 @@ before recording a durable commit or abort. After commit, reconcile ownership de
 funds to seller and fee accounts. Same-book fungible delivery can settle as a balanced multi-asset journal group.
 Matching follows price-time priority with stable fill identities and protected allocations for partial fills. A bounded
 step can resume before crossing subsequent instructions. A canceled order frees only its unallocated remainder.
+The native worker schedules bounded spot work for the configured book and node. Market settlement also requires the
+configured item home. An old queued job advances work only if its owner binding still matches.
 Public price and volume derive from completed settlements and remain behind Economy admission.
 
 ## Book reconciliation and restore

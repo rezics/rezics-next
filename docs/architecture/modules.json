@@ -414,6 +414,7 @@
         "services/kernel/src/economy/ledger.ts",
         "services/kernel/src/economy/storage/funding-store.ts",
         "services/kernel/src/economy/storage/funding-ledger.ts",
+        "services/kernel/src/economy/storage/funding-test-rail.ts",
         "services/kernel/src/economy/storage/creator-contract.ts",
         "services/kernel/src/economy/storage/market-store.ts",
         "services/kernel/src/economy/storage/market-runner.ts",
@@ -1037,6 +1038,7 @@
         "services/kernel/src/economy/routes.ts",
         "services/kernel/src/economy/spot-routes.ts",
         "services/kernel/src/economy/market-routes.ts",
+        "services/kernel/src/economy/test-funding-routes.ts",
         "services/kernel/src/events/**",
         "services/kernel/src/tokens/**",
         "services/kernel/src/partition/**",
@@ -1059,6 +1061,7 @@
       "publicEntries": [
         "services/kernel/src/economy/spot-routes.ts",
         "services/kernel/src/economy/market-routes.ts",
+        "services/kernel/src/economy/test-funding-routes.ts",
         "services/kernel/src/http/problem.ts",
         "services/kernel/src/http/request.ts",
         "services/kernel/src/command/receipt-key.ts",
