@@ -9,6 +9,11 @@ export declare let admitCollectionKindPreparationStep: SearchNativePorts['admitC
 export declare let admitCollectionMemberQuery: SearchNativePorts['admitCollectionMemberQuery'];
 export declare let admitCollectionPublicationStep: SearchNativePorts['admitCollectionPublicationStep'];
 export declare let advanceNativePublicFilterPreparation: SearchNativePorts['advanceNativePublicFilterPreparation'];
+export declare let reserveHeldSubjectPreparation: SearchNativePorts['reserveHeldSubjectPreparation'];
+export declare let captureHeldSubjectRange: SearchNativePorts['captureHeldSubjectRange'];
+export declare let prepareHeldSubjectRange: SearchNativePorts['prepareHeldSubjectRange'];
+export declare let reconcileHeldSubjectPage: SearchNativePorts['reconcileHeldSubjectPage'];
+export declare let planColdSubjectEnrollment: SearchNativePorts['planColdSubjectEnrollment'];
 export declare let bindCollectionKindPreparationStep: SearchNativePorts['bindCollectionKindPreparationStep'];
 export declare let bindOwnerFilterRead: SearchNativePorts['bindOwnerFilterRead'];
 export declare let createIdentityScopedObservations: SearchNativePorts['createIdentityScopedObservations'];

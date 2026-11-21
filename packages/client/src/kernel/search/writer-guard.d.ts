@@ -7,7 +7,7 @@ import type { StoredSource } from './identity-receiving-native-internal.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import repairWriter from './public-filter-custody-repair-writer.sql.d.ts';
 import { type IndexAction, type SubjectDocument } from './document.ts';
-import { type OpenSearch } from './opensearch.ts';
+import { type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
 import { readDiscoveryWriterPhysicalTarget, type DiscoveryProjection, type DiscoveryRepairEffect } from './account-discovery.ts';
 import type { SearchNativePublicationCompletionReader, SearchPublicFilterCost } from './semantic-source-port.ts';
@@ -231,6 +231,7 @@ export type SearchWriterPublicationFence = Readonly<{
     fence: string;
 }>;
 export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
+    recoverRelayDispatch?(partition: number, ids: readonly string[], context: PublicFilterConsumerContext): Promise<boolean>;
     fencePublication(request: Readonly<{
         consumer: PublicFilterConsumer;
         job: string;
@@ -256,12 +257,12 @@ export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
     } | PublicFilterConsumerUnavailable>;
 }>;
 export declare function nativeSourceForHeldPublication(result: object): GenerationPublicationPin | undefined;
-export declare function bindSearchWriterPublicationReader(guard: SearchWriterPublicationGuard, reader: SearchNativePublicationCompletionReader): void;
+export declare function bindSearchWriterPublicationReader(guard: SearchWriterPublicationGuard, reader: SearchNativePublicationCompletionReader, subjectReader?: SearchNativePublicationCompletionReader): void;
 /** Read current native projection bodies with the external versions actually settled by this writer.
  * A later writer-custody command advances the home head without changing those external versions.
  * Missing/uncertain custody returns null and cannot certify a generation.
  */
-export declare function readSearchWriterGenerationActions(guard: SearchWriterGuard, partition: number, ids: readonly string[], obligation: bigint): Promise<readonly IndexAction<SubjectDocument>[] | null>;
+export declare function readSearchWriterGenerationActions(guard: SearchWriterGuard, partition: number, ids: readonly string[], obligation: bigint, work?: () => SearchRequestWork): Promise<readonly IndexAction<SubjectDocument>[] | null>;
 export declare const readRetainedWriterCopySql = "SELECT g.incarnation AS gate_incarnation,g.owner_epoch AS gate_epoch,\n  w.original_id::text,w.source_position,w.visible_transaction_id,w.visible_position,\n  w.writer_transaction_id,w.writer_position,w.writer_token,w.dispatch_state,w.owner_epoch,w.incarnation\n FROM core.partition p\n JOIN search.identity_writer_gate g ON g.partition_no=p.partition_no AND g.physical_target=$2\n LEFT JOIN search.identity_writer w ON (w.partition_no,w.physical_target,w.original_id)=(g.partition_no,g.physical_target,$5)\n WHERE p.partition_no=$1 AND p.write_state='active' AND p.epoch=g.owner_epoch AND p.position>=g.closed_position\n  AND g.closed_token=$3 AND g.consumer=$4";
 export declare function searchIdentityWriterSettlementSql(): "/* search:identity-writer:settle */\nWITH input AS (\n  SELECT $1::integer AS partition_no, $2::text AS physical_target, $3::text AS incarnation,\n    $4::integer AS owner_epoch, $5::uuid AS writer_token, $6::uuid AS writer_transaction_id,\n    $7::bigint AS writer_position, $8::uuid[] AS ids,\n    $9::uuid AS settled_transaction_id, $10::bigint AS settled_position, $11::bigint AS source_position\n)\nUPDATE search.identity_writer AS writer SET writer_token=NULL,\n  relay_receipt=NULL, relay_intent=NULL,\n  settled_transaction_id=input.settled_transaction_id, settled_position=input.settled_position,\n  visible_transaction_id=CASE WHEN input.source_position IS NULL THEN writer.visible_transaction_id ELSE input.settled_transaction_id END,\n  visible_position=CASE WHEN input.source_position IS NULL THEN writer.visible_position ELSE input.settled_position END,\n  source_position=COALESCE(input.source_position,writer.source_position),\n  dispatch_state=CASE WHEN input.source_position IS NULL THEN 'cancelled' ELSE 'settled' END\nFROM input\nWHERE writer.partition_no=input.partition_no AND writer.physical_target=input.physical_target\n  AND writer.incarnation=input.incarnation AND writer.owner_epoch=input.owner_epoch\n  AND writer.writer_token=input.writer_token AND writer.writer_transaction_id=input.writer_transaction_id\n  AND writer.writer_position=input.writer_position AND writer.original_id=ANY(input.ids)\n  AND ((input.source_position IS NULL AND writer.dispatch_state='enrolled')\n    OR (input.source_position IS NOT NULL AND writer.dispatch_state='dispatched'))\nRETURNING writer.original_id;";
 export declare function searchIdentityWriterAdmissionSql(): {

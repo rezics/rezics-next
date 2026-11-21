@@ -67,6 +67,7 @@ export type PrincipalCommandReceipt = {
 export type PrincipalCommandOptions = PrincipalCommandIdentity & {
     partition: number;
     deadline?: number;
+    serializationRetryGroup?: symbol;
     receipt?: PrincipalCommandReceipt;
     authorization?: CommandAuthorization | undefined;
     /** Trusted service configuration only, never a request timestamp. */
@@ -216,6 +217,7 @@ export declare class TooManyEventsError extends Error {
 export type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
+    serializationRetryGroup?: symbol;
     basis?: CommandBasis;
     receipt?: CommandReceipt;
     authorization?: CommandAuthorization | undefined;

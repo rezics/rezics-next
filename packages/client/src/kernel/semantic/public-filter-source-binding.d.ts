@@ -1,4 +1,5 @@
 import { type CommandTransaction } from '../command/command.ts';
+import { type ColdEnrollmentRequest, type PreparedEnrollmentRange } from './public-filter-coverage-baseline.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../access/index.ts';
 import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
@@ -144,6 +145,8 @@ export type NativeSourceRepairStepRead = Readonly<{
     queried: PublicFilterQueriedObservation;
     execution: string;
     predecessor: string | null;
+    /** A continuation funded for a Subject home scan only. */
+    scanOnly?: true;
 }>;
 export type NativeSourceRepairStepVerification = Readonly<{
     status: 'verified';
@@ -225,6 +228,7 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         homeLimit?: number;
         /** Also fund one bounded scan of immutable held cut pages. */
         compactSubjectCuts?: true;
+        scanOnly?: true;
     }>, context: PublicFilterConsumerContext): Promise<PublicSourceRepairPage>;
     settleMixed?(request: Readonly<{
         bootstrap: string;
@@ -284,6 +288,15 @@ export type NativePublicFilterPublicationCompletion = Readonly<{
 export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;
 export declare function readNativePublicFilterPublicationCompletion(binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext, spent?: NativePublicationSpent): Promise<NativePublicFilterPublicationCompletion>;
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
+type SubjectEnrollment = Readonly<{
+    consumer: PublicFilterConsumer;
+    source: PublicFilterSourceDefinition['source'];
+    registration: {
+        partition: number;
+        id: string;
+    };
+    capturingOnly?: true;
+}>;
 type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] & Readonly<{
     inputLimit?: number;
     usePublishedCoverage?: true | 'reconcile';
@@ -291,15 +304,8 @@ type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['be
 }>) | Readonly<{
     bootstrap: string;
     inputLimit?: number;
-    subjectEnrollment?: Readonly<{
-        consumer: PublicFilterConsumer;
-        source: PublicFilterSourceDefinition['source'];
-        registration: {
-            partition: number;
-            id: string;
-        };
-        capturingOnly?: true;
-    }>;
+    subjectEnrollment?: SubjectEnrollment;
+    coldEnrollment?: ColdEnrollmentRequest;
 }>;
 export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult, {
     status: 'begun';
@@ -322,11 +328,26 @@ export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult
     enrollmentAdvanced: boolean;
     cost: PublicFilterCost;
 }>;
+type NativePreparationResult = NativePublicFilterPreparation | Readonly<{
+    status: 'enrollment-sealed';
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'ranges-prepared';
+    ranges: readonly PreparedEnrollmentRange[];
+    cost: BindingCost;
+}> | Readonly<{
+    status: 'range-adopted' | 'range-pending';
+    cost: BindingCost;
+}>;
 type SubjectRepairWriterObligation = Pick<PublicFilterProjectionObservation, 'subject' | 'partition' | 'epoch' | 'position'>;
 type NativeRepairEvidence = Readonly<{
     repairs: readonly PublicSourceRepair[];
     account: AccountDiscoveryRepairObservation | null;
     subject?: SubjectRepairWriterObligation;
+    nextScan?: Readonly<{
+        inputKeys: number;
+        bytes: number;
+    }>;
 }>;
 export declare function nativePublicFilterRepairEvidence(binding: PublicFilterSourceBinding, step: Extract<NativeSourceRepairStepVerification, {
     status: 'verified';
@@ -373,7 +394,23 @@ export declare function advanceNativePublicFilterPreparation(binding: PublicFilt
     pageObservation: PublicFilterQueriedObservation;
 }, context: PublicFilterConsumerContext): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> | null>;
 export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: BookPreparationGroup, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation[] | null>;
-export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: NativePreparationInput, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: {
+    bootstrap: string;
+    inputLimit: number;
+    subjectEnrollment: SubjectEnrollment;
+    coldEnrollment: ColdEnrollmentRequest;
+}, context: PublicFilterConsumerContext): Promise<NativePreparationResult | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: {
+    bootstrap: string;
+    inputLimit?: number;
+    subjectEnrollment: SubjectEnrollment;
+}, context: PublicFilterConsumerContext): Promise<NativePreparationResult | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: Exclude<NativePreparationInput, {
+    bootstrap: string;
+}> | {
+    bootstrap: string;
+    inputLimit?: number;
+}, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
 type BindingCost = {
     -readonly [K in keyof PublicFilterCost]: number;
 } & {
@@ -382,6 +419,14 @@ type BindingCost = {
     bytes: number;
     engineRequests: number;
 };
+/** Claim the ordinary prepared request identity in the membership transaction.
+ * A concurrent old-format begin uses the same unique capturing index.
+ */
+export declare function reserveHeldSubjectBootstrap(db: CommandTransaction, member: {
+    birth: string;
+    bootstrap: string;
+    consumer: PublicFilterConsumer;
+}): Promise<void>;
 export declare class PublicFilterSourceDefinitionError extends Error {
     readonly reason: PublicFilterBindingFailure['reason'];
     constructor(reason: PublicFilterBindingFailure['reason']);

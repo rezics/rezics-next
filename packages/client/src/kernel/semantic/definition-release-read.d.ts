@@ -2,6 +2,8 @@ import { type Extension } from '@rezics/definitions/extension';
 import { type Release } from '@rezics/definitions';
 import { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
+/** Resolve a base body only after its active digest has been observed in the caller's snapshot. */
+export declare function verifiedBaseRelease(digest: string): Release | undefined;
 /** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
 export declare function readRelease(pool: Pool | CommandTransaction, digest: string, options?: {
     composed?: boolean;

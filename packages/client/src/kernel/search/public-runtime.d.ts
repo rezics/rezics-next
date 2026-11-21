@@ -5,11 +5,11 @@ import type { Pool } from 'pg';
 import type { DiscoveryRegistry } from './discovery.ts';
 import type { DiscoveryProducerEntry } from './discovery-api.ts';
 import { type DiscoveryTarget } from './account-discovery.ts';
-import type { SearchGenerationPublication } from './generation-publication.ts';
+import type { GenerationPublicationJob, SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { type PublicSuggestionOperations } from './public-suggestion.ts';
-import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
@@ -23,6 +23,8 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     prefix: string;
     clock: KernelClock;
     creditSearch?: CreditSearchSource;
+    subjectAckProtocol?: 1;
+    subjectSubscriptionProtocol?: 1;
     discoveryProducers?: DiscoveryProducerEntry;
     /** Composition-bound Access observation; omitted fixtures keep throwing through. */
     facetAccess?: FacetAccessObservationPort;
@@ -36,6 +38,10 @@ export type DefaultPublicFilterRuntime = Readonly<{
     openDiscovery(registry: DiscoveryRegistry, scope: DiscoveryTarget, digest: string, context: PublicFilterConsumerContext, queried?: PublicFilterQueriedObservation, enrollmentOnly?: boolean): Promise<PublicDiscoveryConsumerOperations>;
     prepareDefaultHome(target: DiscoveryTarget, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerJob | undefined>;
     publication: SearchGenerationPublication;
+    enrollPublication(job: GenerationPublicationJob, context: PublicFilterConsumerContext, active: () => boolean): Promise<{
+        status: 'progress' | 'reconciled';
+        sourceAdvanced?: boolean;
+    } | Pick<PublicFilterConsumerUnavailable, 'status' | 'reason'>>;
     preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;

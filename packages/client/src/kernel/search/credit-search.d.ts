@@ -50,6 +50,8 @@ export type CreditSearchPage = Readonly<{
 export interface CreditSearchSource {
     /** Private index input with the same complete coverage and currentness as the paged projection. */
     projectForIndex?(workId: string): Promise<CreditSearchIndexProjection>;
+    /** Prove empty selections where possible. Missing keys still require ordinary projection. */
+    projectEmptyForIndex?(partition: number, workIds: readonly string[]): Promise<ReadonlyMap<string, CreditSearchIndexProjection>>;
     page(input: Readonly<{
         workId: string;
         after: string | null;

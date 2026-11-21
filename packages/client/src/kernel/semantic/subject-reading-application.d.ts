@@ -1,3 +1,5 @@
+import type { readTermDetailSnapshot } from './term-detail-snapshot.ts';
+import type { TermDetailWitness, termSummaryDisclosure } from './term-summary-disclosure.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
@@ -9,7 +11,8 @@ export type { SubjectSummaryObservation } from './contract/summaries.ts';
 import type { SubjectReadingAuthorizationPort, SubjectReadingNativePort, SubjectReadingFenceTuple, SubjectReadingFence } from './contract/index.ts';
 import type { ContextRecord } from './context.ts';
 import { type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
-import { type Item } from './item.ts';
+import { type SubjectDetailCheck } from './eligibility.ts';
+import { type FactRow, type Item } from './item.ts';
 import { type SelectedSynopsisInput, type SelectedSynopsisResult } from './selected-synopsis.ts';
 import { type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
@@ -57,6 +60,10 @@ type SubjectFenceTuple = SubjectReadingFenceTuple & {
 type SubjectFence = SubjectReadingFenceTuple & {
     field_group: ContentImportedFieldGroup;
 } & SubjectReadingFence;
+type DetailCheck = ((client: PoolClient) => Promise<boolean>) & {
+    termCandidate?: boolean;
+};
+type YieldAdmission = <T>(wait: () => Promise<T>) => Promise<T>;
 export type SubjectReadOptions = {
     reviewIdentity?: ReviewedPersonSource;
     selectedSynopsis?: {
@@ -70,9 +77,11 @@ export type SubjectReadOptions = {
     observeMissingCheckpoint?: boolean;
     deadline?: number;
     prepareAuthorization?: () => Promise<AccessCheck>;
-    prepareAuthorize?: (id: string) => Promise<AccessCheck>;
+    prepareAuthorize?: (id: string) => Promise<DetailCheck>;
+    termSnapshot?: (id: string, seen: readonly SubjectComponent[]) => ReturnType<typeof readTermDetailSnapshot>;
+    termDisclosure?: (witness: TermDetailWitness) => ReturnType<typeof termSummaryDisclosure>;
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
-    yieldAdmission?: <T>(wait: () => Promise<T>) => Promise<T>;
+    yieldAdmission?: YieldAdmission;
 };
 export type SubjectReadResult = {
     selectedSynopsis?: SelectedSynopsisResult;
@@ -90,10 +99,12 @@ export type SubjectReadingPageRequest = {
     subject: string;
     context: string;
     languages: readonly string[];
-    authorization: SubjectReadingAuthorizationPort<AccessCheck> & {
+    authorization: SubjectReadingAuthorizationPort<SubjectDetailCheck, YieldAdmission> & {
         prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
+        termSnapshot?: SubjectReadOptions['termSnapshot'];
+        termDisclosure?: SubjectReadOptions['termDisclosure'];
     };
-    runNative: <T>(read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>) => Promise<T>;
+    runNative: <T>(read: (yieldAdmission?: YieldAdmission) => Promise<T>) => Promise<T>;
     readAs: <T>(read: () => Promise<T>) => Promise<T>;
     seen: readonly SubjectComponent[];
     observeMissingCheckpoint?: boolean;
@@ -218,6 +229,25 @@ export type SummaryObservationOptions = {
  * native checks execute on that snapshot; no allow decision is retained.
  */
 export declare function summaryAuthorization(prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>, prepareBatch?: () => Promise<SubjectSummaryBatchAuthorizer>): SummaryAuthorize;
+export type SubjectReadRow = {
+    id: string;
+    account: string | null;
+    redirect: string | null;
+    type: string;
+    revision: number;
+    security_revision: string;
+    release: string;
+    fact_revision: number | null;
+    fact_release: string | null;
+    slot_id: string | null;
+    log_seq: number | null;
+    operation: FactRow['operation'] | null;
+    kind: FactRow['kind'] | null;
+    language: string | null;
+    property: string | null;
+    statement_id: string | null;
+    body: unknown;
+};
 export type SubjectCorrectionActions = {
     state: 'available';
     actions: {

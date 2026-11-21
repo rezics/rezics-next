@@ -139,7 +139,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -150,7 +150,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -161,7 +161,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -172,7 +172,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -183,7 +183,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -223,7 +223,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -234,7 +234,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -245,7 +245,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -256,7 +256,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -267,7 +267,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -278,7 +278,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -289,7 +289,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -352,7 +352,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -363,7 +363,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -374,7 +374,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -385,7 +385,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -396,7 +396,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -407,7 +407,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -418,7 +418,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -461,7 +461,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -472,7 +472,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -498,7 +498,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -766,7 +766,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -777,7 +777,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -788,7 +788,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -799,7 +799,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -810,7 +810,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -836,7 +836,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -875,7 +875,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -886,7 +886,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -897,7 +897,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -908,7 +908,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -919,7 +919,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -930,7 +930,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -941,7 +941,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -985,7 +985,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -996,7 +996,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1007,7 +1007,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1018,7 +1018,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1029,7 +1029,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1040,7 +1040,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1051,7 +1051,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1091,7 +1091,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1102,7 +1102,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1113,7 +1113,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1124,7 +1124,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1135,7 +1135,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1146,7 +1146,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1157,7 +1157,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1200,7 +1200,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1211,7 +1211,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1222,7 +1222,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1233,7 +1233,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1244,7 +1244,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1255,7 +1255,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1305,7 +1305,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1316,7 +1316,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1327,7 +1327,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1353,7 +1353,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1395,7 +1395,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1406,7 +1406,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1417,7 +1417,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1428,7 +1428,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1439,7 +1439,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1450,7 +1450,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1492,7 +1492,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1503,7 +1503,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1514,7 +1514,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1525,7 +1525,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1536,7 +1536,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1547,7 +1547,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1597,7 +1597,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1608,7 +1608,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1619,7 +1619,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1630,7 +1630,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1641,7 +1641,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1652,7 +1652,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1663,7 +1663,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1713,7 +1713,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1724,7 +1724,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1735,7 +1735,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1746,7 +1746,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1757,7 +1757,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1768,7 +1768,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1779,7 +1779,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1825,7 +1825,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1836,7 +1836,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1847,7 +1847,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1858,7 +1858,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1869,7 +1869,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1880,7 +1880,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1891,7 +1891,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1941,7 +1941,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1952,7 +1952,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1963,7 +1963,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1974,7 +1974,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1985,7 +1985,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1996,7 +1996,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2007,7 +2007,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2053,7 +2053,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2064,7 +2064,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2075,7 +2075,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2086,7 +2086,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2097,7 +2097,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2108,7 +2108,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2119,7 +2119,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2179,7 +2179,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2190,7 +2190,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2201,7 +2201,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2212,7 +2212,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2223,7 +2223,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2234,7 +2234,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2245,7 +2245,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2409,7 +2409,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2420,7 +2420,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2431,7 +2431,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2457,7 +2457,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2547,7 +2547,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2558,7 +2558,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2569,7 +2569,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2595,7 +2595,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2649,7 +2649,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2660,7 +2660,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2671,7 +2671,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2697,7 +2697,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2725,7 +2725,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2822,7 +2822,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2833,7 +2833,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2844,7 +2844,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2870,7 +2870,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2908,7 +2908,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2919,7 +2919,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2930,7 +2930,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2956,7 +2956,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4462,7 +4462,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4473,7 +4473,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4484,7 +4484,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4510,7 +4510,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4698,7 +4698,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4709,7 +4709,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4720,7 +4720,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4746,7 +4746,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4783,7 +4783,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4794,7 +4794,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4805,7 +4805,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4816,7 +4816,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4827,7 +4827,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4838,7 +4838,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4849,7 +4849,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4886,7 +4886,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4897,7 +4897,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4908,7 +4908,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4919,7 +4919,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4930,7 +4930,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4941,7 +4941,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4952,7 +4952,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4999,7 +4999,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5010,7 +5010,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5021,7 +5021,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5047,7 +5047,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5092,7 +5092,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5103,7 +5103,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5114,7 +5114,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5125,7 +5125,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5151,7 +5151,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5192,7 +5192,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5203,7 +5203,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5214,7 +5214,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5225,7 +5225,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5251,7 +5251,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5290,7 +5290,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5301,7 +5301,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5312,7 +5312,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5323,7 +5323,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5334,7 +5334,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5345,7 +5345,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5356,7 +5356,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5411,7 +5411,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5422,7 +5422,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5433,7 +5433,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5444,7 +5444,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5455,7 +5455,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5466,7 +5466,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5477,7 +5477,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5528,7 +5528,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5539,7 +5539,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5550,7 +5550,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5561,7 +5561,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5572,7 +5572,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5583,7 +5583,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5594,7 +5594,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5640,7 +5640,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5651,7 +5651,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5662,7 +5662,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5673,7 +5673,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5684,7 +5684,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5695,7 +5695,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5706,7 +5706,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5744,7 +5744,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5755,7 +5755,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5766,7 +5766,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5777,7 +5777,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5788,7 +5788,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5837,7 +5837,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5848,7 +5848,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5859,7 +5859,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5870,7 +5870,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5896,7 +5896,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5936,7 +5936,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5947,7 +5947,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5958,7 +5958,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5969,7 +5969,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5995,7 +5995,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -6038,7 +6038,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6049,7 +6049,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6060,7 +6060,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6071,7 +6071,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6097,7 +6097,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6138,7 +6138,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6149,7 +6149,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6160,7 +6160,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6171,7 +6171,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6197,7 +6197,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6227,7 +6227,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6238,7 +6238,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6249,7 +6249,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6260,7 +6260,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6286,7 +6286,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6323,7 +6323,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6334,7 +6334,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6345,7 +6345,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6356,7 +6356,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6367,7 +6367,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6401,7 +6401,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6412,7 +6412,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6438,7 +6438,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6469,7 +6469,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6480,7 +6480,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6491,7 +6491,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6521,7 +6521,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6532,7 +6532,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6543,7 +6543,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6582,7 +6582,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6593,7 +6593,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6604,7 +6604,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6615,7 +6615,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6626,7 +6626,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6637,7 +6637,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6648,7 +6648,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6691,7 +6691,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6702,7 +6702,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6713,7 +6713,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6724,7 +6724,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6735,7 +6735,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6746,7 +6746,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6790,7 +6790,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6801,7 +6801,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6812,7 +6812,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6823,7 +6823,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6834,7 +6834,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6845,7 +6845,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6856,7 +6856,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6896,7 +6896,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6907,7 +6907,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6933,7 +6933,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6971,7 +6971,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -6982,7 +6982,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7008,7 +7008,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7036,7 +7036,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -7065,7 +7065,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7079,7 +7079,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7128,7 +7128,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -7139,7 +7139,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -7166,7 +7166,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -7177,7 +7177,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -7205,7 +7205,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7219,7 +7219,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7252,7 +7252,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -7278,7 +7278,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<Response>, {
     response: {
@@ -7302,7 +7302,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7316,7 +7316,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -7466,7 +7466,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7477,7 +7477,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7488,7 +7488,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7499,7 +7499,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7510,7 +7510,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7550,7 +7550,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7561,7 +7561,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7572,7 +7572,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7583,7 +7583,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7594,7 +7594,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7605,7 +7605,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7616,7 +7616,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7679,7 +7679,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7690,7 +7690,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7701,7 +7701,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7712,7 +7712,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7723,7 +7723,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7734,7 +7734,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7745,7 +7745,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7788,7 +7788,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7799,7 +7799,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -7825,7 +7825,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8093,7 +8093,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8104,7 +8104,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8115,7 +8115,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8126,7 +8126,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8137,7 +8137,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8163,7 +8163,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8202,7 +8202,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8213,7 +8213,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8224,7 +8224,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8235,7 +8235,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8246,7 +8246,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8257,7 +8257,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8268,7 +8268,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8312,7 +8312,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8323,7 +8323,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8334,7 +8334,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8345,7 +8345,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8356,7 +8356,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8367,7 +8367,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8378,7 +8378,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8418,7 +8418,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8429,7 +8429,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8440,7 +8440,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8451,7 +8451,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8462,7 +8462,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8473,7 +8473,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8484,7 +8484,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8527,7 +8527,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8538,7 +8538,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8549,7 +8549,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8560,7 +8560,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8571,7 +8571,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8582,7 +8582,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8632,7 +8632,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8643,7 +8643,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8654,7 +8654,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8680,7 +8680,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8722,7 +8722,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8733,7 +8733,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8744,7 +8744,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8755,7 +8755,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8766,7 +8766,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8777,7 +8777,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -8819,7 +8819,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8830,7 +8830,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8841,7 +8841,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8852,7 +8852,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8863,7 +8863,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8874,7 +8874,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8924,7 +8924,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8935,7 +8935,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8946,7 +8946,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8957,7 +8957,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8968,7 +8968,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8979,7 +8979,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -8990,7 +8990,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9040,7 +9040,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9051,7 +9051,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9062,7 +9062,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9073,7 +9073,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9084,7 +9084,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9095,7 +9095,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9106,7 +9106,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9152,7 +9152,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9163,7 +9163,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9174,7 +9174,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9185,7 +9185,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9196,7 +9196,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9207,7 +9207,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9218,7 +9218,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9268,7 +9268,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9279,7 +9279,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9290,7 +9290,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9301,7 +9301,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9312,7 +9312,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9323,7 +9323,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9334,7 +9334,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9380,7 +9380,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9391,7 +9391,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9402,7 +9402,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9413,7 +9413,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9424,7 +9424,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9435,7 +9435,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9446,7 +9446,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -9506,7 +9506,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9517,7 +9517,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9528,7 +9528,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9539,7 +9539,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9550,7 +9550,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9561,7 +9561,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9572,7 +9572,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9736,7 +9736,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9747,7 +9747,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9758,7 +9758,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9784,7 +9784,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9874,7 +9874,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9885,7 +9885,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9896,7 +9896,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9922,7 +9922,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -9976,7 +9976,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9987,7 +9987,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9998,7 +9998,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10024,7 +10024,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10052,7 +10052,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -10149,7 +10149,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10160,7 +10160,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10171,7 +10171,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10197,7 +10197,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10235,7 +10235,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10246,7 +10246,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10257,7 +10257,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -10283,7 +10283,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11789,7 +11789,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11800,7 +11800,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11811,7 +11811,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -11837,7 +11837,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12025,7 +12025,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12036,7 +12036,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12047,7 +12047,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12073,7 +12073,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12110,7 +12110,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12121,7 +12121,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12132,7 +12132,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12143,7 +12143,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12154,7 +12154,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12165,7 +12165,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12176,7 +12176,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12213,7 +12213,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12224,7 +12224,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12235,7 +12235,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12246,7 +12246,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12257,7 +12257,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12268,7 +12268,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12279,7 +12279,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12326,7 +12326,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12337,7 +12337,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12348,7 +12348,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12374,7 +12374,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12419,7 +12419,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -12430,7 +12430,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -12441,7 +12441,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -12452,7 +12452,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -12478,7 +12478,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -12519,7 +12519,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12530,7 +12530,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12541,7 +12541,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12552,7 +12552,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12578,7 +12578,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12617,7 +12617,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12628,7 +12628,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12639,7 +12639,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12650,7 +12650,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12661,7 +12661,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12672,7 +12672,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12683,7 +12683,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -12738,7 +12738,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12749,7 +12749,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12760,7 +12760,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12771,7 +12771,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12782,7 +12782,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12793,7 +12793,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12804,7 +12804,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -12855,7 +12855,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12866,7 +12866,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12877,7 +12877,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12888,7 +12888,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12899,7 +12899,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12910,7 +12910,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12921,7 +12921,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12967,7 +12967,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12978,7 +12978,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -12989,7 +12989,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13000,7 +13000,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13011,7 +13011,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13022,7 +13022,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13033,7 +13033,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13071,7 +13071,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13082,7 +13082,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13093,7 +13093,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13104,7 +13104,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13115,7 +13115,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13164,7 +13164,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13175,7 +13175,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13186,7 +13186,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13197,7 +13197,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13223,7 +13223,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13263,7 +13263,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13274,7 +13274,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13285,7 +13285,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13296,7 +13296,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13322,7 +13322,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -13365,7 +13365,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13376,7 +13376,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13387,7 +13387,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13398,7 +13398,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13424,7 +13424,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13465,7 +13465,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13476,7 +13476,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13487,7 +13487,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13498,7 +13498,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13524,7 +13524,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13554,7 +13554,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13565,7 +13565,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13576,7 +13576,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13587,7 +13587,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13613,7 +13613,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13650,7 +13650,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13661,7 +13661,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13672,7 +13672,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13683,7 +13683,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13694,7 +13694,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13728,7 +13728,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13739,7 +13739,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13765,7 +13765,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -13796,7 +13796,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13807,7 +13807,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13818,7 +13818,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -13848,7 +13848,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13859,7 +13859,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13870,7 +13870,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -13909,7 +13909,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13920,7 +13920,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13931,7 +13931,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13942,7 +13942,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13953,7 +13953,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13964,7 +13964,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -13975,7 +13975,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14018,7 +14018,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14029,7 +14029,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14040,7 +14040,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14051,7 +14051,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14062,7 +14062,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14073,7 +14073,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14117,7 +14117,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14128,7 +14128,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14139,7 +14139,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14150,7 +14150,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14161,7 +14161,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14172,7 +14172,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14183,7 +14183,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -14223,7 +14223,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14234,7 +14234,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14260,7 +14260,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14298,7 +14298,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14309,7 +14309,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14335,7 +14335,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -14385,7 +14385,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14396,7 +14396,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14407,7 +14407,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14433,7 +14433,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -14474,7 +14474,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14485,7 +14485,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14496,7 +14496,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14507,7 +14507,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14518,7 +14518,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14529,7 +14529,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -14556,7 +14556,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -14637,7 +14637,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14651,7 +14651,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14665,7 +14665,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14679,7 +14679,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14693,7 +14693,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14707,7 +14707,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14750,7 +14750,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14761,7 +14761,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14772,7 +14772,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14783,7 +14783,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14794,7 +14794,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14805,7 +14805,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14825,7 +14825,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14836,7 +14836,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14847,7 +14847,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14858,7 +14858,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14869,7 +14869,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14880,7 +14880,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -14967,7 +14967,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14981,7 +14981,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -14995,7 +14995,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15009,7 +15009,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15023,7 +15023,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15037,7 +15037,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15078,7 +15078,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -15108,7 +15108,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<{
     exposure: import("./catalogue.ts").ExposureValue;
@@ -15186,7 +15186,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15200,7 +15200,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15214,7 +15214,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15228,7 +15228,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15242,7 +15242,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15256,7 +15256,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -15414,7 +15414,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -15425,7 +15425,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -15436,7 +15436,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -15447,7 +15447,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -15458,7 +15458,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -15498,7 +15498,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15509,7 +15509,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15520,7 +15520,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15531,7 +15531,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15542,7 +15542,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15553,7 +15553,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15564,7 +15564,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -15627,7 +15627,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15638,7 +15638,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15649,7 +15649,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15660,7 +15660,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15671,7 +15671,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15682,7 +15682,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15693,7 +15693,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15736,7 +15736,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15747,7 +15747,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -15773,7 +15773,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16041,7 +16041,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16052,7 +16052,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16063,7 +16063,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16074,7 +16074,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16085,7 +16085,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16111,7 +16111,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -16150,7 +16150,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16161,7 +16161,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16172,7 +16172,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16183,7 +16183,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16194,7 +16194,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16205,7 +16205,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16216,7 +16216,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16260,7 +16260,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16271,7 +16271,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16282,7 +16282,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16293,7 +16293,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16304,7 +16304,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16315,7 +16315,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16326,7 +16326,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16366,7 +16366,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16377,7 +16377,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16388,7 +16388,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16399,7 +16399,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16410,7 +16410,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16421,7 +16421,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16432,7 +16432,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16475,7 +16475,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16486,7 +16486,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16497,7 +16497,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16508,7 +16508,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16519,7 +16519,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16530,7 +16530,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -16580,7 +16580,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16591,7 +16591,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16602,7 +16602,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16628,7 +16628,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16670,7 +16670,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16681,7 +16681,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16692,7 +16692,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16703,7 +16703,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16714,7 +16714,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16725,7 +16725,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -16767,7 +16767,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16778,7 +16778,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16789,7 +16789,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16800,7 +16800,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16811,7 +16811,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16822,7 +16822,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16872,7 +16872,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16883,7 +16883,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16894,7 +16894,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16905,7 +16905,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16916,7 +16916,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16927,7 +16927,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16938,7 +16938,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16988,7 +16988,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -16999,7 +16999,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17010,7 +17010,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17021,7 +17021,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17032,7 +17032,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17043,7 +17043,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17054,7 +17054,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17100,7 +17100,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17111,7 +17111,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17122,7 +17122,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17133,7 +17133,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17144,7 +17144,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17155,7 +17155,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17166,7 +17166,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17216,7 +17216,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17227,7 +17227,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17238,7 +17238,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17249,7 +17249,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17260,7 +17260,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17271,7 +17271,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17282,7 +17282,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17328,7 +17328,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17339,7 +17339,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17350,7 +17350,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17361,7 +17361,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17372,7 +17372,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17383,7 +17383,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17394,7 +17394,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -17454,7 +17454,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17465,7 +17465,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17476,7 +17476,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17487,7 +17487,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17498,7 +17498,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17509,7 +17509,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17520,7 +17520,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17684,7 +17684,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17695,7 +17695,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17706,7 +17706,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17732,7 +17732,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17822,7 +17822,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -17833,7 +17833,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -17844,7 +17844,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -17870,7 +17870,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -17924,7 +17924,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17935,7 +17935,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17946,7 +17946,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -17972,7 +17972,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18000,7 +18000,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -18097,7 +18097,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18108,7 +18108,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18119,7 +18119,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18145,7 +18145,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18183,7 +18183,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18194,7 +18194,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18205,7 +18205,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -18231,7 +18231,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19737,7 +19737,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19748,7 +19748,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19759,7 +19759,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19785,7 +19785,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19973,7 +19973,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19984,7 +19984,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -19995,7 +19995,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20021,7 +20021,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20058,7 +20058,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20069,7 +20069,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20080,7 +20080,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20091,7 +20091,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20102,7 +20102,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20113,7 +20113,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20124,7 +20124,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20161,7 +20161,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20172,7 +20172,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20183,7 +20183,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20194,7 +20194,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20205,7 +20205,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20216,7 +20216,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20227,7 +20227,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20274,7 +20274,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20285,7 +20285,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20296,7 +20296,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20322,7 +20322,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20367,7 +20367,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -20378,7 +20378,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -20389,7 +20389,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -20400,7 +20400,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -20426,7 +20426,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -20467,7 +20467,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20478,7 +20478,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20489,7 +20489,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20500,7 +20500,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20526,7 +20526,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20565,7 +20565,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20576,7 +20576,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20587,7 +20587,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20598,7 +20598,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20609,7 +20609,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20620,7 +20620,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20631,7 +20631,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -20686,7 +20686,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20697,7 +20697,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20708,7 +20708,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20719,7 +20719,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20730,7 +20730,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20741,7 +20741,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20752,7 +20752,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -20803,7 +20803,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20814,7 +20814,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20825,7 +20825,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20836,7 +20836,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20847,7 +20847,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20858,7 +20858,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20869,7 +20869,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20915,7 +20915,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20926,7 +20926,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20937,7 +20937,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20948,7 +20948,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20959,7 +20959,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20970,7 +20970,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -20981,7 +20981,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21019,7 +21019,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21030,7 +21030,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21041,7 +21041,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21052,7 +21052,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21063,7 +21063,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21112,7 +21112,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21123,7 +21123,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21134,7 +21134,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21145,7 +21145,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21171,7 +21171,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21211,7 +21211,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -21222,7 +21222,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -21233,7 +21233,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -21244,7 +21244,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -21270,7 +21270,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -21313,7 +21313,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21324,7 +21324,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21335,7 +21335,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21346,7 +21346,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21372,7 +21372,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21413,7 +21413,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21424,7 +21424,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21435,7 +21435,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21446,7 +21446,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21472,7 +21472,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21502,7 +21502,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21513,7 +21513,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21524,7 +21524,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21535,7 +21535,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21561,7 +21561,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21598,7 +21598,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21609,7 +21609,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21620,7 +21620,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21631,7 +21631,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21642,7 +21642,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21676,7 +21676,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -21687,7 +21687,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -21713,7 +21713,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -21744,7 +21744,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -21755,7 +21755,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -21766,7 +21766,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -21796,7 +21796,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21807,7 +21807,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21818,7 +21818,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -21857,7 +21857,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21868,7 +21868,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21879,7 +21879,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21890,7 +21890,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21901,7 +21901,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21912,7 +21912,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21923,7 +21923,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21966,7 +21966,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21977,7 +21977,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21988,7 +21988,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -21999,7 +21999,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -22010,7 +22010,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -22021,7 +22021,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -22065,7 +22065,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22076,7 +22076,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22087,7 +22087,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22098,7 +22098,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22109,7 +22109,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22120,7 +22120,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22131,7 +22131,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -22171,7 +22171,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -22182,7 +22182,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -22208,7 +22208,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -22246,7 +22246,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -22257,7 +22257,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -22283,7 +22283,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -22311,7 +22311,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -22329,7 +22329,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -22343,7 +22343,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -22381,7 +22381,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -22392,7 +22392,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -22408,7 +22408,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -22419,7 +22419,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -22436,7 +22436,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -22450,7 +22450,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: TSchema;
                 retryable: TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -22483,7 +22483,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -22509,7 +22509,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorize: (resource: import("../index.ts").Resource, permit?: import("../../http/admission.ts").AdmissionYield) => Promise<import("../index.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<{
     admitted: string[];
@@ -22524,7 +22524,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -22538,7 +22538,7 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: TSchema;
             retryable: TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{

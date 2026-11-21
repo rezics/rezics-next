@@ -32,7 +32,7 @@ export type SubjectReadingNativePort<Runtime, Connection, Release, Context, Docu
     importedTupleRoute(routeKey: Uint8Array, source: string, externalId: string): number;
 }>;
 /** Request-local Access preparation is explicit at the application boundary. */
-export type SubjectReadingAuthorizationPort<Check> = Readonly<{
-    prepareDetail(subject: string): Promise<Check>;
-    prepareSummary(subject: string, related: readonly string[]): Promise<Check>;
+export type SubjectReadingAuthorizationPort<Check, Permit = never> = Readonly<{
+    prepareDetail(subject: string, permit?: Permit): Promise<Check>;
+    prepareSummary(subject: string, related: readonly string[], permit?: Permit): Promise<Check>;
 }>;

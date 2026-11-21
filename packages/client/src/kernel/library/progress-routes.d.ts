@@ -145,7 +145,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -156,7 +156,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -167,7 +167,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -178,7 +178,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -189,7 +189,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -229,7 +229,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -240,7 +240,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -251,7 +251,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -262,7 +262,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -273,7 +273,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -284,7 +284,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -295,7 +295,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -358,7 +358,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -369,7 +369,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -380,7 +380,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -391,7 +391,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -402,7 +402,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -413,7 +413,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -424,7 +424,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -467,7 +467,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -478,7 +478,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -504,7 +504,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -772,7 +772,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -783,7 +783,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -794,7 +794,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -805,7 +805,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -816,7 +816,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -842,7 +842,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -881,7 +881,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -892,7 +892,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -903,7 +903,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -914,7 +914,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -925,7 +925,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -936,7 +936,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -947,7 +947,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -991,7 +991,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1002,7 +1002,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1013,7 +1013,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1024,7 +1024,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1035,7 +1035,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1046,7 +1046,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1057,7 +1057,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1097,7 +1097,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1108,7 +1108,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1119,7 +1119,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1130,7 +1130,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1141,7 +1141,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1152,7 +1152,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1163,7 +1163,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1206,7 +1206,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1217,7 +1217,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1228,7 +1228,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1239,7 +1239,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1250,7 +1250,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1261,7 +1261,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -1311,7 +1311,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1322,7 +1322,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1333,7 +1333,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1359,7 +1359,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1401,7 +1401,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1412,7 +1412,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1423,7 +1423,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1434,7 +1434,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1445,7 +1445,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1456,7 +1456,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -1498,7 +1498,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1509,7 +1509,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1520,7 +1520,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1531,7 +1531,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1542,7 +1542,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1553,7 +1553,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1603,7 +1603,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1614,7 +1614,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1625,7 +1625,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1636,7 +1636,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1647,7 +1647,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1658,7 +1658,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1669,7 +1669,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1719,7 +1719,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1730,7 +1730,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1741,7 +1741,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1752,7 +1752,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1763,7 +1763,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1774,7 +1774,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1785,7 +1785,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1831,7 +1831,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1842,7 +1842,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1853,7 +1853,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1864,7 +1864,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1875,7 +1875,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1886,7 +1886,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1897,7 +1897,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1947,7 +1947,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1958,7 +1958,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1969,7 +1969,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1980,7 +1980,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -1991,7 +1991,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2002,7 +2002,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2013,7 +2013,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2059,7 +2059,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2070,7 +2070,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2081,7 +2081,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2092,7 +2092,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2103,7 +2103,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2114,7 +2114,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2125,7 +2125,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -2185,7 +2185,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2196,7 +2196,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2207,7 +2207,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2218,7 +2218,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2229,7 +2229,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2240,7 +2240,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2251,7 +2251,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2415,7 +2415,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2426,7 +2426,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2437,7 +2437,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2463,7 +2463,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2553,7 +2553,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2564,7 +2564,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2575,7 +2575,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2601,7 +2601,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -2655,7 +2655,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2666,7 +2666,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2677,7 +2677,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2703,7 +2703,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2731,7 +2731,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2828,7 +2828,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2839,7 +2839,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2850,7 +2850,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2876,7 +2876,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2914,7 +2914,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2925,7 +2925,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2936,7 +2936,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -2962,7 +2962,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4468,7 +4468,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4479,7 +4479,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4490,7 +4490,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4516,7 +4516,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4704,7 +4704,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4715,7 +4715,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4726,7 +4726,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4752,7 +4752,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4789,7 +4789,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4800,7 +4800,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4811,7 +4811,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4822,7 +4822,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4833,7 +4833,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4844,7 +4844,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4855,7 +4855,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4892,7 +4892,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4903,7 +4903,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4914,7 +4914,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4925,7 +4925,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4936,7 +4936,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4947,7 +4947,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -4958,7 +4958,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5005,7 +5005,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5016,7 +5016,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5027,7 +5027,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5053,7 +5053,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5098,7 +5098,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5109,7 +5109,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5120,7 +5120,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5131,7 +5131,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5157,7 +5157,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -5198,7 +5198,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5209,7 +5209,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5220,7 +5220,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5231,7 +5231,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5257,7 +5257,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5296,7 +5296,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5307,7 +5307,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5318,7 +5318,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5329,7 +5329,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5340,7 +5340,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5351,7 +5351,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5362,7 +5362,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -5417,7 +5417,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5428,7 +5428,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5439,7 +5439,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5450,7 +5450,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5461,7 +5461,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5472,7 +5472,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5483,7 +5483,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5534,7 +5534,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5545,7 +5545,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5556,7 +5556,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5567,7 +5567,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5578,7 +5578,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5589,7 +5589,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5600,7 +5600,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5646,7 +5646,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5657,7 +5657,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5668,7 +5668,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5679,7 +5679,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5690,7 +5690,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5701,7 +5701,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5712,7 +5712,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5750,7 +5750,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5761,7 +5761,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5772,7 +5772,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5783,7 +5783,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5794,7 +5794,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -5843,7 +5843,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5854,7 +5854,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5865,7 +5865,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5876,7 +5876,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5902,7 +5902,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -5942,7 +5942,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5953,7 +5953,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5964,7 +5964,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -5975,7 +5975,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -6001,7 +6001,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -6044,7 +6044,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6055,7 +6055,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6066,7 +6066,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6077,7 +6077,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6103,7 +6103,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6144,7 +6144,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6155,7 +6155,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6166,7 +6166,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6177,7 +6177,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6203,7 +6203,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6233,7 +6233,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6244,7 +6244,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6255,7 +6255,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6266,7 +6266,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6292,7 +6292,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6329,7 +6329,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6340,7 +6340,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6351,7 +6351,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6362,7 +6362,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6373,7 +6373,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6407,7 +6407,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6418,7 +6418,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6444,7 +6444,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6475,7 +6475,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6486,7 +6486,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6497,7 +6497,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -6527,7 +6527,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6538,7 +6538,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6549,7 +6549,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -6588,7 +6588,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6599,7 +6599,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6610,7 +6610,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6621,7 +6621,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6632,7 +6632,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6643,7 +6643,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6654,7 +6654,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6697,7 +6697,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6708,7 +6708,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6719,7 +6719,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6730,7 +6730,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6741,7 +6741,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6752,7 +6752,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     status: number;
                                     code: unknown;
                                     retryable: unknown;
-                                    effect_status: "applied" | "not_applicable" | "not_applied";
+                                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                     request_id: string;
                                     detail: unknown;
                                     errors: unknown;
@@ -6796,7 +6796,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6807,7 +6807,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6818,7 +6818,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6829,7 +6829,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6840,7 +6840,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6851,7 +6851,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6862,7 +6862,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             status: number;
                                             code: unknown;
                                             retryable: unknown;
-                                            effect_status: "applied" | "not_applicable" | "not_applied";
+                                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
@@ -6902,7 +6902,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6913,7 +6913,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6939,7 +6939,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -6977,7 +6977,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -6988,7 +6988,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7014,7 +7014,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         status: number;
                                         code: unknown;
                                         retryable: unknown;
-                                        effect_status: "applied" | "not_applicable" | "not_applied";
+                                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
@@ -7046,7 +7046,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7057,7 +7057,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7068,7 +7068,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7094,7 +7094,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7135,7 +7135,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7146,7 +7146,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7157,7 +7157,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7183,7 +7183,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7226,7 +7226,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7237,7 +7237,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7248,7 +7248,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7259,7 +7259,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7270,7 +7270,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7296,7 +7296,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7337,7 +7337,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7348,7 +7348,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7359,7 +7359,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7370,7 +7370,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7381,7 +7381,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7392,7 +7392,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7403,7 +7403,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -7518,7 +7518,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7529,7 +7529,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7540,7 +7540,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7551,7 +7551,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7562,7 +7562,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7573,7 +7573,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7723,7 +7723,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7734,7 +7734,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7745,7 +7745,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7756,7 +7756,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7767,7 +7767,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7793,7 +7793,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7980,7 +7980,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -7991,7 +7991,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8002,7 +8002,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8013,7 +8013,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8039,7 +8039,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -8205,7 +8205,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8216,7 +8216,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8227,7 +8227,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8238,7 +8238,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8249,7 +8249,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8275,7 +8275,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -8326,7 +8326,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8337,7 +8337,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8348,7 +8348,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8374,7 +8374,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8430,7 +8430,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8441,7 +8441,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8452,7 +8452,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8463,7 +8463,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8474,7 +8474,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8485,7 +8485,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8511,7 +8511,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8592,7 +8592,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8603,7 +8603,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8614,7 +8614,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8625,7 +8625,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8636,7 +8636,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8647,7 +8647,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8658,7 +8658,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8732,7 +8732,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8743,7 +8743,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8754,7 +8754,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8765,7 +8765,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8776,7 +8776,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8787,7 +8787,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8798,7 +8798,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8872,7 +8872,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8883,7 +8883,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8894,7 +8894,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8905,7 +8905,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8916,7 +8916,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8927,7 +8927,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -8938,7 +8938,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9012,7 +9012,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9023,7 +9023,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9034,7 +9034,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9045,7 +9045,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9056,7 +9056,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9067,7 +9067,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9078,7 +9078,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9152,7 +9152,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9163,7 +9163,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9174,7 +9174,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9185,7 +9185,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9196,7 +9196,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9207,7 +9207,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9218,7 +9218,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9257,7 +9257,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9268,7 +9268,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9279,7 +9279,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9305,7 +9305,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9371,7 +9371,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9382,7 +9382,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9393,7 +9393,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9419,7 +9419,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 status: number;
                                 code: unknown;
                                 retryable: unknown;
-                                effect_status: "applied" | "not_applicable" | "not_applied";
+                                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
@@ -9466,7 +9466,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9477,7 +9477,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9488,7 +9488,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9499,7 +9499,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9510,7 +9510,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9521,7 +9521,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9618,7 +9618,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9629,7 +9629,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9655,7 +9655,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9751,7 +9751,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9762,7 +9762,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9773,7 +9773,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9799,7 +9799,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -9843,7 +9843,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9854,7 +9854,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9865,7 +9865,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9876,7 +9876,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9887,7 +9887,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9898,7 +9898,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9909,7 +9909,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -9934,7 +9934,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+        readonly authorize: (resource: import("../request/access.ts").Resource, permit?: import("../http/admission.ts").AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -9971,7 +9971,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9985,7 +9985,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -9999,7 +9999,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10013,7 +10013,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10027,7 +10027,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10041,7 +10041,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10055,7 +10055,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10114,7 +10114,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10125,7 +10125,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10136,7 +10136,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10147,7 +10147,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10158,7 +10158,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10169,7 +10169,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10180,7 +10180,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10205,7 +10205,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10216,7 +10216,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10227,7 +10227,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10238,7 +10238,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10249,7 +10249,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10260,7 +10260,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10271,7 +10271,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -10307,7 +10307,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10321,7 +10321,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10335,7 +10335,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10349,7 +10349,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10363,7 +10363,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10377,7 +10377,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10391,7 +10391,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10436,7 +10436,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+            readonly authorize: (resource: import("../request/access.ts").Resource, permit?: import("../http/admission.ts").AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
             readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -10469,7 +10469,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+    readonly authorize: (resource: import("../request/access.ts").Resource, permit?: import("../http/admission.ts").AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     publishedLog: import("./published-logs.ts").PublishedLog;
@@ -10503,7 +10503,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10517,7 +10517,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10531,7 +10531,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10545,7 +10545,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10559,7 +10559,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10573,7 +10573,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -10587,7 +10587,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{

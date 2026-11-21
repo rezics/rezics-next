@@ -1727,7 +1727,7 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly "com.rezics.semantic.erasure.locator-advanced.v1": Type.TObject<{
         position: Type.TString;
     }>;
-    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
+    readonly "com.rezics.semantic.erasure.progress.v1": Type.TObject<{
         accountId: Type.TString;
     }>;
     readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{

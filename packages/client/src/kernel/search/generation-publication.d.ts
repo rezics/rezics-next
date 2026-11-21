@@ -11,6 +11,7 @@ export type GenerationPublicationJob = Readonly<{
     consumer: PublicFilterConsumer;
     job: string;
 }>;
+type HeldLane = 'capture' | 'source';
 export type SearchGenerationPublication = Readonly<{
     prepare(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext): Promise<{
         status: 'preparing';
@@ -19,13 +20,18 @@ export type SearchGenerationPublication = Readonly<{
     } | PublicFilterConsumerUnavailable>;
     step(job: GenerationPublicationJob, context: PublicFilterConsumerContext, options?: Readonly<{
         enrollSource: boolean;
+        batchSource?: boolean;
+        heldOffers?: number;
+        heldLane?: HeldLane;
     }>): Promise<{
         status: 'progress' | 'reconciled';
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
         sourceAdvanced?: boolean;
         additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
-    } | PublicFilterConsumerUnavailable>;
+    } | (PublicFilterConsumerUnavailable & {
+        additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
+    })>;
     activate(job: GenerationPublicationJob, context: PublicFilterConsumerContext, options?: Readonly<{
         batchSource: boolean;
     }>): Promise<{
@@ -57,6 +63,8 @@ export type SearchGenerationPublicationConfig = Readonly<{
     clock: KernelClock;
     meaning: SearchPublicFilterProjectionMeaning;
     writerGuard: SearchWriterPublicationGuard;
+    subjectAckProtocol?: 1;
+    subjectSubscriptionProtocol?: 1;
     creditSearch?: CreditSearchSource;
     registry?: DiscoveryRegistry;
 }>;
@@ -64,3 +72,4 @@ export type SearchGenerationPublicationConfig = Readonly<{
 export declare function publishSubjectActivationMetadata(search: OpenSearch, index: string, activatedAt: string): Promise<void>;
 /** A single native publication port for worker and CLI composition. It owns no supplied resources. */
 export declare function createSearchGenerationPublication(config: SearchGenerationPublicationConfig): SearchGenerationPublication;
+export {};
