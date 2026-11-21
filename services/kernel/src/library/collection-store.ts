@@ -382,7 +382,13 @@ export async function deleteMembers(
 }
 
 export async function readMemberDeletion(client: Client, route: number, collectionId: string, memberId: string) {
-  return memberRetentionRead.run(queryClient(client), { route, collection_id: collectionId, member_id: memberId });
+  const row = await memberRetentionRead.run(queryClient(client), {
+    route,
+    collection_id: collectionId,
+    member_id: memberId,
+  });
+  if (!row) return row;
+  return { ...row, deletionRevision: row.deletionRevision === null ? null : BigInt(row.deletionRevision) };
 }
 
 export async function restoreMember(
