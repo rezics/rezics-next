@@ -33,6 +33,10 @@ type LooseRoutes<Tree, Path extends string = ''> = {
     : LooseRoutes<Tree[Key], `${Path}/${Key}`>;
 }[keyof Tree & string];
 type Routes = TypedRoutes<Kernel['~Routes']>;
+const testFundingRoutes = [
+  'POST /v1/economy/test-funding/intents',
+  'GET /v1/economy/test-funding/intents/:intentId',
+] as const;
 
 // Type-checking proves that each entry is a typed route, that no typed route is missing, and that every success
 // response keeps its schema's type. An error names the offending routes.
@@ -264,6 +268,7 @@ const typed = [
   'POST /v1/economy/market/listings/:listingId/purchases',
   'POST /v1/economy/market/listings/:listingId/cancel',
   'GET /v1/economy/market/trades/:tradeId',
+  ...testFundingRoutes,
   'POST /v1/subjects/:id/candidates',
   'DELETE /v1/subjects/:id/candidates/:candidate',
   'POST /v1/subjects/:id/candidates/:candidate/$restoreDeleted',
@@ -633,10 +638,11 @@ const complete: [Missing] extends [never] ? true : `Unlisted route: ${Missing}` 
 type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
-test("the kernel app's type, which is the Eden contract, carries exactly the routes it serves and their responses", () => {
+test('the Eden contract covers all supported routes and the default kernel omits synthetic funding', () => {
   const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
   const served = app.routes.map(({ method, path }) => `${method} ${path}`);
   const paths = openApiDocument(app).paths;
+  expect(Object.keys(paths).filter((path) => path.startsWith('/v1/economy/test-funding/'))).toEqual([]);
   const journal = paths['/v1/progressSessions/{sessionId}/journal'];
   expect(journal?.get?.operationId).toBe('progress_session_journal.read');
   expect(journal?.patch?.operationId).toBe('progress_session_journal.update');
@@ -714,7 +720,8 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
     security: [{ bearerAuth: [] }],
   });
   expect([complete, precise]).toEqual([true, true]);
-  expect(served.sort()).toEqual([...typed].sort());
+  const optionalRoutes = new Set<string>(testFundingRoutes);
+  expect(served.sort()).toEqual(typed.filter((route) => !optionalRoutes.has(route)).sort());
 });
 
 const activationPaths = [
