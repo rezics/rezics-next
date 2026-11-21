@@ -2583,7 +2583,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const registered = m.take(
         await custody.register(
           {
-            definition: resolved.definition,
+            definition: { ...resolved.definition, meaning },
             physicalTarget: target,
             consumerGeneration: publication?.consumerGeneration ?? resolved.definition.source.configuration,
             projectionGeneration: resolved.definition.readDefinition,

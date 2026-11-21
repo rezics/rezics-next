@@ -2,7 +2,7 @@ import { bookBindingStep, bookCostShare, type BindingStep } from '../request/boo
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
 import { encode, decode, requireValue } from './public-filter-codec.ts';
 import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
-import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import { readRepairWinnerCheckpoint } from './public-filter-repair-checkpoint.ts';
@@ -349,21 +349,15 @@ async function hasReleaseAuthority(pool: Queryable, meter: Meter, digest: string
 async function requireReleaseAuthority(pool: Queryable, meter: Meter, digest: string) {
   if (!(await hasReleaseAuthority(pool, meter, digest))) throw new Failure('definition_missing');
 }
-async function retainedDefinition(
-  pool: Queryable,
-  meter: Meter,
-  definition: CustodyDefinition<PublicCanonicalCaptureInput>,
-) {
-  return encodeRetainedDefinition(definition, await hasReleaseAuthority(pool, meter, definition.meaning.digest));
+function embeddedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
+  const encoded = encode({ digest: digest(definition), data: definition });
+  return Buffer.byteLength(encoded) <= 1_048_576 ? encoded : null;
 }
-function encodeRetainedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>, installed: boolean) {
-  const embedded = encode({ digest: digest(definition), data: definition });
-  const embedsWithinLimit = Buffer.byteLength(embedded) <= 1_048_576;
-  if (!installed) {
-    if (!embedsWithinLimit) throw new Failure('definition_missing');
-    return { encoded: embedded, previous: null };
-  }
-  return { encoded: encodeInstalledDefinition(definition), previous: embedsWithinLimit ? embedded : null };
+function registrationDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>, installed: boolean) {
+  if (installed) return encodeInstalledDefinition(definition);
+  const encoded = embeddedDefinition(definition);
+  if (!encoded) throw new Failure('definition_missing');
+  return encoded;
 }
 function encodeInstalledDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   // Installed releases share the same immutable owner reference at every size.
@@ -422,7 +416,7 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
   text(definition.source.id);
   text(definition.source.configuration);
   text(definition.readDefinition);
-  requireValue(hasExactPublicFilterMeaning(definition.meaning));
+  requireValue(hasNativePublicFilterMeaning(definition.meaning) || hasExactPublicFilterMeaning(definition.meaning));
   const input = definition.capture;
   requireValue(Object.hasOwn(input, 'filterDocument') && Object.hasOwn(input, 'text'));
   if ('purpose' in input) {
@@ -1584,10 +1578,37 @@ export function createPublicFilterCustody(
     };
     return { consumer, identity };
   }
+  type RegistrationRow = Readonly<{ id: string; consumer: string; definition: string }>;
+  async function currentRegistrations(
+    db: Queryable,
+    meter: Meter,
+    home: number,
+    target: string,
+    incarnation: string,
+    rows: readonly RegistrationRow[],
+  ) {
+    // Exact replay is permitted on either side of a publication fence. Only a miss can enroll a copy.
+    const result = await sql(
+      db,
+      meter,
+      `SELECT r.id,r.consumer_work FROM jsonb_to_recordset($1) i(id text,consumer text,definition text)
+       JOIN search.public_filter_registration r ON (r.partition_no,r.id)=($2,i.id)
+       JOIN search.public_filter_target t USING(partition_no,physical_target)
+       WHERE r.physical_target=$3 AND t.incarnation=$4 AND r.consumer=i.consumer
+         AND r.definition=i.definition AND r.state='active'`,
+      [JSON.stringify(rows), home, target, incarnation],
+    );
+    return new Map(result.rows.map((r) => [r.id as string, r.consumer_work as string | null]));
+  }
   const api: PublicFilterCustody = {
     register(request, search, context) {
-      // Copy before the first await, so concurrent caller mutation never changes persisted identity.
-      const input = decode<typeof request>(encode(request));
+      // Copy before the first await. Only the Definitions owner's verified, frozen meaning is shareable.
+      const { meaning, ...fields } = request.definition;
+      const copy = <T>(value: T): T => decode<T>(encode(value));
+      const input = {
+        ...copy({ ...request, definition: undefined }),
+        definition: { ...copy(fields), meaning: hasNativePublicFilterMeaning(meaning) ? meaning : copy(meaning) },
+      };
       validateDefinition(input.definition);
       text(input.consumerGeneration);
       text(input.projectionGeneration);
@@ -1610,9 +1631,7 @@ export function createPublicFilterCustody(
                 const installed = await hasReleaseAuthority(pool, shared, input.definition.meaning.digest);
                 const members = inputs.map((item) => {
                   const { consumer, identity } = registrationIdentity(item, incarnation);
-                  const encoded = installed
-                    ? encodeInstalledDefinition(item.definition)
-                    : encodeRetainedDefinition(item.definition, false).encoded;
+                  const encoded = registrationDefinition(item.definition, installed);
                   return {
                     consumer,
                     identity,
@@ -1620,43 +1639,54 @@ export function createPublicFilterCustody(
                   };
                 });
                 const home = input.definition.source.partition;
-                const accepted = await transaction(shared, async (client) => {
-                  // Take a fresh statement snapshot after waiting for publication.
-                  await sql(client, shared, lockPublicationAdmission, [input.physicalTarget]);
-                  const target = await sql(
-                    client,
-                    shared,
-                    `INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation)
+                const rows = members.map((m) => m.row);
+                const accepted = await currentRegistrations(
+                  pool,
+                  shared,
+                  home,
+                  input.physicalTarget,
+                  incarnation,
+                  rows,
+                );
+                const missing = rows.filter((r) => !accepted.has(r.id));
+                if (missing.length)
+                  await transaction(shared, async (client) => {
+                    // Take a fresh statement snapshot after waiting for publication.
+                    await sql(client, shared, lockPublicationAdmission, [input.physicalTarget]);
+                    const target = await sql(
+                      client,
+                      shared,
+                      `INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation)
                      SELECT $1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                        WHERE partition_no=0 AND physical_target=$2 AND publication_fence IS NOT NULL)
                      ON CONFLICT (partition_no,physical_target) DO UPDATE SET incarnation=EXCLUDED.incarnation`,
-                    [home, input.physicalTarget, incarnation],
-                  );
-                  const fenced = !target.rowCount;
-                  const rows = await sql(
-                    client,
-                    shared,
-                    fenced
-                      ? `SELECT r.id,r.consumer_work FROM jsonb_to_recordset($1) i(id text,consumer text,definition text)
-                     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=($2,i.id)
-                     JOIN search.public_filter_target t USING(partition_no,physical_target)
-                     WHERE r.physical_target=$3 AND t.incarnation=$4 AND r.consumer=i.consumer
-                       AND r.definition=i.definition AND r.state='active'`
-                      : `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
+                      [home, input.physicalTarget, incarnation],
+                    );
+                    if (!target.rowCount) {
+                      const replay = await currentRegistrations(
+                        client,
+                        shared,
+                        home,
+                        input.physicalTarget,
+                        incarnation,
+                        missing,
+                      );
+                      for (const [id, work] of replay) accepted.set(id, work);
+                      return;
+                    }
+                    const added = await sql(
+                      client,
+                      shared,
+                      `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
                      SELECT $2,i.id,$3,i.consumer,i.definition,'active' FROM jsonb_to_recordset($1)
                        i(id text,consumer text,definition text) ORDER BY i.id
                      ON CONFLICT(partition_no,id) DO UPDATE SET id=EXCLUDED.id
                        WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition
                          AND public_filter_registration.state='active' RETURNING id,consumer_work`,
-                    [
-                      JSON.stringify(members.map((m) => m.row)),
-                      home,
-                      input.physicalTarget,
-                      ...(fenced ? [incarnation] : []),
-                    ],
-                  );
-                  return new Map(rows.rows.map((r) => [r.id, r.consumer_work as string | null]));
-                });
+                      [JSON.stringify(missing), home, input.physicalTarget],
+                    );
+                    for (const row of added.rows) accepted.set(row.id, row.consumer_work);
+                  });
                 return members.map(({ consumer, identity }, i) => ({
                   consumer,
                   identity,
@@ -1685,26 +1715,28 @@ export function createPublicFilterCustody(
         }
         const incarnation = await native(search, meter, context, input.physicalTarget);
         const { consumer, identity } = registrationIdentity(input, incarnation);
-        const retained = await retainedDefinition(pool, meter, input.definition);
+        const installed = await hasReleaseAuthority(pool, meter, input.definition.meaning.digest);
+        const encoded = registrationDefinition(input.definition, installed);
+        const encodedConsumer = encode(consumer);
+        const replay = (db: Queryable, definition: string) =>
+          currentRegistrations(db, meter, identity.partition, consumer.physicalTarget, incarnation, [
+            { id: identity.id, consumer: encodedConsumer, definition },
+          ]);
+        const current = (await replay(pool, encoded)).get(identity.id);
+        if (current !== undefined)
+          return {
+            status: 'registered' as const,
+            registration: identity,
+            consumer,
+            consumerWork: current,
+            cost: meter,
+          };
         await transaction(meter, async (client) => {
-          const encodedConsumer = encode(consumer);
           if ((await lockCopyAdmission(client, meter, consumer.physicalTarget)).rowCount) {
-            // An exact registration replay needs no new target or copy and cannot change incarnation.
-            const replay = (encoded: string) =>
-              sql(
-                client,
-                meter,
-                `SELECT 1 FROM search.public_filter_registration r
-                 JOIN search.public_filter_target t USING (partition_no,physical_target)
-                 WHERE (r.partition_no,r.id,r.physical_target) = ($1,$2,$3)
-                   AND t.incarnation=$4 AND r.consumer=$5 AND r.definition=$6 AND r.state='active'`,
-                [identity.partition, identity.id, consumer.physicalTarget, incarnation, encodedConsumer, encoded],
-              );
-            if (
-              !(await replay(retained.encoded)).rowCount &&
-              (!retained.previous || !(await replay(retained.previous)).rowCount)
-            )
-              throw new Failure('binding_mismatch');
+            // A concurrent exact installation can finish between the first probe and the fence lock.
+            if ((await replay(client, encoded)).has(identity.id)) return;
+            const previous = installed && embeddedDefinition(input.definition);
+            if (!previous || !(await replay(client, previous)).has(identity.id)) throw new Failure('binding_mismatch');
             return;
           }
           await sql(
@@ -1718,10 +1750,11 @@ export function createPublicFilterCustody(
             meter,
             `INSERT INTO search.public_filter_registration VALUES ($1,$2,$3,$4,$5,'active')
             ON CONFLICT (partition_no,id) DO UPDATE SET id=EXCLUDED.id WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition AND public_filter_registration.state='active' RETURNING id`,
-            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, retained.encoded],
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, encoded],
           );
           if (result.rowCount) return;
-          if (!retained.previous) throw new Failure('binding_mismatch');
+          const previous = installed && embeddedDefinition(input.definition);
+          if (!previous) throw new Failure('binding_mismatch');
           // Convert an exact embedded definition under the same registration and writer admission lock.
           const upgraded = await sql(
             client,
@@ -1729,14 +1762,7 @@ export function createPublicFilterCustody(
             `UPDATE search.public_filter_registration SET definition=$6
              WHERE (partition_no,id,physical_target)=($1,$2,$3)
                AND consumer=$4 AND definition=$5 AND state='active' RETURNING id`,
-            [
-              identity.partition,
-              identity.id,
-              consumer.physicalTarget,
-              encodedConsumer,
-              retained.previous,
-              retained.encoded,
-            ],
+            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, previous, encoded],
           );
           if (!upgraded.rowCount) throw new Failure('binding_mismatch');
         });

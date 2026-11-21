@@ -99,6 +99,39 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       // bootstrap or observation locator is stable across the read and worker.
       if (locator.kind === 'repair' && kind === 'discovery')
         locator = { ...locator, key: JSON.stringify([locator.job.consumer.physicalTarget, locator.job.job]) };
+      if (locator.kind === 'repair') {
+        // Repeated pending pages can observe the same committed delivery. The write path owns
+        // new, delayed, claimed and recovering revisions, including any missing SDK input.
+        const delivery = intent('%s', '%s', kind);
+        const retained = await withBoundedReadConnection(
+          pool,
+          deadline,
+          (client) =>
+            client.query<{ id: string }>(
+              `SELECT p.id FROM search.public_preparation p
+               JOIN ${DBOS_SCHEMA}.workflow_status w ON w.workflow_uuid=format($5,p.id,p.revision)
+               JOIN ${DBOS_SCHEMA}.workflow_input i USING(workflow_uuid)
+               WHERE (p.partition_no,p.prefix,p.kind,p.locator->>'key')=(0,$1,'repair',$2)
+                 AND p.locator=$3::jsonb AND p.lease_until=0 AND p.due_at<=$4 AND p.expires_at>$4
+                 AND w.name=$6 AND w.application_name=$7 AND w.queue_name=$8 AND w.status IN ('ENQUEUED','PENDING')
+                 AND i.inputs::jsonb #>> '{json,0,id}'=p.id::text
+                 AND i.inputs::jsonb #>> '{json,0,prefix}'=p.prefix
+                 AND i.inputs::jsonb #>> '{json,0,revision}'=p.revision::text`,
+              [
+                prefix,
+                locator.key,
+                JSON.stringify(locator),
+                Date.now(),
+                delivery.workflowId,
+                delivery.workflowName,
+                WORK_APPLICATION,
+                delivery.queue,
+              ],
+            ),
+          lifetimeOptions,
+        );
+        if (retained.rows[0]) return retained.rows[0].id;
+      }
       return transaction(deadline, async (client) => {
         const result = await client.query<{ id: string; revision: string; lease_until: string }>(
           `

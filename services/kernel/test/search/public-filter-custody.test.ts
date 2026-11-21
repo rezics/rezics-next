@@ -322,6 +322,12 @@ test('native interrupted prepared builds replay one fixed segment and read exact
 
 test('real migrated durable custody preserves immutable definition observation cut and each exact execution across process recovery and rejects tuple mutation unknown execution expiry closed or replaced registrations without borrowing live coverage', async () => {
   const n = await setup();
+  expect(await registry.register(n.input, search, context())).toMatchObject({
+    status: 'registered',
+    registration: n.registration,
+    consumerWork: null,
+    cost: { engineRequests: 1, resultWrites: 0 },
+  });
   const a = await append(n.queried);
   const b = await append(n.queried, [{ original: 'other-original', terminal: 'other-terminal' }]);
   const c = await append(n.queried, []);
@@ -882,6 +888,7 @@ function wideRelease() {
   release.catalogue = { ...release.catalogue, version: crypto.randomUUID() };
   release.prefixes.custody = 'https://example.test/custody/';
   release.types['schema:Book']!.properties.push('custody:reference0');
+  release.types['schema:Book']!.properties.sort();
   release.types['schema:Book']!.facets.push('custody:reference0');
   let bytes = Buffer.byteLength(JSON.stringify(release));
   let last = '';

@@ -22,14 +22,15 @@ Consumer, Source configuration, release identity, expanded input and compiler de
 
 Definitions admit releases through `RELEASE_LIMITS`: at most 1024 types, 4096 properties, 64 properties and 16
 facets per type, and **4 MiB of JSON**. That is the release body alone, before capture, dependency keys or custody's
-tagged encoding. The registration's **1 MiB** text ceiling therefore cannot serve as release admission. When the
-complete tagged definition fits, the existing inline encoding remains readable and unchanged. Otherwise custody
-retains the complete capture, configuration, meaning type, release digest and dependency keys, replacing only the
+tagged encoding. Existing inline registrations remain readable within the **1 MiB** text ceiling. For an installed
+release, custody retains the complete capture, configuration, meaning type, release digest and dependency keys, replacing only the
 copied release body with `{authority:'semantic.readRelease',digest}`. The same semantic immutable release authority
 retains every definition, including unused grammar, qualifiers, inherited types, saved filters and other meaning.
-The existing published-release point lookup, or registered-composite lookup for composed meaning, establishes that
-this exact immutable identity is durable before registration. Composites retain their original immutable parent
-and extension closure in that authority; custody creates no release catalogue or Source mirror.
+Every registration probes the published-release or registered-composite authority. An exact replay reads the active
+registration and its current work by home and ID, matching the native target UUID, consumer and complete retained
+definition. Publication fences permit that read. Cold enrollment, replacement and legacy inline conversion take
+the target's publication admission lock. An unpublished definition may only use the bounded inline encoding.
+Composites retain their original immutable parent and extension closure in the semantic authority.
 
 **Selected owner proposal for the custody read contract:** `CustodyFound.definition` is
 `CustodyRetainedDefinition`; its `meaning.release` is either the original inline `Release` or

@@ -161,6 +161,12 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
     await other.retain({ kind: 'repair', key: JSON.stringify(isolatedJob), job: isolatedJob }, Date.now() + 86_400_000),
   );
   const repairBefore = await read(owner, repairId);
+  const version = async () =>
+    (await pool.query('SELECT xmin::text FROM search.public_preparation WHERE partition_no=0 AND id=$1', [repairId]))
+      .rows[0].xmin;
+  const retainedVersion = await version();
+  expect(await store.retain({ kind: 'repair', key: JSON.stringify(job), job }, Date.now() + 86_400_000)).toBe(repairId);
+  expect(await version()).toBe(retainedVersion);
   const populationBefore = await read(owner, populationId);
   const otherBefore = await read(isolated, otherId);
   expect(repairBefore?.kind).toBe('repair');
