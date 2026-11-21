@@ -30,7 +30,11 @@ export function registerSemanticErasureWork({ pool, client }: WorkContext) {
       }
       // Local page exhaustion is not participant completion. Keep the same workflow alive while real
       // receiving proof is unavailable; each observation releases its connection before durable sleep.
-      while ((await custody(accountId)).state === 'pending') await DBOS.sleep(60_000);
+      for (;;) {
+        const observation = await custody(accountId);
+        if (observation.state !== 'pending') return;
+        if (observation.reason !== 'source-progress') await DBOS.sleep(60_000);
+      }
     },
     { name: workflowName },
   );

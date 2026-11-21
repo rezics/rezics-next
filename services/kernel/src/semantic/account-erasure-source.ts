@@ -58,8 +58,20 @@ export async function readSubjectErasureSourceProof(
   barrier: HistoryBarrier,
   context: PublicFilterReadContext,
 ): Promise<SubjectErasureSourceProof | null> {
+  const result = await advanceSubjectErasureSourceProof(deps, barrier, context);
+  return result.status === 'complete' ? result.proof : null;
+}
+
+/** A committed nonterminal transfer has another runnable page. Only a complete chain carries a proof. */
+export async function advanceSubjectErasureSourceProof(
+  deps: Readonly<{ pool: Pool; clock?: () => Date }>,
+  barrier: HistoryBarrier,
+  context: PublicFilterReadContext,
+): Promise<{ status: 'progress' | 'pending' } | { status: 'complete'; proof: SubjectErasureSourceProof }> {
   const page = await sourceFactory(deps, true).readPage({ barrier, context, frontier: null, inputLimit: 100 });
-  return page.status === 'complete' ? ({ id: page.receipt.id } as SubjectErasureSourceProof) : null;
+  if (page.status === 'complete')
+    return { status: 'complete', proof: { id: page.receipt.id } as SubjectErasureSourceProof };
+  return { status: page.status === 'progress' ? 'progress' : 'pending' };
 }
 
 /** Resolve the privately transferred all-home terminal chain in the account command. */
