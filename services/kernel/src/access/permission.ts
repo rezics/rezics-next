@@ -72,6 +72,7 @@ import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
 import permissionRead from './permission-check.sql';
+import anonymousPermissionRead from './permission-check-anonymous.sql';
 import governanceReachCandidatesRead from './governance-reach-candidates.sql';
 import {
   setGovernanceReach,
@@ -109,6 +110,23 @@ export function withCompiledPermissionChecks<T>(body: () => T): T {
 }
 
 function readFormula(client: AccessClient, input: Parameters<typeof permissionRead.run>[1]) {
+  if (
+    !compiledPermissionChecks.getStore() &&
+    input.anonymous === true &&
+    input.actor_id === '' &&
+    input.principal_id === '' &&
+    input.assignment_request_id == null &&
+    !input.include_explicit &&
+    Array.isArray(input.roles) &&
+    input.roles.length === 0
+  ) {
+    const reader = preparedStatementClient(
+      client,
+      anonymousPermissionRead['~standard'].query.text,
+      'access_anonymous_permission_formula_v1',
+    );
+    return anonymousPermissionRead.run(reader, input);
+  }
   const reader = preparedStatementClient(client, permissionCheckFormulaStatement(), 'access_permission_formula_v1');
   return compiledPermissionChecks.getStore()
     ? nativeSourceQuery(reader, permissionRead, input, 'compiled')

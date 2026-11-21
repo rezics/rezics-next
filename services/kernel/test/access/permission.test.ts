@@ -420,6 +420,42 @@ test('missing evidence denies access and unavailable permission tables propagate
   expect(await run()).toBe(false);
 });
 
+test('anonymous grants and missing branches match the native formula for every requested target', async () => {
+  const general = (await import('../../src/access/permission-check.sql')).default;
+  const anonymous = (await import('../../src/access/permission-check-anonymous.sql')).default;
+  for (const batch of [false, true]) {
+    for (const include_global of [false, true]) {
+      for (const policy_core of [false, true]) {
+        for (const floor of [false, true]) {
+          for (const deadline of ['infinity', '-infinity']) {
+            const input = {
+              route: resource.route,
+              resource_ids: batch ? [resource.id, otherId] : [resource.id],
+              action,
+              actor_id: '',
+              principal_id: '',
+              anonymous: true,
+              roles: [],
+              at: '2030-01-01T00:00:00Z',
+              include_explicit: false,
+              include_public: batch,
+              batch,
+              include_global,
+              policy_core,
+              floor,
+              deadline,
+            };
+            const byId = (a: { resourceId: string | null }, b: { resourceId: string | null }) =>
+              String(a.resourceId).localeCompare(String(b.resourceId));
+            const expected = await general.run(pool, input);
+            expect(expected.sort(byId)).toEqual((await anonymous.run(pool, input)).sort(byId));
+          }
+        }
+      }
+    }
+  }
+});
+
 test('grant ranges use exact inclusive start and exclusive end at the final database authority time', async () => {
   for (const subject of [actorId, principalId]) {
     await removeGrant(subject);

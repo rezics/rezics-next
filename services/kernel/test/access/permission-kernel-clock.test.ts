@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { PoolClient } from 'pg';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
-import timeRead from '../../src/access/permission-time.sql';
+import { createAccess as createPermissionAccess, permissionCheckStatements } from '../../src/access/permission.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -172,7 +171,7 @@ test.serial('a wall-time token is accepted with the kernel clock two years ahead
 });
 
 function normalize(statement: string): string {
-  return statement.replace(/\s+/g, ' ').trim().replace(/;$/, '');
+  return statement.replace(/\/\*file='[^']*'\*\//g, '').replace(/;\s*$/, '').replace(/\s+/g, ' ').trim();
 }
 async function timeBinding(check: AccessCheck): Promise<unknown> {
   const client = await pool.connect();
@@ -200,7 +199,7 @@ async function timeBinding(check: AccessCheck): Promise<unknown> {
   } finally {
     client.release();
   }
-  const time = calls.find((call) => normalize(call.text) === normalize(timeRead.sql));
+  const time = calls.find((call) => normalize(call.text) === normalize(permissionCheckStatements.time));
   if (!time) throw new Error(`Permission time statement was not sent:\n${calls.map((call) => call.text).join('\n')}`);
   return time.values[0];
 }
