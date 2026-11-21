@@ -414,6 +414,7 @@
         "services/kernel/src/economy/ledger.ts",
         "services/kernel/src/economy/storage/funding-store.ts",
         "services/kernel/src/economy/storage/funding-ledger.ts",
+        "services/kernel/src/economy/storage/creator-contract.ts",
         "services/kernel/src/economy/storage/market-store.ts",
         "services/kernel/src/economy/storage/market-runner.ts",
         "services/kernel/src/economy/storage/item-custody.ts",

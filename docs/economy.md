@@ -51,6 +51,9 @@ locked spendable value before posting any shortfall separately. Deposit, refund,
 payout are separate facts. Withdrawal reserves value before rail submission; retry reuses its original dispatch
 identity. Late returns and shortfalls receive explicit accounting adjustments. Use reconciled source watermarks and
 one fenced writer when switching an authoritative book.
+Creator accruals recognize an independent payable and expense. A payout reserves that payable, records the exact
+confirmed movement against the named reservation, and releases a refused reservation. Returns are separate journaled
+events capped by their original payout. Wallet funding and creator payout use one provider movement identity guard.
 
 Unique items transfer by generation at their item home. A trade protects both its item and its funding reservation
 before recording a durable commit or abort. After commit, reconcile ownership delivery and then release clearing

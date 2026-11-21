@@ -24,6 +24,23 @@ CREATE SCHEMA economy;
 
 
 --
+-- Name: claim_funding_posting_key(); Type: FUNCTION; Schema: economy; Owner: -
+--
+
+CREATE FUNCTION economy.claim_funding_posting_key() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+BEGIN
+  INSERT INTO economy.provider_posting_key VALUES (
+    NEW.provider_namespace, NEW.provider_mode, NEW.source_kind, NEW.source_id, 'wallet_funding'
+  );
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: project_pending_deposit(); Type: FUNCTION; Schema: economy; Owner: -
 --
 
@@ -115,6 +132,61 @@ CREATE TABLE economy.command_receipt (
 
 
 --
+-- Name: creator_payout; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.creator_payout (
+    book_id text NOT NULL,
+    payout_id text NOT NULL,
+    creator_id uuid NOT NULL,
+    asset_id text NOT NULL,
+    units bigint NOT NULL,
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    destination_ref text NOT NULL,
+    status text NOT NULL,
+    paid_movement_id text,
+    returned_units bigint DEFAULT 0 NOT NULL,
+    reserve_transaction_id uuid NOT NULL,
+    CONSTRAINT creator_payout_check CHECK (((returned_units >= 0) AND (returned_units <= units))),
+    CONSTRAINT creator_payout_check1 CHECK (((status = 'paid'::text) = (paid_movement_id IS NOT NULL))),
+    CONSTRAINT creator_payout_check2 CHECK (((status = 'paid'::text) OR (returned_units = 0))),
+    CONSTRAINT creator_payout_creator_id_check CHECK ((creator_id <> '00000000-0000-0000-0000-000000000000'::uuid)),
+    CONSTRAINT creator_payout_destination_ref_check CHECK (((char_length(destination_ref) >= 1) AND (char_length(destination_ref) <= 255))),
+    CONSTRAINT creator_payout_paid_movement_id_check CHECK (((char_length(paid_movement_id) >= 1) AND (char_length(paid_movement_id) <= 255))),
+    CONSTRAINT creator_payout_payout_id_check CHECK (((char_length(payout_id) >= 1) AND (char_length(payout_id) <= 64))),
+    CONSTRAINT creator_payout_provider_mode_check CHECK ((provider_mode = ANY (ARRAY['test'::text, 'live'::text]))),
+    CONSTRAINT creator_payout_provider_namespace_check CHECK (((char_length(provider_namespace) >= 1) AND (char_length(provider_namespace) <= 255))),
+    CONSTRAINT creator_payout_status_check CHECK ((status = ANY (ARRAY['reserved'::text, 'paid'::text, 'released'::text]))),
+    CONSTRAINT creator_payout_units_check CHECK ((units > 0))
+);
+
+
+--
+-- Name: creator_posting; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.creator_posting (
+    source_namespace text NOT NULL,
+    source_mode text NOT NULL,
+    source_kind text NOT NULL,
+    source_id text NOT NULL,
+    book_id text NOT NULL,
+    asset_id text NOT NULL,
+    payout_id text,
+    digest bytea NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT creator_posting_check CHECK (((source_kind = 'accrual'::text) = (source_mode = 'owner'::text))),
+    CONSTRAINT creator_posting_check1 CHECK (((source_kind = 'accrual'::text) = (payout_id IS NULL))),
+    CONSTRAINT creator_posting_digest_check CHECK ((octet_length(digest) = 32)),
+    CONSTRAINT creator_posting_source_id_check CHECK (((char_length(source_id) >= 1) AND (char_length(source_id) <= 255))),
+    CONSTRAINT creator_posting_source_kind_check CHECK ((source_kind = ANY (ARRAY['accrual'::text, 'movement'::text, 'refusal'::text]))),
+    CONSTRAINT creator_posting_source_mode_check CHECK ((source_mode = ANY (ARRAY['owner'::text, 'test'::text, 'live'::text]))),
+    CONSTRAINT creator_posting_source_namespace_check CHECK (((char_length(source_namespace) >= 1) AND (char_length(source_namespace) <= 255)))
+);
+
+
+--
 -- Name: entry; Type: TABLE; Schema: economy; Owner: -
 --
 
@@ -142,7 +214,7 @@ CREATE TABLE economy.funding_control_account (
     reference text NOT NULL,
     account_id uuid NOT NULL,
     CONSTRAINT funding_control_account_account_id_check CHECK ((account_id <> '00000000-0000-0000-0000-000000000000'::uuid)),
-    CONSTRAINT funding_control_account_account_role_check CHECK ((account_role = ANY (ARRAY['provider_clearing'::text, 'chargeback_receivable'::text]))),
+    CONSTRAINT funding_control_account_account_role_check CHECK ((account_role = ANY (ARRAY['provider_clearing'::text, 'chargeback_receivable'::text, 'creator_expense'::text, 'creator_payable'::text]))),
     CONSTRAINT funding_control_account_reference_check CHECK (((char_length(reference) >= 1) AND (char_length(reference) <= 263)))
 );
 
@@ -320,7 +392,7 @@ CREATE TABLE economy.journal (
     recorded_at timestamp with time zone NOT NULL,
     CONSTRAINT journal_check CHECK (((kind = 'transfer'::text) = (namespace = 'wallet'::text))),
     CONSTRAINT journal_hold_kind_check CHECK (((kind = ANY (ARRAY['reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'withdrawal'::text, 'withdrawal_refusal'::text])) = (hold_id IS NOT NULL))),
-    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'deposit'::text, 'withdrawal'::text, 'withdrawal_return'::text, 'chargeback'::text, 'withdrawal_refusal'::text])))
+    CONSTRAINT journal_kind_check CHECK ((kind = ANY (ARRAY['issue'::text, 'transfer'::text, 'reserve'::text, 'capture'::text, 'release'::text, 'expire'::text, 'release_amount'::text, 'allocate'::text, 'capture_allocation'::text, 'release_allocation'::text, 'deposit'::text, 'withdrawal'::text, 'withdrawal_return'::text, 'chargeback'::text, 'withdrawal_refusal'::text, 'creator_accrual'::text, 'creator_payout_reserve'::text, 'creator_payout'::text, 'creator_payout_refusal'::text, 'creator_payout_return'::text])))
 );
 
 
@@ -518,11 +590,27 @@ CREATE TABLE economy."position" (
     restricted bigint DEFAULT 0 NOT NULL,
     revision bigint DEFAULT 0 NOT NULL,
     account_role text DEFAULT 'wallet'::text NOT NULL,
-    CONSTRAINT position_account_role_check CHECK ((account_role = ANY (ARRAY['wallet'::text, 'issuer'::text, 'provider_clearing'::text, 'chargeback_receivable'::text]))),
-    CONSTRAINT position_balance_by_role_check CHECK ((((account_role = 'wallet'::text) AND ((posted)::numeric >= ((held)::numeric + (restricted)::numeric))) OR ((account_role <> 'wallet'::text) AND (held = 0) AND (restricted = 0)))),
+    CONSTRAINT position_account_role_check CHECK ((account_role = ANY (ARRAY['wallet'::text, 'issuer'::text, 'provider_clearing'::text, 'chargeback_receivable'::text, 'creator_expense'::text, 'creator_payable'::text]))),
+    CONSTRAINT position_balance_by_role_check CHECK ((((account_role = 'wallet'::text) AND ((posted)::numeric >= ((held)::numeric + (restricted)::numeric))) OR ((account_role = 'creator_payable'::text) AND (posted >= held) AND (restricted = 0)) OR ((account_role <> ALL (ARRAY['wallet'::text, 'creator_payable'::text])) AND (held = 0) AND (restricted = 0)))),
     CONSTRAINT position_check CHECK (((held >= 0) AND (restricted >= 0))),
     CONSTRAINT position_issuer_role_check CHECK (((account_role = 'issuer'::text) = (account_id = '00000000-0000-0000-0000-000000000000'::uuid))),
     CONSTRAINT position_revision_check CHECK ((revision >= 0))
+);
+
+
+--
+-- Name: provider_posting_key; Type: TABLE; Schema: economy; Owner: -
+--
+
+CREATE TABLE economy.provider_posting_key (
+    provider_namespace text NOT NULL,
+    provider_mode text NOT NULL,
+    source_kind text NOT NULL,
+    source_id text NOT NULL,
+    owner text NOT NULL,
+    CONSTRAINT provider_posting_key_owner_check CHECK ((owner = ANY (ARRAY['wallet_funding'::text, 'creator_payout'::text]))),
+    CONSTRAINT provider_posting_key_provider_mode_check CHECK ((provider_mode = ANY (ARRAY['test'::text, 'live'::text]))),
+    CONSTRAINT provider_posting_key_source_kind_check CHECK ((source_kind = ANY (ARRAY['movement'::text, 'refusal'::text])))
 );
 
 
@@ -670,6 +758,38 @@ ALTER TABLE ONLY economy.asset
 
 ALTER TABLE ONLY economy.command_receipt
     ADD CONSTRAINT command_receipt_pkey PRIMARY KEY (book_id, origin_id, namespace, operation_id);
+
+
+--
+-- Name: creator_payout creator_payout_book_id_asset_id_reserve_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_payout
+    ADD CONSTRAINT creator_payout_book_id_asset_id_reserve_transaction_id_key UNIQUE (book_id, asset_id, reserve_transaction_id);
+
+
+--
+-- Name: creator_payout creator_payout_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_payout
+    ADD CONSTRAINT creator_payout_pkey PRIMARY KEY (book_id, payout_id);
+
+
+--
+-- Name: creator_posting creator_posting_book_id_asset_id_transaction_id_key; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_posting
+    ADD CONSTRAINT creator_posting_book_id_asset_id_transaction_id_key UNIQUE (book_id, asset_id, transaction_id);
+
+
+--
+-- Name: creator_posting creator_posting_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_posting
+    ADD CONSTRAINT creator_posting_pkey PRIMARY KEY (source_namespace, source_mode, source_kind, source_id);
 
 
 --
@@ -937,6 +1057,14 @@ ALTER TABLE ONLY economy."position"
 
 
 --
+-- Name: provider_posting_key provider_posting_key_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.provider_posting_key
+    ADD CONSTRAINT provider_posting_key_pkey PRIMARY KEY (provider_namespace, provider_mode, source_kind, source_id);
+
+
+--
 -- Name: spot_fill spot_fill_pkey; Type: CONSTRAINT; Schema: economy; Owner: -
 --
 
@@ -1076,6 +1204,13 @@ CREATE TRIGGER asset_immutable BEFORE DELETE OR UPDATE ON economy.asset FOR EACH
 
 
 --
+-- Name: creator_posting creator_posting_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER creator_posting_immutable BEFORE DELETE OR UPDATE ON economy.creator_posting FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
 -- Name: entry entry_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -1104,6 +1239,13 @@ CREATE TRIGGER funding_intent_pending_deposit AFTER INSERT OR UPDATE OF phase ON
 
 
 --
+-- Name: funding_posting funding_posting_evidence_identity; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER funding_posting_evidence_identity BEFORE INSERT ON economy.funding_posting FOR EACH ROW EXECUTE FUNCTION economy.claim_funding_posting_key();
+
+
+--
 -- Name: funding_posting funding_posting_immutable; Type: TRIGGER; Schema: economy; Owner: -
 --
 
@@ -1129,6 +1271,13 @@ CREATE TRIGGER market_funds_receipt_immutable BEFORE DELETE OR UPDATE ON economy
 --
 
 CREATE TRIGGER market_item_receipt_immutable BEFORE DELETE OR UPDATE ON economy.market_item_receipt FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: provider_posting_key provider_posting_key_immutable; Type: TRIGGER; Schema: economy; Owner: -
+--
+
+CREATE TRIGGER provider_posting_key_immutable BEFORE DELETE OR UPDATE ON economy.provider_posting_key FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
 
 
 --
@@ -1171,6 +1320,30 @@ CREATE TRIGGER spot_order_terms_immutable BEFORE DELETE OR UPDATE OF book_id, in
 --
 
 CREATE TRIGGER spot_settlement_immutable BEFORE DELETE OR UPDATE ON economy.spot_settlement FOR EACH ROW EXECUTE FUNCTION economy.reject_history_edit();
+
+
+--
+-- Name: creator_payout creator_payout_book_id_asset_id_reserve_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_payout
+    ADD CONSTRAINT creator_payout_book_id_asset_id_reserve_transaction_id_fkey FOREIGN KEY (book_id, asset_id, reserve_transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: creator_posting creator_posting_book_id_asset_id_transaction_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_posting
+    ADD CONSTRAINT creator_posting_book_id_asset_id_transaction_id_fkey FOREIGN KEY (book_id, asset_id, transaction_id) REFERENCES economy.journal(book_id, asset_id, transaction_id);
+
+
+--
+-- Name: creator_posting creator_posting_book_id_payout_id_fkey; Type: FK CONSTRAINT; Schema: economy; Owner: -
+--
+
+ALTER TABLE ONLY economy.creator_posting
+    ADD CONSTRAINT creator_posting_book_id_payout_id_fkey FOREIGN KEY (book_id, payout_id) REFERENCES economy.creator_payout(book_id, payout_id);
 
 
 --
