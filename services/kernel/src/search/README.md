@@ -1167,7 +1167,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Touches: one PUT and one exact keyed GET per required released template, using bounded native response bodies
   and immutable literal comparison. No document, Source or SQL reads are involved.
 - Bound: O(fixed template count and bytes), independent of native document/script population. The first failure
-  stops that invocation. Each later invocation repeats the same fixed set; there is no inventory or hidden retry.
+  stops that invocation. An installation retry repeats the fixed set. After verification, a missing stored script
+  triggers reinstallation on the next request. An unpublished Subject alias only requires another generation lookup.
 - Growth check: `test/search/query.test.ts` installs with 64, 512 and 4,096 unrelated native documents and scripts,
   retaining exact paths, request bodies/bytes, completed native receipts, failed readback and independent retries.
   Its native first/middle/last controls cover acknowledgement/readback failures, lost responses, actual substitution,
