@@ -1,9 +1,10 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
   createPublicFilterCustody,
+  readGenerationPublicationCustody,
   readPublicFilterConsumerCustody,
   stepRetainedTargetErasure,
   withDiscoveryRepairCustody,
@@ -112,6 +113,82 @@ async function append(
   }
   return execution;
 }
+
+test('PIT retention recovers the original searchable observation after a lost commit reply', async () => {
+  const n = await setup();
+  const original = cut();
+  const document = crypto.randomUUID();
+  const path = `/${n.physical.index}/_doc/${document}?refresh=true`;
+  await search.request('PUT', path, { marker: document });
+  const revision = async () =>
+    (
+      await pool.query(
+        'SELECT copy_revision FROM search.public_filter_target WHERE (partition_no,physical_target)=($1,$2)',
+        [n.registration.partition, n.physical.index],
+      )
+    ).rows[0].copy_revision as string;
+  const before = await revision();
+  const interrupted = createPool(process.env.DATABASE_URL!);
+  const connect = interrupted.connect.bind(interrupted);
+  let lost = false;
+  interrupted.connect = (async () => {
+    const client = await connect();
+    const observed = Object.create(client) as PoolClient;
+    observed.query = (async (query: QueryConfig) => {
+      const result = await client.query(query);
+      if (!lost && query.text === 'COMMIT') {
+        lost = true;
+        throw new Error('Lost PIT retention commit reply');
+      }
+      return result;
+    }) as PoolClient['query'];
+    observed.release = client.release.bind(client);
+    return observed;
+  }) as Pool['connect'];
+  const opening = createPublicFilterCustody(interrupted);
+  try {
+    const attempt = await opening.openPit(
+      { registration: n.registration, covered: original, keepAliveMs: 300_000 },
+      search,
+      context(),
+    );
+    expect(lost).toBe(true);
+    expect(attempt.status).not.toBe('retained');
+    expect(attempt.cost.resultWrites).toBe(3);
+    expect(BigInt(await revision()) - BigInt(before)).toBe(1n);
+    await search.request('DELETE', path);
+    const recovered = await readGenerationPublicationCustody(
+      pool,
+      n.consumer,
+      n.registration.partition,
+      context(),
+      undefined,
+      { bootstrap: original, snapshot: 'pit' },
+    );
+    const q = 'queried' in recovered ? recovered.queried : null;
+    if (q?.snapshot.kind !== 'pit') throw new Error('Original PIT custody missing after commit');
+    try {
+      expect(q.snapshot.observation).not.toBe(n.queried.snapshot.observation);
+      const result = await search.request<{
+        _shards: { failed: number };
+        timed_out: boolean;
+        hits: { hits: { _id: string }[] };
+      }>('POST', '/_search', {
+        query: { ids: { values: [document] } },
+        pit: { id: q.snapshot.pit, keep_alive: '1m' },
+      });
+      expect(result.body._shards.failed).toBe(0);
+      expect(result.body.timed_out).toBe(false);
+      expect(result.body.hits.hits.map((hit) => hit._id)).toEqual([document]);
+    } finally {
+      await registry.closeObservation(q, search, context());
+    }
+  } finally {
+    await opening.close();
+    await interrupted.end();
+    await registry.closeObservation(n.queried, search, context());
+  }
+});
 
 test('expired preparation custody is usable only inside the original native repair', async () => {
   const { registration, queried } = await setup('-discovery-g3');

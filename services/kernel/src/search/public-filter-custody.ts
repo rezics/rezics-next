@@ -1828,26 +1828,27 @@ export function createPublicFilterCustody(
       lifetime(input.keepAliveMs);
       text(input.covered.observation);
       return run(context, async (meter, context) => {
+        registration(input.registration);
+        const readOwners = (ids: readonly string[], shared: Meter) =>
+          sql(
+            pool,
+            shared,
+            `SELECT r.id,r.consumer FROM search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
+             WHERE r.partition_no=$1 AND r.id=ANY($2::text[]) AND r.state='active'`,
+            [input.registration.partition, ids],
+            { keys: 2 * ids.length, points: 2 * ids.length, writes: 0 },
+          );
         const owners = bookRows(
           'pitOwner',
           String(input.registration.partition),
           input.registration.id,
           input.registration.id,
           meter,
-          (ids, shared) =>
-            sql(
-              pool,
-              shared,
-              `SELECT r.id,r.consumer FROM search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
-             WHERE r.partition_no=$1 AND r.id=ANY($2::text[]) AND r.state='active'`,
-              [input.registration.partition, ids],
-            ),
+          readOwners,
         );
-        const owner = await owners;
-        if (owners && !owner) throw new Failure('definition_missing');
-        const consumer = owner
-          ? decode<PublicFilterConsumer>(owner.consumer)
-          : await registered(input.registration, meter);
+        const owner = owners ? await owners : (await readOwners([input.registration.id], meter)).rows[0];
+        if (!owner) throw new Failure('definition_missing');
+        const consumer = decode<PublicFilterConsumer>(owner.consumer);
         publicFilterCatalogue(consumer);
         const checkTarget = async (step: 'beforePit' | 'afterPit') => {
           const batch = bookBindingStep(
@@ -1884,6 +1885,7 @@ export function createPublicFilterCustody(
           `/${consumer.physicalTarget}/_search/point_in_time?keep_alive=${input.keepAliveMs}ms`,
         );
         text(opened.pit_id);
+        let retentionMayHaveCommitted = false;
         try {
           if (opened._shards.failed) throw new Failure('observation_lost');
           if ((await checkTarget('afterPit')) !== consumer.incarnation) throw new Failure('binding_mismatch');
@@ -1895,28 +1897,36 @@ export function createPublicFilterCustody(
               pit: opened.pit_id,
             },
           };
-          const batch = bookRows(
-            'retain',
-            JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
-            input.registration.id,
-            {
-              id: input.registration.id,
-              observation: q.snapshot.observation,
-              queried: encode(q),
-              consumer: encode(consumer),
-              covered: encode(input.covered),
-              expires: openedAt + input.keepAliveMs,
-              pit: opened.pit_id,
-              hash: digest(opened.pit_id),
+          const item = {
+            id: input.registration.id,
+            observation: q.snapshot.observation,
+            queried: encode(q),
+            consumer: owner.consumer,
+            covered: encode(input.covered),
+            expires: openedAt + input.keepAliveMs,
+            pit: opened.pit_id,
+            hash: digest(opened.pit_id),
+          };
+          const member = {
+            item,
+            committing() {
+              retentionMayHaveCommitted = true;
             },
-            meter,
-            (items, shared) =>
-              transaction(shared, async (client) => {
-                await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
-                return sql(
-                  client,
-                  shared,
-                  `WITH target AS MATERIALIZED (
+          };
+          const retainPits = (members: readonly (typeof member)[], shared: Meter) =>
+            transaction(shared, async (client) => {
+              await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget], {
+                keys: 1,
+                points: 1,
+                writes: 0,
+              });
+              const items = members.map(({ item }) => item);
+              // Shared fence probe and target row lock. Per member: registration lock, both inserts
+              // and FK checks, plus copy enrollment's registration, admission lock, gate and target revision.
+              const result = await sql(
+                client,
+                shared,
+                `WITH target AS MATERIALIZED (
                 SELECT partition_no,physical_target FROM search.public_filter_target WHERE (partition_no,physical_target)=($2,$3)
                   AND incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                     WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)
@@ -1928,35 +1938,30 @@ export function createPublicFilterCustody(
                 SELECT partition_no,observation,id,queried,covered,expires,'open' FROM admitted RETURNING partition_no,observation,registration),
                 owned AS (INSERT INTO search.public_filter_pit SELECT r.partition_no,r.observation,i.hash,i.pit,'owned'
                   FROM retained r JOIN admitted i USING(observation)) SELECT registration AS id FROM retained`,
-                  [JSON.stringify(items), input.registration.partition, consumer.physicalTarget, consumer.incarnation],
-                );
-              }),
+                [JSON.stringify(items), input.registration.partition, consumer.physicalTarget, consumer.incarnation],
+                { keys: 2 + 10 * items.length, points: 2 + 10 * items.length, writes: 3 * items.length },
+              );
+              const admitted = new Set(result.rows.map(({ id }) => id));
+              for (const member of members) {
+                if (admitted.has(member.item.id)) member.committing();
+              }
+              return result;
+            });
+          const batch = bookRows(
+            'retain',
+            JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
+            input.registration.id,
+            member,
+            meter,
+            retainPits,
           );
-          if (batch) {
-            if (!(await batch)) throw new Failure('binding_mismatch');
-            return { status: 'retained' as const, queried: q, cost: meter };
-          }
-          return await transaction(meter, async (client) => {
-            await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
-            return retain(
-              input.registration,
-              {
-                consumer,
-                snapshot: {
-                  kind: 'pit',
-                  observation: `${input.registration.partition}:${randomUUID()}`,
-                  pit: opened.pit_id,
-                },
-              },
-              input.covered,
-              openedAt + input.keepAliveMs,
-              null,
-              meter,
-              client,
-            );
-          });
+          const retained = batch ? await batch : (await retainPits([member], meter)).rows[0];
+          if (!retained) throw new Failure('binding_mismatch');
+          return { status: 'retained' as const, queried: q, cost: meter };
         } catch (error) {
-          await deletePit(opened.pit_id, search, context, meter);
+          // A lost COMMIT reply can leave a durable observation owning this PIT.
+          // Its original cut can recover it. An uncommitted PIT expires at its native keep_alive.
+          if (!retentionMayHaveCommitted) await deletePit(opened.pit_id, search, context, meter);
           throw error;
         }
       });
