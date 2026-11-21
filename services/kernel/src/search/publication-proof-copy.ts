@@ -8,6 +8,7 @@ export async function drainGenerationPublicationProofCopy(
   partition: number,
   physicalTarget: string,
   job: string,
+  drained?: (registration: string, observation: string) => void,
 ): Promise<boolean> {
   if (partition !== 0) return false;
   const retained = await tx.query<{
@@ -66,7 +67,65 @@ export async function drainGenerationPublicationProofCopy(
        AND (prepared_rows IS DISTINCT FROM $2 OR consumer_work IS DISTINCT FROM $3)`,
     [row.observation, encode([]), proofWork],
   );
-  return !!(prepared.rowCount || observation.rowCount);
+  if (prepared.rowCount || observation.rowCount) return true;
+  drained?.(row.registration, row.observation);
+  return false;
+}
+
+/** A failed private materialization can leave a closed PIT receipt after its Source
+ * abort has removed the registration's work. The held publication registration
+ * may release one physical receipt or its childless observation per turn. */
+export async function drainReleasedPublicationPit(
+  tx: Pick<import('pg').PoolClient, 'query'>,
+  registration: string,
+  protectedObservation: string,
+  now: number,
+  limit: number,
+): Promise<{ changed: boolean; examined: number }> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 8) throw new RangeError('Invalid released PIT window');
+  const result = await tx.query<{ changed: boolean; examined: number }>(
+    `WITH roots AS MATERIALIZED (
+       SELECT o.partition_no,o.observation FROM search.public_filter_observation o
+       WHERE o.partition_no=0 AND o.registration=$1 AND o.observation<>$2 AND EXISTS (
+         SELECT FROM search.public_filter_registration r WHERE (r.partition_no,r.id)=(0,$1)
+           AND r.state='active' AND r.consumer_bootstrap IS NULL AND r.consumer_work IS NULL FOR SHARE OF r
+       ) ORDER BY o.observation LIMIT $4
+     ), candidate AS MATERIALIZED (
+       SELECT o.partition_no,o.observation FROM roots
+       JOIN search.public_filter_observation o USING(partition_no,observation)
+       WHERE o.state='closed' AND o.expires_at<=$3 AND o.consumer_work IS NULL
+         AND o.consumer_bootstrap IS NULL AND o.prepared_rows IS NULL AND o.prepared_build IS NULL
+         AND o.observation ~ '^0:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+         AND NOT EXISTS (SELECT FROM search.public_filter_reference f
+           WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation))
+         AND NOT EXISTS (SELECT FROM search.public_filter_execution e
+           WHERE (e.partition_no,e.observation)=(o.partition_no,o.observation))
+         AND NOT EXISTS (SELECT FROM search.public_filter_coverage_page p
+           WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation))
+         AND NOT EXISTS (SELECT FROM semantic.public_filter_population_start s
+           WHERE (s.partition_no,s.observation)=(o.partition_no,o.observation))
+         AND NOT EXISTS (SELECT FROM semantic.public_filter_bootstrap b WHERE b.partition_no=0
+           AND (b.queried COLLATE "C"=o.observation OR b.publication_observation COLLATE "C"=o.observation))
+         AND NOT EXISTS (SELECT FROM search.public_filter_pit_claim c WHERE c.partition_no=0 AND c.registration=$1
+           AND c.bootstrap=substring(o.observation FROM '^0:([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$')::uuid)
+         AND NOT EXISTS (SELECT FROM search.public_filter_pit p
+           WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation) AND p.state='owned')
+       ORDER BY o.observation LIMIT 1 FOR UPDATE OF o
+     ), receipt AS MATERIALIZED (
+       SELECT p.partition_no,p.observation,p.id FROM search.public_filter_pit p
+       JOIN candidate c USING(partition_no,observation) WHERE p.state='released' ORDER BY p.id LIMIT 1 FOR UPDATE OF p
+     ), released AS (
+       DELETE FROM search.public_filter_pit p USING receipt r
+       WHERE (p.partition_no,p.observation,p.id)=(r.partition_no,r.observation,r.id) RETURNING p.id
+     ), retired AS (
+       DELETE FROM search.public_filter_observation o USING candidate c
+       WHERE (o.partition_no,o.observation)=(c.partition_no,c.observation) AND NOT EXISTS (SELECT FROM receipt)
+       RETURNING o.observation
+     ) SELECT EXISTS (SELECT FROM released) OR EXISTS (SELECT FROM retired) AS changed,
+              (SELECT count(*)::integer FROM roots) AS examined`,
+    [registration, protectedObservation, now, limit],
+  );
+  return result.rows[0]!;
 }
 
 /** Every other observation, prepared payload and original reader must drain normally. */

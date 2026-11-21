@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { drainReleasedPublicationPit } from '../../src/search/publication-proof-copy.ts';
 import { pageControls } from '../../src/search/book-page-controls.ts';
 import { readPopulationTerminals } from '../../src/search/public-filter-preparation-segment.ts';
 import { explainPlanEntries, walkPlanTree } from '../support/growth-plan-walk.ts';
@@ -34,7 +35,7 @@ afterAll(async () => {
   await pool.end();
 });
 // These records exercise the trusted producer boundary only, never Source/Access permission.
-function definition(): CustodyDefinition {
+function definition(partition = 7): CustodyDefinition {
   const release: CustodyDefinition['meaning']['release'] = {
     format: RELEASE_FORMAT,
     catalogue: { id: 'boundary', version: '1' },
@@ -53,7 +54,7 @@ function definition(): CustodyDefinition {
     properties: {},
   };
   return {
-    source: { id: crypto.randomUUID(), partition: 7, epoch: 1, configuration: 'native-boundary-fixture' },
+    source: { id: crypto.randomUUID(), partition, epoch: 1, configuration: 'native-boundary-fixture' },
     readDefinition: crypto.randomUUID(),
     meaning: { digest: releaseDigest(release), release },
     capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20, after: [null, 'key'] },
@@ -70,10 +71,10 @@ async function target(suffix = '') {
   );
   return { index, uuid: settings.body[index]!.settings.index.uuid };
 }
-async function setup(suffix?: string) {
+async function setup(suffix?: string, partition = 7) {
   const physical = await target(suffix);
   const input = {
-    definition: definition(),
+    definition: definition(partition),
     physicalTarget: physical.index,
     consumerGeneration: '1',
     projectionGeneration: '1',
@@ -116,6 +117,71 @@ async function append(
   }
   return execution;
 }
+
+test('publication retires only confirmed, expired, childless PIT receipts on its registration', async () => {
+  const f = await setup(undefined, 0);
+  const open = async (keepAliveMs: number) => {
+    const pit = await registry.openPit(
+      { registration: f.registration, covered: f.covered, keepAliveMs },
+      search,
+      context(),
+    );
+    if (pit.status !== 'retained') throw new Error(pit.reason);
+    return pit.queried;
+  };
+  const first = await open(600);
+  const second = await open(600);
+  const executed = await open(1000);
+  const future = await open(300_000);
+  const leased = await open(300_000);
+  const live = await registry.acquire(leased, context());
+  if (live.status !== 'acquired' || leased.snapshot.kind !== 'pit') throw new Error('Expected original PIT lease');
+  const physicalPit = leased.snapshot.pit;
+  const other = await setup(undefined, 0);
+  const retained = (observation: string) =>
+    pool.query('SELECT state FROM search.public_filter_observation WHERE (partition_no,observation)=(0,$1)', [
+      observation,
+    ]);
+  try {
+    await append(executed);
+    for (const q of [first, second, executed, future]) {
+      expect((await registry.closeObservation(q, search, context())).status).toBe('closed');
+    }
+    await Bun.sleep(1050);
+    const own = f.queried.snapshot.observation;
+    const drain = async () => (await drainReleasedPublicationPit(pool, f.registration.id, own, Date.now(), 8)).changed;
+    // Each native DELETE spends one ledger item: two released physical receipts and their two roots.
+    for (let item = 0; item < 4; item++) expect(await drain()).toBe(true);
+    expect(await drain()).toBe(false);
+    for (const q of [first, second]) {
+      expect((await retained(q.snapshot.observation)).rowCount).toBe(0);
+      expect(
+        (
+          await pool.query('SELECT id FROM search.public_filter_pit WHERE (partition_no,observation)=(0,$1)', [
+            q.snapshot.observation,
+          ])
+        ).rowCount,
+      ).toBe(0);
+    }
+    expect((await retained(executed.snapshot.observation)).rows[0]?.state).toBe('closed');
+    expect((await retained(future.snapshot.observation)).rows[0]?.state).toBe('closed');
+    expect((await retained(other.queried.snapshot.observation)).rows[0]?.state).toBe('open');
+    expect((await retained(leased.snapshot.observation)).rows[0]?.state).toBe('open');
+    const physical = await search.request<{ _shards: { failed: number } }>('POST', '/_search', {
+      size: 0,
+      pit: { id: physicalPit, keep_alive: '1m' },
+    });
+    expect(physical.body._shards.failed).toBe(0);
+    const use = await registry.acquire(f.queried, context());
+    if (use.status !== 'acquired') throw new Error(use.reason);
+    expect((await registry.release(use.use, context())).status).toBe('released');
+  } finally {
+    await registry.release(live.use, context());
+    await registry.closeObservation(leased, search, context());
+    await registry.closeObservation(f.queried, search, context());
+    await registry.closeObservation(other.queried, search, context());
+  }
+});
 
 test('expired preparation custody is usable only inside the original native repair', async () => {
   const { registration, queried } = await setup('-discovery-g3');

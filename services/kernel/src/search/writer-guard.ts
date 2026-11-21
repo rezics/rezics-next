@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import {
   drainGenerationPublicationProofCopy,
+  drainReleasedPublicationPit,
   hasRetainedWriterPublicationCopies,
   nextWriterPublicationHomes,
 } from './publication-proof-copy.ts';
@@ -1489,6 +1490,7 @@ export function createSearchWriterGuard(options: {
     cost: PublicationCost,
     before: PublicationRow,
     home: number,
+    inputLimit: number,
   ) {
     // Core retains checkout, commit and rollback custody for the home command.
     const result = await runCommand(
@@ -1506,10 +1508,39 @@ export function createSearchWriterGuard(options: {
         cost.dependencyPoints++;
         if ((await copies.query(readSearchIdentityHomePendingSql, [home, options.index])).rowCount)
           return pendingPublication();
-        const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
+        let proof: { registration: string; observation: string } | undefined;
+        const proofDrained = await drainGenerationPublicationProofCopy(
+          copies,
+          home,
+          options.index,
+          input.job,
+          (registration, observation) => {
+            proof = { registration, observation };
+          },
+        );
         publicationDeadline(context);
         const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
         publicationDeadline(context);
+        if (copiesPending && proof) {
+          // Reserve the registration seek and at most eight native custody checks. An
+          // unchanged protected root still blocks the fence and retains its own work.
+          const limit = Math.min(8, Math.floor((inputLimit - cost.inputKeys - 4) / 27));
+          if (limit > 0) {
+            const cleanup = await drainReleasedPublicationPit(
+              copies,
+              proof.registration,
+              proof.observation,
+              Date.now(),
+              limit,
+            );
+            cost.inputKeys += 4 + 27 * cleanup.examined;
+            cost.dependencyPoints += 1 + 12 * cleanup.examined;
+            cost.candidates += cleanup.examined;
+            cost.resultWrites += Number(cleanup.changed);
+            const progress = { after: before.publication_after, changed: cleanup.changed, uncertain: true };
+            return cleanup.changed ? { value: progress, events: changed() } : noEffect(progress);
+          }
+        }
         const page = (
           await tx.query<{
             copies: {
@@ -1694,7 +1725,7 @@ export function createSearchWriterGuard(options: {
           if (home === 4096) break;
           const homeStarted = Date.now();
           if (longest && homeStarted + 2 * longest >= context.deadline) break;
-          const progress = await drainPublicationHome(input, context, cost, before, home);
+          const progress = await drainPublicationHome(input, context, cost, before, home, inputLimit);
           publicationDeadline(context);
           copiesChanged ||= progress.changed;
           if (progress.uncertain) break;

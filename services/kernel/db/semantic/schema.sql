@@ -14101,6 +14101,20 @@ CREATE UNIQUE INDEX public_filter_bootstrap_publication_job ON semantic.public_f
 
 
 --
+-- Name: public_filter_bootstrap_publication_observation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_bootstrap_publication_observation ON semantic.public_filter_bootstrap USING btree (partition_no, publication_observation COLLATE "C") WHERE (publication_observation IS NOT NULL);
+
+
+--
+-- Name: public_filter_bootstrap_queried_observation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_bootstrap_queried_observation ON semantic.public_filter_bootstrap USING btree (partition_no, queried COLLATE "C") WHERE (queried IS NOT NULL);
+
+
+--
 -- Name: public_filter_key_enrollment_window; Type: INDEX; Schema: semantic; Owner: -
 --
 
