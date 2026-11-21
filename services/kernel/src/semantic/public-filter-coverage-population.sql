@@ -34,6 +34,7 @@ binding AS MATERIALIZED (
     SELECT proof.* FROM semantic.public_filter_published_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,i.catalogue_text_keys
     ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target !~ 'discovery-g[1-9][0-9]*$'
+    /* semantic.mixed-coverage */
     UNION ALL
     SELECT proof.* FROM semantic.public_filter_mixed_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer

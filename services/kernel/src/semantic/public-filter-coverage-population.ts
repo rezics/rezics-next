@@ -27,6 +27,12 @@ import type {
 import { readBookRole } from './public-filter-book-role.ts';
 
 const statement = readFileSync(new URL('./public-filter-coverage-population.sql', import.meta.url), 'utf8');
+// The binding requires the stored physical target to equal the requested target.
+// A prepared Subject target can only join the published Subject coverage branch.
+const subjectStatement = statement.replace(
+  /\/\* semantic\.mixed-coverage \*\/[\s\S]*?\/\* semantic\.end-attached-coverage \*\//,
+  '',
+);
 // A sealed publication owns its coverage. The bootstrap constraint excludes a
 // serving attachment when publication_job is set, and prepared cuts have no
 // PIT withdrawals or own window. Keep the common binding and current probes.
@@ -505,7 +511,13 @@ async function readPopulations(
     }
     // The publication seal binds one prepared execution with no page or window.
     // validBindings still decodes it and demands the exact start and empty own rows.
-    const sql = (publication ? publicationStatement : statement).replace(
+    const preparedSubject =
+      !publication &&
+      admitted.length === 1 &&
+      admitted[0]!.queried.snapshot.kind === 'prepared' &&
+      /subjects-g[1-9][0-9]*$/.test(members[0]!.physical_target);
+    const roleStatement = preparedSubject ? subjectStatement : publication ? publicationStatement : statement;
+    const sql = roleStatement.replace(
       'semantic.privacy-role',
       final ? 'semantic.privacy-final' : 'semantic.privacy-start',
     );
@@ -528,11 +540,6 @@ async function readPopulations(
         (client) => {
           // The prepared Subject page runs the same START and FINAL statements
           // with new custody, deadline and execution parameters on each request.
-          const preparedSubject =
-            !publication &&
-            admitted.length === 1 &&
-            admitted[0]!.queried.snapshot.kind === 'prepared' &&
-            /subjects-g[1-9][0-9]*$/.test(members[0]!.physical_target);
           const query = {
             ...(preparedSubject && { name: final ? 'public_filter_subject_final' : 'public_filter_subject_start' }),
             text: sql,
