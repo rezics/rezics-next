@@ -69,8 +69,8 @@ async function readResponse(
     const length = response.headers.get('content-length');
     if (length !== null && /^\d+$/.test(length) && Number(length) > limit) throw new SearchUnavailableError();
 
-    // One fixed-capacity buffer bounds retained state even for millions of tiny chunks. Inspect each native
-    // chunk before copying or decoding; neither a small Content-Length nor an error status bypasses this count.
+    // A single native chunk already contains the complete small response. Fragmented bodies
+    // share one bounded destination, regardless of their chunk count or advertised length.
     let bytes: Uint8Array | undefined;
     let used = 0;
     while (true) {
@@ -78,8 +78,15 @@ async function readResponse(
       if (done) break;
       if (value.byteLength > limit - used) throw new SearchUnavailableError();
       if (value.byteLength === 0) continue;
-      bytes ??= new Uint8Array(limit);
-      bytes.set(value, used);
+      if (!bytes) bytes = value;
+      else {
+        if (used === bytes.byteLength) {
+          const buffer = new Uint8Array(limit);
+          buffer.set(bytes);
+          bytes = buffer;
+        }
+        bytes.set(value, used);
+      }
       used += value.byteLength;
     }
     work?.settle(used);

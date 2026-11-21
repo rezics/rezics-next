@@ -1181,8 +1181,9 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   controller per request. Request/query/bulk serialization and engine operation counts are unchanged.
 - Bound: At most 4 MiB of observed response bytes may enter the retained buffer before UTF-8 decoding and JSON
   parsing, including chunked and error bodies. An honest oversized Content-Length can refuse at headers; every
-  received chunk is still counted when the length is absent, invalid or smaller. Retained bytes use one fixed-capacity
-  buffer, processing is O(bytes), and refusal aborts/cancels the producer and releases the reader. The deadline covers
+  received chunk is still counted when the length is absent, invalid or smaller. A one-chunk reply uses its native
+  bytes directly. Fragmented replies share one fixed-capacity buffer. Processing is O(bytes), and refusal cancels
+  the producer and releases the reader. The deadline covers
   headers and the entire body. Internal constructor tests may lower the ceiling but cannot raise or disable it;
   no public request or environment setting changes this budget. HEAD and empty responses retain undefined bodies.
   Malformed successful JSON fails unavailable; bounded native 4xx JSON retains internal `OpenSearchError` diagnostic
