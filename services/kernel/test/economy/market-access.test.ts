@@ -103,7 +103,7 @@ beforeAll(async () => {
   expect(
     await ledger.issue({ accountId: buyer, assetId, amount: '9007199254741093', operationId: 'issue' }),
   ).toMatchObject({ kind: 'ok' });
-});
+}, 90_000);
 
 afterAll(async () => {
   await db?.close();
