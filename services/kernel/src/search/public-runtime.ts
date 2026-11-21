@@ -289,8 +289,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           while (result.status === 'progress' && result.sourceAdvanced && previous.length < 15) {
             started = Date.now();
             if (started + 2 * longest >= context.deadline) break;
-            previous.push(result.cost, ...(result.additionalEnrollmentCosts ?? []));
-            result = await native.step(job, context, options);
+            const spent = [result.cost, ...(result.additionalEnrollmentCosts ?? [])];
+            const remaining = (options.heldOffers ?? 16) - previous.length - spent.length;
+            if (remaining <= 0 || (spent.length >= 5 && remaining < 5)) break;
+            previous.push(...spent);
+            result = await native.step(job, context, { ...options, heldOffers: remaining });
             longest = Math.max(longest, Date.now() - started);
           }
           if (!previous.length) return result;

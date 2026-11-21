@@ -5,7 +5,9 @@ import {
 } from './public-filter-consumer.ts';
 import {
   advanceNativePublicFilterPreparation,
+  captureHeldSubjectRange,
   planColdSubjectEnrollment,
+  prepareHeldSubjectRange,
   reconcileHeldSubjectPage,
   reserveHeldSubjectPreparation,
 } from './native-bindings.ts';
@@ -103,7 +105,7 @@ export type SearchGenerationPublication = Readonly<{
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
-    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean }>,
+    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean; heldOffers?: number }>,
   ): Promise<
     | {
         status: 'progress' | 'reconciled';
@@ -112,7 +114,7 @@ export type SearchGenerationPublication = Readonly<{
         sourceAdvanced?: boolean;
         additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
       }
-    | PublicFilterConsumerUnavailable
+    | (PublicFilterConsumerUnavailable & { additionalEnrollmentCosts?: readonly SearchPublicFilterCost[] })
   >;
   activate(
     job: GenerationPublicationJob,
@@ -151,7 +153,11 @@ export type SearchGenerationPublicationConfig = Readonly<{
 }>;
 
 const validationBytes = Symbol('validationBytes');
-type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number } & { [validationBytes]: number };
+const enrollmentOffers = Symbol('enrollmentOffers');
+type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number } & {
+  [validationBytes]: number;
+  [enrollmentOffers]?: Meter[];
+};
 const cost = (): Meter => ({
   inputKeys: 0,
   candidates: 0,
@@ -389,6 +395,7 @@ export function createSearchGenerationPublication(
               : ('unready' as const),
           reason,
           cost: meter,
+          ...(meter[enrollmentOffers]?.length ? { additionalEnrollmentCosts: meter[enrollmentOffers] } : {}),
         };
       }
     });
@@ -742,6 +749,143 @@ export function createSearchGenerationPublication(
     return rows.length === 1 ? rows[0]! : null;
   }
 
+  async function enrollHeldRange(
+    ref: GenerationPublicationJob,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    limit: number,
+  ) {
+    // Read all three committed edges under the publication session lock. A torn
+    // handoff returns to the existing single-page recovery from its original.
+    meter.inputKeys += 9;
+    meter.dependencyPoints += 9;
+    const {
+      rows: [job],
+    } = await client.query<
+      Job & {
+        birth: string;
+        original: string;
+        next_home: number;
+        next_ordinal: number;
+        end_home: number | null;
+        coverage_after: number;
+      }
+    >(
+      `SELECT j.*,m.birth::text,m.bootstrap AS original,s.next_home,s.next_ordinal,p.end_home,b.coverage_after
+       FROM search.generation_publication j JOIN core.subject_subscription_v1 m ON m.job=j.job
+       JOIN semantic.subject_source_preparation_v1 s USING(birth)
+       JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,m.bootstrap)
+       JOIN search.public_filter_coverage_preparation c ON c.bootstrap=b.bootstrap AND c.ack_protocol=1
+       LEFT JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home)=(m.birth,s.next_home)
+       WHERE (j.partition_no,j.job,j.consumer)=(0,$1,$2::jsonb) AND j.subscription_protocol=1 AND j.pass=1
+         AND j.phase='subject' AND j.fence IS NULL AND NOT j.fenced_pass AND j.observation IS NULL
+         AND j.bootstrap IS NULL AND j.pit IS NULL AND j.previous_uuid IS NULL
+         AND b.state IN ('capturing','begun') AND b.subscription_protocol=1 AND c.subscription_protocol=1
+         AND NOT c.ack_retired AND (b.coverage_after,b.coverage_root)=(c.after_home,c.root)
+         AND b.coverage_after>0 AND b.coverage_after=(SELECT end_home FROM semantic.subject_access_page_v1
+           WHERE birth=m.birth ORDER BY first_home DESC LIMIT 1)
+         AND (b.coverage_after<4096 OR (s.next_home<4096 AND s.next_ordinal=0))`,
+      [ref.job, ref.consumer],
+    );
+    if (!job) return;
+    const member = { job: job.job, birth: job.birth, bootstrap: job.original };
+    const offers: Meter[] = [];
+    meter[enrollmentOffers] = offers;
+    const reserve = (inputs: number, writes: number) => {
+      if (offers.length + 1 >= limit) throw new RangeError('Held Subject offer exhausted');
+      const offer = cost();
+      offer.inputKeys = offer.dependencyPoints = inputs;
+      offer.frontierWrites = writes;
+      offer[validationBytes] = 2 * 65536;
+      offers.push(offer);
+      return offer;
+    };
+    let checked: Promise<void> | undefined;
+    const checkTarget = () =>
+      (checked ??= (async () => {
+        const physical = await native(job.consumer, context, validationSearch(context, meter));
+        if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
+        await adopt(job, context, meter, physical);
+      })());
+    if (job.next_home === 0 && job.next_ordinal === 0) await checkTarget();
+    const available = limit - 1;
+    const captureCount = Math.min(Math.floor(available / 4), Math.ceil((4096 - job.coverage_after) / 32));
+    const sourceCount = Math.min(8, Math.floor((available - 2 * captureCount) / 2));
+    const captured = captureCount
+      ? (async () => {
+          for (let i = 0; i < captureCount; i++)
+            reserve(176 + 18 * Math.min(32, 4096 - job.coverage_after - 32 * i), 2);
+          await captureHeldSubjectRange(pool, member, job.coverage_after, captureCount, context);
+        })()
+      : Promise.resolve();
+    const receive = async () => {
+      await captured;
+      for (let i = 0; i < captureCount; i++) {
+        reserve(192 + 24 * Math.min(32, 4096 - job.coverage_after - 32 * i), 3);
+        // A transaction may accept the committed predecessor and append the next original.
+        const result = await client.query<{ homes: number }>(
+          i === 0
+            ? 'SELECT search.advance_subject_receiver_v1($1,32) AS homes'
+            : `WITH accepted AS MATERIALIZED (SELECT semantic.accept_subject_receiver_page_v1($1) AS homes)
+           SELECT search.advance_subject_receiver_v1($1,32) AS homes FROM accepted WHERE homes>0`,
+          [job.job],
+        );
+        if (!result.rows[0]?.homes) throw new Pending('source_pending');
+      }
+      if (captureCount) await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+    };
+    const settle = async (
+      obligations: readonly { partition: number; position: string; ids: readonly string[] }[],
+      offer: Meter,
+    ) => {
+      try {
+        await checkTarget();
+        for (const { partition, ids, position } of obligations)
+          await reconcile(job, partition, ids, undefined, BigInt(position), context, offer, true);
+        return true;
+      } catch (error) {
+        if (error instanceof Pending && error.reason === 'source_pending') return false;
+        throw error;
+      }
+    };
+    const scan = async () => {
+      if (job.next_home >= job.coverage_after) await captured;
+      if (job.next_ordinal === 0)
+        return prepareHeldSubjectRange(
+          pool,
+          member,
+          job.next_home,
+          sourceCount,
+          context,
+          (homes) => reserve(176 + 18 * homes, 2),
+          settle,
+          (homes) => reserve(176 + 18 * homes, 3),
+        );
+      if (job.end_home === null) throw new Pending('source_pending');
+      const offer = reserve(176 + 18 * (job.end_home - job.next_home), 2);
+      try {
+        await reconcileHeldSubjectPage(
+          pool,
+          { ...member, firstHome: job.next_home, endHome: job.end_home, ordinal: job.next_ordinal },
+          context,
+          async (obligation) => {
+            if (!(await settle([obligation], offer))) throw new Pending('source_pending');
+          },
+        );
+        return true;
+      } catch (error) {
+        if (error instanceof Pending && error.reason === 'source_pending') return false;
+        throw error;
+      }
+    };
+    const [receiver, source] = await Promise.allSettled([receive(), scan()]);
+    if (receiver.status === 'rejected') throw receiver.reason;
+    if (source.status === 'rejected') throw source.reason;
+    if (!captureCount && !source.value) throw new Pending('source_pending');
+    return job;
+  }
+
   async function subjectEnrollmentPage(
     job: Job,
     definition: SearchPublicFilterSourceDefinition,
@@ -974,6 +1118,7 @@ export function createSearchGenerationPublication(
       additionalEnrollmentCosts?: readonly SearchPublicFilterCost[],
     ) => Promise<T>,
     batchHeld = false,
+    heldOffers = 16,
   ): Promise<T> {
     const ref = structuredClone(input);
     const target = locator(ref.consumer);
@@ -1021,6 +1166,10 @@ export function createSearchGenerationPublication(
             mayOwnLock = lock.rows[0]?.locked !== false;
             if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
             try {
+              if (batchHeld && phase === 'step-enroll' && heldOffers >= 5) {
+                const enrolled = await enrollHeldRange(ref, client, context, meter, heldOffers);
+                if (enrolled) return work(enrolled, client, null, undefined, true, meter[enrollmentOffers]);
+              }
               const {
                 rows: [job],
               } = await client.query<
@@ -2519,6 +2668,8 @@ export function createSearchGenerationPublication(
     },
     step(input, context, options) {
       const phase = options?.enrollSource === true ? 'step-enroll' : 'step';
+      const offers = options?.heldOffers ?? 16;
+      requireValue(Number.isSafeInteger(offers) && offers >= 1 && offers <= 16);
       return run(context, (meter) =>
         locked(
           input,
@@ -2586,7 +2737,8 @@ export function createSearchGenerationPublication(
               ...(sourceAdvanced ? { sourceAdvanced } : {}),
             };
           },
-          options?.batchSource,
+          options?.batchSource && offers >= 3,
+          offers,
         ),
       );
     },

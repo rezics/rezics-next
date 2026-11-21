@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { runCommand } from '../../src/command/command.ts';
 import { anchorRoute, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
 import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
@@ -196,11 +197,53 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       ).rows,
     ).toEqual([{ end_home: 34 }]);
     expect(await frontier()).toEqual({ next_home: 2, next_ordinal: 1 });
+    for (const partition of [2, 3])
+      await runCommand(pool, { partition }, async () => ({
+        value: null,
+        events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
+      }));
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
     // Receiver adoption commits separately from the producer's finite window.
     expect(await frontier()).toEqual({ next_home: 2, next_ordinal: 1 });
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
     expect(await frontier()).toEqual({ next_home: 34, next_ordinal: 0 });
+    const window = await pool.query(
+      'SELECT evidence FROM semantic.subject_source_step_v1 WHERE (birth,first_home,ordinal)=($1,2,1)',
+      [birth],
+    );
+    expect(window.rows[0].evidence.evidence.quiet.map(([home]: [number, unknown]) => home)).toEqual([2, 3]);
+    const batch = () =>
+      publication.step(prepared.job, context(), { enrollSource: true, batchSource: true, heldOffers: 9 });
+    const grouped = await batch();
+    expect(grouped.status).toBe('progress');
+    if (grouped.status !== 'progress') throw new Error('Missing grouped enrollment');
+    const offers = [grouped.cost, ...(grouped.additionalEnrollmentCosts ?? [])];
+    expect(offers.length).toBeLessThanOrEqual(9);
+    expect(offers.every((offer) => offer.inputKeys <= 1000)).toBe(true);
+    expect(await frontier()).toEqual({ next_home: 98, next_ordinal: 0 });
+    const pages = (
+      await pool.query(
+        `SELECT a.first_home,a.end_home,a.captured_xid::text,r.adopted_by::text FROM semantic.subject_access_page_v1 a
+       JOIN search.subject_receiver_page_v1 r USING(birth,first_home,end_home)
+       WHERE a.birth=$1 AND a.first_home>=34 ORDER BY a.first_home`,
+        [birth],
+      )
+    ).rows;
+    expect(pages.map((p) => [p.first_home, p.end_home])).toEqual([
+      [34, 66],
+      [66, 98],
+    ]);
+    expect(pages[0]!.captured_xid).toBe(pages[1]!.captured_xid);
+    expect(pages.every((p) => p.adopted_by !== p.captured_xid)).toBe(true);
+    // Lose the receiver reply before Source accepts its original.
+    await pool.query('SELECT semantic.capture_subject_access_page_v1($1,98,100)', [birth]);
+    await pool.query('SELECT search.adopt_subject_receiver_page_v1($1,98)', [birth]);
+    expect(await batch()).toMatchObject({ status: 'progress', sourceAdvanced: true });
+    const accepted = await pool.query(
+      'SELECT b.coverage_after FROM semantic.public_filter_bootstrap b JOIN core.subject_subscription_v1 m USING(bootstrap) WHERE m.birth=$1',
+      [birth],
+    );
+    expect(accepted.rows[0]?.coverage_after).toBe(100);
     const { body } = await search.request<{ hits: { hits: { _id: string }[] } }>('POST', '/' + target + '/_search', {
       query: { match_all: {} },
     });

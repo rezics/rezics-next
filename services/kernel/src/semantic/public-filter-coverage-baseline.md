@@ -173,6 +173,14 @@ of at most 32 homes, preserving the Subject enqueue carry and the per-home recei
 page inserts one Search page and updates one Search cursor. Source checks that page on a separate transaction
 and updates one cursor. A lost receiver reply resumes the same page. Ordinary job creation selects protocol 0.
 
+During a batched cold delivery, capture starts at the accepted receiver edge and can continue while a
+writer holds the Source cursor. Adjacent Core and Access pages commit together before inventory.
+Each receiver page commits before Source accepts it. Acceptance and adoption of the following page
+can share a transaction. Source inventories committed intervals together, compares occupied homes
+through the ordinary writer, then reopens each page to advance the ordered prefix and save finite ends.
+A window can close unrelated singleton commands across homes with their original event and write-basis
+evidence. Other groups continue through the saved event cursor.
+
 After the original inventory and creation bridge finish, the first engine traversal uses the original command
 position for untouched homes. A changed position still requires the existing writer comparison. Search compares
 each verified creation window with its own page, the original Core and Access tuple, and the current owner.

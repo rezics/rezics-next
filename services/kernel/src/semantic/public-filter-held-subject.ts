@@ -10,6 +10,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { HeldSubjectOriginal } from './public-filter-held-subject-originals.ts';
 import {
   publicFilterCreationAction,
+  readHeldQuietCommands,
   readPublicFilterCreationEvents,
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
@@ -38,7 +39,13 @@ type Step = {
   phase: Cursor['phase'];
   complete: boolean;
   obligations: Obligation[];
-  evidence: { inventory?: Inventory[]; windows?: Window[]; envelopes?: readonly Envelope[]; window?: Window };
+  evidence: {
+    inventory?: Inventory[];
+    windows?: Window[];
+    quiet?: [number, string[]][];
+    envelopes?: readonly Envelope[];
+    window?: Window;
+  };
   next: Cursor | null;
 };
 type Cut = {
@@ -87,6 +94,21 @@ export async function reserveHeldSubjectPreparation(db: PoolClient, input: Omit<
   if (!birth) return pending(0);
   await reserveHeldSubjectBootstrap(db, { birth, bootstrap, consumer: rows[0]!.consumer });
   return birth;
+}
+
+// The finite ends and original receipts were checked in this window snapshot.
+// Reserve one lookahead for each nonempty outbox range within the 32-slot offer.
+function quietWindowCommands(db: PoolClient, windows: readonly Window[]) {
+  return readHeldQuietCommands(
+    db,
+    windows.map(({ partition, epoch, base, through }) => ({
+      partition,
+      epoch,
+      base,
+      head: through,
+    })),
+    16,
+  );
 }
 
 function saveWindow(w: PublicFilterCreationWindow): Window {
@@ -179,7 +201,14 @@ async function produce(
       sequence: 0,
       eventCount: null,
     }));
-    const windows = evidence.windows.filter((w) => w.base !== w.through);
+    let windows = evidence.windows.filter((w) => w.base !== w.through);
+    if (windows.length > 1) {
+      const quiet = await quietWindowCommands(db, windows);
+      if (quiet.size) {
+        evidence.quiet = [...quiet];
+        windows = windows.filter((w) => !quiet.has(w.partition));
+      }
+    }
     next = windows.length ? { phase: 'events', windows } : null;
   } else if (cursor.phase === 'events') {
     const [original, ...rest] = cursor.windows;
@@ -239,6 +268,12 @@ async function reopenStep(db: PoolClient, page: Page, step: Step, context: Conte
       step.evidence.inventory?.map((home) => ({ partition: home.partition, position: home.commandHead })) ??
       step.evidence.windows?.map((w) => ({ partition: w.partition, position: w.through }));
     if (!heads) return pending(page.firstHome);
+    if (step.evidence.quiet) {
+      const covered = new Set(step.evidence.quiet.map(([partition]) => partition));
+      const windows = step.evidence.windows!.filter((w) => covered.has(w.partition));
+      if (!isDeepStrictEqual([...(await quietWindowCommands(db, windows))], step.evidence.quiet))
+        return pending(page.firstHome);
+    }
     const result = await db.query<{ keys: number; homes: number }>(
       `SELECT (SELECT count(*)::integer FROM jsonb_to_recordset($1) k(route integer,id uuid)
         CROSS JOIN LATERAL (SELECT FROM semantic.subject WHERE (route,subject_id)=(k.route,k.id) LIMIT 1) original) AS keys,
@@ -353,6 +388,107 @@ export async function reconcileHeldSubjectPage(
   for (const obligation of step.obligations) await settle(obligation);
   await withBoundedCommandConnection(pool, context.deadline, (db) => advanceFrontier(db, page, step, true));
   return step;
+}
+
+/** Resolve every interval from the original birth. The producer can keep taking
+ * retention cuts while the independent Source cursor waits for a writer.
+ */
+export async function captureHeldSubjectRange(
+  pool: Pool,
+  member: Member,
+  start: number,
+  count: number,
+  context: Context,
+) {
+  if (
+    !Number.isInteger(count) ||
+    count < 1 ||
+    count > 8 ||
+    !Number.isInteger(start) ||
+    start < 0 ||
+    start + 32 * (count - 1) >= 4096
+  )
+    throw new TypeError('Invalid held capture range');
+  await transaction(pool, context, async (db) => {
+    // The next call starts at the end actually certified by its predecessor.
+    const result = await db.query<{ after_home: number }>(
+      `WITH RECURSIVE admitted AS MATERIALIZED (
+         SELECT b.coverage_after FROM core.subject_subscription_v1 m
+         JOIN search.generation_publication j ON (j.partition_no,j.job,j.subscription_protocol)=(0,m.job,1)
+         JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap,b.subscription_protocol)=(0,m.bootstrap,1)
+         WHERE (m.birth,m.job,m.bootstrap,b.coverage_after)=($1,$2,$3,$4)
+           AND b.state='capturing' AND b.coverage_generation IS NOT NULL AND j.phase='subject'
+           AND j.pass=1 AND NOT j.fenced_pass AND j.fence IS NULL FOR SHARE OF j,b
+       ), pages(after_home,n) AS (
+         SELECT coverage_after,0 FROM admitted UNION ALL
+         SELECT after_home+jsonb_array_length(semantic.capture_subject_access_page_v1($1,after_home,least(4096,after_home+32))),n+1
+         FROM pages WHERE after_home<4096 AND n<$5
+       ) SELECT after_home FROM pages WHERE n=$5`,
+      [member.birth, member.job, member.bootstrap, start, count],
+    );
+    if (result.rows[0]?.after_home !== Math.min(4096, start + 32 * count)) return pending(start);
+  });
+}
+
+/** Inventory commits before the writer comparison and the finite command ends.
+ * The final transaction reopens each Access page before advancing Source. A
+ * dense inventory or a nonempty bridge resumes at the retained exact ordinal.
+ */
+export async function prepareHeldSubjectRange<T>(
+  pool: Pool,
+  member: Member,
+  first: number,
+  count: number,
+  context: Context,
+  inventoryOffer: (homes: number) => T,
+  settle: (obligations: readonly Obligation[], offer: T) => Promise<boolean>,
+  windowOffer: (homes: number) => void,
+) {
+  if (!Number.isInteger(count) || count < 1 || count > 8) throw new TypeError('Invalid held page count');
+  const inventory = await transaction(pool, context, async (db) => {
+    const result = await db.query<{ first_home: number; end_home: number }>(
+      `SELECT p.first_home,p.end_home FROM core.subject_subscription_v1 m
+       JOIN semantic.subject_source_preparation_v1 s USING(birth,bootstrap)
+       JOIN semantic.subject_access_page_v1 p USING(birth)
+       WHERE (m.birth,m.job,m.bootstrap,s.next_home,s.next_ordinal)=($1,$2,$3,$4,0) AND p.first_home >= $4
+       ORDER BY p.first_home LIMIT $5`,
+      [member.birth, member.job, member.bootstrap, first, count],
+    );
+    const steps = [];
+    let start = first;
+    for (const { first_home, end_home } of result.rows) {
+      if (first_home !== start) return pending(start);
+      const page = validatedPage({ ...member, firstHome: start, endHome: end_home, ordinal: 0 });
+      const offer = inventoryOffer(end_home - start);
+      const step = await readOrSaveStep(db, page, context);
+      steps.push({ page, step, offer });
+      if (step.next?.phase !== 'window') break;
+      start = end_home;
+    }
+    return steps;
+  });
+  const results = await Promise.allSettled(
+    inventory.map(({ step, offer }) => (step.obligations.length ? settle(step.obligations, offer) : true)),
+  );
+  for (const result of results) if (result.status === 'rejected') throw result.reason;
+  const pendingIndex = results.findIndex((result) => result.status === 'fulfilled' && !result.value);
+  const settled = pendingIndex < 0 ? inventory.length : pendingIndex;
+  if (!settled) return false;
+  await transaction(pool, context, async (db) => {
+    for (const { page, step } of inventory.slice(0, settled)) {
+      windowOffer(page.endHome - page.firstHome);
+      if (step.next?.phase !== 'window') {
+        await advanceFrontier(db, page, step, true);
+        break;
+      }
+      const windowPage = { ...page, ordinal: 1 };
+      const window = await readOrSaveStep(db, windowPage, context);
+      await advanceFrontier(db, page, step, false);
+      await advanceFrontier(db, windowPage, window, false);
+      if (!window.complete) break;
+    }
+  });
+  return true;
 }
 
 async function advanceFrontier(db: PoolClient, page: Page, step: Step, recheckAfterWriter: boolean) {
