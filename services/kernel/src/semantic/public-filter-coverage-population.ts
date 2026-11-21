@@ -526,7 +526,18 @@ async function readPopulations(
         pool,
         deadline,
         (client) => {
-          const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+          // Each role keeps its own statement on this backend. Every execution still binds
+          // the current clock, observation and native start or final witnesses at a fresh snapshot.
+          const query = {
+            name: publication
+              ? 'semantic_privacy_publication_final_v1'
+              : final
+                ? 'semantic_privacy_final_v1'
+                : 'semantic_privacy_start_v1',
+            text: sql,
+            values,
+            query_timeout: Math.max(1, deadline - Date.now()),
+          };
           return client.query<Row>(query);
         },
         { isUncertainSettledQueryError: () => true },
