@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import {
+  AppliedCommandResponseError,
   CommandUnavailableError,
   CommandCommitUncertainError,
   authoritativeTimeValue,
@@ -12,6 +13,7 @@ import {
   hasLiveCommandTransaction,
   hasOwnCommandCompletion,
   noEffect,
+  preflightCommandReceipt,
   registerCommandCallback,
   runCommand,
   withSingleCommandAttempt,
@@ -28,7 +30,7 @@ import {
   type CommandDispatchAllowance,
   type CommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { newId } from '../../src/route/route.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
@@ -777,6 +779,47 @@ for (const code of ['40001', '40P01']) {
     expect(authorized).toBe(3);
   });
 }
+
+test('a failed checkout exit preserves only a confirmed command effect or receipt', async () => {
+  const options = {
+    partition,
+    receipt: {
+      actorAccountId: randomUUID(),
+      kind: 'test.checkout.exit',
+      key: randomUUID(),
+      digest: new Uint8Array(32),
+    },
+    authorization: {
+      action: 'test',
+      resource: { route: partition << 4, id: randomUUID() },
+      authorize: async () => 'execute' as const,
+      denied: () => new Error('denied'),
+    },
+  };
+  const deadline = new CommandUnavailableError('deadline', partition);
+  const exitFailure = (run: () => Promise<unknown>) =>
+    failed(
+      withQueryAccounting(
+        {
+          query: (_text, _operations, execute) => execute(),
+          async connection(checkout) {
+            await checkout();
+            throw deadline;
+          },
+        },
+        run,
+      ),
+    );
+  const preflight = () => preflightCommandReceipt(pool, options);
+  expect(await exitFailure(preflight)).toBe(deadline);
+  expect(await exitFailure(() => runCommand(pool, { partition }, async () => noEffect(1)))).toBe(deadline);
+  for (const operation of [() => runCommand(pool, options, async () => noEffect(1)), preflight]) {
+    const error = await exitFailure(operation);
+    expect(error).toBeInstanceOf(AppliedCommandResponseError);
+    expect(error).toMatchObject({ cause: deadline });
+  }
+  expect(await preflight()).toMatchObject({ replayed: true, value: 1 });
+});
 
 test('ordinary lost COMMIT response stays uncertain without retry after the real effect commits', async () => {
   const observer = observe();

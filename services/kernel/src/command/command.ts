@@ -419,6 +419,13 @@ export class CommandResultErasedError extends Error {
   }
 }
 
+export class AppliedCommandResponseError extends Error {
+  constructor(cause: unknown) {
+    super('Committed command response failed', { cause });
+    this.name = 'AppliedCommandResponseError';
+  }
+}
+
 /** A sent COMMIT may be durable even when its native response is lost. */
 export class CommandCommitUncertainError extends Error {
   readonly partition: number;
@@ -719,6 +726,7 @@ async function executeCommand<T>(
     if (singleAttempt.getStore() && singleAttemptCount++ > 0)
       throw new CommandUnavailableError('contention', partition);
     let time: AuthoritativeTime | undefined;
+    let confirmedEffect = false;
     try {
       let evidence: unknown;
       let attempt: CommandAttempt | undefined;
@@ -789,12 +797,11 @@ async function executeCommand<T>(
         Object.defineProperty(tx, transactionCallbacks, { value: state });
         if (dispatch) selectedCallbacks.set(state, { tx, dispatch });
         if (publisher) publisherCallbacks.add(state);
-        const commit = async () => {
+        const commit = async (hasEffect: boolean) => {
           if (ordinary) commitPending = true;
+          let result;
           try {
-            const result = await client.query('COMMIT');
-            commitPending = false;
-            return result;
+            result = await client.query('COMMIT');
           } catch (error) {
             if (isPostgresTransactionAbort(error)) {
               commitPending = false;
@@ -806,6 +813,10 @@ async function executeCommand<T>(
                 : new CommandCommitUncertainError(partition, error);
             throw error;
           }
+          commitPending = false;
+          if (ordinary && result.command === 'ROLLBACK') throw new Error('Command transaction rolled back at COMMIT');
+          confirmedEffect = ordinary && hasEffect && result.command === 'COMMIT';
+          return result;
         };
         try {
           dispatch?.checkpoint();
@@ -853,7 +864,7 @@ async function executeCommand<T>(
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               if (row.payloadState === 'minimized') throw new CommandResultErasedError();
               receiptOwners.delete(tx);
-              await measureCommandPhase('commit', commit);
+              await measureCommandPhase('commit', () => commit(true));
               sealEventTypes();
               return {
                 value: row.response as T,
@@ -868,7 +879,7 @@ async function executeCommand<T>(
           if (mode === 'receipt-only') throw authorization!.denied();
           if (receiptPreflight) {
             receiptOwners.delete(tx);
-            await measureCommandPhase('commit', commit);
+            await measureCommandPhase('commit', () => commit(false));
             sealEventTypes();
             return receiptNotFound;
           }
@@ -1038,7 +1049,7 @@ async function executeCommand<T>(
             publisher.assertLive();
           }
           await measureCommandPhase('commit', () =>
-            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(),
+            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(!noEffect || receipt !== null),
           );
           sealEventTypes();
           return {
@@ -1102,6 +1113,7 @@ async function executeCommand<T>(
       await measureCommandPhase('writable_wait', () => waitForWritable(pool, partition, deadline));
     } catch (error) {
       if (time) times.delete(time);
+      if (confirmedEffect) throw new AppliedCommandResponseError(error);
       if (dispatch) {
         // Preserve native single-attempt classifications without retrying or
         // dropping the original failure/uncertain COMMIT evidence.

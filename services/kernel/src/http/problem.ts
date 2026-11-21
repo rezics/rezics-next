@@ -21,6 +21,7 @@ import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError } from 'elysia';
 import {
+  AppliedCommandResponseError,
   CommandCommitUncertainError,
   CommandResultErasedError,
   IdempotencyConflictError,
@@ -32,13 +33,6 @@ import { SubjectProjectionPreparingError } from '../semantic/contract/subject-er
 
 import { extensionMembers, fieldErrorCodes } from './problem-schema.ts';
 export { problemSchema } from './problem-schema.ts';
-
-class AppliedCommandResponseError extends Error {
-  constructor(cause: unknown) {
-    super('Committed command response failed', { cause });
-    this.name = 'AppliedCommandResponseError';
-  }
-}
 
 /** Enter only after the command returned its committed outcome. A failed response
  * read retains its ordinary problem code without claiming the write rolled back.

@@ -204,6 +204,9 @@ export declare class IdempotencyConflictError extends Error {
 export declare class CommandResultErasedError extends Error {
     constructor();
 }
+export declare class AppliedCommandResponseError extends Error {
+    constructor(cause: unknown);
+}
 /** A sent COMMIT may be durable even when its native response is lost. */
 export declare class CommandCommitUncertainError extends Error {
     readonly partition: number;

@@ -7,7 +7,11 @@ import {
 } from '@rezics/definitions/bulk';
 import { classifyUnavailability } from '../../access/unavailable.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
-import { CommandCommitUncertainError, CommandUnavailableError } from '../../command/command.ts';
+import {
+  AppliedCommandResponseError,
+  CommandCommitUncertainError,
+  CommandUnavailableError,
+} from '../../command/command.ts';
 import { commandTimingSnapshot } from '../../command/timing.ts';
 import { isPostgresServerError } from '../../database/bounded-read-lifetime.ts';
 import {
@@ -102,6 +106,7 @@ export function bulkWriteDiagnostics(
   action: BulkWriteAction,
 ): Pick<BulkWriteProblemBody, 'operation' | 'partition' | 'phase' | 'contention_retries'> {
   const timing = commandTimingSnapshot();
+  if (error instanceof AppliedCommandResponseError) error = error.cause;
   const partition =
     error instanceof CommandUnavailableError || error instanceof CommandCommitUncertainError
       ? publicPartition(error.partition)

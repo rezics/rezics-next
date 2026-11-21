@@ -20,6 +20,10 @@ An expired or uncertain checkout is retired and its underlying pool client is re
 with an error; late body or callback code has no further SQL dispatch authority. The
 executor retains custody of the original callback and its eventual settlement.
 
+When checkout fails after a confirmed command effect or authorized receipt replay, the problem response
+retains the checkout failure code and reports `effect_status=applied`. A receipt preflight miss and a
+receipt-free `noEffect` command establish no applied effect.
+
 A lost or timed-out `COMMIT` response is an uncertain durable outcome. It must not be
 reported as success or as a proven rollback, and it must not be retried as a fresh effect.
 Owners settle receipt-bearing commands by reading their existing receipt under current
