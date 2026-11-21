@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import { ERASURE_PARTICIPANTS, acknowledgeErasure } from '../access/erasure.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import { runCommand } from '../command/command.ts';
+import { noEffect, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection, withQueryAccounting } from '../database/pool.ts';
 import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -14,6 +14,7 @@ import {
   readSubjectErasureSourceProof,
   verifySubjectErasureSourceProof,
 } from '../semantic/account-erasure-source.ts';
+import { SEMANTIC_ERASURE_PROGRESS } from '../semantic/account-erasure.ts';
 import type { SubjectErasureSourceRecord, SubjectErasureSource } from '../semantic/account-erasure-source-contract.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/index.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
@@ -35,6 +36,10 @@ import type { SearchNativePorts } from './native-ports.ts';
 
 const eventType = 'com.rezics.access.account-tombstoned.v1';
 const workflowName = 'search.erasure';
+const sourceChanged = Symbol('Search erasure Source changed');
+const sourceProgress = (accountId: string) => [
+  { type: SEMANTIC_ERASURE_PROGRESS, subject: accountId, data: { accountId } },
+];
 export type SearchErasurePendingReason =
   | 'source-unavailable'
   | 'configuration-unavailable'
@@ -646,7 +651,7 @@ async function advanceSearchErasure(
     turn.check();
     const advanced = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
       turn.check();
-      if (!(await verifySubjectErasureSourcePage(tx, barrier, page.receipt))) return { value: false, events: [] };
+      if (!(await verifySubjectErasureSourcePage(tx, barrier, page.receipt))) return noEffect(false);
       turn.check();
       const updated = await tx.query(
         `UPDATE search.erasure_progress SET frontier=$4,source_complete=$5,
@@ -662,7 +667,9 @@ async function advanceSearchErasure(
         ],
       );
       turn.check();
-      return { value: updated.rowCount === 1, events: [] };
+      // A lost receiver CAS must roll back consumption with the same native transaction.
+      if (updated.rowCount !== 1) throw sourceChanged;
+      return { value: true, events: sourceProgress(accountId) };
     });
     turn.check();
     if (!advanced.value) return pending('source-changed', 'source');
@@ -700,19 +707,20 @@ async function advanceSearchErasure(
     turn.check();
     const finalized = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
       turn.check();
-      if (!(await verifySubjectErasureSourceProof(tx, barrier, sourceProof))) return { value: false, events: [] };
+      if (!(await verifySubjectErasureSourceProof(tx, barrier, sourceProof, page.receipt.id))) return noEffect(false);
       turn.check();
       const updated = await tx.query(
         `UPDATE search.erasure_progress SET phase='done',pending_reason=NULL
-        WHERE (partition_no,account_id)=($1,$2) AND source_complete AND personal_complete`,
-        keys,
+        WHERE (partition_no,account_id)=($1,$2) AND source_complete AND personal_complete AND frontier=$3`,
+        [...keys, page.receipt.id],
       );
       turn.check();
-      return { value: updated.rowCount === 1, events: [] };
+      return updated.rowCount === 1 ? { value: true, events: sourceProgress(accountId) } : noEffect(false);
     });
     turn.check();
     return finalized.value ? progress('complete', 'done') : pending('source-changed', 'finalize');
   } catch (error) {
+    if (error === sourceChanged) return pending('source-changed', 'source');
     if (error instanceof TypeError) throw error;
     // A lost effect/response retains its exact native intent. No timeout or engine count can settle it.
     if (Date.now() >= context.deadline) return progress('pending', header.phase, 'native-ambiguous');
@@ -800,15 +808,16 @@ async function acknowledgeSearchErasureTurn(pool: Pool, accountId: string, turn:
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid Search erasure account');
   const record = (
-    await erasureQuery<{ ever_applied: boolean; version: number; at: string }>(
+    await erasureQuery<{ ever_applied: boolean; version: number; at: string; frontier: string | null }>(
       pool,
       turn,
-      `SELECT ever_applied,version,at::text FROM search.erasure_progress WHERE (partition_no,account_id)=($1,$2)
+      `SELECT ever_applied,version,at::text,frontier FROM search.erasure_progress WHERE (partition_no,account_id)=($1,$2)
      AND phase='done' AND source_complete AND personal_complete`,
       [partitionOf(route), accountId],
     )
   ).rows[0];
-  if (!record) throw new Error('Search erasure is pending');
+  if (!record?.frontier) throw new Error('Search erasure is pending');
+  const consumedPageId = record.frontier;
   const barrier: HistoryBarrier = { accountId, accountRoute: route, version: record.version, at: record.at };
   const { deadline } = turn.context;
   turn.check();
@@ -817,9 +826,9 @@ async function acknowledgeSearchErasureTurn(pool: Pool, accountId: string, turn:
   if (!proof) throw new Error('Search erasure Source proof is pending');
   const verified = await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx) => {
     turn.check();
-    const value = await verifySubjectErasureSourceProof(tx, barrier, proof);
+    const value = await verifySubjectErasureSourceProof(tx, barrier, proof, consumedPageId);
     turn.check();
-    return { value, events: [] };
+    return noEffect(value);
   });
   turn.check();
   if (!verified.value) throw new Error('Search erasure Source proof changed');
@@ -832,8 +841,8 @@ async function acknowledgeSearchErasureTurn(pool: Pool, accountId: string, turn:
     pool,
     turn,
     `UPDATE search.erasure_progress SET acked=true
-    WHERE (partition_no,account_id)=($1,$2) AND phase='done'`,
-    [partitionOf(route), accountId],
+    WHERE (partition_no,account_id)=($1,$2) AND phase='done' AND source_complete AND personal_complete AND frontier=$3`,
+    [partitionOf(route), accountId, consumedPageId],
   );
 }
 

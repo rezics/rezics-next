@@ -299,8 +299,12 @@ evidence cannot become an empty or complete page.
 Search consumes one retained page through `verifySubjectErasureSourcePage` in its actual account-home command.
 `readSubjectErasureSourceProof({pool,clock?},barrier,context)` independently advances a Source-owned terminal
 chain. Only after every sealed home and historical role has transferred native custody can it produce a proof
-accepted by `verifySubjectErasureSourceProof`. Local discovery completion and Search page consumption cannot
-mint this proof. Neither chain depends on Search's final copy ACK, shared-history coverage or Semantic's final
+accepted by `verifySubjectErasureSourceProof`. Both traversals order record keys and delivery positions as native
+bigints. Each current transfer binds that ordering to its own receipt ID. A previously issued unconsumed
+origin-bearing receipt replays with its original ID as progress. Once consumed, a prior cursor restarts at home
+zero with its retained ID as predecessor. Search's completion and acknowledgment recheck its exact consumed
+terminal as well as the independent Source terminal. The receiver records its page consumption and frontier
+in one account-home command. Local discovery completion and Search page consumption cannot mint this proof. Neither chain depends on Search's final copy ACK, shared-history coverage or Semantic's final
 participant ACK. History coverage and copied histories remain separate obligations.
 
 Every call shares the shorter of the caller deadline and 5000 ms, at most 100 examined inputs including native
@@ -346,8 +350,9 @@ receiving adapter therefore cannot yet be copied without inventing those undecla
 final ACK or `none` follows from these missing declarations. Binding the real exports and local historical-role
 terminal proof remains part of this slice.
 
-`erasure_shared_custody` retains exact source partition/transaction/outbox position and account roles. Accounts
-owns command receipts, outbox and durable-work payloads. The delivered history artifact/role encoders do not
+`erasure_shared_custody` keys each account role by source partition, transaction and outbox position. Separate positions
+for a transaction remain independently recoverable. Repeated capture of the same nullable position is
+idempotent. Accounts owns command receipts, outbox and durable-work payloads. The delivered history artifact/role encoders do not
 supply an actual receiving minimizer/commit receipt; current native receipt keys also differ from the future
 versioned history locator key. No future callback or successful receipt is inferred. Local cleanup neither
 throws because that export is absent nor calls `acknowledgeErasure`.

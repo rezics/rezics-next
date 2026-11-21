@@ -74,6 +74,11 @@ export async function accountErasureFixture() {
     },
   });
   await bootstrapRelease(db.pool, bundledRelease);
+  async function accessToken(headers: ReturnType<typeof cookies>) {
+    const token = await native.request('/token', {}, headers);
+    expect(token.status, await token.clone().text()).toBe(200);
+    return ((await token.json()) as { access_token: string }).access_token;
+  }
   async function person() {
     const key = `erasure_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
     const registered = await native.host.workflows.register({
@@ -90,16 +95,16 @@ export async function accountErasureFixture() {
     });
     expect(signed.status, await signed.clone().text()).toBe(200);
     const headers = cookies(signed);
-    const token = await native.request('/token', {}, headers);
-    expect(token.status, await token.clone().text()).toBe(200);
-    const { access_token: bearer } = (await token.json()) as { access_token: string };
-    return { ...registered, handle: key, headers, bearer };
+    return { ...registered, handle: key, headers, bearer: await accessToken(headers) };
   }
   type Person = Awaited<ReturnType<typeof person>>;
   const governor = await person();
   await bootstrapGovernance(db.pool, governor.accountId);
   async function grant(id: string, subject: Person, granted: string[]) {
-    const actor = await native.access.authenticate(governor.bearer, { pool: db.pool, deadline: Date.now() + 30_000 });
+    const actor = await native.access.authenticate(await accessToken(governor.headers), {
+      pool: db.pool,
+      deadline: Date.now() + 30_000,
+    });
     await native.COMMANDS.grants.create(
       { pool: db.pool, actor, deadline: Date.now() + 30_000 },
       {

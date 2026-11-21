@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { currentCommand, noEffect, runCommand } from '../../src/command/command.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
+import { acknowledgeSearchErasure } from '../../src/search/erasure.ts';
 import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
 import type { HistoryBarrier } from '../../src/history/contract/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -107,7 +108,20 @@ async function complete(b: HistoryBarrier) {
     expect(accepted.value).toBe(true);
     records.push(...page.records);
     pages++;
-    if (page.status === 'complete') break;
+    if (page.status === 'complete') {
+      const unheld = await f.db.admin.query(
+        `SELECT d.partition_no,d.store,d.record_key::text,d.role,d.delivery_position::text,d.origin_key
+         FROM semantic.erasure_source_record d WHERE d.account_id=$1 AND NOT EXISTS (
+           SELECT 1 FROM semantic.erasure_source_hold h WHERE h.account_id=d.account_id
+             AND h.version=$2 AND h.at=$3::timestamptz AND h.partition_no=d.partition_no
+             AND (h.store,h.record_key,h.role,h.delivery_position,h.origin_key)
+               =(d.store,d.record_key,d.role,d.delivery_position,d.origin_key)
+         ) LIMIT 1`,
+        [b.accountId, b.version, b.at],
+      );
+      expect(unheld.rows).toEqual([]);
+      break;
+    }
     expect(Buffer.byteLength(page.frontier)).toBeLessThanOrEqual(2048);
     frontier = page.frontier;
   }
@@ -369,6 +383,62 @@ test('changed native account custody rejects both serialized Source receipts and
   const b = await barrier(person.accountId);
   await local(b);
   const result = await complete(b);
+  const verifyReceivedTerminal = async () =>
+    (
+      await command(b, async (tx) => ({
+        value: await verifySubjectErasureSourceProof(tx, b, result.proof, result.receipt.id),
+        events: events(b),
+      }))
+    ).value;
+  expect(await verifyReceivedTerminal()).toBe(true);
+
+  // A previous binary persisted this receipt without a numeric traversal binding.
+  const removeBinding = (id: string) =>
+    f.db.admin.query(
+      'UPDATE semantic.erasure_source_page SET numeric_cursor_id=NULL WHERE route=$1 AND account_id=$2 AND id=$3',
+      [b.accountRoute, b.accountId, id],
+    );
+  expect((await removeBinding(result.receipt.id)).rowCount).toBe(1);
+  expect(await verifyReceivedTerminal()).toBe(false);
+  // A retained Search completion header can still name the consumed pre-upgrade page.
+  await f.db.admin.query(
+    `UPDATE search.erasure_progress SET phase='done',source_complete=true,personal_complete=true,frontier=$3
+     WHERE (partition_no,account_id)=($1,$2)`,
+    [partitionOf(b.accountRoute), b.accountId, result.receipt.id],
+  );
+  await expect(acknowledgeSearchErasure(f.db.pool, b.accountId, context())).rejects.toThrow(
+    'Search erasure Source proof changed',
+  );
+  expect(
+    (
+      await f.db.admin.query(
+        "SELECT 1 FROM access.erasure_acknowledgement WHERE route=$1 AND account_id=$2 AND participant='search'",
+        [b.accountRoute, b.accountId],
+      )
+    ).rows,
+  ).toEqual([]);
+  const readAfterTerminal = () =>
+    createSubjectErasureSource(config()).readPage({
+      barrier: b,
+      frontier: result.receipt.id,
+      inputLimit: 100,
+      context: context(),
+    });
+  const first = await readAfterTerminal();
+  expect(first.status).toBe('progress');
+  if (first.status !== 'progress') throw new Error('Expected a new numeric traversal from the retained terminal');
+  const original = (
+    await f.db.admin.query(
+      'SELECT source_partition,previous_id::text,numeric_cursor_id=id AS bound,consumed FROM semantic.erasure_source_page WHERE id=$1',
+      [first.receipt.id],
+    )
+  ).rows[0];
+  expect(original).toEqual({ source_partition: 0, previous_id: result.receipt.id, bound: true, consumed: false });
+
+  // Replaying an unconsumed receipt must preserve its ID even across a binary downgrade.
+  expect((await removeBinding(first.receipt.id)).rowCount).toBe(1);
+  const replay = await readAfterTerminal();
+  expect(replay).toMatchObject({ status: 'progress', receipt: first.receipt, frontier: first.frontier });
   await f.db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [
     partitionOf(b.accountRoute),
   ]);
@@ -430,6 +500,7 @@ test('equal-delivery original and native origins traverse into distinct held Sou
         ).rows[0]!.position;
         const origins = [
           { transaction_id: revision.transaction_id, position: revision.position },
+          { transaction_id: revision.transaction_id, position },
           { transaction_id: native, position },
         ];
         const locatorUpdates = async () =>

@@ -6884,6 +6884,7 @@ CREATE TABLE semantic.erasure_source_page (
     complete boolean NOT NULL,
     consumed boolean DEFAULT false NOT NULL,
     origin_key text,
+    numeric_cursor_id uuid,
     CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
@@ -6982,6 +6983,7 @@ CREATE TABLE semantic.erasure_source_terminal (
     complete boolean CONSTRAINT erasure_source_page_complete_not_null NOT NULL,
     consumed boolean DEFAULT false CONSTRAINT erasure_source_page_consumed_not_null NOT NULL,
     origin_key text,
+    numeric_cursor_id uuid,
     CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
@@ -11030,11 +11032,11 @@ ALTER TABLE ONLY semantic.erasure_provenance
 
 
 --
--- Name: erasure_shared_custody erasure_shared_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+-- Name: erasure_shared_custody erasure_shared_custody_origin; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.erasure_shared_custody
-    ADD CONSTRAINT erasure_shared_custody_pkey PRIMARY KEY (partition_no, account_id, role, transaction_id);
+    ADD CONSTRAINT erasure_shared_custody_origin UNIQUE NULLS NOT DISTINCT (partition_no, account_id, role, transaction_id, outbox_position);
 
 
 --
