@@ -97,6 +97,7 @@ async function execute(
     clientId?: string;
     legacy?: boolean;
     hold?: (tx: CommandTransaction) => void;
+    afterInitialization?: (tx: CommandTransaction) => Promise<void>;
   } = {},
 ) {
   const context = await f.context();
@@ -167,6 +168,7 @@ async function execute(
           if (!options.caught) throw error;
         }
       }
+      await options.afterInitialization?.(tx);
       if (options.retry && bodies === 1) throw Object.assign(new Error('retry'), { code: '40001' });
       return {
         value: { at: authoritativeTimeValue(command.time) },
@@ -207,7 +209,27 @@ test('a retried initial owner grant records one holder occurrence and receipt re
   const [entry] = entries(1);
   const declared = [{ ...entry!, type: 'fixture.owned' }];
   const key = Bun.randomUUIDv7();
-  expect((await execute(declared, { key, retry: true })).replayed).toBe(false);
+  let inserted: unknown;
+  expect(
+    (
+      await execute(declared, {
+        key,
+        retry: true,
+        async afterInitialization(tx) {
+          inserted = (
+            await tx.query(
+              'SELECT side,delivery FROM access.resource_role_provenance WHERE route=$1 AND resource_id=$2 ORDER BY side',
+              [declared[0]!.resource.route, declared[0]!.resource.id],
+            )
+          ).rows;
+        },
+      })
+    ).replayed,
+  ).toBe(false);
+  expect(inserted).toEqual([
+    { side: 'creator', delivery: 'not-applicable' },
+    { side: 'new', delivery: 'not-applicable' },
+  ]);
   const captured = await snapshot(declared);
   const resource_id = declared[0]!.resource.id;
   expect(captured.roleSources).toEqual([
@@ -216,6 +238,14 @@ test('a retried initial owner grant records one holder occurrence and receipt re
   ]);
   expect((await execute(declared, { key })).replayed).toBe(true);
   expect(await snapshot(declared)).toEqual(captured);
+  await expect(
+    f.reader.query(
+      `INSERT INTO access.resource_role_provenance
+       (route,resource_id,resource_type,original_creator,account_id,grant_role,side,source_transaction)
+       VALUES ($1,$2,'fixture.owned',$3,$3,'','creator','00000000-0000-0000-0000-000000000000')`,
+      [declared[0]!.resource.route, resource_id, f.actor],
+    ),
+  ).rejects.toMatchObject({ code: '23514' });
 });
 test('one parent check creates thread and firstpost with independent roles at T; replay checks authority without initialization', async () => {
   const declared = entries();

@@ -3596,13 +3596,13 @@ The executor's real same-transaction editorial write basis must exist before thi
 `enrollContextRoleProvenance` TypeScript wrapper in a live same-home command. That wrapper records Source's
 forthcoming native commit and its own deferred constraint validates the executor's eventual fence.
 
-Delivery changes only after Source returns actual enrollment with its real Context erasure key, or its explicit
+Context delivery changes only after Source returns actual enrollment with its real Context erasure key, or its explicit
 native `not-applicable` policy. The update guard invokes that idempotent Source port again to verify the transition
 in the same physical transaction; a key or boolean alone cannot forge delivery. Source owns the original/late
 locator and generation admission. Access reads no Source tables. An unavailable SQL receiver produces the typed
 `semantic-context-historical-party-receiver-unavailable` result. Unresolved receiving produces
 `semantic-context-historical-party-enrollment-pending`. Both preserve pending input, including creator and unknown
-roles. Non-Context occurrences are not applicable. No artifact, candidate, account token, deletion generation or
+roles. The immutable type classifies non-Context occurrences as `not-applicable` at insertion. Deferred delivery still locks the active home and validates each source. No artifact, candidate, account token, deletion generation or
 current DATA authority is synthesized.
 
 Each existing default `shared_history` work unit keysets one configured `core.partition` home and uses a genuine

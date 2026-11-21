@@ -1194,6 +1194,20 @@ END $$;
 
 
 --
+-- Name: classify_non_context_role_provenance(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.classify_non_context_role_provenance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.delivery := 'not-applicable';
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: close_membership_authority(integer, uuid, uuid, timestamp with time zone, uuid); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -6759,6 +6773,13 @@ CREATE TRIGGER resource_role_provenance_immutable BEFORE UPDATE ON access.resour
 --
 
 CREATE TRIGGER resource_role_provenance_new AFTER INSERT ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION access.capture_resource_role_provenance();
+
+
+--
+-- Name: resource_role_provenance resource_role_provenance_non_context; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER resource_role_provenance_non_context BEFORE INSERT ON access.resource_role_provenance FOR EACH ROW WHEN (((new.resource_type <> 'semantic.context'::text) AND (new.delivery = 'pending'::text))) EXECUTE FUNCTION access.classify_non_context_role_provenance();
 
 
 --
