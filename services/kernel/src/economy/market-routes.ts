@@ -54,7 +54,6 @@ const amount = t.String({ maxLength: 19, pattern: '^(?:0|[1-9][0-9]*)$' });
 const positive = t.String({ maxLength: 19, pattern: '^[1-9][0-9]*$' });
 const listingParams = t.Object({ listingId: marketId }, closed);
 const listingReceipt = t.Object({ listingId: marketId }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
 const revisionRequest = t.Object({ revision: amount }, closed);
 const listing = t.Object(
   {
@@ -116,6 +115,7 @@ export function economyMarketRoutes(
   app: ReturnType<typeof createApp>,
   deps: { pool: Pool; market?: EconomyMarketPort },
 ) {
+  const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
   async function run<Value>(ctx: MarketScope, work: (port: EconomyMarketPort, request: Request) => Promise<Value>) {
     const { actor, authorize, admission, job } = ctx;
     if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
