@@ -81,6 +81,7 @@ import releaseExists from '../../src/semantic/definitions-exists.sql';
 import releaseRead from '../../src/semantic/definitions-read.sql';
 import sourceDefine from '../../src/semantic/public-filter-source-binding-define.sql';
 import definitionRead from '../../src/semantic/public-filter-source-binding-definition.sql';
+import sourceLookup from '../../src/semantic/public-filter-source-binding-lookup.sql';
 import sourceRegister from '../../src/semantic/public-filter-source-binding-register.sql';
 import visibilityRead from '../../src/semantic/read-visibility.sql';
 import mappingOwners from '../../src/semantic/identity-epoch-read-owners.sql';
@@ -824,6 +825,12 @@ test.each([
       } else if (sql === releaseRead.sql || sql === releaseExists.sql) {
         expect(values).toEqual(['0', bundledDigest]);
         rows = [[sql === releaseRead.sql ? JSON.stringify(bundledRelease) : bundledDigest]];
+      } else if (sql === sourceLookup.sql) {
+        expect(values[sourceLookup.params.indexOf('route_digest')]).toBe(routeDigest);
+        expect(values[sourceLookup.params.indexOf('release_digest')]).toBe(bundledDigest);
+        const exact = capture !== undefined && capture === values[sourceLookup.params.indexOf('capture')]
+          && dependencies === values[sourceLookup.params.indexOf('dependency_keys')];
+        rows = exact ? [[definitionId, sourceId, sourceConfig, '1', bundledDigest, capture, dependencies]] : [];
       } else if (sql === sourceRegister.sql) {
         expect(values).toEqual([routeDigest]);
         rows = [[sourceId, sourceConfig, '1']];

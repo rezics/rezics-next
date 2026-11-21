@@ -38,6 +38,7 @@ import sourceMappingStep from './identity-epoch-store-select-step.sql';
 import sourceSupportInputs from './identity-source-support-inputs.sql';
 import sourceSupportOriginals from './identity-source-support-originals.sql';
 import sourceSupportGroups from './identity-source-support-groups.sql';
+import sourceBindingLookup from './public-filter-source-binding-lookup.sql';
 import sourceBindingRegister from './public-filter-source-binding-register.sql';
 import sourceBindingDefine from './public-filter-source-binding-define.sql';
 import sourceDefinitionRead from './public-filter-source-binding-definition.sql';
@@ -98,6 +99,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [sourceSupportInputs.sql, [2, 2, 1, 1024, 1]],
         [sourceSupportOriginals.sql, [1, 1, 1, 512, 1]],
         [sourceSupportGroups.sql, [1, 1, 1, 512, 1]],
+        [sourceBindingLookup.sql, [3, 10, 1, 32768, 3]],
         [sourceBindingRegister.sql, [1, 1, 1, 1024, 1]],
         [sourceBindingDefine.sql, [1, 1, 1, 32768, 1]],
         [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
