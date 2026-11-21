@@ -2379,7 +2379,20 @@ revision reopens the range, including empty/excluded captures and older incarnat
 Deploy the retained-copy directory migration before the matching erasure readers and capture writers.
 During this rollout the original scalar counter remains authoritative. Both reader versions see the same
 revision, and both writer versions take the original target write lock. Complete the erasure reader rollout
-before activating admission lanes.
+before applying the admission-lane activation migration.
+
+Activation gives each admission transaction one of 32 counter rows per target home. Each original native
+insert increments that row in the same transaction, including an independent prepared header and the
+observation that captures it. Reference acquisition, locator renewal, deletion and exact insert replay
+leave the watermark unchanged. The directory sums the original scalar and committed increments on the
+eraser's statement snapshot. Publication continues to fence actual copy admission and inspect native custody.
+
+After activation both capture writer versions can enroll. A pre-directory eraser that missed the rollout
+cannot read the renamed scalar and returns pending. To reverse activation, roll back the activation migration
+while the directory readers still serve. It drains admission, folds committed increments into the original
+scalar and restores the original writer lock and trigger atomically. An independent writer already holding
+a child table makes the cutover retry without a partial change. Roll back the directory migration only after
+rolling back the matching readers and writers.
 
 The native Account Discovery purge remains separate; its local cleanup no longer acknowledges all of Search.
 Personal recent/trending cleanup records its own progress; only the all-copy worker can send the final ACK.

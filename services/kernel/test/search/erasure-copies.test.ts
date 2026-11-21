@@ -27,7 +27,16 @@ async function fixture() {
     catalogue: { id: 'boundary', version: '1' },
     generator: { name: 'fixture', version: '1' },
     prefixes: {},
-    types: {},
+    types: {
+      'schema:Book': {
+        iri: 'https://schema.org/Book',
+        labels: { en: 'Book' },
+        mappings: [],
+        bases: [],
+        properties: [],
+        facets: [],
+      },
+    },
     properties: {},
   };
   const registered = await custody.register(

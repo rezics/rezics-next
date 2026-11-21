@@ -408,15 +408,11 @@ BEGIN
     WHERE partition_no=0 AND physical_target=target_name AND publication_fence IS NOT NULL) THEN
     RAISE EXCEPTION 'Search generation is fenced for native publication';
   END IF;
-  IF TG_TABLE_NAME='public_filter_registration' THEN
-    UPDATE search.public_filter_target SET copy_revision=copy_revision+1
-      WHERE partition_no=NEW.partition_no AND physical_target=NEW.physical_target;
-  ELSE
-    UPDATE search.public_filter_target t SET copy_revision=t.copy_revision+1
-      FROM search.public_filter_registration r
-      WHERE (r.partition_no,r.id)=(NEW.partition_no,NEW.registration)
-        AND (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target);
-  END IF;
+  -- Every native copy in this transaction uses one lane, including a batch of
+  -- observations and its independent prepared header. No lock order between lanes is needed.
+  INSERT INTO search.retained_copy_lane(partition_no,physical_target,lane,revision)
+    VALUES(NEW.partition_no,target_name,(hashtextextended(pg_current_xact_id()::text,0) & 31)::integer,1)
+  ON CONFLICT(partition_no,physical_target,lane) DO UPDATE SET revision=search.retained_copy_lane.revision+1;
   RETURN NEW;
 END $$;
 
@@ -599,7 +595,7 @@ CREATE FUNCTION search.lock_retained_copy_target(integer, text) RETURNS TABLE(pa
     LANGUAGE sql ROWS 1
     AS $_$
   SELECT t.partition_no,t.physical_target,t.incarnation FROM search.public_filter_target t
-  WHERE (t.partition_no,t.physical_target)=($1,$2) FOR NO KEY UPDATE
+  WHERE (t.partition_no,t.physical_target)=($1,$2) FOR SHARE
 $_$;
 
 
@@ -2224,7 +2220,7 @@ CREATE TABLE search.public_filter_target (
     partition_no integer NOT NULL,
     physical_target text NOT NULL COLLATE pg_catalog."C",
     incarnation text NOT NULL,
-    copy_revision bigint DEFAULT 1 NOT NULL,
+    base_copy_revision bigint DEFAULT 1 CONSTRAINT public_filter_target_copy_revision_not_null NOT NULL,
     CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
@@ -2700,7 +2696,7 @@ CREATE VIEW search.retained_copy_directory AS
  SELECT t.partition_no,
     t.physical_target,
     t.incarnation,
-    (((t.copy_revision)::numeric + COALESCE(l.increment, (0)::numeric)))::bigint AS copy_revision
+    (((t.base_copy_revision)::numeric + COALESCE(l.increment, (0)::numeric)))::bigint AS copy_revision
    FROM (search.public_filter_target t
      CROSS JOIN LATERAL ( SELECT sum(retained_copy_lane.revision) AS increment
            FROM search.retained_copy_lane
