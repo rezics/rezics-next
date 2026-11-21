@@ -14,6 +14,7 @@ import {
   nativeSourceForHeldPublication,
   readSearchWriterGenerationActions,
 } from './writer-guard.ts';
+import { matchSparseSubjectKeys, readSparseSubjectCut, SPARSE_SUBJECT_KEYS } from './generation-publication-sparse.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -57,7 +58,11 @@ import {
   assertNativeGenerationActionsVisible,
   GenerationReconciliationMismatch,
 } from './generations.ts';
-import { encodePublicFilterNativeState, readGenerationPublicationCustody } from './public-filter-custody.ts';
+import {
+  encodePublicFilterNativeState,
+  readGenerationPublicationCustody,
+  readWithPublicationWriterRepair,
+} from './public-filter-custody.ts';
 import {
   classifyGenerationCoverage,
   decodeGenerationPublicationQueried,
@@ -258,6 +263,7 @@ function bindingKey(definition: SearchPublicFilterSourceDefinition) {
 }
 type Job = {
   subscription_protocol: number;
+  subject_fenced_cut: Buffer | null;
   job: string;
   physical_target: string;
   consumer: PublicFilterConsumer;
@@ -301,7 +307,9 @@ export async function publishSubjectActivationMetadata(search: OpenSearch, index
       throw new Error('Generation activation mapping is missing or malformed');
     return meta;
   };
-  const metadata = { ...(await mapping()), name_sort_format: SUBJECT_SORT_FORMAT, activated_at: activatedAt };
+  const current = await mapping();
+  if (current.name_sort_format === SUBJECT_SORT_FORMAT && current.activated_at === activatedAt) return;
+  const metadata = { ...current, name_sort_format: SUBJECT_SORT_FORMAT, activated_at: activatedAt };
   await observedWrite(
     () => search.request('PUT', `/${index}/_mapping`, { _meta: metadata }),
     async () => same(await mapping(), metadata),
@@ -328,7 +336,14 @@ export function createSearchGenerationPublication(
   const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
   if (!nativeMeaning) requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, readPublicationCompletion, writerGuard, registry } = config;
-  bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion);
+  bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion, async (request, context) => {
+    // Reopen the exact terminal verification under the native Subject maintenance allowance.
+    // An outstanding ordinary write can only be repaired after releasing this fence.
+    const { result, writer } = await readWithPublicationWriterRepair(request.job, () =>
+      readPublicationCompletion(request, context),
+    );
+    return writer && result.status === 'pending' ? { ...result, advanced: false } : result;
+  });
   const meaning = nativeMeaning ? config.meaning : structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
@@ -882,7 +897,7 @@ export function createSearchGenerationPublication(
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
     return nativeSourceForHeldPublication(result);
   }
-  async function adoptHeld(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
+  async function adoptHeld(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
     let pin = await held(job, context, meter);
     await adopt(job, context, meter);
     if (!pin) {
@@ -895,14 +910,29 @@ export function createSearchGenerationPublication(
     const retained = jobPin(job);
     if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
     if (!retained) persistPin(job, pin);
+    if (job.subject_fenced_cut) {
+      const current = await sparseCut(job, client, context, meter);
+      if (!current || !current.digest.equals(job.subject_fenced_cut)) throw new Pending('source_pending');
+    }
     return pin.queried;
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
+    // A stale publication or a released/replaced writer must never commit a sparse frontier.
+    const gate =
+      job.subject_fenced_cut && job.fence
+        ? ` AND EXISTS (
+         SELECT FROM search.identity_writer_gate g JOIN core.partition p ON p.partition_no=0
+           AND p.write_state='active' AND p.epoch=g.owner_epoch
+         WHERE (g.partition_no,g.physical_target,g.incarnation,g.publication_job,g.publication_fence,
+                g.publication_consumer,g.publication_home) =
+               (0,j.physical_target,j.native_incarnation,j.job,$9::text::uuid,j.consumer,4096)
+           AND g.publication_after IS NULL FOR SHARE OF g,p)`
+        : '';
     const result = await client.query(
-      `UPDATE search.generation_publication SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
+      `UPDATE search.generation_publication AS j SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
        pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,
-       bootstrap=$16,queried=$17,execution=$18,revision=revision+1
-       WHERE partition_no=0 AND job=$1 AND revision=$2 RETURNING revision::text`,
+       bootstrap=$16,queried=$17,execution=$18,subject_fenced_cut=$19,revision=revision+1
+       WHERE j.partition_no=0 AND j.job=$1 AND j.revision=$2${gate} RETURNING j.revision::text`,
       [
         job.job,
         job.revision,
@@ -922,6 +952,7 @@ export function createSearchGenerationPublication(
         job.bootstrap,
         job.queried,
         job.execution,
+        job.subject_fenced_cut,
       ],
     );
     if (!result.rows[0]) throw new Pending('observation_lost');
@@ -1886,6 +1917,71 @@ export function createSearchGenerationPublication(
     await save(client, job, meter);
   }
 
+  function sparseCut(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+    // One lookahead over raw keys and their owners, five four-lane clocks,
+    // the receiver root and fixed job, membership and admission points.
+    const inputs = 2 * (SPARSE_SUBJECT_KEYS + 1) + 32;
+    if (meter.inputKeys + inputs > PUBLIC_FILTER_PREPARATION_INPUT_LIMIT) throw new Pending('dependency_unavailable');
+    meter.inputKeys += inputs;
+    meter.dependencyPoints += inputs;
+    // The bounded SQL statement, fixed-width native rows and digest operands.
+    meter[validationBytes] += SUBJECT_VALIDATION_SQL_BYTES + (SPARSE_SUBJECT_KEYS + 1) * SUBJECT_VALIDATION_ROW_BYTES;
+    return readSparseSubjectCut(client, validationSearch(context, meter), fence(job));
+  }
+
+  async function reconcileSparseSubject(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    const before = await sparseCut(job, client, context, meter);
+    if (!before) return false;
+    const transport = validationSearch(context, meter);
+    const refresh = await transport.request('POST', `/${job.physical_target}/_refresh`);
+    validateRefreshResponse(refresh.status, refresh.body);
+    const visible = new Set<string>();
+    for (const [partition, rows] of Map.groupBy(before.keys, (row) => row.home)) {
+      const page = await sourceKeys.read({ partition, after: null, inputLimit: rows.length + 1 }, context);
+      add(meter, page.cost);
+      const { epoch, position } = rows[0]!;
+      if (
+        page.status !== 'eligible' ||
+        !page.complete ||
+        page.partition !== partition ||
+        page.epoch !== epoch ||
+        page.position !== BigInt(position)
+      )
+        throw new Pending('source_pending');
+      if (!page.ids.length) continue;
+      meter.inputKeys += 3 * page.ids.length;
+      const actions = await readSearchWriterGenerationActions(writerGuard, partition, page.ids, page.position, () =>
+        validationWork(context, meter),
+      );
+      if (!actions) throw new Pending('source_pending');
+      for (const action of actions) if (action.op === 'index') visible.add(action.id);
+      meter.engineSearches++;
+      try {
+        meter.inputKeys += await assertNativeGenerationActionsVisible(transport, job.physical_target, actions);
+      } catch (error) {
+        if (error instanceof GenerationReconciliationMismatch) throw new Pending('source_pending');
+        throw error;
+      }
+    }
+    const matches = await matchSparseSubjectKeys(transport, job.physical_target, visible, (count) => {
+      meter.engineSearches++;
+      meter.engineIteratorSteps++;
+      meter.inputKeys += count;
+    });
+    if (!matches) throw new Pending('source_pending');
+    const current = await sparseCut(job, client, context, meter);
+    if (!current || !before.digest.equals(current.digest)) throw new Pending('source_pending');
+    job.subject_fenced_cut = current.digest;
+    job.phase = 'reconciled';
+    job.home = 4096;
+    return true;
+  }
+
   async function advance(
     job: Job,
     client: PoolClient,
@@ -2242,6 +2338,23 @@ export function createSearchGenerationPublication(
     await save(client, job, meter);
     bookPreparationTiming?.mark('writerFence');
   }
+  async function prepareIntent(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    queried: GenerationPublicationPin['queried'],
+  ) {
+    if (!job.observation) job.observation = queried.snapshot.observation;
+    const previous = await aliasTarget(job, context, meter);
+    if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
+    if (job.family === 'subjects') await publicationRefresh(job, context, meter, false);
+    job.previous_target = previous;
+    job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
+    job.activated_at = config.clock().toISOString();
+    job.phase = 'intent';
+    await save(client, job, meter);
+  }
   async function release(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     if (!job.fence) return;
     const result = await writerGuard.releasePublication(fence(job), context);
@@ -2292,6 +2405,7 @@ export function createSearchGenerationPublication(
     job.previous_uuid = null;
     // Indexed bounded invalidation: old home rows are replaced lazily as their native home is revisited.
     job.fenced_pass = false;
+    job.subject_fenced_cut = null;
     job.pass = (BigInt(job.pass) + 1n).toString();
     await save(client, job, meter);
   }
@@ -2533,6 +2647,12 @@ export function createSearchGenerationPublication(
                     continue;
                   }
                   const next = await completeSource(job, client, context, nextMeter, capture);
+                  if (next.complete && job.subscription_protocol === 1) {
+                    // This invocation holds the alias lock and just verified the original Source.
+                    // Retain the writer fence before yielding that completed settlement turn.
+                    await installFence(job, client, context, nextMeter);
+                    break;
+                  }
                   if (!next.sourceAdvanced || next.complete) break;
                   longest = Math.max(longest, Date.now() - nextStarted);
                 }
@@ -2561,29 +2681,49 @@ export function createSearchGenerationPublication(
               job.home = 0;
               job.after_id = null;
               job.after_route = null;
-              await save(client, job, meter);
               bookPreparationTiming?.mark('writerDrain');
+              if (
+                source &&
+                !registry &&
+                job.subscription_protocol === 1 &&
+                current === null &&
+                (options?.batchSource ||
+                  meter.inputKeys + 12 * SPARSE_SUBJECT_KEYS + 80 < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT)
+              ) {
+                // The drain paid for current Source completion. The bounded physical proof runs
+                // as its own turn under the same admission token, alias lock and absolute deadline.
+                const proofCost = options?.batchSource ? cost() : meter;
+                let matched = false;
+                try {
+                  matched = await reconcileSparseSubject(job, client, context, proofCost);
+                } catch (error) {
+                  if (
+                    !(error instanceof SearchUnavailableError) &&
+                    !(error instanceof Pending && error.reason === 'source_pending')
+                  )
+                    throw error;
+                }
+                if (matched) await prepareIntent(job, client, context, proofCost, source.queried);
+                else await save(client, job, meter);
+                return {
+                  ...preparing(matched ? 'activate' : 'step', true),
+                  ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
+                };
+              }
+              await save(client, job, meter);
               return preparing('step', true);
             }
             if (job.phase !== 'intent') {
-              const queried = await adoptHeld(job, context, meter);
-              if (!queried) throw new Pending('source_pending');
-              if (!job.observation) job.observation = queried.snapshot.observation;
-              const previous = await aliasTarget(job, context, meter);
-              if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
-              if (job.family === 'subjects') await publicationRefresh(job, context, meter, false);
-              job.previous_target = previous;
-              job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
-              job.activated_at = config.clock().toISOString();
-              job.phase = 'intent';
-              await save(client, job, meter);
+              const queried = await adoptHeld(job, client, context, meter);
+              await prepareIntent(job, client, context, meter, queried);
               return preparing('activate', true);
             }
             if (newerSubjectAlias(job, job.previous_target)) throw new Pending('source_pending');
             const before = await aliasTarget(job, context, meter);
             if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
-            if (before !== job.physical_target || job.family === 'subjects') await adoptHeld(job, context, meter);
+            if (before !== job.physical_target || job.family === 'subjects')
+              await adoptHeld(job, client, context, meter);
             if (job.family === 'subjects') {
               await publicationRefresh(job, context, meter, false);
               const activationSearch: OpenSearch = {
@@ -2614,7 +2754,7 @@ export function createSearchGenerationPublication(
               bookPreparationTiming?.mark('aliasWrite');
               if (job.family === 'subjects') return preparing('activate', true);
             }
-            if (job.family === 'discovery') await adoptHeld(job, context, meter);
+            if (job.family === 'discovery') await adoptHeld(job, client, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             bookPreparationTiming?.mark('aliasConfirmed');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.

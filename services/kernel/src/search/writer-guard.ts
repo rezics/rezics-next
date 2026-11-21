@@ -1058,7 +1058,13 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
   }>;
 
 // The generation owner installs the current native completion reader on its existing writer.
-const publicationReaders = new WeakMap<SearchWriterPublicationGuard, SearchNativePublicationCompletionReader>();
+const publicationReaders = new WeakMap<
+  SearchWriterPublicationGuard,
+  {
+    read: SearchNativePublicationCompletionReader;
+    readSubject: SearchNativePublicationCompletionReader | undefined;
+  }
+>();
 // Associate this held result with the native Source proof read by this invocation.
 const heldPublicationSources = new WeakMap<object, GenerationPublicationPin>();
 export function nativeSourceForHeldPublication(result: object): GenerationPublicationPin | undefined {
@@ -1067,8 +1073,9 @@ export function nativeSourceForHeldPublication(result: object): GenerationPublic
 export function bindSearchWriterPublicationReader(
   guard: SearchWriterPublicationGuard,
   reader: SearchNativePublicationCompletionReader,
+  subjectReader?: SearchNativePublicationCompletionReader,
 ) {
-  publicationReaders.set(guard, reader);
+  publicationReaders.set(guard, { read: reader, readSubject: subjectReader });
 }
 
 // Producer-private native readers retain the actual supplied Source/listing composition. This is
@@ -1339,8 +1346,8 @@ export function createSearchWriterGuard(options: {
     publicationDeadline(context);
     if (request.consumer.physicalTarget !== options.index || !/^[0-9a-f-]{36}$/.test(request.job))
       return pendingPublication();
-    const result = await tx.query<{ phase: string; family: string }>(
-      `SELECT phase,family FROM search.generation_publication WHERE partition_no=0 AND job=$1
+    const result = await tx.query<{ phase: string; family: string; subscription_protocol: number }>(
+      `SELECT phase,family,subscription_protocol FROM search.generation_publication WHERE partition_no=0 AND job=$1
        AND physical_target=$2 AND consumer=$3 AND native_incarnation=$4`,
       [request.job, options.index, request.consumer, request.consumer.incarnation],
     );
@@ -1355,23 +1362,28 @@ export function createSearchWriterGuard(options: {
     );
     publicationDeadline(context);
     if (erasure.rowCount !== 1) return pendingPublication();
-    return { ...erasure.rows[0]!, family: null };
+    return { ...erasure.rows[0]!, family: null, subscription_protocol: 0 };
   }
+  const settlingPublication = Symbol('settling publication');
   async function publicationSource(
     value: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
     cost: PublicationCost,
+    allowProgress: boolean,
   ) {
     // Finish the local snapshot before entering either native Source owner on the original Pool.
     const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value, context), context.deadline);
     publicationDeadline(context);
     if (!job.barrier) {
-      const readCompletion = publicationReaders.get(guard);
-      if (!readCompletion) return pendingPublication();
-      const completion = await readCompletion({ job: value.job }, context);
+      const readers = publicationReaders.get(guard);
+      if (!readers) return pendingPublication();
+      const read = (job.subscription_protocol === 1 && readers.readSubject) || readers.read;
+      const completion = await read({ job: value.job }, context);
       for (const key of Object.keys(cost) as (keyof SearchPublicFilterCost)[]) cost[key] += completion.cost[key];
       publicationDeadline(context);
       if (completion.status !== 'complete') {
+        if (allowProgress && job.subscription_protocol === 1 && completion.status === 'pending' && completion.advanced)
+          return settlingPublication;
         if ('reason' in completion && completion.reason === 'deadline') throw new PublicationPending('deadline');
         return pendingPublication();
       }
@@ -1562,8 +1574,9 @@ export function createSearchWriterGuard(options: {
     input: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
     cost: PublicationCost,
+    allowProgress = false,
   ) {
-    const publication = await publicationSource(input, context, cost);
+    const publication = await publicationSource(input, context, cost, allowProgress);
     await publicationPhysical(input, context);
     const row = await withReadTransaction(
       options.pool,
@@ -1667,7 +1680,9 @@ export function createSearchWriterGuard(options: {
         );
         publicationDeadline(context);
         if (before.publication_home === 4096) {
-          const source = await confirmDrainedPublication(input, context, cost);
+          const source = await confirmDrainedPublication(input, context, cost, true);
+          if (source === settlingPublication)
+            return { status: 'draining' as const, fence: input, cost, advanced: true };
           const result = { status: 'drained' as const, fence: input, cost };
           if (source) heldPublicationSources.set(result, source);
           return result;
@@ -1710,6 +1725,7 @@ export function createSearchWriterGuard(options: {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
         const publication = await confirmDrainedPublication(input, context, cost);
+        if (publication === settlingPublication) return pendingPublication();
         const result = { status: 'held' as const, fence: input, cost };
         if (publication) heldPublicationSources.set(result, publication);
         return result;

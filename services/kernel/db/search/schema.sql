@@ -2243,6 +2243,7 @@ CREATE TABLE search.generation_publication (
     execution text,
     ack_protocol smallint DEFAULT 0 NOT NULL,
     subscription_protocol smallint DEFAULT 0 NOT NULL,
+    subject_fenced_cut bytea,
     CONSTRAINT generation_publication_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
     CONSTRAINT generation_publication_bootstrap_check CHECK (((octet_length(bootstrap) >= 1) AND (octet_length(bootstrap) <= 4096))),
     CONSTRAINT generation_publication_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
@@ -2262,7 +2263,8 @@ CREATE TABLE search.generation_publication (
     CONSTRAINT generation_publication_pit_check CHECK ((octet_length(pit) <= 65536)),
     CONSTRAINT generation_publication_queried_check CHECK (((octet_length(queried) >= 1) AND (octet_length(queried) <= 262144))),
     CONSTRAINT generation_publication_revision_check CHECK ((revision > 0)),
-    CONSTRAINT generation_publication_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
+    CONSTRAINT generation_publication_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095))),
+    CONSTRAINT generation_publication_subject_fenced_cut_check CHECK ((octet_length(subject_fenced_cut) = 32))
 );
 
 
