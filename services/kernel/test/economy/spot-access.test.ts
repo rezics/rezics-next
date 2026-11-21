@@ -8,6 +8,7 @@ import type { SpotAccessPort } from '../../src/economy/spot-routes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { openBroadEconomyAdmission } from './fixtures/broad-admission.ts';
 
 const issuer = 'https://auth.spot.economy.test';
 const audience = 'https://api.rezics.test';
@@ -29,6 +30,7 @@ let readOnlyToken: string;
 let viewerToken: string;
 let secondToken: string;
 let ordinaryToken: string;
+let closeBroadAdmission: (() => Promise<void>) | undefined;
 
 function call(
   kernel: ReturnType<typeof createKernel>,
@@ -53,11 +55,11 @@ function call(
   );
 }
 
-async function grant(accountId: string, action = 'gate:economy', kind = 'identity') {
+async function grant(accountId: string, action = 'gate:economy') {
   await db.admin.query(
     `INSERT INTO access.resource_grant (route, resource_id, subject_id, subject_kind, action, valid, transaction_id)
-     VALUES (0, $1, $2, $3, $4, '(,)', $5)`,
-    [GLOBAL_CONTEXT.id, accountId, kind, action, Bun.randomUUIDv7()],
+     VALUES (0, $1, $2, 'identity', $3, '(,)', $4)`,
+    [GLOBAL_CONTEXT.id, accountId, action, Bun.randomUUIDv7()],
   );
 }
 
@@ -139,17 +141,16 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
-  await db?.close();
+  try {
+    await closeBroadAdmission?.();
+  } finally {
+    await db?.close();
+  }
 });
 
 test('spot instrument and order routes require a direct grant, matching client scope, and installed native book', async () => {
   await grant(ordinary, 'gate:any');
-  await grant('00000000-0000-0000-0000-000000000000', 'gate:economy', 'active_accounts');
-  await db.admin.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-     VALUES ('economy', tstzrange(statement_timestamp() - interval '1 second', NULL, '[)'), $1)`,
-    [Bun.randomUUIDv7()],
-  );
+  closeBroadAdmission = await openBroadEconomyAdmission(db.admin);
   for (const token of [undefined, ordinaryToken]) {
     expect((await call(closed, marketPath, token)).status).toBe(403);
     expect((await call(app, marketPath, token)).status).toBe(403);

@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { openBroadEconomyAdmission } from './fixtures/broad-admission.ts';
 
 const sender = newId(0x6201);
 const receiver = newId(0x6202);
@@ -56,6 +57,7 @@ let readOnlyToken: string;
 let ordinaryToken: string;
 let nativeSenderToken: string;
 let nativeReceiverToken: string;
+let closeBroadAdmission: (() => Promise<void>) | undefined;
 
 function request(path: string, token?: string, recipientId?: string, kernel = app) {
   return kernel.handle(
@@ -75,12 +77,12 @@ function request(path: string, token?: string, recipientId?: string, kernel = ap
   );
 }
 
-async function addGrant(accountId: string, action: string, kind = 'identity') {
+async function addGrant(accountId: string, action: string) {
   await db.admin.query(
     `INSERT INTO access.resource_grant
      (route, resource_id, subject_id, subject_kind, action, valid, transaction_id)
-     VALUES (0, $1, $2, $3, $4, '(,)', $5)`,
-    [GLOBAL_CONTEXT.id, accountId, kind, action, Bun.randomUUIDv7()],
+     VALUES (0, $1, $2, 'identity', $3, '(,)', $4)`,
+    [GLOBAL_CONTEXT.id, accountId, action, Bun.randomUUIDv7()],
   );
 }
 
@@ -139,7 +141,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db?.close();
+  try {
+    await closeBroadAdmission?.();
+  } finally {
+    await db?.close();
+  }
 });
 
 test('Economy admission, discovery and replay require the exact current account grant', async () => {
@@ -151,11 +157,7 @@ test('Economy admission, discovery and replay require the exact current account 
     }
   }
   await addGrant(ordinary, 'gate:any');
-  await addGrant('00000000-0000-0000-0000-000000000000', grant, 'active_accounts');
-  await db.admin.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ('economy', tstzrange(statement_timestamp() - interval '1 second', NULL, '[)'), $1)`,
-    [Bun.randomUUIDv7()],
-  );
+  closeBroadAdmission = await openBroadEconomyAdmission(db.admin);
   for (const token of [undefined, ordinaryToken, senderToken]) {
     for (const [suffix, recipientId] of [
       ['', undefined],
