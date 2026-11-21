@@ -22,6 +22,7 @@ test('worker configuration names invalid variables without revealing values', ()
     'shared_history',
     'rating',
     'commerce',
+    'economy',
     'library',
     'community',
     'semantic',
