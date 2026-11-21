@@ -39,6 +39,8 @@ const lifetimeOptions = {
 
 /** One scalar operational frontier. It never stores public rows, permissions, cuts or coverage. */
 export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefix: string) {
+  // The sweep position is a scheduling hint. The native lease, revision and workflow remain authoritative.
+  let sweep: Readonly<{ through: number; due: string; id: string }> | undefined;
   const schedule = (locator: PreparationLocator) =>
     locator.kind === 'repair' && locator.job.consumer.physicalTarget.startsWith(`${prefix}discovery-g`)
       ? 'discovery'
@@ -199,22 +201,33 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       });
     },
     async due(deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS)): Promise<void> {
-      await transaction(deadline, async (client) => {
-        // CASE reads the uncleared lease; later SET assignments see earlier ones.
-        const rows = await client.query<{ id: string; revision: string; kind: ReturnType<typeof schedule> }>(
-          `
-          UPDATE search.public_preparation
-          SET revision = CASE WHEN lease_until > 0 THEN revision + 1 ELSE revision END,
-            lease_until = 0
-          WHERE (partition_no, id) IN (SELECT partition_no, id FROM search.public_preparation
-          WHERE partition_no = 0 AND prefix = $1 AND due_at <= $2 AND lease_until <= $2
-          ORDER BY due_at, id LIMIT 16 FOR UPDATE SKIP LOCKED)
-          RETURNING id, revision::text, CASE WHEN kind='repair' AND
-            starts_with(locator #>> '{job,consumer,physicalTarget}', $1 || 'discovery-g')
-            THEN 'discovery' ELSE kind END AS kind`,
-          [prefix, Date.now()],
+      const previous = sweep;
+      const now = Date.now();
+      const through = previous?.through ?? now;
+      const next = await transaction(deadline, async (client) => {
+        const rows = await client.query<{
+          id: string;
+          due: string;
+          revision: string;
+          kind: ReturnType<typeof schedule>;
+        }>(
+          `WITH candidates AS MATERIALIZED (
+             SELECT partition_no,id,due_at,revision,lease_until,CASE WHEN kind='repair' AND
+               starts_with(locator #>> '{job,consumer,physicalTarget}', $1 || 'discovery-g')
+               THEN 'discovery' ELSE kind END AS kind
+             FROM search.public_preparation
+             WHERE partition_no=0 AND prefix=$1 AND due_at<=$2 AND lease_until<=$3
+               ${previous ? 'AND (due_at,id)>($4::bigint,$5::uuid)' : ''}
+             ORDER BY due_at,id LIMIT 16 FOR UPDATE SKIP LOCKED
+           ), expired AS (
+             UPDATE search.public_preparation p SET revision=p.revision+1,lease_until=0
+             FROM candidates c WHERE (p.partition_no,p.id)=(c.partition_no,c.id) AND c.lease_until>0
+             RETURNING p.id,p.revision
+           ) SELECT c.id,c.due_at::text AS due,COALESCE(e.revision,c.revision)::text AS revision,c.kind
+             FROM candidates c LEFT JOIN expired e USING(id) ORDER BY c.due_at,c.id`,
+          previous ? [prefix, through, now, previous.due, previous.id] : [prefix, through, now],
         );
-        if (rows.rows.length === 0) return;
+        if (!rows.rows.length) return;
         const deliveries = rows.rows.map((row) => ({ row, delivery: intent(row.id, row.revision, row.kind) }));
         const existing = await client.query<{ workflow_uuid: string; terminal: boolean }>(
           `SELECT workflow_uuid, status = ANY($4::text[]) AS terminal
@@ -245,7 +258,12 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
             await enqueueWorkIntent(work, client, intent(row.id, next.rows[0]!.revision, row.kind));
           }
         }
+        // A fixed due time keeps new arrivals from extending the sweep indefinitely.
+        // Commit the sealed page before advancing; another discoverer can safely replay it.
+        const tail = rows.rows.at(-1)!;
+        return rows.rows.length === 16 ? { through, due: tail.due, id: tail.id } : undefined;
       });
+      if (sweep === previous) sweep = next;
     },
   };
 }

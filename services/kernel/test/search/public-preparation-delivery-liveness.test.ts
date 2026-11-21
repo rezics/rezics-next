@@ -213,8 +213,9 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
   let claimed: PreparationRecord | null = null;
   const live = createSearchServiceGate<Runner>(unavailable);
   live.offer({
-    async run(id, revision) {
-      claimed = await store.claim(id, revision, Date.now() + 30_000);
+    async run(delivered, revision) {
+      const current = await store.claim(delivered, revision, Date.now() + 30_000);
+      if (delivered === id) claimed = current;
     },
   });
   let ready = stopped.ready;
@@ -240,7 +241,22 @@ test('a terminal pre-claim population delivery gets one fresh claim after restar
     const originalSteps = await work.listWorkflowSteps(originalId);
     expect(originalSteps?.some((step) => step.error)).toBe(true);
 
-    await Promise.all([store.due(), store.due()]);
+    // The stopped worker leaves older live maintenance deliveries at the front. An
+    // unwitnessed terminal population behind a full discovery page must still recover.
+    const queued = await Promise.all(
+      Array.from({ length: 20 }, async () => {
+        const job = repairJob();
+        return track(await store.retain({ kind: 'repair', key: job.job, job }, Date.now() + 86_400_000));
+      }),
+    );
+    await pool.query(
+      `UPDATE search.public_preparation SET due_at=$2 WHERE partition_no=0 AND prefix=$1 AND id=ANY($3::uuid[])`,
+      [owner, BigInt(original.due_at) - 1n, queued],
+    );
+    const restarted = createPublicPreparationStore(pool, work, owner);
+    await restarted.due();
+    expect((await read(owner, id))?.revision).toBe(original.revision);
+    await Promise.all([restarted.due(), restarted.due()]);
     const renewed = (await read(owner, id))!;
     expect(renewed).toEqual({ ...original, revision: String(BigInt(original.revision) + 1n) });
     const renewedId = identity(id, renewed.revision, 'population');
