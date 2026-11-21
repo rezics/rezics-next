@@ -1109,6 +1109,23 @@ END; $$;
 
 
 --
+-- Name: capture_erased_search_count(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erased_search_count() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP<>'INSERT' AND (TG_OP='DELETE' OR (OLD.route,OLD.subject_id)<>(NEW.route,NEW.subject_id)) THEN
+    PERFORM semantic.refresh_erased_search_count(OLD.route,OLD.subject_id);
+  END IF;
+  IF TG_OP<>'DELETE' THEN PERFORM semantic.refresh_erased_search_count(NEW.route,NEW.subject_id); END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
 -- Name: capture_erasure_roles(integer, text, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2214,6 +2231,21 @@ BEGIN
  
  RETURN NEW;
 END; $$;
+
+
+--
+-- Name: capture_search_agent_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_search_agent_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM semantic.refresh_erased_search_count(NEW.route,semantic.personal_agent_id(NEW.account_id));
+  PERFORM nextval('semantic.search_canonical_generation');
+  RETURN NULL;
+END
+$$;
 
 
 --
@@ -4084,6 +4116,25 @@ $$;
 
 
 --
+-- Name: personal_agent_id(uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.personal_agent_id(account uuid) RETURNS uuid
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  WITH seed AS (
+    SELECT substring(sha256(uuid_send('fb3a9d35-804c-4d22-b317-260c05382a41'::uuid)
+                            || account::text::bytea) FROM 1 FOR 16) AS bytes
+  )
+  SELECT encode(set_byte(set_byte(set_byte(set_byte(bytes,
+    6, (get_byte(bytes,6) & 15) | 128),
+    8, (get_byte(bytes,8) & 63) | 128),
+    10, get_byte(uuid_send(account),10)),
+    11, get_byte(uuid_send(account),11)), 'hex')::uuid FROM seed
+$$;
+
+
+--
 -- Name: prepare_identity_epoch_admission(integer, uuid, bigint, text); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5115,6 +5166,32 @@ $$;
 
 
 --
+-- Name: refresh_erased_search_count(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.refresh_erased_search_count(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT semantic.search_agent_erased(r,id) THEN RETURN; END IF;
+  IF EXISTS(SELECT 1 FROM semantic.subject s WHERE (s.route,s.subject_id)=(r,id) AND s.visibility='visible')
+     AND (SELECT d.target FROM semantic.redirect d WHERE (d.route,d.subject_id)=(r,id)
+          ORDER BY d.sequence DESC LIMIT 1) IS NULL THEN
+    INSERT INTO semantic.search_erased_visible VALUES(r,id) ON CONFLICT DO NOTHING;
+    IF FOUND THEN
+      UPDATE semantic.partition_subjects SET erased_visible=erased_visible+1 WHERE partition_no=r/16;
+    END IF;
+  ELSE
+    DELETE FROM semantic.search_erased_visible WHERE (route,subject_id)=(r,id);
+    IF FOUND THEN
+      UPDATE semantic.partition_subjects SET erased_visible=erased_visible-1 WHERE partition_no=r/16;
+    END IF;
+  END IF;
+END
+$$;
+
+
+--
 -- Name: require_record_source_member(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5579,6 +5656,19 @@ BEGIN
  UPDATE semantic.record_source_set SET sealed=true,members=n,digest=calculated
  WHERE partition_no=p_home AND transaction_id=p_tx;
 END; $_$;
+
+
+--
+-- Name: search_agent_erased(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_agent_erased(r integer, id uuid) RETURNS boolean
+    LANGUAGE sql STABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT CASE WHEN get_byte(uuid_send(id),6)>>4=8 THEN coalesce((
+    SELECT true FROM access.erasure e WHERE e.route=r AND semantic.personal_agent_id(e.account_id)=id LIMIT 1
+  ),false) ELSE false END
+$$;
 
 
 --
@@ -10163,10 +10253,12 @@ CREATE TABLE semantic.partition_subjects (
     canonical_delivered_generation bigint DEFAULT 0 NOT NULL,
     canonical_announced_generation bigint DEFAULT 0 NOT NULL,
     canonical_empty_seed boolean DEFAULT false NOT NULL,
+    erased_visible bigint DEFAULT 0 NOT NULL,
     CONSTRAINT partition_subjects_canonical_announcement_check CHECK (((canonical_announced_generation >= 0) AND (canonical_announced_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
     CONSTRAINT partition_subjects_canonical_delivery_check CHECK (((canonical_delivered_generation >= 0) AND (canonical_delivered_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_generation_check CHECK ((canonical_generation > 0)),
+    CONSTRAINT partition_subjects_erased_visible_check CHECK ((erased_visible >= 0)),
     CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
 );
@@ -10966,6 +11058,16 @@ CREATE SEQUENCE semantic.search_canonical_generation
 
 
 --
+-- Name: search_erased_visible; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_erased_visible (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL
+);
+
+
+--
 -- Name: search_relation_probe; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -11046,6 +11148,47 @@ CREATE TABLE semantic.search_selection_state (
 
 
 --
+-- Name: subject; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    type text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    visibility text DEFAULT 'visible'::text NOT NULL,
+    security_revision bigint DEFAULT 0 NOT NULL,
+    current_facts integer DEFAULT 0 NOT NULL,
+    current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
+    projection_pending boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    canonical_name text COLLATE pg_catalog."C",
+    CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
+    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
+    CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: search_subject; Type: VIEW; Schema: semantic; Owner: -
+--
+
+CREATE VIEW semantic.search_subject AS
+ SELECT route,
+    subject_id,
+    type,
+    current_release,
+    security_revision,
+        CASE
+            WHEN semantic.search_agent_erased(route, subject_id) THEN 'hidden'::text
+            ELSE visibility
+        END AS visibility
+   FROM semantic.subject s;
+
+
+--
 -- Name: source_candidate; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -11094,30 +11237,6 @@ CREATE TABLE semantic.statement_disclosure (
     source_order_key text NOT NULL COLLATE pg_catalog."C",
     target_order_key text NOT NULL COLLATE pg_catalog."C",
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
-);
-
-
---
--- Name: subject; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    type text NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    visibility text DEFAULT 'visible'::text NOT NULL,
-    security_revision bigint DEFAULT 0 NOT NULL,
-    current_facts integer DEFAULT 0 NOT NULL,
-    current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
-    projection_pending boolean DEFAULT false NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    canonical_name text COLLATE pg_catalog."C",
-    CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
-    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
-    CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
 );
 
 
@@ -13463,6 +13582,14 @@ ALTER TABLE ONLY semantic.retraction
 
 ALTER TABLE ONLY semantic.revision
     ADD CONSTRAINT revision_pkey PRIMARY KEY (route, subject_id, revision);
+
+
+--
+-- Name: search_erased_visible search_erased_visible_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_erased_visible
+    ADD CONSTRAINT search_erased_visible_pkey PRIMARY KEY (route, subject_id);
 
 
 --
@@ -17540,6 +17667,13 @@ CREATE TRIGGER redirect_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON
 
 
 --
+-- Name: redirect redirect_erased_search_count; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER redirect_erased_search_count AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_erased_search_count();
+
+
+--
 -- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -17794,6 +17928,13 @@ ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cu
 CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON semantic.public_filter_privacy_head FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
 
 ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_truncated;
+
+
+--
+-- Name: subject subject_erased_search_count; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_erased_search_count AFTER INSERT OR DELETE OR UPDATE OF visibility, route, subject_id ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_erased_search_count();
 
 
 --

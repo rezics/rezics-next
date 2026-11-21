@@ -700,18 +700,21 @@ function sourceFactory(
             const mapping = detail.original ? await mappingOf(detail.original) : null;
             if (detail.original && mapping?.state !== 'mapped') return pendingPage(budget);
             const observe = !!detail.original && originalHome === next.source_partition;
-            const holdBody = observe ? HOLD_OBSERVE_BODY : HOLD_ROLE_BODY;
+            // Only derived (v8) originals can probe the native account-erasure index.
+            const erasurePoint = detail.original?.[14] === '8' ? 1 : 0;
+            const holdBody = observe ? HOLD_OBSERVE_BODY + erasurePoint : HOLD_ROLE_BODY;
+            const crossBody = HOLD_CROSS_BODY + erasurePoint;
             const fence = effectFence();
             budget.afford(
               fence.keys +
                 holdBody +
-                (cross ? fence.keys + HOLD_CROSS_BODY : 0) +
+                (cross ? fence.keys + crossBody : 0) +
                 READ_BODY * (cross ? 2 : 1) +
                 (detail.original ? READ_BODY : 0) +
                 fence.keys +
                 TRANSFER_BODY,
               fence.bytes * (cross ? 3 : 2) +
-                bodyBytes(holdBody + (cross ? HOLD_CROSS_BODY : 0) + TRANSFER_BODY) +
+                bodyBytes(holdBody + (cross ? crossBody : 0) + TRANSFER_BODY) +
                 bodyBytes(READ_BODY * (cross ? 2 : 1) + (detail.original ? READ_BODY : 0)),
             );
             const observeOriginal = async (
@@ -900,7 +903,7 @@ function sourceFactory(
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(originalHome, HOLD_CROSS_BODY, async (tx) => {
+              sourceHeld = await command<HeldRecord>(originalHome, crossBody, async (tx) => {
                 const seal = await tx.query(
                   `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                   [originalHome, barrier.accountId, barrier.version, barrier.at],

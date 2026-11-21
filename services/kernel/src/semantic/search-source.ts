@@ -20,6 +20,7 @@ import {
   requireAccessDeadline,
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
+import { withoutErasedStatementAgents } from './search-statement-attribution.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
@@ -324,11 +325,13 @@ export function subjectSource(
           for (const values of termRows.values())
             values.sort((left, right) => ASCII(left.slot_id, right.slot_id) || left.log_seq - right.log_seq);
           const indexed = new Map<string, Map<string, { ordinal: number; statement: IndexedStatement }[]>>();
-          for (const row of statements) {
+          const descriptive = statements.flatMap((row) => {
             const release = releases.get(row.release);
             if (!release) throw new Error(`Statement definition release ${row.release} is missing`);
             const statement = indexedStatement(row, release);
-            if (!statement) continue;
+            return statement ? [{ row, release, statement }] : [];
+          });
+          for (const { row, statement } of await withoutErasedStatementAgents(client, descriptive)) {
             const properties = indexed.get(row.subject_id) ?? new Map();
             const values = properties.get(row.property) ?? [];
             values.push({ ordinal: row.ordinal, statement });

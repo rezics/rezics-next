@@ -27,7 +27,7 @@ export const lockProjectionBuildForHeadsSql = `SELECT 1 FROM semantic.public_fil
 /** The original subject, projection revision and completed dependency tail in one snapshot. */
 export const verifyCompletedPublicFilterProjectionSql = `SELECT 1
  FROM semantic.public_filter_projection_build b
- JOIN semantic.subject s ON (s.route,s.subject_id)=($2,$3)
+ JOIN semantic.search_subject s ON (s.route,s.subject_id)=($2,$3)
   AND s.visibility='visible' AND s.security_revision=b.security_revision AND s.current_release=b.current_release
  JOIN semantic.search_selection_state selected ON (selected.route,selected.subject_id)=($2,$3)
   AND selected.ready

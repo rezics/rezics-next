@@ -5700,6 +5700,13 @@ CREATE INDEX erasure_organization_member_organization_id ON access.organization_
 
 
 --
+-- Name: erasure_personal_agent; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX erasure_personal_agent ON access.erasure USING btree (route, semantic.personal_agent_id(account_id));
+
+
+--
 -- Name: erasure_previous_operator_id_approval; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -6767,6 +6774,13 @@ CREATE TRIGGER resource_role_provenance_old BEFORE DELETE ON access.resource_rol
 --
 
 CREATE TRIGGER resource_role_publication_authority AFTER INSERT OR DELETE OR UPDATE ON access.resource_role_grant FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
+-- Name: erasure search_agent_erasure; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER search_agent_erasure AFTER INSERT ON access.erasure FOR EACH ROW EXECUTE FUNCTION semantic.capture_search_agent_erasure();
 
 
 --

@@ -437,6 +437,15 @@ Search stores distinct record classes:
 | Future preparation/retention | No Search-owned saved personal query, prepared result population or retained personal observation store currently exists. Inventory a physically introduced store and its producer-owned locators before release; do not claim deletion of hypothetical stores. Existing progress metadata is covered above.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Shared artifacts             | Receipts, outbox events, editorial provenance and DBOS workflow/step payloads belong to shared-store minimizers under [Deletion item 4](../../../../docs/deletion.md#account-erasure) and their native exact-locator contract. Search producers must enroll exact personal-copy locators atomically; Search cannot attest those shared payloads erased, scan their JSON or replace their owner's minimizer.                                                                                                                                                                                                                                                                                                                                                        |
 
+Semantic excludes the original personal agent from Search as soon as Access commits the account erasure.
+The ordinary writer, rebuild key pages and Source receipt observations use the same indexed decision.
+Verification can move a backlink to an independent catalogue subject, so the lookup uses the original
+derived agent ID. Eligible contributions keep their public terms and unrelated statements. Relation targets,
+credited names, descriptive item values and qualifiers omit attribution to the erased agent.
+A partition counter tracks visible excluded originals for count reads. Statement projection checks only
+the native item IDs in its admitted window, in batches of at most 256. The physical cleanup and receipt
+contract below still applies to every affected generation.
+
 ### Native account participant
 
 Search must register a durable effect through the actual default `searchWorkModule` on

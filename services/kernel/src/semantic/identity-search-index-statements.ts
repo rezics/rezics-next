@@ -6,6 +6,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { readRelease } from './definition-release-read.ts';
+import { withoutErasedStatementAgents } from './search-statement-attribution.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
 import { relationSource } from './search-relations.ts';
@@ -140,9 +141,14 @@ export async function readCanonicalIndexStatements(
     releases.set(digest, rowRelease);
   }
   const properties = new Map<string, { ordinal: number; statement: IndexedStatement }[]>();
-  for (const row of visible.filter((row) => !row.relation && !row.concealed)) {
-    const statement = indexedStatement(row, releases.get(row.release)!);
-    if (!statement) continue;
+  const descriptive = visible
+    .filter((row) => !row.relation && !row.concealed)
+    .flatMap((row) => {
+      const release = releases.get(row.release)!;
+      const statement = indexedStatement(row, release);
+      return statement ? [{ row, release, statement }] : [];
+    });
+  for (const { row, statement } of await withoutErasedStatementAgents(tx, descriptive)) {
     const values = properties.get(row.property) ?? [];
     values.push({ ordinal: row.ordinal, statement });
     properties.set(row.property, values);

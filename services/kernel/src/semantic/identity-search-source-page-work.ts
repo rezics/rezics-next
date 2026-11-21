@@ -18,6 +18,7 @@ import mappingOwners from './identity-epoch-read-owners.sql';
 import mappingSources from './identity-epoch-read-sources.sql';
 import mappingPending from './identity-epoch-read-pending.sql';
 import mappingCurrent from './identity-terminal-closure-current.sql';
+import { erasedStatementAgentsSql, STATEMENT_AGENT_PAGE } from './search-statement-attribution.ts';
 import projectionSubjects from './search-source-subjects.sql';
 import relatedVisibility from './read-subject-related-states.sql';
 import provenance from './scope-leaf-selection-provenance.sql';
@@ -562,6 +563,27 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       declare(inputs.sql, [maxHome, maxId], (values) =>
         values.length === 2 && jobHome(values[0], values[1]) ? indexedRead(inputs.sql, values) : undefined,
       ),
+      declare(erasedStatementAgentsSql, [Array(STATEMENT_AGENT_PAGE).fill(maxId)], (values) => {
+        const ids = values[0];
+        if (
+          values.length !== 1 ||
+          !Array.isArray(ids) ||
+          !ids.length ||
+          ids.length > STATEMENT_AGENT_PAGE ||
+          !ids.every(uuid)
+        )
+          return undefined;
+        return Object.freeze({
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: ids.length,
+          nativePoints: ids.length,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: 128 * ids.length + 512,
+          emptySeeks: ids.length,
+        });
+      }),
       declare(
         projectionSubjects.sql,
         [
@@ -593,15 +615,15 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
             )
           )
             return undefined;
-          // Each requested key reads Subject, selection state, its latest redirect and its latest revision.
+          // Each requested key reads Subject, selection state, its latest redirect, latest revision and personal-agent erasure.
           return Object.freeze({
             candidateKeys: 0,
             identityMetadataRows: 0,
-            nativeRows: 4 * subjects.length,
-            nativePoints: 4 * subjects.length,
+            nativeRows: 5 * subjects.length,
+            nativePoints: 5 * subjects.length,
             witnessKeys: 0,
             statements: 1,
-            bytes: 16384 * subjects.length,
+            bytes: 16385 * subjects.length,
             emptySeeks: 1,
           });
         },

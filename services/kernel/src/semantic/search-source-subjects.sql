@@ -21,7 +21,7 @@ CROSS JOIN input
 JOIN LATERAL (
   SELECT subject.route, subject.subject_id, subject.type, subject.visibility,
          subject.security_revision, subject.current_release
-  FROM semantic.subject subject
+  FROM semantic.search_subject subject
   CROSS JOIN input
   WHERE subject.route = requested.route AND subject.subject_id = requested.subject_id
     AND subject.route >= input.partition_no * 16
