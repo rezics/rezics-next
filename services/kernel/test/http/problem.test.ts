@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
+import {
+  CommandCommitUncertainError,
+  CommandUnavailableError,
+} from '../../src/command/command.ts';
 import { RealmLastOwnerError } from '../../src/access/realm-ownership.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
@@ -106,5 +110,17 @@ test('generic errors and unavailability never acquire the last-owner discriminat
     expect(body.code).toBe(error instanceof AccessUnavailableError ? 'overloaded' : 'internal_error');
     expect(body.effect_status).toBe('not_applied');
     expect(body).not.toHaveProperty('detail');
+  }
+});
+
+test('a lost native commit reply preserves the unknown effect and the original deadline classification', async () => {
+  for (const [error, code, effect] of [
+    [new CommandCommitUncertainError(1, new CommandUnavailableError('deadline', 1)), 'deadline_exceeded', 'unknown'],
+    [new CommandCommitUncertainError(1, new Error('lost COMMIT response')), 'internal_error', 'unknown'],
+  ] as const) {
+    const response = problemResponse(error, { method: 'POST', id: 'create' });
+    const body = await response.json();
+    expect(body).toMatchObject({ code, effect_status: effect });
+    expect(Value.Check(problemSchema(code), body)).toBe(true);
   }
 });

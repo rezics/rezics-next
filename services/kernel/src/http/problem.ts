@@ -20,7 +20,12 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError } from 'elysia';
-import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
+import {
+  CommandCommitUncertainError,
+  CommandResultErasedError,
+  IdempotencyConflictError,
+  TooManyEventsError,
+} from '../command/command.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 import { SubjectProjectionPreparingError } from '../semantic/contract/subject-errors.ts';
@@ -181,6 +186,8 @@ export function problemResponse(
     headers.set('www-authenticate', error.challenge);
   } else if (error instanceof IdempotencyConflictError) {
     code = 'idempotency_conflict';
+  } else if (error instanceof CommandCommitUncertainError) {
+    if (classifyUnavailability(error.cause) === 'deadline') code = 'deadline_exceeded';
   } else if (error instanceof CommandResultErasedError) {
     code = 'command_result_erased';
   } else if (error instanceof TooManyEventsError) {
@@ -243,9 +250,11 @@ export function problemResponse(
       ? 'not_applied'
       : applied || error instanceof CommandResultErasedError
         ? 'applied'
-        : error instanceof ProblemError && error.effectStatus
-          ? error.effectStatus
-          : effectStatus(context.method, context.action, code),
+        : error instanceof CommandCommitUncertainError
+          ? 'unknown'
+          : error instanceof ProblemError && error.effectStatus
+            ? error.effectStatus
+            : effectStatus(context.method, context.action, code),
     request_id: context.id,
     ...(lastOwner || detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),
