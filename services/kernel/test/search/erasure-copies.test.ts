@@ -1,9 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
-import { RELEASE_FORMAT, releaseDigest } from '@rezics/definitions';
+import { releaseDigest } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createPublicFilterCustody, stepRetainedObservationErasure } from '../../src/search/public-filter-custody.ts';
-import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
 import type { PublicFilterQueriedObservation } from '../../src/search/public-filter-consumer-contract.ts';
 
 // Focused native copy outcomes. These do not substitute for sealed all-role participant acceptance.
@@ -22,14 +22,6 @@ async function fixture() {
   const index = `erasure-copy-${crypto.randomUUID()}`;
   await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
   indices.push(index);
-  const release: CustodyDefinition['meaning']['release'] = {
-    format: RELEASE_FORMAT,
-    catalogue: { id: 'boundary', version: '1' },
-    generator: { name: 'fixture', version: '1' },
-    prefixes: {},
-    types: {},
-    properties: {},
-  };
   const registered = await custody.register(
     {
       physicalTarget: index,
@@ -38,7 +30,7 @@ async function fixture() {
       definition: {
         source: { id: crypto.randomUUID(), partition: 7, epoch: 1, configuration: 'native-boundary-fixture' },
         readDefinition: crypto.randomUUID(),
-        meaning: { digest: releaseDigest(release), release },
+        meaning: { digest: releaseDigest(bundledRelease), release: bundledRelease },
         capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20 },
         dependencyKeys: [{ kind: 'order', order: 'id' }],
       },
