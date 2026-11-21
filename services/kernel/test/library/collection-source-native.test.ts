@@ -110,3 +110,29 @@ test('native Collection source primitives preserve current source authority and 
     }),
   ).rejects.toThrow();
 });
+
+test('native public Collection authorizes an anonymous caller at the same mounted source', async () => {
+  const actor = await native.identity(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
+  const r = await native.send(actor.bearer, 'POST', '/v1/collections', {
+    title: 'Public native check',
+    visibility: 'public',
+  });
+  expect(r.status).toBe(201);
+  const id = (await r.json()).collection.id;
+  const deadline = Date.now() + 30000;
+  const { metadata } = await readNativeCollectionMetadata(
+    native.pool,
+    { route: routeOf(id)!, collectionId: id },
+    { deadline, allowance: allowance() },
+  );
+  expect(metadata?.visibility).toBe('public');
+  const at = await withConnection(native.pool, (c) => mintReadTime(c, () => new Date()));
+  const result = await authorizeNativeCollectionMetadata(native.pool, metadata!, {
+    access: native.access,
+    actor: { kind: 'anonymous' },
+    at,
+    deadline,
+    allowance: allowance(),
+  });
+  expect(result.authorized).toBe(true);
+});

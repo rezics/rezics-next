@@ -50,6 +50,7 @@ import type { NativeOrdinalKey, NativeOrdinalRow } from './collection-source-ord
 import partitionRead from '../partition/read.sql';
 import permissionTime from '../access/permission-time.sql';
 import inverse from '../access/permission-inverse.sql';
+import anonymousPermissions from '../access/permission-check-anonymous.sql';
 import candidates from '../access/permission-candidates.sql';
 import emptyCandidates from '../access/permission-candidates-empty.sql';
 import permissions from '../access/permission-check.sql';
@@ -395,6 +396,14 @@ function costs() {
       register(membership.sql, fixed(32, 5, 1024));
       // PostgreSQL folds the dependency-bound empty inverse to one Result and visits no ACL rows.
       register(emptyCandidates.sql, fixed(1, 0, 0));
+      // Anonymous decisions scan only the supplied UUIDs and return one fixed-width decision per distinct target.
+      register(anonymousPermissions.sql, (values) => {
+        const ids = values[anonymousPermissions.params.indexOf('resource_ids')];
+        const targets = Array.isArray(ids)
+          ? ids.length
+          : (types.getTypeParser(1009 as Parameters<typeof types.getTypeParser>[0])(String(ids)) as unknown[]).length;
+        return { nativeRows: 8 * targets + 4, nativePoints: 0, bytes: 2048 * targets };
+      });
       for (const query of [candidates, permissions])
         register(query.sql, (values) => {
           const params = Object.fromEntries(query.params.map((name, i) => [name, values[i]]));
