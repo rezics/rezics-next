@@ -542,7 +542,8 @@ export function createSearchGenerationPublication(
     meter.dependencyPoints += inputLimit;
     meter[validationBytes] += byteLimit;
     meter.resultWrites += 34;
-    meter.frontierWrites++;
+    const ranges = Math.floor(inputLimit / 64);
+    meter.frontierWrites += ranges;
     const ack = await client.query<{
       points: number;
       proof_bytes: number;
@@ -554,7 +555,7 @@ export function createSearchGenerationPublication(
     meter.dependencyPoints -= inputLimit - page.points;
     meter[validationBytes] -= byteLimit - page.proof_bytes;
     meter.resultWrites -= 34 - page.result_writes;
-    meter.frontierWrites -= 1 - page.range_writes;
+    meter.frontierWrites -= ranges - page.range_writes;
     return page.range_writes > 0;
   }
 

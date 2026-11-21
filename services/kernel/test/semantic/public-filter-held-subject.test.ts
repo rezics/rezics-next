@@ -17,6 +17,7 @@ import {
   readHeldQuietCommands,
   readPublicFilterCreationWindow,
 } from '../../src/semantic/public-filter-creation-window.ts';
+import { readHeldQuietRange } from '../../src/semantic/public-filter-held-quiet-range.ts';
 import { identityEpochDatabase } from './support/identity-epoch.ts';
 import { retentionFixture } from '../history/subject-retention-fixture.ts';
 
@@ -322,6 +323,23 @@ test('held repair reopens the exact ordered prefix through a real original and r
     const last = await book(6);
     const birth = await openHeldSubjectPreparation(db.pool, { bootstrap, job }, context());
     await db.pool.query('SELECT semantic.capture_subject_access_page_v1($1,0,8)', [birth]);
+    for (const [start, end] of [
+      [8, 32],
+      [32, 64],
+      [64, 96],
+    ])
+      await db.pool.query('SELECT semantic.capture_subject_access_page_v1($1,$2,$3)', [birth, start, end]);
+    const interval = { birth, bootstrap, start: 32 };
+    const quiet = await readHeldQuietRange(db.pool, interval);
+    expect(quiet).toHaveLength(2);
+    await book(67);
+    expect(await readHeldQuietRange(db.pool, interval)).toEqual(quiet.slice(0, 1));
+    const replay = { ...interval, retainedHomes: 64 };
+    expect(await readHeldQuietRange(db.pool, replay)).toEqual(quiet);
+    await db.pool.query('SELECT core.advance_subject_cleanup_v1(70)');
+    // The changed cleanup permit requires an exact, independently committed recheck.
+    await expect(readHeldQuietRange(db.pool, replay)).rejects.toThrow();
+    expect(await readHeldQuietRange(db.pool, replay)).toEqual(quiet);
     const input = {
       bootstrap,
       birth,
@@ -381,6 +399,9 @@ test('held repair reopens the exact ordered prefix through a real original and r
       await expect(readHeldRepairHomes(client, input, context(), retained)).rejects.toThrow();
       await client.query('ROLLBACK TO before_change');
       expect(await readHeldRepairHomes(client, input, context(), retained)).toEqual(original);
+      await client.query('UPDATE core.publication_authority_epoch SET generation=gen_random_uuid() WHERE home_no=66');
+      await expect(readHeldQuietRange(client, replay)).rejects.toThrow();
+      await client.query('ROLLBACK TO before_change');
       await client.query('UPDATE core.publication_authority_epoch SET generation=gen_random_uuid() WHERE home_no=4');
       await expect(readHeldRepairHomes(client, input, context(), retained)).rejects.toThrow();
     } finally {

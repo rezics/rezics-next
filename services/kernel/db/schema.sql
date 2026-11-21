@@ -4000,6 +4000,13 @@ CREATE INDEX subject_access_original_keys ON core.subject_subscription_key_v1 US
 
 
 --
+-- Name: subject_nonzero_command_home; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX subject_nonzero_command_home ON core.partition USING btree (partition_no) WHERE ("position" > 0);
+
+
+--
 -- Name: subject_retention_creation_pin; Type: INDEX; Schema: core; Owner: -
 --
 
@@ -4669,6 +4676,87 @@ CREATE TRIGGER record_history_preserve_source_set_copy BEFORE DELETE OR UPDATE O
 --
 
 CREATE TRIGGER record_purge_source_home_gate BEFORE UPDATE OF epoch, write_state, moved_to ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_home_gate();
+
+
+--
+-- Name: partition subject_cut_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_changed AFTER UPDATE ON core.partition FOR EACH ROW WHEN (((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.epoch IS DISTINCT FROM new.epoch)) OR (old.write_state IS DISTINCT FROM new.write_state)) OR (new."position" < old."position"))) EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER subject_cut_changed;
+
+
+--
+-- Name: publication_authority_epoch subject_cut_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_changed AFTER UPDATE ON core.publication_authority_epoch FOR EACH ROW WHEN (((old.home_no IS DISTINCT FROM new.home_no) OR (old.generation IS DISTINCT FROM new.generation))) EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home_no');
+
+ALTER TABLE core.publication_authority_epoch ENABLE ALWAYS TRIGGER subject_cut_changed;
+
+
+--
+-- Name: subject_cleanup_v1 subject_cut_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_changed AFTER UPDATE ON core.subject_cleanup_v1 FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home');
+
+ALTER TABLE core.subject_cleanup_v1 ENABLE ALWAYS TRIGGER subject_cut_changed;
+
+
+--
+-- Name: partition subject_cut_rows; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_rows AFTER INSERT OR DELETE ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER subject_cut_rows;
+
+
+--
+-- Name: publication_authority_epoch subject_cut_rows; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_rows AFTER INSERT OR DELETE ON core.publication_authority_epoch FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home_no');
+
+ALTER TABLE core.publication_authority_epoch ENABLE ALWAYS TRIGGER subject_cut_rows;
+
+
+--
+-- Name: subject_cleanup_v1 subject_cut_rows; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_rows AFTER INSERT OR DELETE ON core.subject_cleanup_v1 FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home');
+
+ALTER TABLE core.subject_cleanup_v1 ENABLE ALWAYS TRIGGER subject_cut_rows;
+
+
+--
+-- Name: partition subject_cut_truncated; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON core.partition FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER subject_cut_truncated;
+
+
+--
+-- Name: publication_authority_epoch subject_cut_truncated; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON core.publication_authority_epoch FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home_no');
+
+ALTER TABLE core.publication_authority_epoch ENABLE ALWAYS TRIGGER subject_cut_truncated;
+
+
+--
+-- Name: subject_cleanup_v1 subject_cut_truncated; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON core.subject_cleanup_v1 FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('home');
+
+ALTER TABLE core.subject_cleanup_v1 ENABLE ALWAYS TRIGGER subject_cut_truncated;
 
 
 --

@@ -498,6 +498,26 @@ END $$;
 
 
 --
+-- Name: bind_subject_quiet_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bind_subject_quiet_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.quiet_digest:=NULL;
+  IF NEW.first_home%32=0 AND NEW.end_home=NEW.first_home+32
+    AND NOT EXISTS (SELECT FROM semantic.subject WHERE route>=16*NEW.first_home AND route<16*NEW.end_home)
+    AND NOT EXISTS (SELECT FROM jsonb_array_elements(NEW.cuts) e WHERE (e->>'command')::bigint<>0)
+  THEN
+    NEW.quiet_digest:=encode(sha256(convert_to(jsonb_build_array(NEW.birth,NEW.first_home,NEW.end_home,
+      NEW.definition_digest,NEW.cuts)::text,'UTF8')),'hex');
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: bump_search_canonical_generation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2245,6 +2265,9 @@ BEGIN
       CROSS JOIN LATERAL core.subject_retention_heads_v1(lo) anchor
       WHERE (c.birth,c.first_home,c.end_home)=(member_birth,lo,hi) AND anchor.restore=m.restore_generation
         AND m.opened_xid<>pg_current_xact_id();
+    -- The stamp binds the original comparison. Membership, definition and
+    -- store/restore lineage above are still reopened on each receiver call.
+    IF semantic.subject_quiet_page_current_v1(saved) THEN RETURN saved.cuts; END IF;
     IF NOT semantic.subject_access_range_current_v1(saved,lo,hi) OR
       (SELECT count(*) FROM jsonb_array_elements(saved.cuts) WITH ORDINALITY s(cut,ordinal)
        CROSS JOIN LATERAL (SELECT lo+ordinal::integer-1 AS home) i
@@ -3724,6 +3747,29 @@ BEGIN
  END IF;
  RETURN NULL;
 END; $$;
+
+
+--
+-- Name: invalidate_subject_cut_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.invalidate_subject_cut_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE lo integer; hi integer;
+BEGIN
+  IF TG_OP='TRUNCATE' THEN
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid();
+  ELSE
+    IF TG_OP<>'INSERT' THEN lo:=(to_jsonb(OLD)->>TG_ARGV[0])::integer/32*32; END IF;
+    IF TG_OP<>'DELETE' THEN hi:=(to_jsonb(NEW)->>TG_ARGV[0])::integer/32*32; END IF;
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid() WHERE first_home IN (lo,hi);
+  END IF;
+  IF TG_TABLE_NAME <> 'subject_cleanup_v1' THEN
+    PERFORM search.advance_public_filter_repair_authority('@ack-retention',coalesce(lo,hi,0)/32);
+  END IF;
+  RETURN NULL;
+END $$;
 
 
 --
@@ -5765,6 +5811,7 @@ CREATE TABLE semantic.subject_access_page_v1 (
     definition_digest text NOT NULL,
     captured_xid xid8 NOT NULL,
     access_revisions uuid[],
+    quiet_digest text,
     CONSTRAINT subject_access_page_v1_check CHECK (((end_home <= 4096) AND (((end_home - first_home) >= 1) AND ((end_home - first_home) <= 32)))),
     CONSTRAINT subject_access_page_v1_check1 CHECK (((jsonb_typeof(cuts) = 'array'::text) AND (jsonb_array_length(cuts) = (end_home - first_home))))
 );
@@ -5898,6 +5945,20 @@ CREATE FUNCTION semantic.subject_privacy_member_base_v1(f semantic.subject_priva
     AND cut.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
     AND (cut.doc->>'home',cut.doc->>'epoch',cut.doc->>'generation')=
         (f.partition_no::text,f.owner_epoch::text,f.home_generation::text)
+$$;
+
+
+--
+-- Name: subject_quiet_page_current_v1(semantic.subject_access_page_v1); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_quiet_page_current_v1(p semantic.subject_access_page_v1) RETURNS boolean
+    LANGUAGE sql STABLE STRICT
+    AS $$
+  SELECT p.quiet_digest IS NOT NULL AND EXISTS (
+    SELECT FROM semantic.subject_access_range_revision_v1 s WHERE s.first_home=p.first_home AND
+      (p.access_revisions=ARRAY[s.revision] OR EXISTS (SELECT FROM semantic.subject_quiet_recheck_v1 q
+        WHERE (q.birth,q.first_home,q.revision)=(p.birth,p.first_home,s.revision))))
 $$;
 
 
@@ -6371,6 +6432,24 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
  RETURN NEW;
 END; $$;
+
+
+--
+-- Name: verify_subject_quiet_recheck_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.verify_subject_quiet_recheck_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p semantic.subject_access_page_v1;
+BEGIN
+  SELECT * INTO STRICT p FROM semantic.subject_access_page_v1 WHERE (birth,first_home)=(NEW.birth,NEW.first_home);
+  IF p.quiet_digest IS NULL THEN RAISE EXCEPTION 'Missing original empty Subject interval'; END IF;
+  SELECT revision INTO STRICT NEW.revision FROM semantic.subject_access_range_revision_v1 WHERE first_home=p.first_home;
+  IF semantic.capture_subject_access_page_v1(p.birth,p.first_home,p.end_home) IS DISTINCT FROM p.cuts
+    THEN RAISE EXCEPTION 'Subject interval changed'; END IF;
+  RETURN NEW;
+END $$;
 
 
 --
@@ -11196,6 +11275,17 @@ CREATE TABLE semantic.subject_page_work_home (
 
 
 --
+-- Name: subject_quiet_recheck_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_quiet_recheck_v1 (
+    birth bigint NOT NULL,
+    first_home integer NOT NULL,
+    revision uuid NOT NULL
+);
+
+
+--
 -- Name: subject_source_preparation_v1; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -13459,6 +13549,14 @@ ALTER TABLE ONLY semantic.subject
 
 ALTER TABLE ONLY semantic.subject_privacy_fanout_v1
     ADD CONSTRAINT subject_privacy_fanout_v1_pkey PRIMARY KEY (partition_no, input_key, enqueue_revision);
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_quiet_recheck_v1
+    ADD CONSTRAINT subject_quiet_recheck_v1_pkey PRIMARY KEY (birth, first_home);
 
 
 --
@@ -17509,10 +17607,55 @@ ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access
 
 
 --
+-- Name: subject_access_range_revision_v1 subject_ack_stamp; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_ack_stamp AFTER INSERT OR DELETE OR UPDATE ON semantic.subject_access_range_revision_v1 FOR EACH ROW EXECUTE FUNCTION search.change_subject_ack_stamp_v1();
+
+ALTER TABLE semantic.subject_access_range_revision_v1 ENABLE ALWAYS TRIGGER subject_ack_stamp;
+
+
+--
+-- Name: subject_access_range_revision_v1 subject_ack_stamp_truncated; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_ack_stamp_truncated AFTER TRUNCATE ON semantic.subject_access_range_revision_v1 FOR EACH STATEMENT EXECUTE FUNCTION search.change_subject_ack_stamp_v1();
+
+ALTER TABLE semantic.subject_access_range_revision_v1 ENABLE ALWAYS TRIGGER subject_ack_stamp_truncated;
+
+
+--
 -- Name: subject subject_canonical_population; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER subject_canonical_population AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_population();
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_changed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_changed AFTER UPDATE ON semantic.public_filter_privacy_head FOR EACH ROW WHEN (((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.owner_epoch IS DISTINCT FROM new.owner_epoch)) OR (old.population_fenced IS DISTINCT FROM new.population_fenced)) OR (new."position" < old."position"))) EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_changed;
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_rows; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_rows AFTER INSERT OR DELETE ON semantic.public_filter_privacy_head FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_rows;
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_truncated; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON semantic.public_filter_privacy_head FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_truncated;
 
 
 --
@@ -17564,6 +17707,24 @@ CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON 
 CREATE TRIGGER subject_privacy_pending_v1 BEFORE UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN (((old.input_key <> '["domain","accounts"]'::text) AND ((old.live AND (NOT new.live)) OR ((((old.captured_revision IS DISTINCT FROM new.captured_revision) OR (old.captured_through IS DISTINCT FROM new.captured_through)) OR (old.captured_epoch IS DISTINCT FROM new.captured_epoch)) OR (old.captured_shared_v1 IS DISTINCT FROM new.captured_shared_v1)) OR ((old.captured_revision IS NOT NULL) AND (old.first_position IS DISTINCT FROM new.first_position))))) EXECUTE FUNCTION semantic.guard_subject_privacy_pending_v1();
 
 ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_privacy_pending_v1;
+
+
+--
+-- Name: subject_access_page_v1 subject_quiet_range; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_quiet_range BEFORE INSERT ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION semantic.bind_subject_quiet_range_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_quiet_range;
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_quiet_recheck BEFORE INSERT OR UPDATE ON semantic.subject_quiet_recheck_v1 FOR EACH ROW EXECUTE FUNCTION semantic.verify_subject_quiet_recheck_v1();
+
+ALTER TABLE semantic.subject_quiet_recheck_v1 ENABLE ALWAYS TRIGGER subject_quiet_recheck;
 
 
 --
@@ -19163,6 +19324,14 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 ALTER TABLE ONLY semantic.subject_access_page_v1
     ADD CONSTRAINT subject_access_page_v1_birth_first_home_fkey FOREIGN KEY (birth, first_home) REFERENCES core.subject_retention_page_v1(birth, first_home);
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck_v1_birth_first_home_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_quiet_recheck_v1
+    ADD CONSTRAINT subject_quiet_recheck_v1_birth_first_home_fkey FOREIGN KEY (birth, first_home) REFERENCES semantic.subject_access_page_v1(birth, first_home);
 
 
 --

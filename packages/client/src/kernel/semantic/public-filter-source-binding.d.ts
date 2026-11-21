@@ -223,6 +223,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        /** Also fund one bounded scan of immutable held cut pages. */
+        compactSubjectCuts?: true;
     }>, context: PublicFilterConsumerContext): Promise<PublicSourceRepairPage>;
     settleMixed?(request: Readonly<{
         bootstrap: string;

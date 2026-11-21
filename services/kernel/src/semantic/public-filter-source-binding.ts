@@ -70,6 +70,7 @@ import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairSourceScan from './public-filter-source-binding-repair-source-scan.sql';
+import { readHeldQuietRange } from './public-filter-held-quiet-range.ts';
 import {
   heldRepairHomes,
   readHeldRepairHomes,
@@ -548,6 +549,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        /** Also fund one bounded scan of immutable held cut pages. */
+        compactSubjectCuts?: true;
         scanOnly?: true;
       }>,
       context: PublicFilterConsumerContext,
@@ -1285,6 +1288,7 @@ export function createNativePublicFilterSourceBinding(
       examined: number;
       digest: string;
       packed: string;
+      originalCuts?: true;
       through?: readonly string[];
     }>;
   };
@@ -1311,6 +1315,7 @@ export function createNativePublicFilterSourceBinding(
     db: Pool,
     cost: BindingCost,
     retained?: RepairRecord,
+    compactSubjectCuts = false,
   ): Promise<
     Readonly<{
       next: RepairState;
@@ -1327,6 +1332,36 @@ export function createNativePublicFilterSourceBinding(
       state.projection !== null
     )
       throw new BindingError('binding_mismatch');
+    if (
+      state.heldBirth !== undefined &&
+      state.partition === state.heldPageStart &&
+      state.after === null &&
+      state.partition % heldRepairHomes === 0 &&
+      (retained ? retained.windowBatch?.originalCuts === true : compactSubjectCuts)
+    ) {
+      const pages = await readHeldQuietRange(db, {
+        bootstrap,
+        birth: state.heldBirth,
+        start: state.partition,
+        ...(retained?.windowBatch && { retainedHomes: retained.windowBatch.count }),
+      });
+      if (pages.length) {
+        const homes = pages.length * heldRepairHomes;
+        const end = state.partition + homes;
+        const digest = hash(encode({ input: state, inputLimit, pages }));
+        return {
+          next: {
+            ...state,
+            owner: 'semantic',
+            partition: end,
+            heldPageStart: end === 4096 ? end - heldRepairHomes : end,
+            phase: end === 4096 ? 'window' : 'scan',
+          },
+          receipt: { kind: 'semantic', homes, digest },
+          windowBatch: { from: state.partition, count: homes, examined: homes, digest, originalCuts: true, packed: '' },
+        };
+      }
+    }
     const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
     const limit = Math.min(inputLimit, repairHomeBatchLimit, pageEnd - state.partition);
     let heldHead: string | undefined;
@@ -2323,7 +2358,14 @@ export function createNativePublicFilterSourceBinding(
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
     joined: Joined & { cut: Awaited<ReturnType<typeof loadBootstrap>> },
-    request: { execution: string; frontier: string | null; inputLimit: number; homeLimit?: number; scanOnly?: true },
+    request: {
+      execution: string;
+      frontier: string | null;
+      inputLimit: number;
+      homeLimit?: number;
+      compactSubjectCuts?: true;
+      scanOnly?: true;
+    },
     db: Pool,
     cost: BindingCost,
     context: PublicFilterConsumerContext,
@@ -2587,7 +2629,18 @@ export function createNativePublicFilterSourceBinding(
         next = scanned.next;
         scan = scanned.receipt;
       } else {
-        const scanned = await scanSemanticHomes(id, context, state, inputLimit, db, cost, replay ?? undefined);
+        const scanned = await scanSemanticHomes(
+          id,
+          context,
+          state,
+          inputLimit,
+          db,
+          cost,
+          replay ?? undefined,
+          request.compactSubjectCuts === true &&
+            joined.cut.row.ack_protocol === 1 &&
+            joined.cut.row.subscription_protocol === 1,
+        );
         next = scanned.next;
         scan = scanned.receipt;
         windowBatch = scanned.windowBatch;
@@ -5442,8 +5495,9 @@ export function createNativePublicFilterSourceBinding(
         if (points >= 180 && bytes >= 88 * 1024) {
           // A lost reply can include the home markers, their clock and one range.
           const homes = Math.min(32, Math.floor((points - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
-          const writes = homes + 2;
-          cost.frontierWrites++;
+          const ranges = held ? Math.floor(points / 64) : 1;
+          const writes = Math.max(homes + 2, 2 * ranges);
+          cost.frontierWrites += ranges;
           cost.bytes += bytes;
           const prepared = await db.query<{
             points: number;
@@ -5461,7 +5515,7 @@ export function createNativePublicFilterSourceBinding(
           cost.rows -= unused;
           cost.dependencyPoints -= unused;
           cost.bytes -= bytes - batch.proof_bytes;
-          cost.frontierWrites -= 1 - batch.range_writes;
+          cost.frontierWrites -= ranges - batch.range_writes;
           cost.resultWrites -= writes - batch.result_writes;
           if (batch.range_writes > 0) {
             return {

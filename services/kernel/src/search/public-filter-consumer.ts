@@ -3214,6 +3214,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
                 ...(scanOnly && { scanOnly: true as const }),
                 ...((subjectPublication || mixedPreparation) && { homeLimit: PUBLIC_FILTER_REPAIR_HOME_LIMIT }),
+                ...(subjectPublication && { compactSubjectCuts: true as const }),
               },
               context,
             ),

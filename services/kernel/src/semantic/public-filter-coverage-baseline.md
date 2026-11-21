@@ -116,8 +116,8 @@ under the original membership, definition, registration, store and active owner.
 Account metadata while enumerating only Subject originals.
 
 A committed page admits Source inventory by route and original ID, including hidden and redirected rows.
-Each step reads at most 32 keys plus a lookahead. After inventory finishes, Source captures finite command
-ends for that page. The creation reader walks every outbox slot through those ends, including unrelated
+Each step reads at most 32 keys plus a lookahead. Source captures finite command ends after inventory or
+closes a fresh empty inventory and unchanged command interval together. The creation reader walks every outbox slot through those ends, including unrelated
 events. The saved envelopes carry the owner epoch, event ID, position, sequence, count, type, original
 subject, payload digest and native write-basis transaction where present. The page receipt binds the home
 generation and both stream bases. An uncertain commit reopens the same birth, interval and ordinal.
@@ -127,8 +127,10 @@ and positions through its writer and physical generation comparison. Only a succ
 fresh check of the page can advance the Source reconciliation cursor. A fresh capture commits before the same
 turn seeks the first original key. When a step has no writer obligations, its evidence and cursor
 advance share the transaction that checked every home. A fresh
-inventory with writer obligations leaves its ordinal for the next funded comparison. The finite-window
-step starts after the inventory commit. Changes after its finite end belong to the subsequent
+inventory with writer obligations leaves its ordinal for the next funded comparison. For an empty interval,
+Search can adopt the committed cut before Source starts its inventory. Source verifies that independent
+receiver transaction and closes the interval when every command head still equals its original base.
+Occupied and advanced intervals keep the separate finite-window step after inventory commit. Changes after its finite end belong to the subsequent
 publication revalidation and held traversal. The physical fixture checks
 the pending writer, the settled resident Book, the withdrawn Book and continuation into a fresh page.
 [PostgreSQL and OpenSearch fixture](../../test/semantic/public-filter-held-publication.test.ts)
@@ -177,7 +179,15 @@ each verified creation window with its own page, the original Core and Access tu
 The existing range parents, fenced repair settlement and independently committed manifest authorize Source's
 terminal ACK. The held traversal, alias readback and observation retirement use their existing fences.
 
-New held repair executions finish inventory and finite command windows in ordered intervals of 32 homes.
+A held Subject repair can cover up to sixteen adjacent 32-home cuts in one verified step. Each cut binds
+native empty inventory and zero command bases at capture. The fresh producer stops at the first occupied
+inventory or positive command head using two ordered seeks. The independent reader reopens the same immutable
+pages under their current membership, definition and authority. A later creation preserves the original
+finite window. The two reads reserve at most 97 anchor and four keyed lookups per cut apiece, plus five
+lookups for the fresh producer probe. An authority change can require a separately committed native recheck
+of a single retained page before replay resumes.
+
+Held repair processes other inventory and finite command windows in ordered intervals of 32 homes.
 An empty raw Subject seek can close the contiguous prefix whose native outbox groups contain only
 irrelevant single-slot events. Source and its independent reader compare the original positions, payload
 digests and write bases. An original key, relevant command, missing slot or multi-slot group goes through
@@ -188,7 +198,9 @@ claims or their enqueue carry rotate the affected group revision in the writer t
 revision reuses the captured Access comparison. A changed revision or an older page requires the native
 home comparisons. Each reader still checks placement, store, restore generation and both stream bounds.
 
-The receiver verifies a complete leaf as its ordered window closes. It decodes each packed Source step
+The receiver may compare a complete aligned compact span of 64 to 512 homes against its independently
+adopted receiver pages and the verified Source step. It binds their adjacent roots under the current
+witness. Other leaves use the original per-home comparison as their ordered window closes. It decodes each packed Source step
 once and compares its homes with independently adopted receiver pages. Final assembly reopens the current
 witnesses and rebuilds stale leaves before linking the root to the terminal settlement.
 
@@ -203,7 +215,7 @@ original from its page. The Book withdrawal exception still requires the origina
 The original Search preparation pins its ACK protocol at insertion. Production defaults to version 0.
 Version 1 is reserved for a cold catalogue Subject job. Its receiver compares the original verified
 creation windows, including empty homes, against enrollment, the retained creation checkpoint, Search
-baseline and current coverage. A funded comparison waits for a complete leaf of at most 32 homes. Parents
+baseline and current coverage. A funded comparison waits for a complete verified interval. Parents
 bind the two adjacent child revisions. A complete root covers homes 0 through 4095 before Source closes the terminal.
 
 Receiver changes update the affected subtree clocks synchronously. Loss of an original enrollment,
