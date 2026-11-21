@@ -455,6 +455,11 @@ export function searchRoutes<App>(
               context: {
                 deadline: job.deadline,
                 ...(scopeOptions ? { scope: scopeOptions } : {}),
+                ...(publicBook && scopeAccess?.prepareReadDecisions
+                  ? {
+                      bookAdmission: { wait: permit, run: (work) => admission.run('normal', job, work) },
+                    }
+                  : {}),
                 ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
               },
             });

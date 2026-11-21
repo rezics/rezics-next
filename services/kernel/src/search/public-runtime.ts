@@ -1,3 +1,4 @@
+import { bookRelevanceBound } from './book-relevance-bound.ts';
 import { bookPageRelease } from './book-page-publication.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { forwardPublicFilterCoveragePage, openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
@@ -95,7 +96,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     context: PublicFilterConsumerContext,
   ): ReturnType<SearchGenerationPublication['prepare']>;
   bindRequest(
-    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
+    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' | 'bounded-relevance' }>,
     context: PublicFilterConsumerContext,
     acceptedRelease?: string,
     bookPage?: object,
@@ -649,7 +650,23 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (request.plan.generation !== undefined && request.plan.generation !== active)
           throw new ProblemError('search_restart_required');
         const operations = requestHandle(await subjectOperations(target, release, context));
-        const capture = await operations.capture(structuredClone(request), context);
+        const bounded = request.snapshot === 'bounded-relevance';
+        const readBound = () => bookRelevanceBound(requestSearch(context), target, request.plan.pageSize);
+        const opening = bounded ? await readBound() : null;
+        const snapshot = request.snapshot === 'bounded-relevance' ? (opening ? 'pit' : 'prepared') : request.snapshot;
+        const capture = await operations.capture({ plan: structuredClone(request.plan), snapshot }, context);
+        if (bounded && capture.status === 'captured' && capture.queried.snapshot.kind === 'pit') {
+          let verified = false;
+          try {
+            verified =
+              opening !== null &&
+              capture.queried.consumer.incarnation === opening.uuid &&
+              isDeepStrictEqual(opening, await readBound());
+          } finally {
+            if (!verified) await operations.closeObservation(capture.queried, context);
+          }
+          if (!verified) notReady();
+        }
         checkDeadline(context);
         return { operations, capture };
       });

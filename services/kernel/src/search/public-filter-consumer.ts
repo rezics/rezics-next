@@ -2466,7 +2466,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.bootstrap.coveragePublication &&
       q.snapshot.kind === 'prepared' &&
       isTextBookCapture(plan);
-    const relevancePage = preparedBook && isTextBookCapture(plan, 'relevance');
+    const relevancePage =
+      page && inlinePublishedPreparation && work.bootstrap.coveragePublication && isTextBookCapture(plan, 'relevance');
     if (preparedBook && work.materializing) {
       // Segment retention and its registration CAS have committed the prepared tuple.
       // Its input PIT can drain independently of checking the serving incarnation.
@@ -2526,7 +2527,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         page &&
         groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, transferValues);
       const transfer =
-        grouped || (preparedBook && m.sql(pageControls.transfer(1), transferValues()).then((result) => result.rows[0]));
+        grouped ||
+        ((preparedBook || relevancePage) &&
+          m.sql(pageControls.transfer(1), transferValues()).then((result) => result.rows[0]));
       if (transfer) {
         if (!(await transfer)) return m.unavailable('source_pending');
         m.cost.frontierWrites += 2;
