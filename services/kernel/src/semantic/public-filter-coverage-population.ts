@@ -526,7 +526,19 @@ async function readPopulations(
         pool,
         deadline,
         (client) => {
-          const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+          // The prepared Subject page runs the same START and FINAL statements
+          // with new custody, deadline and execution parameters on each request.
+          const preparedSubject =
+            !publication &&
+            admitted.length === 1 &&
+            admitted[0]!.queried.snapshot.kind === 'prepared' &&
+            /subjects-g[1-9][0-9]*$/.test(members[0]!.physical_target);
+          const query = {
+            ...(preparedSubject && { name: final ? 'public_filter_subject_final' : 'public_filter_subject_start' }),
+            text: sql,
+            values,
+            query_timeout: Math.max(1, deadline - Date.now()),
+          };
           return client.query<Row>(query);
         },
         { isUncertainSettledQueryError: () => true },

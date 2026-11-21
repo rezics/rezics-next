@@ -47,6 +47,7 @@ import {
   type PublicFilterConsumerCaptureInput,
 } from './public-filter-consumer-contract.ts';
 import { compileFilter } from './filter.ts';
+import { hasPublicBookSearchShape } from './request.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
@@ -823,6 +824,14 @@ function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceB
     ...(bootstrap.coveragePublication ? { coveragePublication: bootstrap.coveragePublication } : {}),
   };
 }
+function isTextBookCapture(plan: PublicCanonicalCaptureInput): boolean {
+  return (
+    !('representation' in plan) &&
+    'filterDocument' in plan &&
+    plan.text !== undefined &&
+    hasPublicBookSearchShape({ filter: plan.filterDocument })
+  );
+}
 function locatorHome(locator: string): number {
   const matched = /^(0|[1-9][0-9]{0,3}):/.exec(locator);
   if (!matched || Number(matched[1]) > 4095) throw new ConsumerFailure('observation_lost');
@@ -1228,6 +1237,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   type Page = {
     context: PublicFilterConsumerContext;
     bookBinding?: boolean;
+    capturedCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'> & {
+      queried: PublicFilterQueriedObservation;
+    };
     captureWitness?: PublicFilterCaptureWitness;
     bookPopulation?: string;
     bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'>;
@@ -1622,10 +1634,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         },
         context,
       ));
-    // A resumed mixed page has no capture work on its meter. Fund its original
+    // A resumed page has no capture work on its meter. Fund its original
     // cut and serving proof from the native lookup's measured preparation inputs.
+    const restoredPreparedBook =
+      restorePage === 'book' &&
+      q.snapshot.kind === 'prepared' &&
+      result.status === 'joined' &&
+      isTextBookCapture(result.definition.capture);
     const joined =
-      (mixedPage && execution === undefined) || (restored?.status === 'joined' && restored.bookPopulation)
+      restoredPreparedBook ||
+      (mixedPage && execution === undefined) ||
+      (restored?.status === 'joined' && restored.bookPopulation)
         ? m.takePreparation(result)
         : m.take(result);
     if (joined.status !== 'joined')
@@ -2435,7 +2454,28 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m);
     }
     const q = work.queried!;
-    await physical(q, m, context);
+    const plan = recovery.bootstrap.definition.capture;
+    const preparedBook =
+      page &&
+      inlinePublishedPreparation &&
+      work.bootstrap.coveragePublication &&
+      q.snapshot.kind === 'prepared' &&
+      isTextBookCapture(plan);
+    if (preparedBook && work.materializing) {
+      // Segment retention and its registration CAS have committed the prepared tuple.
+      // Its input PIT can drain independently of checking the serving incarnation.
+      const pit = work.materializing;
+      const [incarnation, closed] = await Promise.allSettled([
+        physical(q, m, context),
+        custody.closeObservation(pit, config.search, context),
+      ]);
+      if (closed.status === 'rejected') throw closed.reason;
+      const retirement = m.take(closed.value);
+      if (retirement.status !== 'closed') return m.unavailable('observation_lost');
+      owned.delete(pit.snapshot.observation);
+      work.materializing = null;
+      if (incarnation.status === 'rejected') throw incarnation.reason;
+    } else await physical(q, m, context);
     let transferred = false;
     if (!work.adopted && !publication) {
       // Native adopt joins the exact PIT and performs the Source CAS. The
@@ -2462,17 +2502,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         return m.unavailable('observation_lost');
       work.adopted = true;
-      const transfer =
+      const transferValues = () => [
+        work.registration.partition,
+        work.registration.id,
+        encoded,
+        work.bootstrap.id,
+        q.snapshot.observation,
+        encodeWork(work),
+      ];
+      const grouped =
         bookCut &&
         page &&
-        groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, () => [
-          work.registration.partition,
-          work.registration.id,
-          encoded,
-          work.bootstrap.id,
-          q.snapshot.observation,
-          encodeWork(work),
-        ]);
+        groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, transferValues);
+      const transfer =
+        grouped || (preparedBook && m.sql(pageControls.transfer(1), transferValues()).then((result) => result.rows[0]));
       if (transfer) {
         if (!(await transfer)) return m.unavailable('source_pending');
         m.cost.frontierWrites += 2;
@@ -2524,6 +2567,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     try {
       const joined = await join(q, undefined, m, context);
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+      if (preparedBook)
+        page.capturedCut = { definition: joined.definition, covered: joined.covered, queried: structuredClone(q) };
       // An enclosing page starts once, after its complete native plan and cursor
       // boundary are closed. Baseline preparation cannot manufacture that start.
       if (!page) {
@@ -2794,10 +2839,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
       const restoringMixed = mixed && page?.id === null && prefix !== undefined;
-      const restorePage = restoringMixed ? 'mixed' : page && prefix && !mixed ? 'book' : undefined;
-      const cut = bookCut ?? (await join(q, undefined, m, context, restorePage));
+      const restoringSubject = page && prefix && !mixed && (q.snapshot.kind === 'pit' || page.id === null);
+      const restorePage = restoringMixed ? 'mixed' : restoringSubject ? 'book' : undefined;
+      // The first read can consume its capture's immutable cut. START, the
+      // execution join and FINAL still run on the acquired observation.
+      const capturedCut = prefix ? undefined : page?.capturedCut;
+      if (page) delete page.capturedCut;
+      if (capturedCut && !isDeepStrictEqual(q, capturedCut.queried)) return m.unavailable('observation_lost');
+      const cut = bookCut ?? capturedCut ?? (await join(q, undefined, m, context, restorePage));
       const plan = cut.definition.capture;
-      let restoredBookPage = false;
+      let restoredBookPage = restorePage === 'book' && q.snapshot.kind === 'prepared' && isTextBookCapture(plan);
       if (
         page &&
         !bookCut &&
