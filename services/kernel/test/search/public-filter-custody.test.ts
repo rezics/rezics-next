@@ -166,7 +166,7 @@ test('concurrent copies on one target enroll every retained observation', async 
     Number(
       (
         await pool.query(
-          'SELECT copy_revision FROM search.public_filter_target WHERE partition_no=$1 AND physical_target=$2',
+          'SELECT copy_revision FROM search.retained_copy_directory WHERE partition_no=$1 AND physical_target=$2',
           [registration.partition, physical.index],
         )
       ).rows[0].copy_revision,

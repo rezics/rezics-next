@@ -393,7 +393,7 @@ async function advanceSearchErasure(
       }>(
         `SELECT t.partition_no,t.physical_target,t.incarnation,t.copy_revision::text,
        CASE WHEN e.copy_revision=t.copy_revision THEN e.registration_after END AS registration_after
-      FROM search.public_filter_target t LEFT JOIN search.erasure_target e
+      FROM search.retained_copy_directory t LEFT JOIN search.erasure_target e
         ON e.partition_no=$1 AND e.account_id=$2 AND e.copy_home=t.partition_no
         AND e.physical_target=t.physical_target AND e.incarnation=t.incarnation
       WHERE e.copies_complete IS DISTINCT FROM true OR e.copy_revision<>t.copy_revision
@@ -678,7 +678,7 @@ async function advanceSearchErasure(
     if (accountCopies.rowCount) return pending('copies-pending', 'finalize');
     // Check native copy admission once more after Source validation and every release.
     const dirty = await query(
-      `SELECT 1 FROM search.public_filter_target t LEFT JOIN search.erasure_target e
+      `SELECT 1 FROM search.retained_copy_directory t LEFT JOIN search.erasure_target e
       ON e.partition_no=$1 AND e.account_id=$2 AND e.copy_home=t.partition_no
       AND e.physical_target=t.physical_target AND e.incarnation=t.incarnation
       WHERE e.copies_complete IS DISTINCT FROM true OR e.copy_revision<>t.copy_revision LIMIT 1`,

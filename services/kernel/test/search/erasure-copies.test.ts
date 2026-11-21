@@ -221,7 +221,7 @@ test('new native captures advance retained-copy admission even when the public r
   const revision = async () =>
     (
       await pool.query(
-        `SELECT copy_revision::text FROM search.public_filter_target
+        `SELECT copy_revision::text FROM search.retained_copy_directory
     WHERE (partition_no,physical_target)=($1,$2)`,
         [f.registration.partition, f.consumer.physicalTarget],
       )

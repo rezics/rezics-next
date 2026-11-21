@@ -2372,10 +2372,15 @@ same command as frontier advancement. Until then the native unconsumed page rema
 complete-page receipt ID remains the replay frontier while independent personal cleanup finishes. The native producer supplies sealed page custody and separate all-home terminal proof;
 page completion alone cannot authorize acknowledgement. Accounts' `HistoryBarrier` is only a locator.
 
-Native retained-copy admission advances `public_filter_target.copy_revision` atomically with registration,
+Native retained-copy admission advances `search.retained_copy_directory.copy_revision` atomically with registration,
 observation and prepared creation. Erasure traverses those actual homes and immutable registration ranges,
 closes observations, drains their real references and scrubs independent prepared payloads. A changed admission
 revision reopens the range, including empty/excluded captures and older incarnations retained under a reused name.
+Deploy the retained-copy directory migration before the matching erasure readers and capture writers.
+During this rollout the original scalar counter remains authoritative. Both reader versions see the same
+revision, and both writer versions take the original target write lock. Complete the erasure reader rollout
+before activating admission lanes.
+
 The native Account Discovery purge remains separate; its local cleanup no longer acknowledges all of Search.
 Personal recent/trending cleanup records its own progress; only the all-copy worker can send the final ACK.
 

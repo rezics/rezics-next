@@ -592,6 +592,18 @@ $$;
 
 
 --
+-- Name: lock_retained_copy_target(integer, text); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.lock_retained_copy_target(integer, text) RETURNS TABLE(partition_no integer, physical_target text, incarnation text)
+    LANGUAGE sql ROWS 1
+    AS $_$
+  SELECT t.partition_no,t.physical_target,t.incarnation FROM search.public_filter_target t
+  WHERE (t.partition_no,t.physical_target)=($1,$2) FOR NO KEY UPDATE
+$_$;
+
+
+--
 -- Name: lose_public_filter_ack_cut(uuid); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -2666,6 +2678,36 @@ CREATE TABLE search.release_relevance_position (
 
 
 --
+-- Name: retained_copy_lane; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.retained_copy_lane (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    lane integer NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT retained_copy_lane_lane_check CHECK (((lane >= 0) AND (lane <= 31))),
+    CONSTRAINT retained_copy_lane_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT retained_copy_lane_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: retained_copy_directory; Type: VIEW; Schema: search; Owner: -
+--
+
+CREATE VIEW search.retained_copy_directory AS
+ SELECT t.partition_no,
+    t.physical_target,
+    t.incarnation,
+    (((t.copy_revision)::numeric + COALESCE(l.increment, (0)::numeric)))::bigint AS copy_revision
+   FROM (search.public_filter_target t
+     CROSS JOIN LATERAL ( SELECT sum(retained_copy_lane.revision) AS increment
+           FROM search.retained_copy_lane
+          WHERE ((retained_copy_lane.partition_no = t.partition_no) AND (retained_copy_lane.physical_target = t.physical_target))) l);
+
+
+--
 -- Name: review_discovery_receiving; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -3388,6 +3430,14 @@ ALTER TABLE ONLY search.release_relevance_membership_node
 
 ALTER TABLE ONLY search.release_relevance_position
     ADD CONSTRAINT release_relevance_position_pkey PRIMARY KEY (execution_id, id);
+
+
+--
+-- Name: retained_copy_lane retained_copy_lane_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.retained_copy_lane
+    ADD CONSTRAINT retained_copy_lane_pkey PRIMARY KEY (partition_no, physical_target, lane);
 
 
 --
@@ -4434,6 +4484,14 @@ ALTER TABLE ONLY search.release_relevance_position
 
 ALTER TABLE ONLY search.release_relevance_position
     ADD CONSTRAINT release_relevance_position_membership_root_fkey FOREIGN KEY (execution_id, membership_root) REFERENCES search.release_relevance_membership_node(execution_id, id);
+
+
+--
+-- Name: retained_copy_lane retained_copy_lane_partition_no_physical_target_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.retained_copy_lane
+    ADD CONSTRAINT retained_copy_lane_partition_no_physical_target_fkey FOREIGN KEY (partition_no, physical_target) REFERENCES search.public_filter_target(partition_no, physical_target);
 
 
 --

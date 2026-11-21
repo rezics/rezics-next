@@ -1546,14 +1546,12 @@ export function createPublicFilterCustody(
   ) {
     if ((await lockCopyAdmission(client, meter, input.consumer.physicalTarget)).rowCount)
       throw new Failure('binding_mismatch');
-    // Copy enrollment increments this target's revision in the same transaction.
-    // Lock it for that update before locking the registration, as register() does.
+    // The database locks the original incarnation consistently with the active enrollment protocol.
     const active = await sql(
       client,
       meter,
       `WITH target AS MATERIALIZED (
-         SELECT partition_no,physical_target,incarnation FROM search.public_filter_target
-         WHERE (partition_no,physical_target)=($1,$3) FOR NO KEY UPDATE
+         SELECT partition_no,physical_target,incarnation FROM search.lock_retained_copy_target($1,$3)
        )
        SELECT r.consumer,t.incarnation FROM target t
        JOIN search.public_filter_registration r USING(partition_no,physical_target)
@@ -1889,10 +1887,9 @@ export function createPublicFilterCustody(
                   client,
                   shared,
                   `WITH target AS MATERIALIZED (
-                SELECT partition_no,physical_target FROM search.public_filter_target WHERE (partition_no,physical_target)=($2,$3)
-                  AND incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
-                    WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)
-                FOR NO KEY UPDATE), admitted AS MATERIALIZED (
+                SELECT partition_no,physical_target FROM search.lock_retained_copy_target($2,$3)
+                WHERE incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
+                    WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)), admitted AS MATERIALIZED (
                 SELECT r.partition_no,i.* FROM target t JOIN search.public_filter_registration r USING(partition_no,physical_target)
                 JOIN jsonb_to_recordset($1) i(id text, observation text, queried text, consumer text, covered text, expires bigint, pit text, hash text)
                   ON i.id=r.id AND i.consumer=r.consumer WHERE r.state='active' ORDER BY r.id FOR SHARE OF r), retained AS (
