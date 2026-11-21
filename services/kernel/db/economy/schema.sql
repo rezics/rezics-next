@@ -1338,6 +1338,13 @@ CREATE INDEX spot_fill_ready ON economy.spot_fill USING btree (book_id, due_at, 
 
 
 --
+-- Name: spot_fill_settled_feed; Type: INDEX; Schema: economy; Owner: -
+--
+
+CREATE INDEX spot_fill_settled_feed ON economy.spot_fill USING btree (book_id, instrument_id, settled_at DESC, fill_id DESC) WHERE (settled_at IS NOT NULL);
+
+
+--
 -- Name: spot_matching_ready; Type: INDEX; Schema: economy; Owner: -
 --
 

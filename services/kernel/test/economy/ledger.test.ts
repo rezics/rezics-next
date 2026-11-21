@@ -24,8 +24,10 @@ test('same-book concurrent spending conserves units and exact replay retains one
   const results = await Promise.all(keys.map((operationId) => ledger.transfer({ ...operands, operationId })));
   expect(results.map((result) => result.kind).sort()).toEqual(['insufficient_funds', 'ok']);
   const winner = results.findIndex((result) => result.kind === 'ok');
-  const operationId = keys[winner]!;
-  expect(await ledger.transfer({ ...operands, operationId })).toEqual(results[winner]);
+  const operationId = keys[winner];
+  const winningResult = results[winner];
+  if (operationId === undefined || winningResult?.kind !== 'ok') throw new Error('Missing winning transfer');
+  expect(await ledger.transfer({ ...operands, operationId })).toEqual(winningResult);
   expect(await ledger.transfer({ ...operands, operationId, amount: '79' })).toEqual({ kind: 'operation_conflict' });
   expect(await ledger.readBalance(wallet)).toMatchObject({ kind: 'ok', value: { posted: '20', available: '20' } });
   expect(await ledger.readBalance({ ...wallet, accountId: recipientId })).toMatchObject({
