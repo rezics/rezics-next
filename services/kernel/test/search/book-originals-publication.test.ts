@@ -16,6 +16,15 @@ test('cold Subject publication discloses the originals and preserves relevance t
     expect(await waitForPublication(ids, deadline)).toEqual(published);
     await pauseWhenCaughtUp(deadline);
     expect((await readFreshness(database.pool, consumer, { deadline })).behind).toBe(0);
+    const projectionBuilds = async () =>
+      (
+        await database.pool.query(
+          `SELECT subject_id,build_id,generation FROM semantic.public_filter_projection_build
+         WHERE subject_id=ANY($1::uuid[]) ORDER BY subject_id`,
+          [ids],
+        )
+      ).rows;
+    const before = await projectionBuilds();
     const query = { text: marker, filter: { type: { in: ['schema:Book'] } }, limit: 1, languages: ['en'] };
     let cursor: string | undefined;
     for (const [page, id] of ids.sort().entries()) {
@@ -36,6 +45,7 @@ test('cold Subject publication discloses the originals and preserves relevance t
         cursor = next;
       }
     }
+    expect(await projectionBuilds()).toEqual(before);
     console.info('Cold Subject publication', {
       generation: published.generation,
       originals: originals.length,

@@ -47,6 +47,7 @@ import {
   type PublicFilterConsumerCaptureInput,
 } from './public-filter-consumer-contract.ts';
 import { compileFilter } from './filter.ts';
+import { hasPublicBookSearchShape } from './request.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
@@ -3002,13 +3003,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         positions = checked.accepted;
       } else {
         if (raw.some((hit) => 'key' in hit)) return m.unavailable('observation_lost');
-        // The installed Book TypeList uses only its released kind and name order.
-        // The receiver still checks current predicate, names and disclosure after this identity proof.
+        // A serving Book page checks each hit's current type, text and disclosure after
+        // this identity window. Its FINAL uses every examined original and terminal.
+        const rankedBook =
+          page !== undefined &&
+          !('representation' in plan) &&
+          'sort' in plan &&
+          plan.sort === 'relevance' &&
+          plan.text?.kind === 'term' &&
+          !plan.overflowProperties?.length &&
+          hasPublicBookSearchShape({ filter: plan.filterDocument });
         const checked = await ownRows(
           raw as SearchResult['hits'],
           m,
           context,
-          q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList === true,
+          q.snapshot.kind === 'pit' && (rankedBook || ('bookTypeList' in plan && plan.bookTypeList === true)),
         );
         rows = checked.rows;
         positions = checked.accepted;
