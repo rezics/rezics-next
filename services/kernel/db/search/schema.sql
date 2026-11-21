@@ -418,6 +418,40 @@ END $$;
 
 
 --
+-- Name: group_freshness_checkpoint(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.group_freshness_checkpoint() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE folded jsonb;
+BEGIN
+  IF TG_OP='UPDATE' AND (OLD.consumer,OLD.partition_no,OLD.position)=(NEW.consumer,NEW.partition_no,NEW.position) THEN RETURN NULL; END IF;
+  IF TG_OP<>'INSERT' AND OLD.position>0 AND starts_with(OLD.consumer,'search_')
+     AND (TG_OP='DELETE' OR NEW.position=0 OR (OLD.consumer,OLD.partition_no)<>(NEW.consumer,NEW.partition_no)) THEN
+    DELETE FROM search.freshness_positions WHERE consumer=OLD.consumer AND shard=OLD.partition_no;
+    PERFORM search.write_freshness_slot(OLD.consumer,OLD.partition_no,0);
+  END IF;
+  IF TG_OP<>'DELETE' AND starts_with(NEW.consumer,'search_') THEN
+    IF NEW.position>0 THEN
+      INSERT INTO search.freshness_positions(consumer,shard,positions)
+        VALUES (NEW.consumer,NEW.partition_no,jsonb_build_object(NEW.partition_no,NEW.position))
+        ON CONFLICT (consumer,shard) DO UPDATE SET positions=EXCLUDED.positions;
+      PERFORM search.write_freshness_slot(NEW.consumer,NEW.partition_no,NEW.position);
+    END IF;
+    UPDATE search.freshness_positions SET pending=false WHERE consumer='' AND shard=NEW.partition_no AND pending
+      RETURNING positions INTO folded;
+    IF FOUND THEN
+      PERFORM search.write_freshness_slot('',NEW.partition_no,coalesce((folded->>NEW.partition_no::text)::bigint,0));
+      IF folded='{}'::jsonb THEN DELETE FROM search.freshness_positions WHERE consumer='' AND shard=NEW.partition_no; END IF;
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: guard_public_filter_coverage_page(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1327,6 +1361,25 @@ END $$;
 
 
 --
+-- Name: retain_pending_freshness_home(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.retain_pending_freshness_home() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE home integer := coalesce(NEW.partition_no,OLD.partition_no);
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.position=NEW.position THEN RETURN NULL; END IF;
+  IF TG_OP='INSERT' AND NEW.position=0 THEN RETURN NULL; END IF;
+  INSERT INTO search.freshness_positions(consumer,shard,positions,pending)
+    VALUES ('',home,CASE WHEN NEW.position>0 THEN jsonb_build_object(home,NEW.position) ELSE '{}'::jsonb END,true)
+    ON CONFLICT (consumer,shard) DO UPDATE SET positions=EXCLUDED.positions,pending=true;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: retain_public_filter_ack_protocol(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1396,6 +1449,21 @@ END $$;
 
 
 --
+-- Name: truncate_freshness_groups(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.truncate_freshness_groups() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM search.freshness_positions WHERE (consumer='')=(TG_TABLE_NAME='partition');
+  DELETE FROM search.freshness_groups WHERE (consumer='')=(TG_TABLE_NAME='partition');
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: truncate_freshness_positions(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -1405,6 +1473,28 @@ CREATE FUNCTION search.truncate_freshness_positions() RETURNS trigger
 BEGIN
   DELETE FROM search.freshness_positions WHERE (consumer = '') = (TG_TABLE_NAME = 'partition');
   RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: write_freshness_slot(text, integer, bigint); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.write_freshness_slot(who text, home integer, value bigint) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE emptied boolean;
+BEGIN
+  IF value>0 THEN
+    INSERT INTO search.freshness_groups AS g (consumer,shard,positions)
+      VALUES (who,home / 64,jsonb_build_object(home,value))
+      ON CONFLICT (consumer,shard) DO UPDATE SET positions=g.positions || EXCLUDED.positions;
+  ELSE
+    UPDATE search.freshness_groups SET positions=positions-home::text
+      WHERE consumer=who AND shard=home / 64 RETURNING positions='{}'::jsonb INTO emptied;
+    IF emptied THEN DELETE FROM search.freshness_groups WHERE consumer=who AND shard=home / 64; END IF;
+  END IF;
 END;
 $$;
 
@@ -1674,6 +1764,20 @@ CREATE TABLE search.facet_value (
 
 
 --
+-- Name: freshness_groups; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.freshness_groups (
+    consumer text CONSTRAINT freshness_positions_consumer_not_null NOT NULL,
+    shard integer CONSTRAINT freshness_positions_shard_not_null NOT NULL,
+    positions jsonb CONSTRAINT freshness_positions_positions_not_null NOT NULL,
+    CONSTRAINT freshness_positions_consumer_check CHECK (((consumer = ''::text) OR starts_with(consumer, 'search_'::text))),
+    CONSTRAINT freshness_positions_positions_check CHECK ((jsonb_typeof(positions) = 'object'::text)),
+    CONSTRAINT freshness_positions_shard_check CHECK ((shard >= 0))
+);
+
+
+--
 -- Name: freshness_home; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1700,6 +1804,7 @@ CREATE TABLE search.freshness_positions (
     consumer text NOT NULL,
     shard integer NOT NULL,
     positions jsonb NOT NULL,
+    pending boolean DEFAULT false NOT NULL,
     CONSTRAINT freshness_positions_consumer_check CHECK (((consumer = ''::text) OR starts_with(consumer, 'search_'::text))),
     CONSTRAINT freshness_positions_positions_check CHECK ((jsonb_typeof(positions) = 'object'::text)),
     CONSTRAINT freshness_positions_shard_check CHECK ((shard >= 0))
@@ -1790,6 +1895,38 @@ CREATE TABLE search.generation_publication_lock (
     CONSTRAINT generation_publication_lock_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
     CONSTRAINT generation_publication_lock_revision_check CHECK ((revision >= 0))
 );
+
+
+--
+-- Name: grouped_freshness_positions; Type: VIEW; Schema: search; Owner: -
+--
+
+CREATE VIEW search.grouped_freshness_positions AS
+ WITH edits AS (
+         SELECT (freshness_positions.shard / 64) AS shard,
+            jsonb_object_agg(freshness_positions.shard, (freshness_positions.positions -> (freshness_positions.shard)::text)) FILTER (WHERE (freshness_positions.positions <> '{}'::jsonb)) AS added,
+            array_agg((freshness_positions.shard)::text) FILTER (WHERE (freshness_positions.positions = '{}'::jsonb)) AS removed
+           FROM search.freshness_positions
+          WHERE ((freshness_positions.consumer = ''::text) AND freshness_positions.pending)
+          GROUP BY (freshness_positions.shard / 64)
+        )
+ SELECT g.consumer,
+    g.shard,
+        CASE
+            WHEN (e.shard IS NULL) THEN g.positions
+            ELSE ((g.positions || COALESCE(e.added, '{}'::jsonb)) - COALESCE(e.removed, '{}'::text[]))
+        END AS positions
+   FROM (search.freshness_groups g
+     LEFT JOIN edits e ON (((g.consumer = ''::text) AND (e.shard = g.shard))))
+  WHERE ((e.removed IS NULL) OR (((g.positions || COALESCE(e.added, '{}'::jsonb)) - e.removed) <> '{}'::jsonb))
+UNION ALL
+ SELECT ''::text AS consumer,
+    e.shard,
+    e.added AS positions
+   FROM edits e
+  WHERE ((e.added IS NOT NULL) AND (NOT (EXISTS ( SELECT 1
+           FROM search.freshness_groups g
+          WHERE ((g.consumer = ''::text) AND (g.shard = e.shard))))));
 
 
 --
@@ -3067,6 +3204,14 @@ ALTER TABLE ONLY search.facet_value
 
 
 --
+-- Name: freshness_groups freshness_groups_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.freshness_groups
+    ADD CONSTRAINT freshness_groups_pkey PRIMARY KEY (consumer, shard);
+
+
+--
 -- Name: freshness_home freshness_home_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -3660,6 +3805,13 @@ CREATE UNIQUE INDEX facet_one_ready ON search.facet_generation USING btree (part
 
 
 --
+-- Name: freshness_pending_home; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX freshness_pending_home ON search.freshness_positions USING btree (shard) WHERE ((consumer = ''::text) AND pending);
+
+
+--
 -- Name: generation_publication_bootstrap; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -4069,7 +4221,7 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 -- Name: freshness_home freshness_position; Type: TRIGGER; Schema: search; Owner: -
 --
 
-CREATE TRIGGER freshness_position AFTER INSERT OR UPDATE OF head, checkpoint_ceiling ON search.freshness_home FOR EACH ROW EXECUTE FUNCTION search.capture_freshness_position();
+CREATE TRIGGER freshness_position AFTER INSERT OR DELETE OR UPDATE OF head, checkpoint_ceiling ON search.freshness_home FOR EACH ROW EXECUTE FUNCTION search.retain_pending_freshness_home();
 
 ALTER TABLE search.freshness_home ENABLE ALWAYS TRIGGER freshness_position;
 

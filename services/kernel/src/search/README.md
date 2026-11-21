@@ -1625,7 +1625,7 @@ population completeness, or expand the existing preview's disclosure guarantees.
 ### Freshness
 
 - One statement compares the shared committed outbox heads with the queried generation's checkpoints.
-  `search.freshness_positions` groups up to 64 homes. Checkpoint groups retain exact positive native bigint
+  `search.grouped_freshness_positions` combines each stored group of up to 64 homes with its pending changes. Checkpoint groups retain exact positive native bigint
   positions. A missing home starts at zero. A head group retains the smaller of the native head and one past
   the largest checkpoint ever observed on that home. Every current checkpoint is at most that ceiling,
   so both equality and lag match the native comparison. Equal groups need no home expansion. For each
@@ -1633,16 +1633,16 @@ population completeness, or expand the existing preview's disclosure guarantees.
   live outbox. It returns the behind count and minimum retained timestamp. A positive count with no retained
   timestamp fails. Other consumers of this reader use their native checkpoints directly for positive heads.
 - Each home maintains its exact head and checkpoint ceiling in one transactionally updated
-  `search.freshness_home` row. A head advancing beyond every checkpoint stops writing the shared group
-  until its bounded value changes. Any consumer can raise the ceiling. A Search checkpoint also updates
-  its own exact group. A key move clears the previous slot, and clearing a group's last slot removes the row.
-  Backfill and rollback lock both native sources. Rollback restores all exact heads from `core.partition`.
-  The existing read statement serves both layouts. Triggers include replica-mode changes and truncation.
-  Outbox retention and timestamp changes need no summary updates.
-- At most 64 head groups and 64 checkpoint groups qualify for the named Search generation. Comparing
-  groups can inspect up to 4,096 in-memory positions even when caught up. Only differing groups expand into
-  home rows, and each behind home adds one indexed envelope seek. PostgreSQL can scan the small group table
-  or use its consumer-leading index as unrelated generations grow. Writers serialize on the shared row only when its represented positions change.
+  `search.freshness_home` row. A command whose bounded head changes writes only its own home in
+  `search.freshness_positions`. Earlier readers compare that table's single-home shards directly.
+  Any consumer can raise the ceiling. A Search checkpoint writes its single-home and grouped positions
+  and folds that home's pending head into the shared group in the same transaction. Most successive
+  advances of an already-behind head leave the bounded head unchanged. A key move clears the previous
+  checkpoint slot. Backfill and rollback lock both native sources. Replica-mode writes and truncation
+  use the same triggers. Outbox retention and timestamp changes need no summary updates.
+- At most 64 stored head groups and 64 checkpoint groups qualify for one named Search generation.
+  An index locates the pending homes, up to 4,096 if every home has advanced since its last checkpoint.
+  Only differing groups expand into home rows. Each behind home adds one indexed envelope seek.
   Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
   callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
   the deadline (default one hour).

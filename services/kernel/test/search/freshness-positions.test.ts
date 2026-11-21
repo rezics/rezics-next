@@ -3,6 +3,12 @@ import pg from 'pg';
 import freshness from '../../src/search/freshness.sql';
 import { subjectConsumer } from '../../src/search/consumer-name.ts';
 
+const [foldHeads, restoreHeadGroups] = (
+  await Bun.file(
+    new URL('../../db/search/migrations/20261122023200_defer_freshness_head_group_writes.sql', import.meta.url),
+  ).text()
+).split('-- migrate:down');
+
 test('whole-generation freshness follows native backfill, replay, retirement and rollback', async () => {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -21,6 +27,10 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   const cut = '9007199254740993';
   const earlier = new Date('2026-01-01T00:00:01Z');
   const later = new Date('2026-01-01T00:00:02Z');
+  const legacySql = (await Bun.file(new URL('../../src/search/freshness.sql', import.meta.url)).text())
+    .replaceAll('search.grouped_freshness_positions', 'search.freshness_positions')
+    .replace(':consumer::text', '$1::text');
+  const legacy = async (consumer: string) => (await db.query(legacySql, [consumer])).rows[0]!;
   const read = async (consumer: string) => {
     const row = await freshness.run(db, { consumer });
     if (!row) throw new Error('Expected a freshness observation');
@@ -31,7 +41,7 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       (
         await db.query(`
     SELECT sum(seq_tup_read + idx_tup_fetch) AS n FROM pg_stat_xact_user_tables
-    WHERE relid IN ('search.freshness_positions'::regclass, 'core.partition'::regclass,
+    WHERE relid IN ('search.freshness_groups'::regclass, 'search.freshness_positions'::regclass, 'core.partition'::regclass,
                     'core.consumer_checkpoint'::regclass, 'core.outbox'::regclass)`)
       ).rows[0]!.n,
     );
@@ -39,6 +49,7 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   await db.connect();
   try {
     await db.query('BEGIN');
+    await db.query(restoreHeadGroups!);
     await db.query(restore!);
     await db.query(down!);
     const homes = (await db.query('SELECT count(*)::int AS homes FROM core.partition')).rows[0]!.homes;
@@ -50,9 +61,10 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       [[first, next, generic]],
     );
     await db.query(up!);
-    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    expect(await legacy(first)).toMatchObject({ behind: 0, oldest: null });
     await db.query(bound!);
-    await db.query('ANALYZE search.freshness_positions');
+    await db.query(foldHeads!);
+    await db.query('ANALYZE search.freshness_groups, search.freshness_positions');
     const before = await tuples();
     expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
     const caughtUpRows = (await tuples()) - before;
@@ -67,18 +79,27 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       FROM core.partition WHERE partition_no IN (0,4095)`,
       [earlier, later],
     );
+    // Both homes have changed since the last group write. The original query sees their real positions immediately.
+    expect(
+      (
+        await db.query(
+          "SELECT shard AS partition_no FROM search.freshness_positions WHERE consumer='' AND pending ORDER BY shard",
+        )
+      ).rows,
+    ).toEqual([{ partition_no: 0 }, { partition_no: 4095 }]);
     const lagBefore = await tuples();
     expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
     const behindRows = (await tuples()) - lagBefore;
     expect(behindRows).toBeLessThan(512);
     console.info(JSON.stringify({ homes, caughtUpRows, twoBehindRows: behindRows }));
     expect(await read(generic)).toMatchObject({ behind: 2, oldest: earlier });
+    for (const consumer of [first, next, generic]) expect(await legacy(consumer)).toMatchObject(await read(consumer));
 
     const sharedUpdates = async () =>
       Number(
         (
           await db.query(
-            "SELECT n_tup_upd FROM pg_stat_xact_user_tables WHERE relid='search.freshness_positions'::regclass",
+            "SELECT n_tup_upd FROM pg_stat_xact_user_tables WHERE relid='search.freshness_groups'::regclass",
           )
         ).rows[0]!.n_tup_upd,
       );
@@ -122,6 +143,13 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       [first],
     );
     expect(await read(first)).toMatchObject({ behind: 1, oldest: later });
+    expect(
+      (
+        await db.query(
+          "SELECT NOT EXISTS(SELECT 1 FROM search.freshness_positions WHERE consumer='' AND shard=4095 AND pending) AS folded",
+        )
+      ).rows,
+    ).toEqual([{ folded: true }]);
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
     await db.query('ROLLBACK TO advances');
     expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
@@ -138,15 +166,16 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
     await db.query('TRUNCATE core.consumer_checkpoint');
     expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
+    await db.query(restoreHeadGroups!);
     await db.query(restore!);
     const exact = await db.query(
       "SELECT (positions->>'0')::bigint AS head FROM search.freshness_positions WHERE consumer='' AND shard=0",
     );
     expect(exact.rows[0]!.head).toBe(String(BigInt(cut) + 101n));
     await db.query('UPDATE core.partition SET position=position+1 WHERE partition_no=0');
-    expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
+    expect(await legacy(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
     await db.query(bound!);
-    expect(await read(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
+    expect(await legacy(next)).toMatchObject({ behind: homes, oldest: firstEnvelope });
   } finally {
     try {
       await db.query('ROLLBACK');
@@ -183,8 +212,8 @@ test('a concurrent head and checkpoint preserve the same committed freshness com
         (p.positions->>h.partition_no::text)::bigint AS group_head,
         (c.positions->>h.partition_no::text)::bigint AS group_checkpoint
       FROM search.freshness_home h
-      JOIN search.freshness_positions p ON p.consumer='' AND p.shard=h.partition_no/64
-      JOIN search.freshness_positions c ON c.consumer=$2 AND c.shard=h.partition_no/64
+      JOIN search.grouped_freshness_positions p ON p.consumer='' AND p.shard=h.partition_no/64
+      JOIN search.grouped_freshness_positions c ON c.consumer=$2 AND c.shard=h.partition_no/64
       WHERE h.partition_no=$1`,
       [home, consumer],
     );
@@ -252,7 +281,7 @@ test('a concurrent head and checkpoint preserve the same committed freshness com
     await head.query('BEGIN');
     await head.query('UPDATE core.partition SET position=60 WHERE partition_no=$1', [home]);
     await checkpoint.query('BEGIN');
-    const restoring = checkpoint.query(restore!);
+    const restoring = checkpoint.query(restoreHeadGroups! + restore!);
     try {
       await waitForLock(writerPid, checkpointPid);
     } finally {
@@ -306,6 +335,7 @@ test('cutover reconciles native checkpoints that replica replay delivered before
   await db.connect();
   try {
     await db.query('BEGIN');
+    await db.query(restoreHeadGroups!);
     await db.query(restore!);
     await db.query('SET LOCAL session_replication_role=replica');
     await db.query(

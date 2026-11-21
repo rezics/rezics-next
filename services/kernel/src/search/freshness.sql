@@ -2,11 +2,11 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :consumer::text AS consumer
 ), checkpoints AS MATERIALIZED (
-  SELECT p.shard, p.positions FROM search.freshness_positions p JOIN input i ON p.consumer = i.consumer
+  SELECT p.shard, p.positions FROM search.grouped_freshness_positions p JOIN input i ON p.consumer = i.consumer
   WHERE starts_with(i.consumer, 'search_')
 ), changed AS MATERIALIZED (
   SELECT h.positions AS heads, c.positions AS checkpoints
-  FROM search.freshness_positions h LEFT JOIN checkpoints c USING (shard)
+  FROM search.grouped_freshness_positions h LEFT JOIN checkpoints c USING (shard)
   WHERE h.consumer = '' AND h.positions IS DISTINCT FROM c.positions
 ), homes AS MATERIALIZED (
   SELECT home.key::integer AS partition_no, home.value::bigint AS head,
