@@ -436,6 +436,15 @@ function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'au
 } {
   if (!record(value) || !isKnowledgeId(value.subjectId) || !isKnowledgeId(value.notebookId))
     throw new Error('Invalid Knowledge document command');
+  const subjectIds = value.subjectIds;
+  if (
+    subjectIds !== undefined &&
+    (!Array.isArray(subjectIds) ||
+      subjectIds.length > 64 ||
+      !subjectIds.every(isKnowledgeId) ||
+      new Set([value.subjectId, ...subjectIds]).size > 64)
+  )
+    throw new Error('Invalid Knowledge document subjects');
   const expected = expectedSession(value);
   const body = documentBody(value.body);
   const references = admitReferenceManifest(body, value.references);
@@ -445,6 +454,7 @@ function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'au
     credential: credential(value.credential),
     idempotencyKey: commandKey(value.idempotencyKey),
     subjectId: value.subjectId,
+    ...(subjectIds === undefined ? {} : { subjectIds }),
     notebookId: value.notebookId,
     structureRevisionId: boundedId(value.structureRevisionId, 'structure revision'),
     parentPlacementId: parentPlacement(value.parentPlacementId),

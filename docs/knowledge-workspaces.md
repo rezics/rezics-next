@@ -232,6 +232,19 @@ Decision: exact availability maps each document, lifecycle generation and revisi
 Two authors may publish different analyses of the same character. They coexist with provenance; neither overwrites
 the catalogue's selected facts. Public contributions may enter the ordinary Semantic editorial workflow; publication adopts no catalogue truth.
 
+## Subject associations
+
+A document revision records the Subject IDs the writer associates with its content. The editor selects those Subjects
+through catalogue search. Creation includes the notebook's anchor plus the writer's selections. Revision and restore
+capture the exact draft selection with the body and references. This association can identify any readable Subject,
+including a work, person or place. The notebook anchor and typed body references have their own lifecycle.
+
+Knowledge owns each association through its document revision. Public discovery only receives the associations of an
+explicitly selected publication and checks current Subject disclosure. The writer and the notebook identify distinct
+parts of the association. A catalogue classification remains a separately adopted Semantic statement, with the range
+of the specific released property. [Subject applications](library-and-collections.md#subject-applications) describes
+the corresponding Collection behavior.
+
 ## Reference and mathematical meaning
 
 References have stable source-local identities and a discriminated target:
