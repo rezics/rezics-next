@@ -4335,6 +4335,7 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 CREATE FUNCTION semantic.public_filter_ack_origin(registration_id text, original uuid) RETURNS TABLE(job uuid, observation text, execution text, settlement text, terminal uuid, ack_after integer)
     LANGUAGE sql STABLE ROWS 1
+    SET join_collapse_limit TO '1'
     AS $$
   SELECT m.job,m.observation,m.execution,m.settlement,m.terminal,t.ack_after
   FROM search.public_filter_ack_manifest m
