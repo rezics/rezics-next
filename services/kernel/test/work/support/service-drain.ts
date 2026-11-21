@@ -4,6 +4,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
 import { createSearchServiceGate, registerPublicPreparationWork } from '../../../src/search/work.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
+import { registerSubjectPagePublicationWork } from '../../../src/semantic/publication-work.ts';
 import type { WorkModule } from '../../../src/work/registry.ts';
 import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 
@@ -17,6 +18,7 @@ const ids = ['short', 'interrupted', 'queued'].map((kind) => prefix + ':' + kind
 const [short, interrupted, queued] = ids as [string, string, string];
 const table = 'public.drain_' + prefix.replaceAll('-', '');
 const entered = new Set<string>();
+let latestPublication: string | undefined;
 const admitted = Promise.withResolvers<void>();
 const sealed = Promise.withResolvers<void>();
 const enqueue = (id: string) =>
@@ -67,6 +69,22 @@ const module: WorkModule = {
         },
       };
     });
+    const publicationClient = Object.create(context.client) as typeof context.client;
+    publicationClient.enqueue = (...args) => {
+      latestPublication = args[0].workflowID;
+      return context.client.enqueue(...args);
+    };
+    registerSubjectPagePublicationWork(
+      { ...context, client: publicationClient },
+      {
+        async requestRebuild() {
+          throw new Error('No rebuild was requested');
+        },
+        async step() {
+          return { processed: 0, next: null, done: true };
+        },
+      },
+    );
   },
 };
 
@@ -78,11 +96,22 @@ try {
   if (phase === 'drain') {
     await Promise.all([enqueue(short), enqueue(interrupted)]);
     await admitted.promise;
+    // Both native maintenance slots are held. The Semantic timer is waiting on a
+    // real queued original that this worker cannot dequeue after sealing admission.
+    const deadline = Date.now() + 15_000;
+    let queuedPublication: string | undefined;
+    while (!queuedPublication) {
+      const candidate = latestPublication;
+      if (candidate && (await client.getWorkflow(candidate))?.status === 'ENQUEUED') queuedPublication = candidate;
+      assert(Date.now() < deadline, 'Semantic observer has no queued original');
+      if (!queuedPublication) await Bun.sleep(25);
+    }
     const started = performance.now();
     process.kill(process.pid, 'SIGTERM');
     await sealed.promise;
     await worker.stop();
     assert(performance.now() - started < 20_000);
+    assert.equal((await client.getWorkflow(queuedPublication))?.status, 'ENQUEUED');
     assert.equal((await client.getWorkflow(short))?.status, 'SUCCESS');
     assert.equal((await client.getWorkflow(interrupted))?.status, 'PENDING');
     assert.equal((await client.getWorkflow(queued))?.status, 'ENQUEUED');

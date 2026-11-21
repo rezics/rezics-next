@@ -30,7 +30,15 @@ export function registerSubjectPagePublicationWork(context: WorkContext, publica
             workflowName: WORKFLOW,
             workflowID: randomUUID(),
           });
-          delay = (await handle.getResult()) ? 100 : 1;
+          // A tick can enqueue just before the SDK stops dequeueing. The durable
+          // workflow stays queued for a successor while this local observer drains.
+          while (!stopped) {
+            const done = await DBOS.getResult<boolean>(handle.workflowID, { timeoutSeconds: 2 });
+            if (done !== null) {
+              delay = done ? 100 : 1;
+              break;
+            }
+          }
         } catch (error) {
           console.error('Subject page publication repair failed', error);
           delay = 1000;
