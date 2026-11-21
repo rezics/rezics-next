@@ -215,9 +215,14 @@ export interface PublicFilterCustody {
       entries: readonly PublicFilterPreparationSegmentEntry[];
       after: readonly (string | number | null)[] | undefined;
       rawExhausted: boolean;
+      /** Retain the immutable observation in the same transaction as its terminal segment. */
+      retain?: Readonly<{ covered: PrivacyReductionStart; expiresAt: number }>;
     }>,
     context: PublicFilterConsumerContext,
-  ): Promise<Readonly<{ status: 'appended' | 'replayed'; cost: CustodyCost }> | CustodyFailure>;
+  ): Promise<
+    | Readonly<{ status: 'appended' | 'replayed'; queried?: PublicFilterQueriedObservation; cost: CustodyCost }>
+    | CustodyFailure
+  >;
   /** Create or recover the prepared observation after raw Search exhaustion; still unreadable until finalization. */
   retainPreparedSegments(
     request: Readonly<{

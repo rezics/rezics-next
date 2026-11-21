@@ -2402,6 +2402,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                   entries,
                   after: raw.at(-1)?.sort ?? found.frontier.after,
                   rawExhausted: result.exhausted,
+                  ...(direct && result.exhausted && isTextBookCapture(plan, 'relevance')
+                    ? { retain: { covered: work.bootstrap.covered, expiresAt: Date.now() + 300_000 } }
+                    : {}),
                 },
                 context,
               ),
@@ -2413,30 +2416,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             exhausted = result.exhausted;
             work.materializing = result.queried;
             own(result.queried, context, m);
+            if (appended.queried) work.queried = appended.queried;
             encoded = await save(work, encoded, true, m);
+            if (appended.queried) own(appended.queried, context, m);
           } finally {
             await releaseUse(acquired.use, context, m);
           }
         }
         if (!exhausted) return { status: 'preparing', repair: job, cost: m.cost };
-        const prepared = m.take(
-          await custody.retainPreparedSegments(
-            {
-              registration: work.registration,
-              covered: work.bootstrap.covered,
-              build: work.bootstrap.id,
-              generation: 1n,
-              rawCount,
-              outputCount,
-              expiresAt: publication ? Number.MAX_SAFE_INTEGER : Date.now() + 300_000,
-            },
-            context,
-          ),
-        );
-        if (prepared.status !== 'retained') return m.unavailable('observation_lost');
-        work.queried = prepared.queried;
-        encoded = await save(work, encoded, true, m);
-        own(prepared.queried, context, m);
+        if (!work.queried) {
+          const prepared = m.take(
+            await custody.retainPreparedSegments(
+              {
+                registration: work.registration,
+                covered: work.bootstrap.covered,
+                build: work.bootstrap.id,
+                generation: 1n,
+                rawCount,
+                outputCount,
+                expiresAt: publication ? Number.MAX_SAFE_INTEGER : Date.now() + 300_000,
+              },
+              context,
+            ),
+          );
+          if (prepared.status !== 'retained') return m.unavailable('observation_lost');
+          work.queried = prepared.queried;
+          encoded = await save(work, encoded, true, m);
+          own(prepared.queried, context, m);
+        }
       }
     }
     if (publication && work.materializing && work.queried) {

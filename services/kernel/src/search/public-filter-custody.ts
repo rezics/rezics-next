@@ -1529,6 +1529,60 @@ export function createPublicFilterCustody(
     if (!inserted.rowCount) throw new Failure('binding_mismatch');
     return { status: 'retained' as const, queried: q, cost: meter };
   }
+  // The caller holds copy admission and the build row lock through commit.
+  async function retainSegmentObservation(
+    input: Parameters<PublicFilterCustody['retainPreparedSegments']>[0],
+    consumer: PublicFilterConsumer,
+    meter: Meter,
+    client: PoolClient,
+  ) {
+    const prior = await sql(
+      client,
+      meter,
+      `SELECT queried,covered FROM search.public_filter_observation
+       WHERE (partition_no,registration,prepared_build,prepared_generation)=($1,$2,$3,$4::numeric)
+         AND state='open' ORDER BY observation DESC LIMIT 1`,
+      [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
+    );
+    if (prior.rowCount) {
+      const queriedValue = decode<PublicFilterQueriedObservation>(prior.rows[0]!.queried);
+      queried(queriedValue);
+      if (
+        !isDeepStrictEqual(queriedValue.consumer, consumer) ||
+        !isDeepStrictEqual(decode(prior.rows[0]!.covered), input.covered) ||
+        queriedValue.snapshot.kind !== 'prepared' ||
+        queriedValue.snapshot.build !== input.build ||
+        queriedValue.snapshot.generation !== input.generation
+      )
+        throw new Failure('binding_mismatch');
+      return { status: 'retained' as const, queried: queriedValue, cost: meter };
+    }
+    const marker = {
+      storage: 'segments-v1',
+      build: input.build,
+      generation: input.generation,
+      rawCount: input.rawCount,
+      outputCount: input.outputCount,
+    };
+    return retain(
+      input.registration,
+      {
+        consumer,
+        snapshot: {
+          kind: 'prepared',
+          observation: `${input.registration.partition}:${randomUUID()}`,
+          build: input.build,
+          generation: input.generation,
+        },
+      },
+      input.covered,
+      input.expiresAt,
+      marker,
+      meter,
+      client,
+      { build: input.build, generation: input.generation },
+    );
+  }
   async function lockCopyAdmission(client: PoolClient, meter: Meter, target: string) {
     await sql(client, meter, lockPublicationAdmission, [target]);
     return sql(client, meter, readPublicationFence, [target]);
@@ -1980,6 +2034,12 @@ export function createPublicFilterCustody(
       text(input.consumer.incarnation);
       text(input.build);
       requireValue(typeof input.generation === 'bigint' && input.generation > 0n);
+      if (input.retain) {
+        requireValue(
+          input.rawExhausted && Number.isSafeInteger(input.retain.expiresAt) && input.retain.expiresAt > Date.now(),
+        );
+        text(input.retain.covered.observation);
+      }
       requireValue(input.entries.length <= 100);
       requireValue(Number.isInteger(input.expected.rawCount) && Number.isInteger(input.expected.outputCount));
       for (const [index, entry] of input.entries.entries()) {
@@ -1989,7 +2049,7 @@ export function createPublicFilterCustody(
       return run(context, async (meter) => {
         const known = await registered(input.registration, meter);
         if (!isDeepStrictEqual(known, input.consumer)) throw new Failure('binding_mismatch');
-        const result = await transaction(meter, async (client) => {
+        return transaction(meter, async (client) => {
           await admitPreparationWrite(client, meter, input);
           const key = preparationKey(input.registration, input.build, input.generation);
           await sql(
@@ -2017,6 +2077,23 @@ export function createPublicFilterCustody(
           const nextOutput =
             input.expected.outputCount + input.entries.filter((entry) => entry.outputOrdinal !== null).length;
           const nextCursor = preparationCursor(input.after);
+          const finish = async (status: 'appended' | 'replayed') => {
+            if (!input.retain) return { status, cost: meter };
+            const retained = await retainSegmentObservation(
+              {
+                registration: input.registration,
+                build: input.build,
+                generation: input.generation,
+                rawCount: nextRaw,
+                outputCount: nextOutput,
+                ...input.retain,
+              },
+              input.consumer,
+              meter,
+              client,
+            );
+            return { status, queried: retained.queried, cost: meter };
+          };
           const sameNext =
             current.rawCount === nextRaw &&
             current.outputCount === nextOutput &&
@@ -2044,7 +2121,7 @@ export function createPublicFilterCustody(
                 );
               })
             )
-              return 'replayed' as const;
+              return finish('replayed');
             throw new Failure('binding_mismatch');
           }
           if (
@@ -2091,9 +2168,8 @@ export function createPublicFilterCustody(
           );
           if (advanced.rowCount !== 1) throw new Failure('observation_lost');
           meter.frontierWrites++;
-          return 'appended' as const;
+          return finish('appended');
         });
-        return { status: result, cost: meter };
       });
     },
     retainPreparedSegments(request, context) {
@@ -2128,51 +2204,7 @@ export function createPublicFilterCustody(
             frontier.outputCount !== input.outputCount
           )
             throw new Failure('observation_lost');
-          const prior = await sql(
-            client,
-            meter,
-            `SELECT queried FROM search.public_filter_observation
-             WHERE (partition_no,registration,prepared_build,prepared_generation)=($1,$2,$3,$4::numeric)
-               AND state='open' ORDER BY observation DESC LIMIT 1`,
-            [input.registration.partition, input.registration.id, input.build, input.generation.toString()],
-          );
-          if (prior.rowCount) {
-            const queriedValue = decode<PublicFilterQueriedObservation>(prior.rows[0]!.queried);
-            queried(queriedValue);
-            if (
-              queriedValue.consumer.incarnation !== consumer.incarnation ||
-              queriedValue.snapshot.kind !== 'prepared' ||
-              queriedValue.snapshot.build !== input.build ||
-              queriedValue.snapshot.generation !== input.generation
-            )
-              throw new Failure('binding_mismatch');
-            return { status: 'retained' as const, queried: queriedValue, cost: meter };
-          }
-          const marker = {
-            storage: 'segments-v1',
-            build: input.build,
-            generation: input.generation,
-            rawCount: input.rawCount,
-            outputCount: input.outputCount,
-          };
-          return retain(
-            input.registration,
-            {
-              consumer,
-              snapshot: {
-                kind: 'prepared',
-                observation: `${input.registration.partition}:${randomUUID()}`,
-                build: input.build,
-                generation: input.generation,
-              },
-            },
-            input.covered,
-            input.expiresAt,
-            marker,
-            meter,
-            client,
-            { build: input.build, generation: input.generation },
-          );
+          return retainSegmentObservation(input, consumer, meter, client);
         });
       });
     },

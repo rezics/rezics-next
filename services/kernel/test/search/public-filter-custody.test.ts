@@ -185,6 +185,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       let outputCount = 0;
       let after: readonly (string | number | null)[] | undefined;
       let interrupted = false;
+      let terminalObservation: typeof n.queried | undefined;
       while (rawCount < count) {
         const end = Math.min(count, rawCount + 100);
         const expectedOutputCount = outputCount;
@@ -211,17 +212,29 @@ test('native interrupted prepared builds replay one fixed segment and read exact
           entries,
           after: nextAfter,
           rawExhausted: end === count,
+          ...(end === count ? { retain: { covered: n.covered, expiresAt: Date.now() + 60_000 } } : {}),
         };
-        // The producer loses its reply after the committed first segment.
+        // The producer loses the first segment reply and the terminal observation reply.
         const first = await registry.appendPreparationSegment(request, context());
         expect(first.status).toBe('appended');
         if (first.status !== 'appended') throw new Error(first.status);
         charge(first);
-        if (!interrupted) {
+        if (!interrupted || request.retain) {
           const replay = await resumed.appendPreparationSegment(request, context());
           expect(replay.status).toBe('replayed');
           if (replay.status !== 'replayed') throw new Error(replay.status);
           charge(replay);
+          if (request.retain) {
+            expect(first.queried?.snapshot.kind).toBe('prepared');
+            expect(replay.queried).toEqual(first.queried);
+            terminalObservation = first.queried;
+            expect(
+              await resumed.appendPreparationSegment(
+                { ...request, retain: { ...request.retain, covered: cut() } },
+                context(),
+              ),
+            ).toMatchObject({ reason: 'binding_mismatch' });
+          }
           const frontier = await resumed.readPreparationFrontier(
             { registration: n.registration, build, generation },
             context(),
@@ -251,6 +264,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       expect(retained.status).toBe('retained');
       if (retained.status !== 'retained') throw new Error(retained.reason);
       charge(retained);
+      expect(terminalObservation).toEqual(retained.queried);
       const completed = await resumed.completePreparationBuild(
         { queried: retained.queried, rawCount, outputCount },
         context(),

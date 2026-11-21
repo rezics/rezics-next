@@ -63,10 +63,11 @@ New public-filter generations use `public_filter_preparation_segment` under the 
 raw/output counts and Source cursor, inserts at most 100 raw candidates with their already-checked owner witnesses,
 and advances the parent counts, cursor and exhaustion bit under one row lock. Exact retries compare the bounded raw
 ordinal range; a changed retry or stale frontier is refused. New `consumer_work` rows contain only the build locator
-and bounded control state, never accumulated hit or owner arrays. `retainPreparedSegments` binds the terminal build
-to an observation without making it readable. After the consumer's native Source disclosure succeeds,
-`completePreparationBuild` proves raw and selected output ordinals each have exact contiguous coverage and marks the
-build complete. `readPreparedWindow` then uses the output ordinal index for one bounded window and returns only hit
+and bounded control state, never accumulated hit or owner arrays. Book relevance capture retains its prepared
+observation in the terminal append transaction under the same copy admission and build lock. A retry can recover
+the observation through `retainPreparedSegments` using the original covered cut. After the consumer's native
+Source disclosure succeeds, `completePreparationBuild` verifies contiguous raw and output ordinals before opening
+the build for reads. `readPreparedWindow` then uses the output ordinal index for one bounded window and returns only hit
 payloads. Existing legacy rows keep their original reader. Observation and registration erasure delete segment rows
 in bounded batches under the existing custody barriers before clearing their parent cursor and counts.
 
