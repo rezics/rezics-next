@@ -1169,11 +1169,13 @@ export function createNativePublicFilterSourceBinding(
     const coverage = mixed
       ? 'semantic.public_filter_mixed_coverage($1,$2,$3,$4,$5::text)'
       : 'semantic.public_filter_published_coverage($1,$2,$3,$4,$5::text[])';
-    const current = await db.query(
-      `/* semantic.native-keyed:15:20 */
+    // Reuse only the PostgreSQL plan. Each execution checks the current publication and cut.
+    const current = await db.query({
+      name: mixed ? 'semantic_serving_mixed_coverage_v1' : 'semantic_serving_published_coverage_v1',
+      text: `/* semantic.native-keyed:15:20 */
        SELECT 1 FROM ${coverage}
        WHERE generation >= $6::bigint`,
-      [
+      values: [
         consumer.physicalTarget,
         consumer.incarnation,
         cut.definition.readDefinition,
@@ -1181,7 +1183,7 @@ export function createNativePublicFilterSourceBinding(
         mixed ? ports.search.encodeConsumer(consumer) : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
         cut.row.coverage_generation,
       ],
-    );
+    });
     if (current.rowCount !== 1) throw new BindingError('owner_unavailable');
   }
   type Joined = Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, { status: 'joined' }>;
@@ -3082,8 +3084,13 @@ export function createNativePublicFilterSourceBinding(
           if (captured.bootstrap) return attachedCut(captured.bootstrap, captured.row);
           if (captured.awaiting) throw new BindingError('owner_unavailable');
         } else {
-          const attached = await db.query<{ bootstrap: string }>(
-            `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
+          const attached = await db.query<{ bootstrap: string }>({
+            name: mixed
+              ? 'semantic_attach_mixed_coverage_v1'
+              : bookList
+                ? 'semantic_attach_book_coverage_v1'
+                : 'semantic_attach_subject_coverage_v1',
+            text: `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
            WITH parent AS MATERIALIZED (
              SELECT * FROM ${coverage}
            ), cut AS MATERIALIZED (SELECT parent.*, ${withdrawals} AS withdrawals FROM parent)
@@ -3104,7 +3111,7 @@ export function createNativePublicFilterSourceBinding(
            )
            ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
            DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap::text`,
-            [
+            values: [
               consumer.physicalTarget,
               consumer.incarnation,
               resolved.definition.readDefinition,
@@ -3116,7 +3123,7 @@ export function createNativePublicFilterSourceBinding(
               resolved.definition.source.epoch,
               ...(mixed ? [ports.search.encodeConsumer(consumer)] : []),
             ],
-          );
+          });
           if (attached.rows[0]) return attachedCut(attached.rows[0].bootstrap);
           if (bookList) {
             // Reserve the bounded visibility proof and the returned bootstrap before dispatch.
