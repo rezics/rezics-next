@@ -526,7 +526,10 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
       | PublicFilterBindingFailure
     >;
     abort(
-      request: Readonly<{ bootstrap: string }>,
+      request: Readonly<{
+        bootstrap: string;
+        closedPreparation?: Readonly<{ registration: string; observation: string; work: string }>;
+      }>,
       context: PublicFilterConsumerContext,
     ): Promise<Readonly<{ status: 'aborted' | 'pending'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
     recover(
@@ -4388,6 +4391,67 @@ export function createNativePublicFilterSourceBinding(
       const id = request.bootstrap;
       return run(context, async (cost, db) => {
         const cut = await loadBootstrap(id, db);
+        if (request.closedPreparation) {
+          // Release this exact unadopted request and its registration in one commit.
+          // A replacement has its own build UUID and cannot consume old segments.
+          const closed = request.closedPreparation;
+          const work = decode<{
+            bootstrap: { id: string };
+            registration: { id: string };
+            adopted: boolean;
+            queried: PublicFilterQueriedObservation | null;
+            materializing: PublicFilterQueriedObservation | null;
+          }>(closed.work);
+          if (
+            work.adopted !== false ||
+            work.queried !== null ||
+            work.bootstrap.id !== id ||
+            work.registration.id !== closed.registration ||
+            work.materializing?.snapshot.kind !== 'pit' ||
+            work.materializing.snapshot.observation !== closed.observation ||
+            !isDeepStrictEqual(work.materializing.consumer, cut.bootstrap.consumer)
+          )
+            throw new BindingError('binding_mismatch');
+          const result = await db.query(
+            `/* semantic.native-keyed:42:46:19 */
+             WITH owned AS MATERIALIZED (
+               SELECT b.bootstrap,r.id FROM semantic.public_filter_bootstrap b
+               JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+               JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
+               JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(r.partition_no,$3)
+               WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='begun' AND b.queried IS NULL
+                 AND b.publication_job IS NULL AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='prepared'
+                 AND r.consumer_bootstrap=$4 AND r.consumer_work=$5 AND r.state='active'
+                 AND o.registration=r.id AND o.state='closed' AND NOT EXISTS (
+                   SELECT FROM search.public_filter_observation prepared
+                   WHERE (prepared.partition_no,prepared.registration,prepared.prepared_build,prepared.prepared_generation)
+                     =(0,r.id,$4,1) AND prepared.state='open'
+                 )
+               FOR UPDATE OF b,r
+             ), batch AS MATERIALIZED (
+               SELECT s.raw_ordinal FROM owned JOIN search.public_filter_preparation_segment s
+                 ON (s.partition_no,s.registration,s.build,s.generation)=(0,owned.id,$4,1)
+               ORDER BY s.raw_ordinal LIMIT 17
+             ), cleared AS (
+               DELETE FROM search.public_filter_preparation_segment s USING owned
+               WHERE (s.partition_no,s.registration,s.build,s.generation)=(0,owned.id,$4,1)
+                 AND s.raw_ordinal IN (SELECT raw_ordinal FROM batch ORDER BY raw_ordinal LIMIT 16)
+               RETURNING s.raw_ordinal
+             ), finished AS (
+               SELECT owned.* FROM owned WHERE (SELECT count(*) FROM batch)=(SELECT count(*) FROM cleared)
+             ), header AS (
+               DELETE FROM search.public_filter_prepared p USING finished
+               WHERE (p.partition_no,p.registration,p.build,p.generation)=(0,finished.id,$4,1)
+               RETURNING p.registration
+             ), aborted AS (
+               UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM finished
+               WHERE (b.partition_no,b.bootstrap)=(0,finished.bootstrap) RETURNING finished.id
+             ) UPDATE search.public_filter_registration r SET consumer_work=NULL,consumer_bootstrap=NULL
+               FROM aborted WHERE (r.partition_no,r.id)=(0,aborted.id) RETURNING r.id`,
+            [cut.row.bootstrap, closed.registration, closed.observation, id, closed.work],
+          );
+          return { status: result.rowCount === 1 ? ('aborted' as const) : ('pending' as const), cost };
+        }
         const result = (await nativeSourceQuery(db, abortBootstrap, { bootstrap: cut.row.bootstrap }))[0];
         if (!result) throw new BindingError('configuration_changed');
         // Search's public lookup cannot distinguish closed from unknown/expired/uncertain native custody.

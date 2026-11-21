@@ -2136,9 +2136,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
     }
     if (work.materializing && !work.queried) {
-      // A fresh attached cut may retain one small segment in this capture. It
-      // is still preparation under the original meter. The serving page starts
-      // only after the complete native build is available.
+      // Each funded capture can retain one small segment of the same attached
+      // cut. The serving page starts only after the complete build is available.
       const direct = page && inlinePublishedPreparation && work.bootstrap.coveragePublication;
       if (page && !direct) return { status: 'preparing', repair: job, cost: m.cost };
       const plan = recovery.bootstrap.definition.capture;
@@ -2221,10 +2220,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         // exact custody tuple before resuming so a lost consumer-work save can
         // still continue from the database frontier and current PIT locator.
         const saved = (
-          await m.sql<{ queried: string; registration: string }>(
-            `SELECT queried,registration FROM search.public_filter_observation
-             WHERE (partition_no,observation)=($1,$2) AND state='open'`,
-            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation],
+          await m.sql<{ queried: string; registration: string; state: string; expired: boolean }>(
+            `SELECT queried,registration,state,expires_at<=$3 AS expired FROM search.public_filter_observation
+             WHERE (partition_no,observation)=($1,$2)`,
+            [locatorHome(work.materializing.snapshot.observation), work.materializing.snapshot.observation, Date.now()],
           )
         ).rows[0];
         if (!saved || saved.registration !== work.registration.id) return m.unavailable('observation_lost');
@@ -2235,6 +2234,31 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           !isDeepStrictEqual(q.consumer, consumer)
         )
           return m.unavailable('observation_lost');
+        if (saved.state !== 'open' || saved.expired) {
+          if (!publication && !work.adopted && work.bootstrap.coveragePublication && !config.discoveryTarget) {
+            // No public observation was adopted. Require the exact physical PIT
+            // to be closed before retiring the incomplete build and releasing the claim.
+            if (saved.state !== 'closed') {
+              const closed = m.take(await custody.closeObservation(q, config.search, context));
+              if (closed.status !== 'closed') return m.unavailable('observation_lost');
+            }
+            const retired = m.takePreparation(
+              await binding.abort(
+                {
+                  bootstrap: work.bootstrap.id,
+                  closedPreparation: {
+                    registration: work.registration.id,
+                    observation: q.snapshot.observation,
+                    work: encoded,
+                  },
+                },
+                context,
+              ),
+            );
+            if (retired.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
+          }
+          return m.unavailable('observation_lost');
+        }
         work.materializing = q;
         encoded = await save(work, encoded, true, m);
         const found = m.take(
@@ -2583,7 +2607,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             },
             cost: m.cost,
           };
-        return await advanceCapture(retained, old.consumer_work, m, context, page, publication);
+        // A fresh Subject request can leave its original PIT and a partial
+        // segment behind. Fund the same bounded progress when resuming that cut.
+        const resumeSubjectPreparation =
+          page !== undefined && !config.discoveryTarget && !publication && retained.bootstrap.snapshot === 'prepared';
+        return await advanceCapture(
+          retained,
+          old.consumer_work,
+          m,
+          context,
+          page,
+          publication,
+          resumeSubjectPreparation,
+        );
       }
       if (config.discoveryPreparation === 'enrollment') {
         const parent = await m.sql(
