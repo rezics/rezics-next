@@ -2262,8 +2262,13 @@ Discovery allocation obtains the historical high water with the primary key's de
 
 Mixed discovery generations use a 100 ms refresh interval. On relay installation, Search reads the physical
 index setting and upgrades the former 1 s allocation default. Readback confirms the setting after a lost
-acknowledgement. Other configured intervals are retained. The generation lock covers the same copy intent,
-refresh-visible bulk and settlement as before, including the custody shared with erasure and retirement.
+acknowledgement. Other configured intervals are retained. Ordinary, nonempty projection batches prove every native key belongs to
+one home. They take that physical generation/home's exclusive session lock before taking the generation lock
+in shared mode. Distinct homes can wait for the same refresh concurrently. Same-home writes serialize from
+copy intent through visible bulk, copy settlement and the final UUID/incarnation readback. The exact global
+lock remains exclusive for erasure, retirement, publication, repair and receiving. A queued global operation
+drains existing shared writers before subsequently admitted homes can send. A failed lock response retires
+the session, releasing any locks the native server acquired.
 
 The ordinary writer owns native admission, dispatch, uncertainty and settlement. Generation publication and
 erasure share one target fence. A registration replay may confirm the exact stored definition and incarnation while

@@ -437,7 +437,7 @@ export function validateDiscoveryRepairWinner(index: string, action: AnyDiscover
 }
 
 /** Session custody spans the external effect, but no database transaction/row lock does. */
-export async function withDiscoveryTarget<T>(
+export function withDiscoveryTarget<T>(
   pool: Pool,
   search: OpenSearch,
   target: DiscoveryTarget,
@@ -445,11 +445,38 @@ export async function withDiscoveryTarget<T>(
   purge = false,
   context?: DiscoveryProjectionContext,
 ): Promise<T> {
+  return withPhysicalDiscoveryTarget(pool, search, target, work, purge, context);
+}
+
+async function withPhysicalDiscoveryTarget<T>(
+  pool: Pool,
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  work: (client: PoolClient, index: string) => Promise<T>,
+  purge: boolean,
+  context?: DiscoveryProjectionContext,
+  ordinaryHome?: number,
+): Promise<T> {
   const index = discoveryIndexName(target.prefix, target.generation);
   const transport = projectionSearch(search, context);
   return withConnection(pool, async (client) => {
     if (context) projectionRemaining(context);
-    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
+    const values = ordinaryHome === undefined ? [index] : [index, ordinaryHome];
+    try {
+      // Queue same-home writers before they acquire shared generation custody. The two-int home
+      // keyspace is disjoint from the existing bigint generation fence used by erasure and retirement.
+      await client.query(
+        ordinaryHome === undefined
+          ? 'SELECT pg_advisory_lock(hashtextextended($1,0))'
+          : `WITH home AS MATERIALIZED (SELECT pg_advisory_lock(hashtext($1),$2::integer))
+             SELECT pg_advisory_lock_shared(hashtextextended($1,0)) FROM home`,
+        values,
+      );
+    } catch (error) {
+      // The server may already hold one or both session locks after a lost response.
+      discardConnection(client, error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
     try {
       if (context) projectionRemaining(context);
       const {
@@ -474,7 +501,14 @@ export async function withDiscoveryTarget<T>(
     } finally {
       try {
         if (context) projectionRemaining(context);
-        await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
+        const released = await client.query<{ unlocked: boolean }>(
+          ordinaryHome === undefined
+            ? 'SELECT pg_advisory_unlock(hashtextextended($1,0)) AS unlocked'
+            : `SELECT pg_advisory_unlock_shared(hashtextextended($1,0))
+                 AND pg_advisory_unlock(hashtext($1),$2::integer) AS unlocked`,
+          values,
+        );
+        if (released.rows[0]?.unlocked !== true) throw new Error('Discovery physical custody was not held');
       } catch (error) {
         discardConnection(client, error instanceof Error ? error : new Error(String(error)));
         throw error;
@@ -623,8 +657,9 @@ export function createDiscoveryProjection(options: {
     actions: readonly Action[],
     repair: boolean,
     captureKey: ((id: string) => Key) | null,
-    held?: HeldDiscoveryTarget,
+    custody: { held?: HeldDiscoveryTarget; ordinaryHome?: number } = {},
   ) {
+    const { held, ordinaryHome } = custody;
     const context = held?.context;
     const transport = projectionSearch(search, context);
     const live = () => {
@@ -758,7 +793,7 @@ export function createDiscoveryProjection(options: {
       }
     };
     if (held) await apply(held.client, held.index);
-    else await withDiscoveryTarget(pool, search, target, apply);
+    else await withPhysicalDiscoveryTarget(pool, search, target, apply, false, undefined, ordinaryHome);
     return effects;
   }
   async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n, repair = false) {
@@ -775,7 +810,13 @@ export function createDiscoveryProjection(options: {
       const limit = owner === 'accounts' ? 100 : 256;
       for (let offset = 0; offset < owned.length; offset += limit) {
         const actions = await prepareChunk(partition, owner, owned.slice(offset, offset + limit), atLeast);
-        await applyActions(actions, repair, null);
+        if (
+          actions.some((action) => discoveryPartition(parseDiscoveryDocumentKey(registry, action.id).id) !== partition)
+        )
+          throw new RangeError('Foreign discovery action');
+        await applyActions(actions, repair, null, {
+          ordinaryHome: !repair && actions.length > 0 ? partition : undefined,
+        });
       }
     }
   }
@@ -899,7 +940,7 @@ export function createDiscoveryProjection(options: {
       })
     )
       throw new TypeError('Invalid review receiving actions');
-    await applyActions(actions, true, null, held);
+    await applyActions(actions, true, null, { held });
   }
   async function applyNativeActions(actions: readonly AnyDiscoveryIndexAction[]) {
     if (actions.length > 100) throw new RangeError('Metadata discovery write exceeds its native batch bound');
