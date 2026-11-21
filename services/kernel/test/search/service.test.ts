@@ -1,5 +1,5 @@
 import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
@@ -10,10 +10,12 @@ import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
-import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
+import { EVIDENCE_HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { epochFixture } from '../semantic/support/identity-epoch.ts';
+import { createMappedExecutedRequestSubject } from './support/executed-request-runtime.ts';
 import { createFakeSource } from './support/fake-source.ts';
 
 const missingFigure: PublicFigureView = {
@@ -346,7 +348,7 @@ test("typeahead labels follow the reader's language chain", async () => {
   });
 });
 
-test('an unreachable node, a missing alias or a missing template is index_not_ready', async () => {
+test('an unreachable node or a missing alias is index_not_ready', async () => {
   const unreachable = createSearchService({
     pool,
     client: createOpenSearch('http://127.0.0.1:9', { timeoutMs: 2000 }),
@@ -359,11 +361,43 @@ test('an unreachable node, a missing alias or a missing template is index_not_re
   await problem(unreachable.suggest('Koko'), 'index_not_ready');
   const missing = createSearchService({ pool, client, prefix: freshPrefix(), source: createFakeSource(), cursors });
   await problem(missing.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
-  const { prefix, service } = await deployment([kokoro]);
-  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
-  await client.request('DELETE', `/_scripts/${prefix}${SEARCH_TEMPLATE}`);
-  await problem(service.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
-  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
+});
+
+describe('stored template recovery', () => {
+  let book: IndexedSubject;
+  beforeAll(async () => {
+    const identity = await epochFixture(databaseUrl, { pool });
+    book = await createMappedExecutedRequestSubject(identity, 1, 'Kokoro').finally(() => identity.close());
+  });
+
+  test('preserves verified scripts across alias loss and reinstalls a missing script', async () => {
+    let installed = 0;
+    const { prefix, service } = await deployment([book], {
+      client: {
+        ...client,
+        request<T>(...args: Parameters<OpenSearch['request']>) {
+          if (args[0] === 'PUT' && args[1].startsWith('/_scripts/')) installed++;
+          return client.request<T>(...args);
+        },
+      },
+    });
+    const read = () => service.search('anonymous', { text: 'kokoro' });
+    expect(ids(await read())).toEqual([book.id]);
+    const initial = installed;
+    expect(initial).toBeGreaterThan(0);
+
+    const target = { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) };
+    await client.request('POST', '/_aliases', { actions: [{ remove: target }] });
+    await problem(read(), 'index_not_ready');
+    await client.request('POST', '/_aliases', { actions: [{ add: target }] });
+    expect(ids(await read())).toEqual([book.id]);
+    expect(installed).toBe(initial);
+
+    await client.request('DELETE', `/_scripts/${prefix}${EVIDENCE_HIT_TEMPLATE}`);
+    await problem(read(), 'index_not_ready');
+    expect(ids(await read())).toEqual([book.id]);
+    expect(installed).toBe(2 * initial);
+  });
 });
 
 test('each request makes at most three index requests and reads only the partitions of examined hits', async () => {

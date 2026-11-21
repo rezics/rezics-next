@@ -389,19 +389,18 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       unavailable(error) {
         if (!(error instanceof OpenSearchError)) return false;
         const body = error.body as { error?: unknown } | null;
-        return error.type === 'index_not_found_exception' || missingTemplate(body?.error);
+        if (missingTemplate(body?.error)) {
+          templatesInstalled = false;
+          return true;
+        }
+        return error.type === 'index_not_found_exception';
       },
     });
   }
 
   async function indexRequest<T>(operation: () => Promise<T>): Promise<T> {
     const deadline = requestDeadline();
-    try {
-      return await (requests.getStore()?.indexRequest ?? requestIndex())(() => requestStep(operation, deadline));
-    } catch (error) {
-      templatesInstalled = false;
-      throw error;
-    }
+    return (requests.getStore()?.indexRequest ?? requestIndex())(() => requestStep(operation, deadline));
   }
 
   async function executeRequest<T, Context extends { deadline: number; scope?: LeafOptions }>(
