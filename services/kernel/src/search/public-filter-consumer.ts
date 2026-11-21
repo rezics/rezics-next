@@ -640,6 +640,7 @@ import type {
 } from '../semantic/public-filter-source-contract.ts';
 import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
 import type {
+  NativePublicFilterPreparation,
   PublicFilterSourceBinding,
   PublicFilterSourceBootstrapBinding,
   PublicSourceBootstrap,
@@ -2271,10 +2272,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: Readonly<{ job: string; consumer: PublicFilterConsumer }>,
     inlinePublishedPreparation = false,
     bookPage?: boolean,
-    freshPit?: {
+    freshPit?: Pick<
+      NonNullable<Extract<NativePublicFilterPreparation, { status: 'begun' }>['freshPit']>,
+      'adopt' | 'transfer'
+    > & {
       bootstrap: PublicSourceBootstrap;
       admitPhysicalOpen?: () => Promise<(() => void) | undefined>;
-      adopt: (q: PublicFilterQueriedObservation) => ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
     },
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
@@ -2342,6 +2345,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           config.search,
           context,
           freshPit?.admitPhysicalOpen,
+          work.independentPit && freshPit
+            ? { previous: encoded, retained: (queried) => boundedWork({ ...work, queried }) }
+            : undefined,
         ),
       );
       if (retained.status !== 'retained') return m.unavailable('observation_lost');
@@ -2349,7 +2355,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       else work.queried = retained.queried;
       own(retained.queried, context, m);
       try {
-        encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
+        if (retained.claimWork === undefined) {
+          encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
+        } else {
+          encoded = retained.claimWork;
+          m.cost.frontierWrites++;
+        }
       } catch (error) {
         // A lost reply leaves custody uncertain. Only an observed CAS loss proves this PIT is ours to close.
         if (!work.independentPit && error instanceof LostWorkUpdate) retireUndelivered(retained.queried, false);
@@ -2702,6 +2713,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
         return m.unavailable('observation_lost');
+      if (freshPit?.transfer && work.independentPit && page && servingSubject && recovered.status === 'begun') {
+        const moved = m.take(await freshPit.transfer(q, encoded, boundedWork({ ...work, adopted: true })));
+        if (!('transferred' in moved) || !moved.transferred) return m.unavailable('source_pending');
+        m.cost.frontierWrites += 2;
+        page.bookCut = { definition: recovered.bootstrap.definition, covered: recovered.bootstrap.covered };
+        markUnpublishedIndependentPit(q);
+        return { status: 'captured', queried: q, repair: job, cost: m.cost };
+      }
       const adopted =
         recovered.status === 'adopted'
           ? recovered
@@ -3135,6 +3154,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           ? {
               bootstrap: begun.bootstrap,
               adopt: fresh.adopt,
+              ...(fresh.transfer ? { transfer: fresh.transfer } : {}),
               ...(fresh.independent
                 ? {
                     admitPhysicalOpen: async () => {

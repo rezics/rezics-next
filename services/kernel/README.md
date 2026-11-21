@@ -248,6 +248,8 @@ The worker replays the log into the new generation. A failed rebuild reports one
 
 A ranked Book first page with a published Source cut has its own durable PIT-opening claim. Apply the Search
 claim migration before deploying these readers. Existing cursors continue through their retained observation.
+The opener stores its recovery work with the physical PIT receipt. Its original request then checks the current
+published population, stored registration, observation and Source definition while handing off the adopted cut.
 The worker retires expired unpublished claims using the original registration, bootstrap and physical PIT.
 A lost OpenSearch open response without a retained locator stays uncertain until its original deletion is confirmed.
 Before rolling the schema back, stop new independent captures and let their worker drain active claims.

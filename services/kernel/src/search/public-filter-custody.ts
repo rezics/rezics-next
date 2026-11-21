@@ -1800,10 +1800,11 @@ export function createPublicFilterCustody(
         return { status: 'registered' as const, registration: identity, consumer, cost: meter };
       });
     },
-    openPit(request, search, context, admitPhysicalOpen) {
+    openPit(request, search, context, admitPhysicalOpen, claimWork) {
       const input = decode<typeof request>(encode(request));
       lifetime(input.keepAliveMs);
       requireValue((input.claim !== undefined) === (admitPhysicalOpen !== undefined));
+      if (claimWork) requireValue(input.claim !== undefined);
       if (input.claim !== undefined) {
         requireValue(
           input.registration.partition === 0 &&
@@ -1908,7 +1909,10 @@ export function createPublicFilterCustody(
             },
           };
           if (input.claim) {
+            const retainedWork = claimWork?.retained(q);
             const item = {
+              previous_work: claimWork?.previous,
+              retained_work: retainedWork,
               registration: input.registration.id,
               bootstrap: input.claim.slice(2),
               observation: q.snapshot.observation,
@@ -1946,7 +1950,12 @@ export function createPublicFilterCustody(
               3,
             );
             if (!(group ? await group : (await persist([item], meter)).rows[0])) throw new Failure('binding_mismatch');
-            return { status: 'retained' as const, queried: q, cost: meter };
+            return {
+              status: 'retained' as const,
+              queried: q,
+              ...(retainedWork === undefined ? {} : { claimWork: retainedWork }),
+              cost: meter,
+            };
           }
           const batch = bookRows(
             'retain',
@@ -3707,6 +3716,7 @@ export async function readGenerationPublicationCustody(
       registration: CustodyRegistration;
       queried: PublicFilterQueriedObservation | null;
       registrationWork: string | null;
+      registeredDefinition?: string;
       cost: CustodyCost;
     }>
   | CustodyFailure
@@ -3757,7 +3767,14 @@ export async function readGenerationPublicationCustody(
         requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
         await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
       }
-      return { definition: definition.data, registration, queried: null, registrationWork, cost: meter };
+      return {
+        definition: definition.data,
+        registration,
+        queried: null,
+        registrationWork,
+        ...(recovery === 'registration' ? { registeredDefinition: row.definition as string } : {}),
+        cost: meter,
+      };
     }
     const q = decode<PublicFilterQueriedObservation>(row.queried);
     queried(q);

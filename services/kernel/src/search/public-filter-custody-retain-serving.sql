@@ -9,15 +9,17 @@ target AS MATERIALIZED (
   SELECT t.partition_no,i.* FROM input CROSS JOIN target t
   JOIN search.public_filter_registration r USING(partition_no,physical_target)
   JOIN jsonb_to_recordset(input.claims) AS i(registration text,bootstrap uuid,observation text,
-    consumer text,queried text,covered text,expires bigint,hash text,pit text)
+    consumer text,queried text,covered text,expires bigint,hash text,pit text,previous_work text,retained_work text)
     ON i.registration=r.id AND i.consumer=r.consumer
   WHERE r.state='active'
   ORDER BY r.id,i.bootstrap FOR SHARE OF r
 ), claimed AS (
-  UPDATE search.public_filter_pit_claim c SET state='retained'
+  UPDATE search.public_filter_pit_claim c SET state='retained',consumer_work=coalesce(i.retained_work,c.consumer_work)
   FROM input,registered i,semantic.public_filter_bootstrap b
   WHERE (c.partition_no,c.registration,c.bootstrap)=(i.partition_no,i.registration,i.bootstrap)
     AND c.state='opening' AND c.consumer_work IS NOT NULL AND c.deadline>input.now_ms
+    AND ((i.previous_work IS NULL AND i.retained_work IS NULL)
+      OR (i.previous_work=c.consumer_work AND i.retained_work IS NOT NULL))
     AND (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) AND b.state='begun'
     AND b.snapshot_kind='pit' AND b.queried IS NULL AND b.coverage_publication IS NOT NULL
     AND b.publication_job IS NULL

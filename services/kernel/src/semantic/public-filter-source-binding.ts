@@ -673,11 +673,17 @@ type NativePreparationInput =
       subjectEnrollment?: SubjectEnrollment;
       coldEnrollment?: ColdEnrollmentRequest;
     }>;
+type FreshPitTransfer = (
+  queried: PublicFilterQueriedObservation,
+  previousWork: string,
+  adoptedWork: string,
+) => Promise<{ transferred: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
 export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
       enrollmentAdvanced?: true;
       freshPit?: Readonly<{
         independent?: true;
+        transfer?: FreshPitTransfer;
         unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
       }>;
@@ -1000,6 +1006,7 @@ function restoreDefinition(
     dependencyKeys: keys,
   };
 }
+const handoffServingPit = readFileSync(new URL('./public-filter-source-handoff-pit.sql', import.meta.url), 'utf8');
 const retireSplitObservations = readFileSync(
   new URL('./public-filter-source-retire-split.sql', import.meta.url),
   'utf8',
@@ -2920,12 +2927,58 @@ export function createNativePublicFilterSourceBinding(
           if (mixed || snapshot !== 'pit' || id !== newId || cut.row.state !== 'begun' || cut.row.queried !== null)
             return { status: 'begun' as const, bootstrap, cost };
           freeze(bootstrap);
+          const definitionPayload = registration.registeredDefinition;
+          const transfer: FreshPitTransfer = (queried, previousWork, adoptedWork) => {
+            const q = structuredClone(queried);
+            return run({ deadline }, async (cost, store) => {
+              if (
+                q.snapshot.kind !== 'pit' ||
+                q.snapshot.observation !== bootstrap.id ||
+                !isDeepStrictEqual(q.consumer, bootstrap.consumer)
+              )
+                throw new BindingError('binding_mismatch');
+              // The new UUID belongs to this invocation. Validate the current population and the
+              // stored bytes from both owners before handing this exact physical receipt to its page.
+              const result = await store.query({
+                name: 'semantic_fresh_ranked_pit_handoff_v1',
+                text: handoffServingPit,
+                values: [
+                  id,
+                  registration.registration.id,
+                  q.snapshot.observation,
+                  Date.now(),
+                  previousWork,
+                  adoptedWork,
+                  ports.search.encodeState(q),
+                  ports.search.encodeState(bootstrap.covered),
+                  encode(bootstrap.consumer),
+                  bootstrap.definition.readDefinition,
+                  cut.row.coverage_publication,
+                  cut.row.coverage_generation,
+                  bootstrap.definition.meaning.digest,
+                  encode(bootstrap.definition.capture),
+                  JSON.stringify(bootstrap.definition.dependencyKeys),
+                  routeDigest,
+                  bootstrap.definition.source.id,
+                  bootstrap.definition.source.configuration,
+                  bootstrap.consumer.physicalTarget,
+                  ports.search.encodeConsumer(bootstrap.consumer),
+                  definitionPayload,
+                  bootstrap.consumer.incarnation,
+                  [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+                ],
+              });
+              return { transferred: result.rowCount === 1, cost };
+            });
+          };
           return {
             status: 'begun' as const,
             bootstrap,
             cost,
             freshPit: {
-              ...(independent ? { independent: true as const } : {}),
+              ...(independent
+                ? { independent: true as const, ...(definitionPayload === undefined ? {} : { transfer }) }
+                : {}),
               unopened() {
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.

@@ -28,8 +28,29 @@ test('cold Subject publication discloses the originals and preserves relevance t
       ).rows;
     const before = await projectionBuilds();
     const query = { text: marker, filter: { type: { in: ['schema:Book'] } }, limit: 1, languages: ['en'] };
+    // A crash after either commit must leave the matching recovery work with its native receipt.
+    await database.pool.query(`CREATE FUNCTION search.check_test_pit_handoff() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.state='retained' AND NEW.consumer_work IS NOT DISTINCT FROM OLD.consumer_work THEN
+          RAISE EXCEPTION 'The PIT receipt committed without its recovery work';
+        END IF;
+        IF NEW.state='handed' AND NOT EXISTS (
+          SELECT FROM semantic.public_filter_bootstrap b
+          WHERE (b.partition_no,b.bootstrap)=(NEW.partition_no,NEW.bootstrap)
+            AND b.state='adopted' AND b.xmin=pg_current_xact_id()::xid
+        ) THEN RAISE EXCEPTION 'The handed PIT did not adopt its Source cut in the same transaction';
+        END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER check_test_pit_handoff AFTER UPDATE OF state ON search.public_filter_pit_claim
+      FOR EACH ROW WHEN (OLD.state<>NEW.state AND NEW.state IN ('retained','handed'))
+      EXECUTE FUNCTION search.check_test_pit_handoff()`);
     const concurrent = await Promise.all(
       Array.from({ length: 4 }, () => fixture.request('anonymous', 'POST', '/v1/subjects:search', query)),
+    ).finally(() =>
+      database.pool.query(
+        'DROP TRIGGER check_test_pit_handoff ON search.public_filter_pit_claim; DROP FUNCTION search.check_test_pit_handoff()',
+      ),
     );
     for (const response of concurrent) {
       expect(response.status, JSON.stringify(response.body)).toBe(200);

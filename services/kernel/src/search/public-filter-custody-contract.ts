@@ -82,6 +82,7 @@ export type CustodyFound = Readonly<{
 }>;
 export type CustodyRetained = Readonly<{
   status: 'retained';
+  claimWork?: string;
   queried: PublicFilterQueriedObservation;
   cost: CustodyCost;
 }>;
@@ -185,6 +186,8 @@ export interface PublicFilterCustody {
     context: PublicFilterConsumerContext,
     /** An original grant returns the budget check to perform immediately before its sole physical dispatch. */
     admitPhysicalOpen?: () => Promise<(() => void) | undefined>,
+    /** Move this exact opener's recovery work with its retained physical receipt. */
+    claimWork?: Readonly<{ previous: string; retained(queried: PublicFilterQueriedObservation): string }>,
   ): Promise<CustodyRetained | CustodyFailure>;
   /** Immutable SQL prepared input owned by this observation, not a mutable cache or population proof. */
   retainPrepared(
