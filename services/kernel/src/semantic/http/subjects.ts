@@ -1,3 +1,4 @@
+import { readTermDetailSnapshot } from '../term-detail-snapshot.ts';
 import { termSummaryDisclosure } from '../term-summary-disclosure.ts';
 import { accessRoot } from '../../access/derived-access.ts';
 import { requireLiveJob } from '../../http/admission.ts';
@@ -1298,6 +1299,8 @@ function subjectRoutes(
           context: query.context ?? GLOBAL_CONTEXT,
           languages,
           authorization: {
+            termSnapshot: (id, seen) =>
+              readTermDetailSnapshot({ pool, access: requestAccess, actor, deadline: job.deadline }, id, seen),
             termDisclosure: (witness) =>
               termSummaryDisclosure(
                 { pool, access: accessRoot(requestAccess), actor, deadline: job.deadline },

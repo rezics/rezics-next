@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { createAccess } from '../../src/access/index.ts';
+import { termDetailSql } from '../../src/semantic/term-detail-snapshot.ts';
 import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -20,7 +22,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { accessCommandAuthorization, actorOf, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
-import { encodeSession } from '../../src/tokens/session.ts';
+import { decodeSession, encodeSession } from '../../src/tokens/session.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createRealAccess } from './real-access.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
@@ -30,7 +32,6 @@ import readPartitionBatch from '../../src/partition/read-batch.sql';
 import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
 import readSubjectReference from '../../src/semantic/read-subject-reference.sql';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
-import readDetailSources from '../../src/semantic/read-subject-detail-sources.sql';
 import readPropertySources from '../../src/semantic/read-subject-property-sources.sql';
 import readSummaries from '../../src/semantic/summaries-read.sql';
 import readPermissionTimeEmptyInverse from '../../src/access/permission-time-empty-inverse.sql';
@@ -485,11 +486,29 @@ test('a term-only Book summary reuses its original labels and checks final Acces
   const book = await createFixed(partition, 'schema:Book', 'A term-only Book');
   await realAccess.grant(book, 'reader', 'subject:read');
   await catchUpLinks(partition);
-  const read = () => call('GET', `/v1/subjects/${book.id}`, { token: 'reader' });
+  const native = createKernel({
+    pool,
+    tokens,
+    routeKey,
+    receiptKeys: testReceiptKeys(),
+    writeRate: realAccess.writeRate,
+    access: (config) => createAccess({ ...config, auth: realAccess.auth }),
+  });
+  const read = async (session?: string) => {
+    const response = await native.handle(
+      new Request(`http://kernel.test/v1/subjects/${book.id}`, {
+        headers: {
+          authorization: `Bearer ${realAccess.bearer('reader')}`,
+          ...(session ? { [SESSION_HEADER]: session } : {}),
+        },
+      }),
+    );
+    return { response, body: (await response.json()) as Record<string, any> };
+  };
   const observer = observeSql(pool);
   const denial = randomUUID();
   async function changeAfterDetail(change: () => Promise<void>) {
-    const barrier = observer.hold({ statement: readDetailSources.sql }, 'after');
+    const barrier = observer.hold({ statement: termDetailSql() }, 'after');
     const response = read();
     try {
       await Promise.race([
@@ -518,9 +537,24 @@ test('a term-only Book summary reuses its original labels and checks final Acces
       readPropertySources['~standard'].query.text,
     );
 
-    expect(observer.records.filter(({ statement }) => statement.includes('one permission formula'))).toHaveLength(1);
+    expect(observer.records.filter(({ statement }) => statement === termDetailSql())).toHaveLength(1);
+    expect(observer.records.some(({ statement }) => statement.includes('one permission formula'))).toBe(false);
     expect(current.response.headers.get('etag')).toBe('"1"');
-    expect(current.response.headers.get(SESSION_HEADER)).toBeTruthy();
+    const session = current.response.headers.get(SESSION_HEADER)!;
+    expect(session).toBeTruthy();
+    const ordinary = await call('GET', `/v1/subjects/${book.id}`, { token: 'reader', session });
+    const nativeSession = await read(session);
+    const components = (token: string) => decodeSession(tokens, `account:${accounts.reader}`, token);
+    expect(components(nativeSession.response.headers.get(SESSION_HEADER)!)).toEqual(
+      components(ordinary.response.headers.get(SESSION_HEADER)!),
+    );
+    expect(nativeSession.body).toEqual(ordinary.body);
+    observer.armFault({
+      match: { statement: termDetailSql() },
+      boundary: 'before',
+      error: Object.assign(new Error('serialization retry'), { code: '40001' }),
+    });
+    expect((await read()).response.status).toBe(503);
 
     try {
       const moved = await changeAfterDetail(async () => {
@@ -578,11 +612,13 @@ test('a term-only Book summary reuses its original labels and checks final Acces
     });
     expect(denied.response.status).toBe(200);
     expect(denied.body.summary).toBeNull();
+    expect((await read()).response.status).toBe(404);
     await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
 
     const hidden = await changeAfterDetail(() => hide(book.id));
     expect(hidden.response.status).toBe(200);
     expect(hidden.body.summary).toBeNull();
+    expect((await read()).response.status).toBe(404);
     expect(observer.records.map(({ statement }) => statement)).toContain(summarySql);
   } finally {
     await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);

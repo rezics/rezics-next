@@ -1,3 +1,4 @@
+import type { readTermDetailSnapshot } from './term-detail-snapshot.ts';
 import type { TermDetailWitness, termSummaryDisclosure } from './term-summary-disclosure.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { readSummaryWitness, summaryPositionRegion } from './summary-currentness.ts';
@@ -138,6 +139,7 @@ export type SubjectReadOptions = {
   deadline?: number;
   prepareAuthorization?: () => Promise<AccessCheck>;
   prepareAuthorize?: (id: string) => Promise<DetailCheck>;
+  termSnapshot?: (id: string, seen: readonly SubjectComponent[]) => ReturnType<typeof readTermDetailSnapshot>;
   termDisclosure?: (witness: TermDetailWitness) => ReturnType<typeof termSummaryDisclosure>;
   readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   yieldAdmission?: YieldAdmission;
@@ -162,6 +164,7 @@ export type SubjectReadingPageRequest = {
   languages: readonly string[];
   authorization: SubjectReadingAuthorizationPort<SubjectDetailCheck, YieldAdmission> & {
     prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
+    termSnapshot?: SubjectReadOptions['termSnapshot'];
     termDisclosure?: SubjectReadOptions['termDisclosure'];
   };
   runNative: <T>(read: (yieldAdmission?: YieldAdmission) => Promise<T>) => Promise<T>;
@@ -889,7 +892,7 @@ async function projectSummaries(
 }
 
 // Native Subject projection and related identity reads moved behind the supplied-port application.
-type SubjectReadRow = {
+export type SubjectReadRow = {
   id: string;
   account: string | null;
   redirect: string | null;
@@ -1380,6 +1383,33 @@ async function readSubjectNative(
     };
     if (!summaries.termDisclosure)
       return withSubjectStatementReader(summaries.readAs, async (refresh) => read(await prepare(), refresh, false));
+    if (
+      summaries.termSnapshot &&
+      !terminal &&
+      !summaries.reviewIdentity &&
+      context === GLOBAL_SUBJECT_CONTEXT &&
+      !currentReadSnapshot(pool)
+    ) {
+      const observed = await withSubjectStatementReader(undefined, (refresh) =>
+        refresh ? Promise.resolve(undefined) : summaries.termSnapshot!(subjectId, summaries.seen ?? []),
+      );
+      if (observed) {
+        const { rows, component, release } = observed;
+        return {
+          rows,
+          component,
+          release,
+          layerDigest: rows[0]!.release,
+          active: { release, digest: rows[0]!.release },
+          supported: currentTerms(asFacts(rows)).map((fact) => ({ fact, source: null })),
+          reviewedIdentity: null,
+          reuseLabels: true,
+          members: [],
+          resolution: {},
+          relationCounts: {},
+        };
+      }
+    }
     const initialAuthorize = await prepare();
     if (initialAuthorize.termCandidate && summaries.readAs && !summaries.reviewIdentity) {
       try {
@@ -1735,6 +1765,9 @@ async function readSubjectPage(
             }
           : {}),
         authorize: authorizeSummary(yieldAdmission),
+        ...(input.authorization.termSnapshot && !runtime.work
+          ? { termSnapshot: input.authorization.termSnapshot }
+          : {}),
         ...(input.authorization.termDisclosure ? { termDisclosure: input.authorization.termDisclosure } : {}),
         seen: input.seen,
         ...(input.observeMissingCheckpoint ? { observeMissingCheckpoint: true } : {}),

@@ -16,7 +16,7 @@ export type TermDetailWitness = {
   securityRevision: string;
 };
 
-function termDisclosureSql() {
+export function termDisclosureSql() {
   return memoizedValue(termDisclosureSql, () => {
     // Bind both disclosure instants to the statement's native decision time.
     const source = disclosure.sql
