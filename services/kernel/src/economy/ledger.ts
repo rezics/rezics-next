@@ -1,4 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type {
+  CreatorClearing,
+  CreatorPayoutObservation,
+  CreatorPayoutStatus,
+  CreatorRail,
+} from './storage/creator-contract.ts';
 import type { PoolClient } from 'pg';
 import {
   isEconomyBookId,
@@ -28,8 +34,20 @@ export interface EconomyDatabase {
 type WalletKey = Parameters<EconomyLedger['readBalance']>[0];
 type Command = Parameters<EconomyLedger['release']>[0];
 type Operation = Omit<Command, 'holdId'>;
-type Kind = WalletEntry['kind'] | 'allocate' | 'capture_allocation' | 'release_allocation' | 'release_amount';
-type ControlRole = 'provider_clearing' | 'chargeback_receivable';
+type CreatorKind =
+  | 'creator_accrual'
+  | 'creator_payout_reserve'
+  | 'creator_payout'
+  | 'creator_payout_refusal'
+  | 'creator_payout_return';
+type Kind =
+  | WalletEntry['kind']
+  | CreatorKind
+  | 'allocate'
+  | 'capture_allocation'
+  | 'release_allocation'
+  | 'release_amount';
+type ControlRole = 'provider_clearing' | 'chargeback_receivable' | 'creator_payable' | 'creator_expense';
 type AccountRole = 'wallet' | 'issuer' | ControlRole;
 type Position = Readonly<{
   accountId: string;
@@ -185,7 +203,7 @@ function validPlan({ deltas }: Plan): boolean {
       return false;
     const restricted = BigInt(change.position.restricted);
     if (
-      change.position.accountRole === 'wallet'
+      change.position.accountRole === 'wallet' || change.position.accountRole === 'creator_payable'
         ? held < 0n || posted < held + restricted
         : held !== 0n || restricted !== 0n
     )
@@ -311,7 +329,7 @@ function validFundingProvider(value: FundingProvider): boolean {
   return validOperationKey(value.namespace) && (value.mode === 'test' || value.mode === 'live');
 }
 
-async function fundingControl(context: Context, role: ControlRole, reference: string): Promise<string> {
+async function controlAccount(context: Context, role: ControlRole, reference: string): Promise<string> {
   const { client, bookId, asset } = context;
   const key = [bookId, asset.id, role, reference];
   await client.query(
@@ -329,9 +347,9 @@ async function fundingControl(context: Context, role: ControlRole, reference: st
 }
 
 async function lockFundingPositions(context: Context, provider: FundingProvider, includeReceivable: boolean) {
-  const clearing = await fundingControl(context, 'provider_clearing', `${provider.mode}/${provider.namespace}`);
+  const clearing = await controlAccount(context, 'provider_clearing', `${provider.mode}/${provider.namespace}`);
   const receivable = includeReceivable
-    ? await fundingControl(context, 'chargeback_receivable', context.accountId)
+    ? await controlAccount(context, 'chargeback_receivable', context.accountId)
     : null;
   const controls = new Map<string, ControlRole>([[clearing, 'provider_clearing']]);
   if (receivable !== null) controls.set(receivable, 'chargeback_receivable');
@@ -367,7 +385,84 @@ async function bindFundingJournal(context: Context, proof: FundingProof, transac
   if (rowCount !== 1) throw new Error('Economy funding journal has no matching provider evidence');
 }
 
-export function createEconomyLedger(database: EconomyDatabase, bookId: string): EconomyLedger & NativeFundingLedger {
+type CreatorEvidence = readonly [
+  namespace: string,
+  mode: 'owner' | 'test' | 'live',
+  kind: 'accrual' | 'movement' | 'refusal',
+  id: string,
+];
+type CreatorPayoutRow = Omit<CreatorPayoutStatus, 'provider'> & {
+  namespace: string;
+  mode: CreatorRail['mode'];
+  destinationRef: string;
+};
+
+function validCreatorRail(provider: CreatorRail): boolean {
+  return validFundingProvider(provider) && validOperationKey(provider.destinationRef);
+}
+
+function sameCreatorRail(a: CreatorRail, b: CreatorRail): boolean {
+  return a.namespace === b.namespace && a.mode === b.mode && a.destinationRef === b.destinationRef;
+}
+
+async function readCreatorPayout(
+  client: Query,
+  bookId: string,
+  payoutId: string,
+  lock: boolean,
+): Promise<CreatorPayoutStatus | null> {
+  const { rows } = await client.query<CreatorPayoutRow>(
+    `SELECT payout_id AS "payoutId", creator_id::text AS "creatorId", asset_id AS "assetId", units::text,
+            provider_namespace AS namespace, provider_mode AS mode, destination_ref AS "destinationRef",
+            status, paid_movement_id AS "paidMovementId", returned_units::text AS "returnedUnits"
+       FROM economy.creator_payout WHERE book_id = $1 AND payout_id = $2 ${lock ? 'FOR UPDATE' : ''}`,
+    [bookId, payoutId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const { namespace, mode, destinationRef, ...payout } = row;
+  return { ...payout, provider: { namespace, mode, destinationRef } };
+}
+
+async function creatorPositions(
+  context: Context,
+  opposing?: Readonly<{ role: 'creator_expense' | 'provider_clearing'; reference: string }>,
+) {
+  const controls = new Map<string, ControlRole>();
+  const counter = opposing ? await controlAccount(context, opposing.role, opposing.reference) : null;
+  if (counter !== null) controls.set(counter, opposing!.role);
+  const payable = await controlAccount(context, 'creator_payable', context.accountId);
+  controls.set(payable, 'creator_payable');
+  const positions = await lockPositions(context, [...controls.keys()], controls);
+  return { payable: positions.get(payable)!, counter: counter === null ? null : positions.get(counter)! };
+}
+
+function movementOf(payout: CreatorPayoutStatus, observation: CreatorPayoutObservation, amount: bigint) {
+  const units = BigInt(payout.units);
+  if (observation.kind === 'returned') {
+    if (
+      payout.status !== 'paid' ||
+      payout.paidMovementId !== observation.originalMovementId ||
+      observation.movementId === observation.originalMovementId ||
+      BigInt(payout.returnedUnits) + amount > units
+    )
+      return null;
+    return {
+      returned: BigInt(payout.returnedUnits) + amount,
+      status: 'paid' as const,
+      paidMovementId: payout.paidMovementId,
+    };
+  }
+  if (payout.status !== 'reserved' || amount !== units) return null;
+  return observation.kind === 'paid'
+    ? { returned: 0n, status: 'paid' as const, paidMovementId: observation.movementId }
+    : { returned: 0n, status: 'released' as const, paidMovementId: null };
+}
+
+export function createEconomyLedger(
+  database: EconomyDatabase,
+  bookId: string,
+): EconomyLedger & NativeFundingLedger & { creatorClearing: CreatorClearing } {
   if (!isEconomyBookId(bookId)) throw new TypeError('Invalid Economy book ID');
 
   function command(
@@ -696,7 +791,257 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
     );
   }
 
+  async function postCreatorSource(
+    client: Query,
+    input: Readonly<{
+      creatorId: string;
+      assetId: string;
+      source: CreatorEvidence;
+      kind: CreatorKind;
+      payoutId: string | null;
+      terms: readonly string[];
+      ready?: boolean;
+    }>,
+    prepare: (context: Context) => Promise<Plan | BusinessFailure>,
+  ): Promise<EconomyResult<EconomyReceipt>> {
+    const { source, assetId, creatorId, kind, payoutId, terms } = input;
+    const identity = JSON.stringify(source);
+    const digest = createHash('sha256')
+      .update(JSON.stringify([1, bookId, creatorId, assetId, kind, payoutId, ...terms]))
+      .digest();
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('creator-evidence:' || $1::text, 0))`, [
+      identity,
+    ]);
+    const prior = await client.query<{ digest: Buffer }>(
+      `SELECT digest FROM economy.creator_posting
+        WHERE source_namespace = $1 AND source_mode = $2 AND source_kind = $3 AND source_id = $4`,
+      [...source],
+    );
+    const result = success({ operationId: source[3] });
+    if (prior.rows[0]) return digest.equals(prior.rows[0].digest) ? result : failure('operation_conflict');
+    if (input.ready === false) return failure('operation_conflict');
+    const operationId = `creator/evidence/${createHash('sha256').update(identity).digest('hex')}`;
+    const posted = await command(
+      { assetId, accountId: creatorId, operationId },
+      kind,
+      null,
+      [identity, digest.toString('hex')],
+      async (context) => {
+        const plan = await prepare(context);
+        if ('kind' in plan) return plan;
+        // Match wallet-funding lock order: positions before the common provider posting identity.
+        if (source[1] !== 'owner') {
+          const claim = await client.query(
+            `INSERT INTO economy.provider_posting_key VALUES ($1, $2, $3, $4, 'creator_payout') ON CONFLICT DO NOTHING`,
+            [...source],
+          );
+          if (claim.rowCount !== 1) return failure('operation_conflict');
+        }
+        return {
+          ...plan,
+          persistHold: async (transactionId) => {
+            await plan.persistHold?.(transactionId);
+            await client.query(
+              `INSERT INTO economy.creator_posting (source_namespace, source_mode, source_kind, source_id,
+                 book_id, asset_id, payout_id, digest, transaction_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              [...source, bookId, assetId, payoutId, digest, transactionId],
+            );
+          },
+        };
+      },
+      client,
+    );
+    return posted.kind === 'ok' ? result : posted;
+  }
+
+  const creatorClearing: CreatorClearing = {
+    readPayable({ creatorId, assetId }) {
+      const accountId = walletAccount(creatorId);
+      if (accountId === null || !validIdentifier(assetId)) return Promise.resolve(failure('invalid_operation'));
+      return database.read(async (client) => {
+        const result = await client.query<{ posted: string; reserved: string; available: string }>(
+          `SELECT COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS reserved,
+                  COALESCE(position.posted - position.held, 0)::text AS available
+             FROM economy.asset AS asset
+             LEFT JOIN economy.funding_control_account AS control ON control.book_id = asset.book_id
+               AND control.asset_id = asset.asset_id AND control.account_role = 'creator_payable' AND control.reference = $3
+             LEFT JOIN economy.position AS position ON position.book_id = control.book_id
+               AND position.asset_id = control.asset_id AND position.account_id = control.account_id
+               AND position.account_role = control.account_role
+            WHERE asset.book_id = $1 AND asset.asset_id = $2`,
+          [bookId, assetId, accountId],
+        );
+        return result.rows[0] ? success(result.rows[0]) : failure('asset_missing');
+      });
+    },
+
+    readPayout(payoutId) {
+      if (!validIdentifier(payoutId)) return Promise.resolve(failure('invalid_operation'));
+      return database.read(async (client) => success(await readCreatorPayout(client, bookId, payoutId, false)));
+    },
+
+    accrue(input) {
+      const creatorId = walletAccount(input.creatorId);
+      const amount = positiveInteger(input.units);
+      if (amount === null) return Promise.resolve(failure('invalid_amount'));
+      if (
+        creatorId === null ||
+        !validIdentifier(input.assetId) ||
+        ![input.source.namespace, input.source.id, input.expenseReference].every(validOperationKey)
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction((client) =>
+        postCreatorSource(
+          client,
+          {
+            creatorId,
+            assetId: input.assetId,
+            source: [input.source.namespace, 'owner', 'accrual', input.source.id],
+            kind: 'creator_accrual',
+            payoutId: null,
+            terms: [input.units, input.expenseReference],
+          },
+          async (context) => {
+            const { payable, counter } = await creatorPositions(context, {
+              role: 'creator_expense',
+              reference: input.expenseReference,
+            });
+            return { at: await getTime(client), deltas: [delta(counter!, -amount), delta(payable, amount)] };
+          },
+        ),
+      );
+    },
+
+    reservePayout(input) {
+      const creatorId = walletAccount(input.creatorId);
+      const amount = positiveInteger(input.units);
+      const { payoutId, assetId, provider } = input;
+      if (amount === null) return Promise.resolve(failure('invalid_amount'));
+      if (creatorId === null || !validIdentifier(assetId) || !validIdentifier(payoutId) || !validCreatorRail(provider))
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (client) => {
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array('creator-payout', $1::text, $2::text)::text, 0))`,
+          [bookId, payoutId],
+        );
+        const prior = await readCreatorPayout(client, bookId, payoutId, true);
+        const receipt = success({ operationId: payoutId });
+        if (prior)
+          return prior.creatorId === creatorId &&
+            prior.assetId === assetId &&
+            prior.units === input.units &&
+            sameCreatorRail(prior.provider, provider)
+            ? receipt
+            : failure('operation_conflict');
+        const posted = await command(
+          { accountId: creatorId, assetId, operationId: `creator/reserve/${payoutId}` },
+          'creator_payout_reserve',
+          null,
+          [payoutId, input.units, provider.namespace, provider.mode, provider.destinationRef],
+          async (context) => {
+            const { payable } = await creatorPositions(context);
+            if (available(payable) < amount) return failure('insufficient_funds');
+            return {
+              at: await getTime(client),
+              deltas: [delta(payable, 0n, amount)],
+              persistHold: (transactionId) =>
+                client.query(
+                  `INSERT INTO economy.creator_payout (book_id, payout_id, creator_id, asset_id, units,
+                   provider_namespace, provider_mode, destination_ref, status, reserve_transaction_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'reserved', $9)`,
+                  [
+                    bookId,
+                    payoutId,
+                    creatorId,
+                    assetId,
+                    input.units,
+                    provider.namespace,
+                    provider.mode,
+                    provider.destinationRef,
+                    transactionId,
+                  ],
+                ),
+            };
+          },
+          client,
+        );
+        return posted.kind === 'ok' ? receipt : posted;
+      });
+    },
+
+    observePayout(observation) {
+      const amount = positiveInteger(observation.units);
+      const { payoutId, provider, assetId, kind } = observation;
+      if (amount === null) return Promise.resolve(failure('invalid_amount'));
+      if (
+        !validIdentifier(payoutId) ||
+        !validIdentifier(assetId) ||
+        !validCreatorRail(provider) ||
+        !['paid', 'refused', 'returned'].includes(kind)
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      const sourceId = kind === 'refused' ? observation.evidenceId : observation.movementId;
+      if (!validOperationKey(sourceId) || (kind === 'returned' && !validOperationKey(observation.originalMovementId)))
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (client) => {
+        const payout = await readCreatorPayout(client, bookId, payoutId, true);
+        if (!payout) return failure('invalid_operation');
+        if (payout.assetId !== assetId || !sameCreatorRail(payout.provider, provider))
+          return failure('operation_conflict');
+        const next = movementOf(payout, observation, amount);
+        const terms = [
+          provider.destinationRef,
+          observation.units,
+          kind === 'returned' ? observation.originalMovementId : '',
+        ];
+        const journalKind =
+          kind === 'paid' ? 'creator_payout' : kind === 'refused' ? 'creator_payout_refusal' : 'creator_payout_return';
+        return postCreatorSource(
+          client,
+          {
+            creatorId: payout.creatorId,
+            assetId: payout.assetId,
+            source: [provider.namespace, provider.mode, kind === 'refused' ? 'refusal' : 'movement', sourceId],
+            kind: journalKind,
+            payoutId,
+            terms,
+            ready: next !== null,
+          },
+          async (context) => {
+            if (next === null) throw new Error('Economy creator payout transition changed while locked');
+            const opposing =
+              kind === 'refused'
+                ? undefined
+                : { role: 'provider_clearing' as const, reference: `${provider.mode}/${provider.namespace}` };
+            const { payable, counter } = await creatorPositions(context, opposing);
+            if (kind !== 'returned' && BigInt(payable.held) < amount)
+              throw new Error('Economy creator payout is missing its reservation');
+            const deltas =
+              kind === 'paid'
+                ? [delta(payable, -amount, -amount), delta(counter!, amount)]
+                : kind === 'refused'
+                  ? [delta(payable, 0n, -amount)]
+                  : [delta(counter!, -amount), delta(payable, amount)];
+            return {
+              at: await getTime(client),
+              deltas,
+              persistHold: async () => {
+                await client.query(
+                  `UPDATE economy.creator_payout SET status = $3, paid_movement_id = $4, returned_units = $5
+                  WHERE book_id = $1 AND payout_id = $2`,
+                  [bookId, payoutId, next.status, next.paidMovementId, next.returned.toString()],
+                );
+              },
+            };
+          },
+        );
+      });
+    },
+  };
+
   return {
+    creatorClearing,
     postFunding,
     lockRecoverableFundingWallet(input) {
       const accountId = walletAccount(input.accountId);
