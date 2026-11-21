@@ -28,7 +28,16 @@ test('the cold publication step reconciles original inventory and a later withdr
   }
 }, 60000);
 
-async function verifyPublication(url: string) {
+test('the receiver commits the original all-home ACK over verified compact windows', async () => {
+  const isolated = await identityEpochDatabase();
+  try {
+    await verifyPublication(isolated.url, true);
+  } finally {
+    await isolated.close();
+  }
+}, 180000);
+
+async function verifyPublication(url: string, verifyCompactWindow = false) {
   const f = await fixture(url);
   const pool = f.db.pool;
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
@@ -110,6 +119,48 @@ async function verifyPublication(url: string) {
     const { birth } = (
       await pool.query('SELECT birth FROM core.subject_subscription_v1 WHERE job=$1', [prepared.job.job])
     ).rows[0];
+
+    if (verifyCompactWindow) {
+      expect((await pool.query('SELECT FROM semantic.subject_access_page_v1 WHERE birth=$1', [birth])).rowCount).toBe(
+        0,
+      );
+      await writer.write(0, [resident], await position(0));
+      await search.request('POST', '/' + target + '/_refresh');
+      let reconciled = false;
+      for (let turn = 0; turn < 512; turn++) {
+        if (!reconciled) {
+          const result = await publication.step(prepared.job, context(), { enrollSource: true, batchSource: true });
+          if ('reason' in result) throw new Error(result.reason);
+          reconciled = result.status === 'reconciled';
+          continue;
+        }
+        const activation = await publication.activate(prepared.job, context(), { batchSource: true });
+        if (activation.status !== 'preparing' && activation.status !== 'activated')
+          throw new Error('reason' in activation ? activation.reason : activation.status);
+        const proof = (
+          await pool.query(
+            `SELECT r.width,r.first_home,m.root_digest=r.digest AS matched,t.ack_after,m.ordinal::integer AS steps,
+             m.committed_by IS DISTINCT FROM pg_current_xact_id_if_assigned() AS independent,
+             (SELECT count(*)::integer FROM search.public_filter_ack_range n
+               WHERE n.job=m.job AND n.width>32 AND n.left_child IS NULL) AS compact_nodes,
+             (SELECT max(width) FROM search.public_filter_ack_range n
+               WHERE n.job=m.job AND n.width>32 AND n.left_child IS NULL) AS compact_width
+           FROM search.public_filter_ack_manifest m
+           JOIN search.public_filter_ack_range r ON (r.job,r.binding,r.revision)=(m.job,m.binding,m.root_revision)
+           JOIN semantic.public_filter_repair_step t ON
+             (t.partition_no,t.bootstrap,t.execution,t.step)=(0,m.bootstrap,m.execution,m.terminal)
+           WHERE m.job=$1 AND t.ack_after=4096`,
+            [prepared.job.job],
+          )
+        ).rows[0];
+        if (!proof) continue;
+        expect(proof).toMatchObject({ first_home: 0, width: 4096, matched: true, independent: true, ack_after: 4096 });
+        expect(proof.compact_nodes).toBeGreaterThan(0);
+        expect(proof.compact_width).toBeGreaterThan(32);
+        return;
+      }
+      throw new Error('Original publication did not acknowledge all 4096 homes');
+    }
 
     await pool.query('SELECT semantic.capture_subject_access_page_v1($1,0,2)', [birth]);
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
