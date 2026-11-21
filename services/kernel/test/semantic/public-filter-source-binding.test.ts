@@ -635,13 +635,38 @@ test('canonical retained observation execution joins preserve complete compiler 
       [begun.bootstrap.id.slice(2)],
     );
     expect(enrollment.rows).toEqual([{ homes: 4096, first: 0, last: 4095 }]);
-    const retained = await custody.retainPrepared(
+    // Recovery matches the indexed prepared build to the original Source bootstrap.
+    const build = {
+      registration: registered.registration,
+      build: begun.bootstrap.id,
+      generation: 1n,
+    };
+    const after = ['Native public filter', book];
+    expect(
+      await custody.appendPreparationSegment(
+        {
+          ...build,
+          consumer: registered.consumer,
+          expected: { rawCount: 0, outputCount: 0, after: undefined },
+          entries: [
+            {
+              rawOrdinal: 0,
+              outputOrdinal: 0,
+              payload: { hit: { id: book, sort: after }, owner: { original: book, terminal: book } },
+            },
+          ],
+          after,
+          rawExhausted: true,
+        },
+        readContext(),
+      ),
+    ).toMatchObject({ status: 'appended' });
+    const retained = await custody.retainPreparedSegments(
       {
-        registration: registered.registration,
+        ...build,
         covered: begun.bootstrap.covered,
-        build: crypto.randomUUID(),
-        generation: 1n,
-        rows: [{ original: book, terminal: book }],
+        rawCount: 1,
+        outputCount: 1,
         expiresAt: Date.now() + 60000,
       },
       readContext(),
@@ -682,7 +707,7 @@ test('canonical retained observation execution joins preserve complete compiler 
       { bootstrap: begun.bootstrap.id },
       readContext(),
     );
-    expect(recovered.status).toBe('adopted');
+    expect(recovered).toMatchObject({ status: 'adopted', bootstrap: begun.bootstrap, queried: retained.queried });
     // Closing Search custody invalidates this immutable observation without borrowing another cut.
     await custody.closeObservation(retained.queried, search, readContext());
     expect((await binding.join({ queried: retained.queried }, readContext())).status).not.toBe('joined');
