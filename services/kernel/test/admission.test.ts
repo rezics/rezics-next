@@ -199,3 +199,20 @@ test('bearer, native and health permits are independent and native waiters can d
   expect(await native).toBe('served');
   await Promise.all(held);
 });
+
+test('a native-bound bearer rechecks capacity when verification starts', async () => {
+  const admission = new Admission({ permits: 1, reserved: 1, bearer: 1, queue: 1 });
+  let reads = 0;
+  const verification = admission.verify(later(), true, async () => ++reads);
+  // The credential owns its bearer slot. Native demand arrives before its callback starts.
+  const heldNormal = gate();
+  const normal = admission.run('normal', later(), () => heldNormal.opened);
+  const queued = admission.run('normal', later(), async () => {});
+  try {
+    await expect(verification).rejects.toMatchObject({ code: 'overloaded' });
+    expect(reads).toBe(0);
+  } finally {
+    heldNormal.open();
+    await Promise.all([normal, queued]);
+  }
+});

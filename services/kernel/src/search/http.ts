@@ -58,12 +58,15 @@ export function knowledgeDiscoveryRoutes<App>(
     async ({ params, query, authorize, admission, job, actor, set }) => {
       set.headers['cache-control'] = 'private, no-store';
       const route = routeOf(params.id)!;
-      const check = await authorize({
-        route,
-        id: params.id,
-        eligibility: subjectReadEligibility({ route, id: params.id }),
-      });
-      return admission.run('normal', job, async () => {
+      return admission.run('normal', job, async (permit) => {
+        const check = await authorize(
+          {
+            route,
+            id: params.id,
+            eligibility: subjectReadEligibility({ route, id: params.id }),
+          },
+          permit,
+        );
         if (!(await withBoundedReadConnection(options.pool, job.deadline, (client) => check(client))))
           throw new ProblemError('not_found');
         const access = options.access();

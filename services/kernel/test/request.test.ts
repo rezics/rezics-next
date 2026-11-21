@@ -4,7 +4,7 @@ import { createPool } from '../src/database/pool.ts';
 import { Admission } from '../src/http/admission.ts';
 import { createApp } from '../src/http/app.ts';
 import { defineRateLimit } from '../src/http/rate-limit.ts';
-import { actionCatalogue, SESSION_HEADER } from '../src/http/request.ts';
+import { actionCatalogue, requiresNativeAdmission, SESSION_HEADER } from '../src/http/request.ts';
 import {
   anonymousAccess,
   AuthenticationError,
@@ -88,8 +88,12 @@ function thingApp(dependencies: Partial<Parameters<typeof createApp>[0]> = {}) {
     .get('/v1/quiet', { detail: { ...read, operationId: 'thing.quiet' } }, () => ({ ok: true }));
 }
 
-const call = (app: ReturnType<typeof thingApp>, method: string, path: string, headers: Record<string, string> = {}) =>
-  app.handle(new Request(`http://kernel.test${path}`, { method, headers }));
+const call = (
+  app: Pick<ReturnType<typeof thingApp>, 'handle'>,
+  method: string,
+  path: string,
+  headers: Record<string, string> = {},
+) => app.handle(new Request(`http://kernel.test${path}`, { method, headers }));
 
 test('the action catalogue comes from the route declarations', () => {
   expect(actionCatalogue(thingApp())).toEqual(
@@ -252,4 +256,39 @@ test('public read metadata needs no normal permit and nested authorization uses 
   const response = await app.handle(new Request('http://kernel.test/v1/nested'));
   expect(await response.json()).toEqual({ allowed: true });
   expect(seen.prepared).toEqual([1]);
+});
+
+test('a full native queue sheds signed native reads and rate charges before the live account checkout', async () => {
+  const admission = new Admission({ permits: 1, bearer: 1, reserved: 1, queue: 1 });
+  const seen: Seen = { authenticated: [], checks: [], prepared: [] };
+  const nativeRead = { ...read, [requiresNativeAdmission]: true };
+  const app = thingApp({ admission, access: recorder(seen, admission, true) }).get(
+    '/v1/native',
+    { detail: nativeRead },
+    ({ admission, job }) => admission.run('normal', job, async () => ({ ok: true })),
+  );
+  const blocker = Promise.withResolvers<void>();
+  const job = { deadline: Date.now() + 5000 };
+  const held = admission.run('normal', job, () => blocker.promise);
+  const queued = admission.run('normal', job, async () => {});
+  const headers = { authorization: 'Bearer good' };
+  try {
+    for (const [method, path] of [
+      ['GET', '/v1/native'],
+      ['POST', '/v1/things'],
+    ] as const) {
+      const response = await call(app, method, path, headers);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('retry-after')).toBe('1');
+      expect(await response.json()).toMatchObject({ code: 'overloaded' });
+    }
+    expect(seen.authenticated).toEqual([]);
+    expect((await call(app, 'GET', '/v1/quiet', headers)).status).toBe(200);
+    expect(seen.authenticated).toEqual([1]);
+  } finally {
+    blocker.resolve();
+    await Promise.all([held, queued]);
+  }
+  expect((await call(app, 'GET', '/v1/native', headers)).status).toBe(200);
+  expect(seen.authenticated).toEqual([1, 1]);
 });

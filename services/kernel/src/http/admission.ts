@@ -52,6 +52,23 @@ export class Admission {
     return this.queue.length;
   }
 
+  /** Untouched credentials need no account checkout when their next native stage cannot even queue. */
+  async verify<T>(context: JobContext, requiresNormal: boolean, verify: () => Promise<T>): Promise<T> {
+    if (!requiresNormal) return this.run('bearer', context, verify);
+    this.requireNormalCapacity(context);
+    return this.run('bearer', context, () => {
+      // The normal lane can fill while this credential is waiting for a verifier.
+      this.requireNormalCapacity(context);
+      return verify();
+    });
+  }
+
+  private requireNormalCapacity(context: JobContext): void {
+    requireLiveJob(context);
+    if (!this.available('normal') && this.queue.length >= this.limits.queue && this.lastQueuedBearer() === -1)
+      throw overloaded();
+  }
+
   /** A sequential Access preparation may use the enclosing native job's live permit. */
   async prepare<T>(context: JobContext, job: () => Promise<T>, permit?: AdmissionYield): Promise<T> {
     const held = permit && this.normalJobs.get(permit);
@@ -140,7 +157,7 @@ export class Admission {
     }
     if (this.queue.length >= this.limits.queue) {
       // An untouched bearer can retry. Keep room for work that already authenticated.
-      const lastBearer = lane === 'bearer' ? -1 : this.queue.findLastIndex((waiter) => waiter.lane === 'bearer');
+      const lastBearer = lane === 'bearer' ? -1 : this.lastQueuedBearer();
       if (lastBearer === -1) throw overloaded();
       const [displaced] = this.queue.splice(lastBearer, 1);
       this.clear(displaced!);
@@ -162,6 +179,10 @@ export class Admission {
       }
       this.queue.push(waiter);
     });
+  }
+
+  private lastQueuedBearer(): number {
+    return this.queue.findLastIndex((waiter) => waiter.lane === 'bearer');
   }
 
   private available(lane: AdmissionWork): boolean {

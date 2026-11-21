@@ -5,6 +5,9 @@ import { kernelWriteRateFor } from './write-rate-routes.ts';
 export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 export type { Admission, AdmissionYield, JobContext } from './admission.ts';
 
+/** Marks public uncharged handlers that enter the normal lane after authentication. */
+export const requiresNativeAdmission = Symbol('requiresNativeAdmission');
+
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
 const RESOURCE_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/;
@@ -13,6 +16,7 @@ export type MountedRoute = {
   method: string;
   path: string;
   hooks?: { detail?: unknown };
+  requiresNormal?: boolean;
 };
 
 type RouteApp = {
@@ -132,7 +136,12 @@ export class MountedRouteCatalogue {
       if (detail['x-rate-limit'] === undefined && composedRate) detail['x-rate-limit'] = composedRate;
       const rate = detail['x-rate-limit'];
       if (isRecord(rate)) detail['x-rate-limit'] = Object.freeze({ ...rate });
+      const requiresNormal =
+        (requiresNativeAdmission in detail && detail[requiresNativeAdmission] === true) ||
+        rate !== undefined ||
+        (typeof detail['x-exposure'] === 'string' && detail['x-exposure'].startsWith('gate:'));
       const mounted = Object.freeze({
+        requiresNormal,
         method: route.method.toUpperCase(),
         path: route.path,
         hooks: Object.freeze({ detail: Object.freeze(detail) }),

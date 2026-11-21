@@ -59,7 +59,13 @@ import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { isImportCatalogueWalk, ProblemError, problemSchema } from '../../http/problem.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
+import {
+  IDEMPOTENCY_HEADER,
+  idempotencyKeyOf,
+  requestDigest,
+  requiresNativeAdmission,
+  SESSION_HEADER,
+} from '../../http/request.ts';
 import {
   relatedReadDecisionEligibility,
   relatedReadEligibility,
@@ -1242,6 +1248,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.get',
+          [requiresNativeAdmission]: true,
           'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],

@@ -1,7 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { Admission } from '../../src/http/admission.ts';
+import { createApp } from '../../src/http/app.ts';
+import { searchRoutes } from '../../src/search/http/routes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -161,7 +164,7 @@ const kernel = createKernel({
 const offline = createKernel({ pool, access, tokens, receiptKeys: testReceiptKeys(), routeKey });
 
 async function call(
-  app: typeof kernel,
+  app: Pick<typeof kernel, 'handle'>,
   method: 'GET' | 'POST',
   path: string,
   options: { token?: string; body?: unknown } = {},
@@ -235,6 +238,40 @@ test('search and suggest pass the caller, the body and the query to the service,
     ['anonymous', 'subject:read', global],
     ['reader', 'subject:read', global],
   ]);
+});
+
+test('signed Book search finishes on its preparation permit with a native request already queued', async () => {
+  const admission = new Admission({ permits: 1, reserved: 1, bearer: 1, queue: 1 });
+  const peer = { deadline: Date.now() + 10_000 };
+  const releasePeer = Promise.withResolvers<void>();
+  let queued: Promise<void> | undefined;
+  const preparing = {
+    ...access,
+    async prepare() {
+      queued = admission.run('normal', peer, () => releasePeer.promise);
+      return null;
+    },
+  };
+  const app = searchRoutes(createApp({ pool, access: preparing, admission, tokens }), {
+    pool,
+    routeKey,
+    search: service,
+    access: preparing,
+  });
+  const runs = spyOn(admission, 'run');
+  try {
+    const reply = await call(app, 'POST', '/v1/subjects:search', {
+      token: 'reader',
+      body: { text: 'kokoro', filter: { type: { in: ['schema:Book'] } }, limit: 1 },
+    });
+    expect(reply.response.status).toBe(200);
+    expect(queued).toBeDefined();
+    expect(runs.mock.calls.filter(([, job]) => job !== peer).map(([lane]) => lane)).toEqual(['bearer', 'normal']);
+  } finally {
+    releasePeer.resolve();
+    await queued;
+    runs.mockRestore();
+  }
 });
 
 test('a caller denied subject:read is forbidden and a rejected credential is unauthenticated, without reaching the service', async () => {

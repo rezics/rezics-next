@@ -254,7 +254,7 @@ export function createApp({
       const actor =
         request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
-          : await admission.run('bearer', job, async () => {
+          : await admission.verify(job, mountedFor(request, route)?.requiresNormal === true, async () => {
               try {
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {

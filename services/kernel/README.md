@@ -256,8 +256,11 @@ whole millisecond values from 50 through 10,000; other values fail startup. `KER
 PostgreSQL pool size (default 10, range 1–100). Before serving, the server opens and retains that many connections plus
 two dedicated to health probes. Budget those connections per server alongside worker, Auth and operational clients.
 `KERNEL_HTTP_PERMITS` sets concurrent native HTTP jobs (default 8, range 1–128). Four independent permits verify
-bearers. Admission has at most 32 queued waiters across lanes. Size native permits from measured held time and size
-connections from measured checkout demand and database headroom. The worker also requires
+bearers. Admission has at most 32 queued waiters across lanes. A signed request for a gated route, rate-charged
+route or marked native read returns `503 overloaded` before its account lookup if normal work can neither start
+nor enter the queue. Normal and health work can displace a queued bearer. Search uses its normal permit for
+sequential Access preparation. Size native permits from measured held time and size connections from measured
+checkout demand and database headroom. The worker also requires
 `KERNEL_RATING_COUNTER_SECRET`, a canonical base64url value containing at least 32 bytes, shared by every worker
 instance so controller counts remain stable.
 
