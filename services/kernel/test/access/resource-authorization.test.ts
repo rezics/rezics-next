@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import type { PoolClient } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import { encodeReceiptKey, receiptKeysFor } from '../../src/command/receipt-key.ts';
 import {
   authoritativeTimeValue,
   runCommand,
@@ -198,7 +199,7 @@ test('stable composite upsert uses the authority formula at T before target chec
 });
 
 test('HTTP denied replay discloses neither stored body nor receipt and applies exactly one effect', async () => {
-  const { input } = await fixture();
+  const { input, basis } = await fixture();
   const key = Bun.randomUUIDv7();
   const app = new Elysia()
     .onError(({ error }) =>
@@ -228,11 +229,17 @@ test('HTTP denied replay discloses neither stored body nor receipt and applies e
   expect(body).toContain('forbidden');
   for (const hidden of ['secret-response', 'replayed', 'transactionId', 'position']) expect(body).not.toContain(hidden);
   expect(await effects(key)).toHaveLength(1);
+  const storedKey = encodeReceiptKey(
+    receiptKeysFor(pool),
+    'fixture.resource',
+    { kind: 'account', id: basis.actorAccountId },
+    key,
+  );
   expect(
     (
       await admin.query('SELECT 1 FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2', [
         'fixture.resource',
-        key,
+        storedKey,
       ])
     ).rowCount,
   ).toBe(1);
@@ -240,7 +247,7 @@ test('HTTP denied replay discloses neither stored body nor receipt and applies e
     (
       await admin.query(
         'SELECT 1 FROM core.outbox WHERE (partition_no,epoch,position)=(SELECT partition_no,epoch,position FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2)',
-        ['fixture.resource', key],
+        ['fixture.resource', storedKey],
       )
     ).rowCount,
   ).toBe(1);
