@@ -146,6 +146,11 @@ bounded set of ready, already issued instructions using the same native claims, 
 scheduled worker. A retained commit or abort remains authoritative. Work whose lease is still live stays with its
 current owner. A trade awaiting a decision continues through the normal decision rules.
 
+A mounted market repair command requires the caller's current direct Economy grant, the `market:repair` client
+scope and independent `market:repair` authority on Global Context. Check both grants before reading or replaying a
+command receipt. Apply the same authorization to discovery. Acceptance queues only the named book, item home and
+trade. An already accepted repair continues under the retained decision and native owner leases.
+
 Run `bun --no-env-file services/kernel/scripts/economy-book-audit.ts --book BOOK` with a read-only database credential
 in `ECONOMY_RECONCILIATION_DATABASE_URL`. The command writes one JSON result to standard output. An optional
 `--page-limit` accepts 1–2048 pages, and `--timeout-ms` accepts 100–10000 milliseconds. Exit codes are 0 for
