@@ -651,6 +651,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   });
   economySpotRoutes(app as unknown as ReturnType<typeof createApp>, {
     pool: dependencies.pool,
+    cursorKeys: tokens,
+    clock,
     ...(dependencies.economySpot === undefined ? {} : { spot: dependencies.economySpot }),
   });
   economyMarketRoutes(app as unknown as ReturnType<typeof createApp>, {

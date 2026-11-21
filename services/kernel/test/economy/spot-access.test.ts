@@ -22,11 +22,13 @@ const order = { side: 'sell', price: '9007199254740993', lots: '2' };
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 let closed: ReturnType<typeof createKernel>;
+let mount: (economySpot?: SpotAccessPort) => ReturnType<typeof createKernel>;
 let ledger: ReturnType<typeof createNativeEconomyLedger>;
 let spot: SpotAccessPort;
 let work: ReturnType<typeof createNativeEconomySpotWork>;
 let sellerToken: string;
 let readOnlyToken: string;
+let placeOnlyToken: string;
 let viewerToken: string;
 let secondToken: string;
 let ordinaryToken: string;
@@ -88,17 +90,20 @@ beforeAll(async () => {
       [routeOf(id), id],
     );
   }
-  [sellerToken, readOnlyToken, viewerToken, secondToken, ordinaryToken] = await Promise.all([
+  [sellerToken, readOnlyToken, placeOnlyToken, viewerToken, secondToken, ordinaryToken] = await Promise.all([
     sign(seller, scopes),
     sign(viewer, ['spot:read']),
+    sign(viewer, ['spot:place']),
     sign(viewer, scopes),
     sign(second, scopes),
     sign(ordinary, scopes),
   ]);
-  const mount = (economySpot?: SpotAccessPort) =>
+  const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(31)]]) };
+  mount = (economySpot?: SpotAccessPort) =>
     createKernel({
       pool: db.pool,
       routeKey: new Uint8Array(32),
+      tokens,
       ...(economySpot === undefined ? {} : { economySpot }),
       writeRate: {
         async spend() {
@@ -158,7 +163,9 @@ test('spot instrument and order routes require a direct grant, matching client s
   }
   const hidden = await call(app, '/v1/openapi.json', ordinaryToken);
   expect(hidden.status).toBe(200);
-  expect((await hidden.json()).paths['/v1/economy/spot/{instrumentId}']).toBeUndefined();
+  const hiddenPaths = (await hidden.json()).paths;
+  expect(hiddenPaths['/v1/economy/spot/{instrumentId}']).toBeUndefined();
+  expect(hiddenPaths['/v1/economy/spot/{instrumentId}/trades']).toBeUndefined();
   await grant(viewer);
   const unbound = await call(closed, marketPath, viewerToken);
   expect(unbound.status).toBe(503);
@@ -246,3 +253,141 @@ test('native order identity, private reads, and cancellation remain exact throug
     }),
   ).rejects.toMatchObject({ code: 'platform_closed' });
 });
+
+test('the signed trade feed only exposes settled amounts and seeks across native time and identity ties', async () => {
+  const instrumentId = 'trade-pair';
+  const path = `/v1/economy/spot/${instrumentId}/trades`;
+  const { bookId } = spot;
+  const scope = (accountId: string) => ({ accountId, instrumentId, deadline: Date.now() + 10_000 });
+  const price = 9_007_199_254_740_993n;
+  const unitsPerLot = 10_000_000_000_000_000n;
+  await grant(seller);
+  expect(
+    await work.provision({
+      id: instrumentId,
+      ledgerBookId: bookId,
+      policyVersion: 1n,
+      baseAssetId: 'base',
+      quoteAssetId: 'quote',
+      baseUnitsPerLot: unitsPerLot,
+      quoteUnitsPerPriceTick: 1n,
+      makerFeeBps: 0n,
+      takerFeeBps: 0n,
+      feeAccountId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ kind: 'ok' });
+
+  for (const [accountId, assetId, amount] of [
+    [seller, 'base', '3000000000000000000'],
+    [second, 'quote', '6000000000000000000'],
+  ] as const) {
+    expect(await ledger.issue({ accountId, assetId, amount, operationId: 'feed-opening' })).toMatchObject({
+      kind: 'ok',
+    });
+  }
+  for (let lots = 1n; lots <= 23n; lots++) {
+    const ask = await spot.place({ ...scope(seller), orderId: `ask-${lots}`, side: 'sell', price, lots });
+    if (ask.kind !== 'ok') throw new Error(`Ask placement failed: ${ask.kind}`);
+    expect(await work.match(instrumentId, 2n * lots - 1n)).toMatchObject({ kind: 'ok', value: { status: 'resting' } });
+  }
+  expect(await spot.place({ ...scope(second), orderId: 'bid', side: 'buy', price, lots: 276n })).toMatchObject({
+    kind: 'ok',
+  });
+  const matched = await work.match(instrumentId, 47n);
+  if (matched.kind !== 'ok') throw new Error(`Matching failed: ${matched.kind}`);
+  expect(matched.value.status).toBe('filled');
+  expect(matched.value.fillIds).toHaveLength(23);
+
+  const pending = await call(app, path, readOnlyToken);
+  expect(pending.status).toBe(200);
+  expect(pending.headers.get('cache-control')).toBe('private, no-store');
+  expect(await pending.json()).toEqual({ trades: [], next: null });
+  const [unsettled, ...settled] = matched.value.fillIds;
+  if (!unsettled) throw new Error('Expected a pending native fill');
+  for (const fillId of settled) {
+    const claim = await work.claimFill(fillId);
+    if (claim.kind !== 'ok') throw new Error(`Claim failed: ${claim.kind}`);
+    expect(await work.settleFill(fillId, claim.value.token)).toEqual({ kind: 'ok', value: { operationId: fillId } });
+  }
+  expect(await work.readyFills()).toEqual({ kind: 'ok', value: [unsettled] });
+  const full = await call(app, `${path}?limit=100`, readOnlyToken);
+  expect(full.status).toBe(200);
+  const initial = await full.json();
+  expect(initial.trades).toHaveLength(22);
+  expect(initial.next).toBeNull();
+  expect(initial.trades.find((trade: { lots: string }) => trade.lots === '23')).toEqual({
+    price: price.toString(),
+    lots: '23',
+    baseUnits: (23n * unitsPerLot).toString(),
+    quoteUnits: (23n * price).toString(),
+    settledAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/),
+  });
+
+  // Freeze the native timestamps after settlement so one default page ends a microsecond above the next page,
+  // while every trade inside either group has an equal timestamp.
+  const low = '2026-11-21T00:00:00.123456Z';
+  const high = '2026-11-21T00:00:00.123457Z';
+  const byFill = await db.admin.query<{ fill_id: string; lots: string }>(
+    `SELECT fill_id, lots::text FROM economy.spot_fill
+     WHERE book_id = $1 AND instrument_id = $2 AND settled_at IS NOT NULL ORDER BY fill_id DESC`,
+    [bookId, instrumentId],
+  );
+  const older = byFill.rows.slice(0, 2);
+  const newer = byFill.rows.slice(2);
+  await db.admin.query(
+    `UPDATE economy.spot_fill SET settled_at = CASE WHEN fill_id = ANY($3::text[]) THEN $4::timestamptz ELSE $5::timestamptz END
+     WHERE book_id = $1 AND instrument_id = $2 AND settled_at IS NOT NULL`,
+    [bookId, instrumentId, older.map((row) => row.fill_id), low, high],
+  );
+  const first = await call(app, path, readOnlyToken);
+  expect(first.status).toBe(200);
+  const page = await first.json();
+  expect(page.trades.map((trade: { lots: string; settledAt: string }) => [trade.lots, trade.settledAt])).toEqual(
+    newer.map((row) => [row.lots, high]),
+  );
+  expect(page.next).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]+$/));
+  expect(Buffer.from(page.next, 'base64url').includes(Buffer.from(newer.at(-1)!.fill_id))).toBe(false);
+  const follow = await call(app, `${path}?limit=20&cursor=${page.next}`, viewerToken);
+  expect(follow.status).toBe(200);
+  const last = await follow.json();
+  expect(last.trades.map((trade: { lots: string; settledAt: string }) => [trade.lots, trade.settledAt])).toEqual(
+    older.map((row) => [row.lots, low]),
+  );
+  expect(last.next).toBeNull();
+
+  const one = await call(app, `${path}?limit=1`, readOnlyToken);
+  const firstTie = await one.json();
+  expect(one.status).toBe(200);
+  expect(firstTie.trades[0]).toMatchObject({ lots: newer[0]!.lots, settledAt: high });
+  const two = await call(app, `${path}?limit=1&cursor=${firstTie.next}`, readOnlyToken);
+  expect(two.status).toBe(200);
+  expect((await two.json()).trades).toEqual([expect.objectContaining({ lots: newer[1]!.lots, settledAt: high })]);
+
+  const cursor = `?cursor=${page.next}`;
+  const otherBook = mount(createNativeEconomySpot(db.pool, { bookId: `${bookId}-other`, node: 'b' }));
+  for (const response of [
+    await call(app, `${path}${cursor}`, secondToken),
+    await call(app, `${marketPath}/trades${cursor}`, readOnlyToken),
+    await call(otherBook, `${path}${cursor}`, readOnlyToken),
+    await call(app, `${path}${cursor}&limit=1`, readOnlyToken),
+    await call(app, `${path}?cursor=invalid`, readOnlyToken),
+  ]) {
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_cursor' });
+  }
+  expect((await call(app, `${path}?limit=101`, readOnlyToken)).status).toBe(400);
+  expect((await call(app, '/v1/economy/spot/absent/trades', readOnlyToken)).status).toBe(404);
+  expect((await call(app, path, placeOnlyToken)).status).toBe(403);
+  expect((await call(app, path, ordinaryToken)).status).toBe(403);
+  expect((await call(closed, path)).status).toBe(403);
+  expect((await call(closed, path, readOnlyToken)).status).toBe(503);
+
+  await db.admin.query(
+    `DELETE FROM access.resource_grant WHERE route = 0 AND resource_id = $1 AND subject_id = $2 AND action = 'gate:economy'`,
+    [GLOBAL_CONTEXT.id, viewer],
+  );
+  expect((await call(app, `${path}${cursor}`, readOnlyToken)).status).toBe(403);
+  await expect(spot.readTrades({ ...scope(viewer), limit: 20, after: null })).rejects.toMatchObject({
+    code: 'platform_closed',
+  });
+}, 90_000);

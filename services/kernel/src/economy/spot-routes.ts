@@ -8,7 +8,20 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, type Admission, type JobContext } from '../http/request.ts';
 import { AuthenticationError, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import type { EconomyFailure } from './contract.ts';
+import {
+  decodeListCursor,
+  encodeListCursor,
+  LIST_CURSOR_BOUNDS,
+  type ListCursorBinding,
+} from '../tokens/list-cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import {
+  isSpotTradePosition,
+  SPOT_TRADE_PAGE_LIMIT,
+  type EconomyFailure,
+  type SpotTradePage,
+  type SpotTradePosition,
+} from './contract.ts';
 import type { SpotBook, SpotOrder, SpotOrderTerms, matchSpotOrder } from './exchange/order-book.ts';
 
 type CoreFailure = Exclude<ReturnType<typeof matchSpotOrder>['kind'], 'ok'>;
@@ -19,7 +32,11 @@ type RequestScope = Readonly<{ accountId: string; instrumentId: string; deadline
 type OrderScope = RequestScope & Readonly<{ orderId: string }>;
 type OrderReceipt = Readonly<{ orderId: string; sequence: bigint }>;
 export interface SpotAccessPort {
+  readonly bookId: string;
   readInstrument(input: RequestScope): Promise<SpotAccessResult<SpotBook>>;
+  readTrades(
+    input: RequestScope & Readonly<{ limit: number; after: SpotTradePosition | null }>,
+  ): Promise<SpotAccessResult<SpotTradePage>>;
   readOrder(input: OrderScope): Promise<SpotAccessResult<SpotOrder>>;
   place(input: OrderScope & SpotOrderTerms): Promise<SpotAccessResult<OrderReceipt>>;
   cancel(input: OrderScope): Promise<SpotAccessResult<OrderReceipt>>;
@@ -54,6 +71,7 @@ const instrumentSchema = t.Object(
   },
   closed,
 );
+const tradesPath = '/v1/economy/spot/:instrumentId/trades';
 const receiptSchema = t.Object({ orderId: key, sequence: positive }, closed);
 const orderSchema = t.Object(
   {
@@ -173,7 +191,31 @@ function deriveOrderId(accountId: string, instrumentId: string, operationId: str
     .digest('hex');
 }
 
-export function economySpotRoutes(app: ReturnType<typeof createApp>, deps: { pool: Pool; spot?: SpotAccessPort }) {
+export function economySpotRoutes(
+  app: ReturnType<typeof createApp>,
+  deps: { pool: Pool; spot?: SpotAccessPort; cursorKeys: KeyRing; clock: () => Date },
+) {
+  const cursor = t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.default.maxTokenLength });
+  const tradesSchema = t.Object(
+    {
+      trades: t.Array(
+        t.Object(
+          {
+            price: positive,
+            lots: positive,
+            baseUnits: positive,
+            quoteUnits: positive,
+            settledAt: t.String({ format: 'date-time' }),
+          },
+          closed,
+        ),
+        { maxItems: SPOT_TRADE_PAGE_LIMIT },
+      ),
+      next: t.Union([cursor, t.Null()]),
+    },
+    closed,
+  );
+
   async function privateCall<T>(
     ctx: ActorContext,
     instrumentId: string,
@@ -198,6 +240,48 @@ export function economySpotRoutes(app: ReturnType<typeof createApp>, deps: { poo
         return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) =>
           instrumentView(valueOf(await spot.readInstrument(scope))),
         );
+      },
+    )
+    .get(
+      tradesPath,
+      {
+        params: instrumentParams,
+        query: t.Object(
+          {
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: SPOT_TRADE_PAGE_LIMIT, multipleOf: 1 })),
+            cursor: t.Optional(cursor),
+          },
+          closed,
+        ),
+        response: { 200: tradesSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('spot.read_trades', 'spot:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
+          const limit = ctx.query.limit ?? 20;
+          const at = deps.clock();
+          const binding: ListCursorBinding = {
+            route: `GET ${tradesPath}`,
+            viewer: scope.accountId.toLowerCase(),
+            query: { bookId: spot.bookId, instrumentId: scope.instrumentId, limit },
+          };
+          let after: SpotTradePosition | null = null;
+          if (ctx.query.cursor !== undefined) {
+            const decoded = await decodeListCursor(deps.cursorKeys, binding, ctx.query.cursor, at);
+            if (!decoded.ok || decoded.epoch !== 1 || !isSpotTradePosition(decoded.after))
+              throw new ProblemError('invalid_cursor');
+            after = decoded.after;
+          }
+          const page = valueOf(await spot.readTrades({ ...scope, limit, after }));
+          return {
+            trades: page.trades,
+            next:
+              page.after === null
+                ? null
+                : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: page.after }, at),
+          };
+        });
       },
     )
     .get(

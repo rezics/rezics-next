@@ -24,7 +24,9 @@ export function createNativeEconomySpot(pool: Pool, { bookId, node }: Configured
     return result.kind === 'ok' ? result.value : result;
   }
   return {
+    bookId,
     readInstrument: (input) => withOwner(input, (store) => store.readBook(input.instrumentId)),
+    readTrades: (input) => withOwner(input, (store) => store.readTrades(input.instrumentId, input.limit, input.after)),
     readOrder: (input) =>
       withOwner(input, (store) => store.readOwnOrder(input.instrumentId, input.orderId, input.accountId)),
     place: (input) => withOwner(input, (store) => store.place(input.instrumentId, input)),
