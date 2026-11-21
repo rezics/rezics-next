@@ -1093,6 +1093,7 @@ const generationReaders = new WeakMap<
     ids: readonly string[],
     obligation: bigint,
     work?: () => SearchRequestWork,
+    retryHomeAdvance?: () => boolean,
   ) => Promise<readonly IndexAction<SubjectDocument>[] | null>
 >();
 
@@ -1106,8 +1107,9 @@ export async function readSearchWriterGenerationActions(
   ids: readonly string[],
   obligation: bigint,
   work?: () => SearchRequestWork,
+  retryHomeAdvance?: () => boolean,
 ): Promise<readonly IndexAction<SubjectDocument>[] | null> {
-  return generationReaders.get(guard)?.(partition, ids, obligation, work) ?? null;
+  return generationReaders.get(guard)?.(partition, ids, obligation, work, retryHomeAdvance) ?? null;
 }
 
 type GateRow = {
@@ -2843,7 +2845,7 @@ export function createSearchWriterGuard(options: {
       await release();
     },
   };
-  generationReaders.set(guard, async (partition, input, obligation, work) => {
+  generationReaders.set(guard, async (partition, input, obligation, work, retryHomeAdvance) => {
     const ids = keys(partition, input);
     // Name analysis can issue concurrent requests. Settle bytes in sequence when
     // this proof shares the validation turn's allowance.
@@ -2864,47 +2866,56 @@ export function createSearchWriterGuard(options: {
         }
       : options.search;
     const target = await readSearchWriterPhysicalTarget(transport, options.index);
-    const { snapshot } = await indexObservation(partition, ids);
-    const subjects = validateIndexObservation(snapshot, partition, ids, obligation);
-    const visible = ids.filter((id) => {
-      const subject = subjects.get(id);
-      return subject?.visibility === 'visible' && subject.redirect === null;
-    });
-    const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
-    const actions = await prepareBoundedSortKeys(transport, options.index, documentActions(snapshot, ids, counts));
-    const versions = await withReadTransaction(options.pool, async (tx) => {
-      const owner = await readPartition(tx, partition);
-      if (!owner || owner.writeState !== 'active' || owner.position !== snapshot.position) return null;
-      const rows = (
-        await tx.query<CopyRow>(
-          `SELECT original_id::text,incarnation,owner_epoch,writer_token,dispatch_state,
-         source_position::text,visible_transaction_id,visible_position::text
-         FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])`,
-          [partition, options.index, ids],
+    for (let attempt = 0; ; attempt++) {
+      const { snapshot } = await indexObservation(partition, ids);
+      const subjects = validateIndexObservation(snapshot, partition, ids, obligation);
+      const visible = ids.filter((id) => {
+        const subject = subjects.get(id);
+        return subject?.visibility === 'visible' && subject.redirect === null;
+      });
+      const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
+      const actions = await prepareBoundedSortKeys(transport, options.index, documentActions(snapshot, ids, counts));
+      const versions = await withReadTransaction(options.pool, async (tx) => {
+        const owner = await readPartition(tx, partition);
+        if (!owner || owner.writeState !== 'active' || owner.position < snapshot.position) return null;
+        if (owner.position > snapshot.position) return 'home-advanced' as const;
+        const rows = (
+          await tx.query<CopyRow>(
+            `SELECT original_id::text,incarnation,owner_epoch,writer_token,dispatch_state,
+           source_position::text,visible_transaction_id,visible_position::text
+           FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])`,
+            [partition, options.index, ids],
+          )
+        ).rows;
+        if (
+          rows.length !== ids.length ||
+          rows.some(
+            (row) =>
+              row.incarnation !== target.incarnation ||
+              row.owner_epoch !== owner.epoch ||
+              row.writer_token !== null ||
+              row.dispatch_state !== 'settled' ||
+              row.source_position === null ||
+              row.visible_transaction_id === null ||
+              row.visible_position === null ||
+              BigInt(row.source_position) > snapshot.position ||
+              BigInt(row.visible_position) > snapshot.position,
+          )
         )
-      ).rows;
+          return null;
+        return new Map(rows.map((row) => [row.original_id, BigInt(row.source_position!)]));
+      });
+      if (versions === 'home-advanced' && attempt === 0 && retryHomeAdvance?.()) continue;
+      const current = await readSearchWriterPhysicalTarget(transport, options.index);
       if (
-        rows.length !== ids.length ||
-        rows.some(
-          (row) =>
-            row.incarnation !== target.incarnation ||
-            row.owner_epoch !== owner.epoch ||
-            row.writer_token !== null ||
-            row.dispatch_state !== 'settled' ||
-            row.source_position === null ||
-            row.visible_transaction_id === null ||
-            row.visible_position === null ||
-            BigInt(row.source_position) > snapshot.position ||
-            BigInt(row.visible_position) > snapshot.position,
-        )
+        !versions ||
+        versions === 'home-advanced' ||
+        current.incarnation !== target.incarnation ||
+        current.writeAlias !== target.writeAlias
       )
         return null;
-      return new Map(rows.map((row) => [row.original_id, BigInt(row.source_position!)]));
-    });
-    const current = await readSearchWriterPhysicalTarget(transport, options.index);
-    if (!versions || current.incarnation !== target.incarnation || current.writeAlias !== target.writeAlias)
-      return null;
-    return actions.map((action) => ({ ...action, version: versions.get(action.id)! }));
+      return actions.map((action) => ({ ...action, version: versions.get(action.id)! }));
+    }
   });
   return guard;
 }

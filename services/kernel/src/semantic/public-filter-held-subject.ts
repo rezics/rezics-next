@@ -453,12 +453,17 @@ export async function prepareHeldSubjectRange<T>(
 ) {
   if (!Number.isInteger(count) || count < 1 || count > 8) throw new TypeError('Invalid held page count');
   const { steps: inventory, advanced } = await transaction(pool, context, async (db) => {
+    // If the frontier already has an original writer obligation, retry it before
+    // reopening later pages. Its receipt survives both a pending writer and a lost reply.
     const result = await db.query<{ first_home: number; end_home: number }>(
       `SELECT p.first_home,p.end_home FROM core.subject_subscription_v1 m
        JOIN semantic.subject_source_preparation_v1 s USING(birth,bootstrap)
        JOIN semantic.subject_access_page_v1 p USING(birth)
        WHERE (m.birth,m.job,m.bootstrap,s.next_home,s.next_ordinal)=($1,$2,$3,$4,0) AND p.first_home >= $4
-       ORDER BY p.first_home LIMIT $5`,
+       ORDER BY p.first_home LIMIT (SELECT CASE WHEN EXISTS (
+         SELECT FROM semantic.subject_source_step_v1
+         WHERE (birth,first_home,ordinal)=($1,$4,0) AND evidence->'obligations'->0 IS NOT NULL
+       ) THEN 1 ELSE $5::integer END)`,
       [member.birth, member.job, member.bootstrap, first, count],
     );
     const steps = [];
@@ -470,7 +475,7 @@ export async function prepareHeldSubjectRange<T>(
       const offer = inventoryOffer(end_home - start);
       // A fresh empty inventory and its unchanged finite ends are observed in
       // this same snapshot. Advance only the uninterrupted prefix before a writer.
-      const step = await readOrSaveStep(db, page, context, false, steps.length === 0);
+      const step = await readOrSaveStep(db, page, context, false, true);
       if (!steps.length && step.complete && !step.obligations.length) {
         await advanceFrontier(db, page, step, false);
         advanced = true;
@@ -478,7 +483,7 @@ export async function prepareHeldSubjectRange<T>(
         continue;
       }
       steps.push({ page, step, offer });
-      if (step.next?.phase !== 'window') break;
+      if (!step.complete && step.next?.phase !== 'window') break;
       start = end_home;
     }
     return { steps, advanced };
@@ -495,6 +500,7 @@ export async function prepareHeldSubjectRange<T>(
       windowOffer(page.endHome - page.firstHome);
       if (step.next?.phase !== 'window') {
         await advanceFrontier(db, page, step, true);
+        if (step.complete) continue;
         break;
       }
       const windowPage = { ...page, ordinal: 1 };

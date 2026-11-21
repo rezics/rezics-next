@@ -52,13 +52,21 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
   const custody = createPublicFilterCustody(pool);
   const source = (await nativeProducer()).publicFilterSource(f.config);
   const binding = createPublicFilterSourceBinding(pool, f.config.routeKey, f.config.access);
+  const listing = subjectListingSource(pool);
+  let afterListing: ((home: number) => Promise<void>) | undefined;
   const writer = createSearchWriterGuard({
     pool,
     search,
     index: target,
     consumer: subjectConsumer(prefix, 1),
     source: createRatedSubjectSource(pool, f.config.routeKey).source,
-    listing: subjectListingSource(pool),
+    listing: {
+      async read(home, ids) {
+        const counts = await listing.read(home, ids);
+        await afterListing?.(home);
+        return counts;
+      },
+    },
   });
   const release = await readRelease(pool, f.meaning.digest);
   if (!release) throw new Error('Missing original publication meaning');
@@ -358,7 +366,13 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
     expect(await frontier()).toEqual({ next_home: 0, next_ordinal: 0 });
     await writer.write(0, [resident], await position(0));
     await search.request('POST', '/' + target + '/_refresh');
+    let reads = 0;
+    afterListing = async (home) => {
+      if (home === 0 && ++reads === 1) await quietCommand(home);
+    };
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
+    afterListing = undefined;
+    expect(reads).toBe(2);
     const late = await book(1);
     await f.post('/v1/subjects/' + late + ':hide', { reason: 'Withdrawn during cold preparation' });
     await writer.write(1, [late], await position(1));
@@ -474,10 +488,24 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       ).rows[0].coverage_sealed;
     while (!(await sealed())) expect(await lane('capture', 16)).toMatchObject({ status: 'progress' });
     const withdrawn = await book(170);
-    await f.post('/v1/subjects/' + withdrawn + ':hide', { reason: 'Withdrawn after receiver seal' });
+    await quietCommand(199);
     await writer.write(170, [withdrawn], await position(170));
     await search.request('POST', '/' + target + '/_refresh');
-    await quietCommand(199);
+    afterListing = async (home) => {
+      if (home !== 170) return;
+      afterListing = undefined;
+      await f.post('/v1/subjects/' + withdrawn + ':hide', { reason: 'Withdrawn during original comparison' });
+    };
+    // The fresh comparison sees the withdrawal. The old visible winner still blocks the prefix.
+    expect(await lane('source', 9)).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await frontier()).toEqual({ next_home: 164, next_ordinal: 0 });
+    const suffix = await pool.query(
+      `SELECT evidence FROM semantic.subject_source_step_v1 WHERE (birth,first_home,ordinal)=($1,228,0)`,
+      [birth],
+    );
+    expect(suffix.rows[0]?.evidence).toMatchObject({ phase: 'inventory', complete: true, obligations: [], next: null });
+    await writer.write(170, [withdrawn], await position(170));
+    await search.request('POST', '/' + target + '/_refresh');
 
     expect(await lane('source', 5)).toMatchObject({ status: 'progress' });
     expect(await frontier()).toEqual({ next_home: 164, next_ordinal: 2 });

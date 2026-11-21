@@ -178,6 +178,10 @@ writer holds the Source cursor. Adjacent Core and Access pages commit together b
 Each receiver page commits before Source accepts it. Acceptance and adoption of the following page
 can share a transaction. Source inventories committed intervals together, compares occupied homes
 through the ordinary writer, then reopens each page to advance the ordered prefix and save finite ends.
+A retry starts with the outstanding original at the frontier before comparing later pages again.
+An empty interval whose command heads still match its cut can save its complete window behind a waiting writer.
+The frontier still visits those receipts in order. If a home advances during a writer comparison, an available
+offer can reread that home's projection and settlement once, including its physical winner before advancing.
 A window can close unrelated singleton commands in one or more homes with their original event and write-basis
 evidence. Other groups continue through the saved event cursor. After the receiver seals, the Source lane
 can finish any retained inventory or event ordinal against that same committed page.

@@ -770,8 +770,8 @@ export function createSearchGenerationPublication(
   ) {
     // Read all three committed edges under the publication session lock. A torn
     // handoff returns to the existing single-page recovery from its original.
-    meter.inputKeys += 9;
-    meter.dependencyPoints += 9;
+    meter.inputKeys += 10;
+    meter.dependencyPoints += 10;
     const {
       rows: [job],
     } = await client.query<
@@ -1777,14 +1777,36 @@ export function createSearchGenerationPublication(
     position: bigint,
     meter: Meter,
     workContext?: PublicFilterConsumerContext,
-    wholeHome = false,
+    scope: 'keys' | 'original' | 'home' = 'keys',
   ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
     meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
+    const wholeHome = scope === 'home';
+    const started = Date.now();
+    const retryHomeAdvance = () => {
+      // Keep the remaining 32-key original and its physical comparisons funded.
+      // Only the raced home repeats its Source, listing and custody reads.
+      const inputs = 3 * ids.length;
+      if (
+        meter.inputKeys + inputs + 4 * 32 > PUBLIC_FILTER_PREPARATION_INPUT_LIMIT ||
+        !workContext ||
+        Date.now() + (Date.now() - started) >= workContext.deadline
+      )
+        return false;
+      meter.inputKeys += inputs;
+      return true;
+    };
     const work = workContext && (() => validationWork(workContext, meter));
     const actions =
       wholeHome && !ids.length
         ? []
-        : await readSearchWriterGenerationActions(writerGuard, partition, ids, position, work);
+        : await readSearchWriterGenerationActions(
+            writerGuard,
+            partition,
+            ids,
+            position,
+            work,
+            scope === 'original' ? retryHomeAdvance : undefined,
+          );
     if (!actions) {
       return 'writer-pending';
     }
@@ -1859,6 +1881,7 @@ export function createSearchGenerationPublication(
         position,
         meter,
         checkingEnrollment ? context : undefined,
+        checkingEnrollment ? 'original' : 'keys',
       );
       if (verified === 'matched') return;
       if (checkingEnrollment || job.fenced_pass) throw new Pending('source_pending');
@@ -1980,7 +2003,7 @@ export function createSearchGenerationPublication(
       return false;
     }
     try {
-      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context, true);
+      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context, 'home');
       if (result !== 'matched') return false;
     } catch (error) {
       if (error instanceof SearchUnavailableError) return false;
