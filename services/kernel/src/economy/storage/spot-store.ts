@@ -15,6 +15,7 @@ import {
   type SpotFillSettlement,
   type SpotOrderFill,
   type SpotOrderFillsPage,
+  type SpotQuote,
   type SpotTrade,
   type SpotTradePage,
   type SpotTradePosition,
@@ -90,6 +91,9 @@ const instrumentColumns = `instrument_id AS id, book_id AS "ledgerBookId", polic
 const orderColumns = `instrument_id AS "instrumentId", order_id AS "orderId", account_id::text AS "accountId",
   sequence::text, side, price::text, lots::text, remaining_lots::text AS "remainingLots", status,
   reservation_id::text AS "reservationId", reserved_units_per_lot::text AS "reservedUnitsPerLot"`;
+
+const settledTradeColumns = `price::text, lots::text, base_units::text AS "baseUnits", quote_units::text AS "quoteUnits",
+  to_char(settled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "settledAt"`;
 
 function ok<T>(value: T): Result<T> & { kind: 'ok' } {
   return { kind: 'ok', value };
@@ -337,6 +341,38 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
       });
     },
 
+    readQuote(instrumentId: string): Promise<Result<SpotQuote>> {
+      if (!isSpotInstrumentId(instrumentId)) return Promise.resolve(failure('not_found'));
+      return run('read', async (tx) => {
+        const { rows } = await tx.query<SpotQuote>(
+          `SELECT instrument.revision::text, bid.price::text AS "bestBid", ask.price::text AS "bestAsk",
+                  row_to_json(trade) AS "latestTrade"
+           FROM economy.spot_instrument AS instrument
+           LEFT JOIN LATERAL (
+             SELECT resting.price FROM economy.spot_order AS resting
+             WHERE resting.book_id = instrument.book_id AND resting.instrument_id = instrument.instrument_id
+               AND resting.side = 'buy' AND resting.status = 'resting'
+             ORDER BY resting.price DESC, resting.sequence LIMIT 1
+           ) AS bid ON true
+           LEFT JOIN LATERAL (
+             SELECT resting.price FROM economy.spot_order AS resting
+             WHERE resting.book_id = instrument.book_id AND resting.instrument_id = instrument.instrument_id
+               AND resting.side = 'sell' AND resting.status = 'resting'
+             ORDER BY resting.price, resting.sequence LIMIT 1
+           ) AS ask ON true
+           LEFT JOIN LATERAL (
+             SELECT ${settledTradeColumns} FROM economy.spot_fill AS settled
+             WHERE settled.book_id = instrument.book_id AND settled.instrument_id = instrument.instrument_id
+               AND settled.settled_at IS NOT NULL
+             ORDER BY settled.settled_at DESC, settled.fill_id DESC LIMIT 1
+           ) AS trade ON true
+           WHERE instrument.book_id = $1 AND instrument.instrument_id = $2`,
+          [bookId, instrumentId],
+        );
+        return rows[0] ? ok(rows[0]) : failure('not_found');
+      });
+    },
+
     readTrades(instrumentId: string, limit: number, after: SpotTradePosition | null): Promise<Result<SpotTradePage>> {
       if (!key.test(instrumentId)) return Promise.resolve(failure('not_found'));
       if (
@@ -353,8 +389,7 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
         );
         if (!instrument.rowCount) return failure('not_found');
         const { rows } = await tx.query<SpotTrade & { fillId: string }>(
-          `SELECT price::text, lots::text, base_units::text AS "baseUnits", quote_units::text AS "quoteUnits",
-             to_char(settled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "settledAt", fill_id AS "fillId"
+          `SELECT ${settledTradeColumns}, fill_id AS "fillId"
            FROM economy.spot_fill
            WHERE book_id = $1 AND instrument_id = $2 AND settled_at IS NOT NULL
            ${after ? 'AND (settled_at, fill_id) < ($4::timestamptz, $5::text)' : ''}

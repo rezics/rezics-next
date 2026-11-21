@@ -105,6 +105,13 @@ export type SpotTrade = Readonly<{
   quoteUnits: string;
   settledAt: string;
 }>;
+export type SpotQuote = Readonly<{
+  revision: string;
+  bestBid: string | null;
+  bestAsk: string | null;
+  latestTrade: SpotTrade | null;
+}>;
+
 /** Native keyset position with sub-millisecond precision. */
 export type SpotTradePosition = readonly [settledAt: string, fillId: string];
 export type SpotTradePage = Readonly<{ trades: SpotTrade[]; after: SpotTradePosition | null }>;
