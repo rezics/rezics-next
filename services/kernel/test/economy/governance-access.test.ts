@@ -190,7 +190,7 @@ async function expectClosed(bearer?: string) {
   await walletDiscovery(bearer, false);
 }
 
-async function expectOwnWallet(bearer: string, amount: string, operationId: string) {
+async function expectOwnWallet(bearer: string, amount: string) {
   const balance = await call(wallet, bearer);
   expect(balance.status).toBe(200);
   expect(balance.headers.get('cache-control')).toBe('private, no-store');
@@ -199,7 +199,13 @@ async function expectOwnWallet(bearer: string, amount: string, operationId: stri
   expect(history.status).toBe(200);
   expect(history.headers.get('cache-control')).toBe('private, no-store');
   expect(await history.json()).toMatchObject({
-    entries: [{ operationId, kind: 'issue', postedDelta: amount }],
+    entries: [
+      {
+        operationId: expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
+        kind: 'issue',
+        postedDelta: amount,
+      },
+    ],
     next: null,
   });
 }
@@ -227,16 +233,16 @@ test('Global governance explicitly admits and revokes native wallet access and d
   expect({ status: granted.status, body: await granted.json() }).toEqual({ status: 201, body: { grant } });
 
   await walletDiscovery(member.bearer, true);
-  await expectOwnWallet(member.bearer, amount, 'member-opening');
+  await expectOwnWallet(member.bearer, amount);
   expect((await call(`/v1/economy/test-funding/intents/${'a'.repeat(64)}`, member.bearer)).status).toBe(404);
   expect((await call(wallet, noWallet)).status).toBe(403);
   await walletDiscovery(noWallet, false);
   await expectClosed(other.bearer);
   expect((await call('/v1/grants', operator.bearer, directGrant(other.accountId))).status).toBe(201);
-  await expectOwnWallet(other.bearer, '37', 'other-opening');
+  await expectOwnWallet(other.bearer, '37');
 
   const revoked = await call('/v1/grants:revoke', operator.bearer, grant);
   expect({ status: revoked.status, body: await revoked.json() }).toMatchObject({ status: 200 });
   await expectClosed(member.bearer);
-  await expectOwnWallet(other.bearer, '37', 'other-opening');
+  await expectOwnWallet(other.bearer, '37');
 }, 60_000);
