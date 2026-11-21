@@ -147,7 +147,7 @@ test('Changed selected native cursor refuses before affected dispatch and failed
 test('deferred native creator NEW and OLD delivery shares actual Source enrollment and preserves former grant provenance', async () => {
   const resource = await create();
   const created = await ownerProvenance(resource);
-  expect(new Set(created.map((row) => row.side))).toEqual(new Set(['creator', 'new']));
+  expect(created.map((row) => row.side).sort()).toEqual(['creator', 'new']);
   const original = created.find((row) => row.side === 'new')!;
   const role = {
     resource,

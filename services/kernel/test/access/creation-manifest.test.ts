@@ -187,6 +187,13 @@ async function snapshot(declared: ResourceCreationEntry[]) {
         [ids],
       )
     ).rows,
+    roleSources: (
+      await f.reader.query(
+        `SELECT resource_id,account_id,side,grant_role FROM access.resource_role_provenance
+         WHERE resource_id=ANY($1::uuid[]) ORDER BY resource_id,side,grant_role`,
+        [ids],
+      )
+    ).rows,
     markers: (
       await f.reader.query(
         'SELECT * FROM access.resource_initialization WHERE resource_id=ANY($1::uuid[]) ORDER BY resource_id',
@@ -196,6 +203,20 @@ async function snapshot(declared: ResourceCreationEntry[]) {
     effects: await f.snapshot(declared[0]!.resource.route),
   };
 }
+test('a retried initial owner grant records one holder occurrence and receipt replay preserves both historical parties', async () => {
+  const [entry] = entries(1);
+  const declared = [{ ...entry!, type: 'fixture.owned' }];
+  const key = Bun.randomUUIDv7();
+  expect((await execute(declared, { key, retry: true })).replayed).toBe(false);
+  const captured = await snapshot(declared);
+  const resource_id = declared[0]!.resource.id;
+  expect(captured.roleSources).toEqual([
+    { resource_id, account_id: f.actor, side: 'creator', grant_role: '' },
+    { resource_id, account_id: f.actor, side: 'new', grant_role: 'fixture.owner' },
+  ]);
+  expect((await execute(declared, { key })).replayed).toBe(true);
+  expect(await snapshot(declared)).toEqual(captured);
+});
 test('one parent check creates thread and firstpost with independent roles at T; replay checks authority without initialization', async () => {
   const declared = entries();
   const key = Bun.randomUUIDv7();
