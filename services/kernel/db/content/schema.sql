@@ -7296,6 +7296,13 @@ CREATE INDEX feed_activity_recent ON content.feed_activity USING btree (route, t
 
 
 --
+-- Name: feed_activity_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_activity_retention_due ON content.feed_activity USING btree (occurred_at, partition_no);
+
+
+--
 -- Name: feed_inbox_expiry; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -7307,6 +7314,13 @@ CREATE INDEX feed_inbox_expiry ON content.feed_inbox USING btree (partition_no, 
 --
 
 CREATE INDEX feed_inbox_recent ON content.feed_inbox USING btree (route, account_id, occurred_at DESC, activity_id DESC);
+
+
+--
+-- Name: feed_inbox_retention_due; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_inbox_retention_due ON content.feed_inbox USING btree (occurred_at, partition_no);
 
 
 --

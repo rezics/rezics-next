@@ -23,6 +23,7 @@ import {
   type FeedActivityTarget,
 } from './feed-activity.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
+import nextFeedRetentionHome from './feed-retention-due.sql';
 
 export const FEED_FANOUT_WORKFLOW = 'content.feedFanout';
 const cleanupWorkflow = 'content.feedRetention';
@@ -178,6 +179,46 @@ async function eventActivities(context: WorkContext, event: CloudEvent): Promise
   }));
 }
 
+type FeedRetentionPosition = { after: number; current?: number };
+
+/** Retained continuations finish their original home. New sweeps elect the oldest due row across both owners. */
+export async function expireFeedPage(
+  pool: Pool,
+  after: number,
+  current?: number,
+): Promise<FeedRetentionPosition | null> {
+  const partition =
+    current ??
+    (await nextFeedRetentionHome.run(pool, { after, retention_ms: BigInt(FEED_RETENTION_MS) }))?.partition_no;
+  if (partition == null) return null;
+  const removed = (
+    await runCommand(pool, { partition, deadline: deadlineFor(30_000) }, async (tx, attempt) => {
+      const cutoff = new Date(Date.parse(authoritativeTimeValue(attempt.time)) - FEED_RETENTION_MS).toISOString();
+      const inventory = await tx.query(
+        `DELETE FROM content.feed_activity WHERE (route,target_type,target_id,activity_id) IN
+        (SELECT route,target_type,target_id,activity_id FROM content.feed_activity WHERE partition_no=$1 AND occurred_at<=$2
+         ORDER BY occurred_at,route,target_type,target_id,activity_id LIMIT 128) RETURNING activity_id`,
+        [partition, cutoff],
+      );
+      const inbox = await tx.query(
+        `DELETE FROM content.feed_inbox WHERE (route,account_id,activity_id) IN
+        (SELECT route,account_id,activity_id FROM content.feed_inbox WHERE partition_no=$1 AND occurred_at<=$2
+         ORDER BY occurred_at,route,account_id,activity_id LIMIT 128) RETURNING activity_id`,
+        [partition, cutoff],
+      );
+      const count = (inventory.rowCount ?? 0) + (inbox.rowCount ?? 0);
+      return count
+        ? {
+            value: { inventory: inventory.rowCount, inbox: inbox.rowCount },
+            events: [{ type: 'com.rezics.content.feed.expired.v1', data: {} }],
+          }
+        : noEffect({ inventory: 0, inbox: 0 });
+    })
+  ).value;
+  if (removed.inventory === 128 || removed.inbox === 128) return { after, current: partition };
+  return { after: after < 0 ? -1 : partition };
+}
+
 /** Shared runtime registration only: no relay, server, SDK launch or second scheduler. */
 export async function registerFeedWork(context: WorkContext): Promise<void> {
   const tokens = readMembershipWorkConfig(context.env).referenceKeys;
@@ -239,45 +280,10 @@ export async function registerFeedWork(context: WorkContext): Promise<void> {
     },
   ]);
 
-  const clean = DBOS.registerStep(
-    async (after: number, current?: number): Promise<{ after: number; current?: number } | null> => {
-      const partition =
-        current ??
-        (
-          await context.pool.query<{ partition_no: number }>(
-            'SELECT partition_no FROM core.partition WHERE partition_no>$1 ORDER BY partition_no LIMIT 1',
-            [after],
-          )
-        ).rows[0]?.partition_no;
-      if (partition === undefined) return null;
-      const removed = (
-        await runCommand(context.pool, { partition, deadline: deadlineFor(30_000) }, async (tx, attempt) => {
-          const cutoff = new Date(Date.parse(authoritativeTimeValue(attempt.time)) - FEED_RETENTION_MS).toISOString();
-          const inventory = await tx.query(
-            `DELETE FROM content.feed_activity WHERE (route,target_type,target_id,activity_id) IN
-        (SELECT route,target_type,target_id,activity_id FROM content.feed_activity WHERE partition_no=$1 AND occurred_at<=$2
-         ORDER BY occurred_at,route,target_type,target_id,activity_id LIMIT 128) RETURNING activity_id`,
-            [partition, cutoff],
-          );
-          const inbox = await tx.query(
-            `DELETE FROM content.feed_inbox WHERE (route,account_id,activity_id) IN
-        (SELECT route,account_id,activity_id FROM content.feed_inbox WHERE partition_no=$1 AND occurred_at<=$2
-         ORDER BY occurred_at,route,account_id,activity_id LIMIT 128) RETURNING activity_id`,
-            [partition, cutoff],
-          );
-          const count = (inventory.rowCount ?? 0) + (inbox.rowCount ?? 0);
-          return count
-            ? {
-                value: { inventory: inventory.rowCount, inbox: inbox.rowCount },
-                events: [{ type: 'com.rezics.content.feed.expired.v1', data: {} }],
-              }
-            : noEffect({ inventory: 0, inbox: 0 });
-        })
-      ).value;
-      return removed.inventory === 128 || removed.inbox === 128 ? { after, current: partition } : { after: partition };
-    },
-    { name: 'content.feedRetentionPage', ...COMMAND_STEP_RETRIES },
-  );
+  const clean = DBOS.registerStep((after: number, current?: number) => expireFeedPage(context.pool, after, current), {
+    name: 'content.feedRetentionPage',
+    ...COMMAND_STEP_RETRIES,
+  });
   const nextCleanup = DBOS.registerStep(
     async (position: { after: number; current?: number }, root: string, segment: number) => {
       await context.client.enqueue(
