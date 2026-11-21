@@ -3,6 +3,7 @@ import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createSubjectIndex, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { readSearchWriterPhysicalTarget } from '../../src/search/identity-epoch-participant-physical.ts';
 import { startSearchIndexing, subjectConsumer } from '../../src/search/runner.ts';
 import type { IndexedSubject, SubjectSnapshot, SubjectSource } from '../../src/search/source.ts';
 
@@ -11,13 +12,8 @@ const searchUrl = process.env.OPENSEARCH_URL;
 if (!databaseUrl || !searchUrl)
   throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
 const native = createOpenSearch(searchUrl);
-// One owned engine namespace, reused only after its previous runner has drained.
-const prefix = `control-${crypto.randomUUID().slice(0, 8)}-`;
 const partition = 3700;
 const id = (n: number) => `018f0000-0000-7000-8000-${(partition * 16).toString(16)}${String(n).padStart(8, '0')}`;
-const index = (generation: number) => subjectIndexName(prefix, generation);
-const consumer = (generation: number) => subjectConsumer(prefix, generation);
-const resolvePath = `/_resolve/index/${prefix}subjects*`;
 
 async function bounded<T>(promise: Promise<T>, name: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,6 +49,7 @@ type RequestGate = { method: string; path: string; gate: Gate };
 
 async function fixture(run: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>, history = 0) {
   const f = await setup(history);
+  const { prefix, index, consumer } = f;
   try {
     await run(f);
   } finally {
@@ -81,6 +78,11 @@ async function fixture(run: (f: Awaited<ReturnType<typeof setup>>) => Promise<vo
 }
 
 async function setup(history: number) {
+  // A fresh physical allocation has its own immutable writer custody.
+  const prefix = `control-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = (generation: number) => subjectIndexName(prefix, generation);
+  const consumer = (generation: number) => subjectConsumer(prefix, generation);
+  const resolvePath = `/_resolve/index/${prefix}subjects*`;
   const pool = createPool(databaseUrl!);
   const admin = new pg.Pool({ connectionString: databaseUrl!, max: 2 });
   const events: string[] = [];
@@ -89,6 +91,7 @@ async function setup(history: number) {
   const sourceGates: Gate[] = [];
   const bulkGates: { index: string; gate: Gate }[] = [];
   const calls: string[] = [];
+  const bulkStatuses: number[] = [];
   const sql = { scans: 0, checkpoints: 0 };
   let counts = 0;
   pool.on('connect', (client) => {
@@ -137,11 +140,17 @@ async function setup(history: number) {
       return response;
     },
     async bulk<T>(...args: Parameters<OpenSearch['bulk']>) {
-      const target = args[0][0] as { index?: { _index?: string }; delete?: { _index?: string } };
-      const name = target.index?._index ?? target.delete?._index;
+      const response = await native.bulk<T>(...args);
+      // The admitted write goes through the allocation's immutable writer alias.
+      // OpenSearch returns the actual physical index for each completed action.
+      const body = response as { items: Array<Record<string, { _index: string; status: number }>> };
+      const actions = body.items.map((item) => Object.values(item)[0]!);
+      bulkStatuses.push(...actions.map((action) => action.status));
+      const targets = new Set(actions.map((action) => action._index));
+      expect(targets.size).toBe(1);
+      const [name] = targets;
       calls.push(`bulk ${name}`);
       events.push(`bulk ${name}`);
-      const response = await native.bulk<T>(...args);
       const at = bulkGates.findIndex((item) => item.index === name);
       if (at !== -1) await bulkGates.splice(at, 1)[0]!.gate.hold();
       return response;
@@ -250,6 +259,25 @@ async function setup(history: number) {
     );
     return rows[0]?.position ?? null;
   };
+  async function admittedDocument(generation: number, subject: string, through: string) {
+    const receipt = await admin.query<{ position: string }>(
+      `SELECT writer_position::text AS position FROM search.identity_writer
+       WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND writer_position >= $4::bigint`,
+      [partition, index(generation), subject, through],
+    );
+    expect(receipt.rowCount).toBe(1);
+    return { id: subject, version: Number(receipt.rows[0]!.position) };
+  }
+  async function processedThrough(generation: number, through: string) {
+    const result = await admin.query(
+      `SELECT 1 FROM core.consumer_checkpoint c
+       WHERE c.partition_no=$1 AND c.consumer=$2 AND c.position >= $3::bigint
+         AND NOT EXISTS (SELECT FROM core.outbox e WHERE e.partition_no=c.partition_no
+           AND e.position>$3::bigint AND e.position<=c.position AND e.type='com.rezics.subject.created.v1')`,
+      [partition, consumer(generation), through],
+    );
+    return result.rowCount === 1;
+  }
   const visible = async (generation: number) =>
     (
       await native.request<{ hits: { hits: { _id: string; _version: number }[] } }>(
@@ -261,15 +289,22 @@ async function setup(history: number) {
   return {
     pool,
     admin,
+    prefix,
+    index,
+    consumer,
+    resolvePath,
     runner,
     events,
     calls,
+    bulkStatuses,
     sql,
     gates,
     source,
     append,
     checkpoint,
     visible,
+    admittedDocument,
+    processedThrough,
     idleResume,
     holdRequest,
     holdSource,
@@ -293,9 +328,9 @@ async function pending(promise: Promise<void>, f: Awaited<ReturnType<typeof setu
 for (const history of [64, 512, 4096]) {
   test(`pause drains discovery admitted before its boundary and paused replacement stays idle at history ${history}`, async () => {
     await fixture(async (f) => {
-      await createSubjectIndex(native, prefix, 2);
+      await createSubjectIndex(native, f.prefix, 2);
       await f.idleResume();
-      const held = f.holdRequest('GET', resolvePath, 'discovery');
+      const held = f.holdRequest('GET', f.resolvePath, 'discovery');
       const refresh = f.runner.refresh();
       await bounded(held.reached, 'discovery admitted');
       const pause = f.runner.pause().then(() => {
@@ -316,10 +351,10 @@ for (const history of [64, 512, 4096]) {
       await f.runner.refresh();
       await f.runner.refresh();
       expect(f.calls.slice(start)).toEqual([
-        `GET ${resolvePath}`,
-        `GET /${index(1)}/_mapping`,
-        `GET ${resolvePath}`,
-        `GET /${index(1)}/_mapping`,
+        `GET ${f.resolvePath}`,
+        `GET /${f.index(1)}/_mapping`,
+        `GET ${f.resolvePath}`,
+        `GET /${f.index(1)}/_mapping`,
       ]);
       expect(f.sql).toEqual({ scans, checkpoints });
       const first = f.holdBulk(1, 'first');
@@ -332,13 +367,13 @@ for (const history of [64, 512, 4096]) {
       second.release();
       await bounded(drain, 'projection checkpoint drain');
       for (const generation of [1, 2]) {
-        expect(await f.checkpoint(generation)).toBe(position);
-        expect(await f.visible(generation)).toEqual([{ id: id(1), version: Number(position) }]);
+        expect(await f.processedThrough(generation, position)).toBe(true);
+        expect(await f.visible(generation)).toEqual([await f.admittedDocument(generation, id(1), position)]);
       }
       expect(f.calls.filter((call) => call.startsWith('source '))).toEqual([`source ${id(1)}`, `source ${id(1)}`]);
       expect(f.calls.filter((call) => call.startsWith('bulk ')).sort()).toEqual([
-        `bulk ${index(1)}`,
-        `bulk ${index(2)}`,
+        `bulk ${f.index(1)}`,
+        `bulk ${f.index(2)}`,
       ]);
       expect(f.sql.checkpoints - checkpoints).toBe(2);
       expect(f.sql.scans - scans).toBe(2);
@@ -352,19 +387,19 @@ for (const history of [64, 512, 4096]) {
 
 test('metadata refresh may replace generations during pause without dispatching even a partition scan', async () => {
   await fixture(async (f) => {
-    await createSubjectIndex(native, prefix, 2);
+    await createSubjectIndex(native, f.prefix, 2);
     // Install an older generation beside an explicitly configured one.
-    await native.request('PUT', `/${index(2)}/_settings`, { index: { refresh_interval: '1s' } });
-    await native.request('PUT', `/${index(1)}/_settings`, { index: { refresh_interval: '-1' } });
+    await native.request('PUT', `/${f.index(2)}/_settings`, { index: { refresh_interval: '1s' } });
+    await native.request('PUT', `/${f.index(1)}/_settings`, { index: { refresh_interval: '-1' } });
     await f.append(2);
     const before = { ...f.sql };
     const start = f.calls.length;
     await f.runner.refresh();
     await f.runner.pause();
-    const settings = await native.request('GET', `/${index(1)},${index(2)}/_settings/index.refresh_interval`);
+    const settings = await native.request('GET', `/${f.index(1)},${f.index(2)}/_settings/index.refresh_interval`);
     expect(settings.body).toMatchObject({
-      [index(1)]: { settings: { index: { refresh_interval: '-1' } } },
-      [index(2)]: { settings: { index: { refresh_interval: '100ms' } } },
+      [f.index(1)]: { settings: { index: { refresh_interval: '-1' } } },
+      [f.index(2)]: { settings: { index: { refresh_interval: '100ms' } } },
     });
     expect(f.sql).toEqual(before);
     expect(f.calls.slice(start).filter((call) => call.startsWith('source ') || call.startsWith('bulk '))).toEqual([]);
@@ -389,18 +424,18 @@ test('pause drains admitted Source through native visibility and checkpoint befo
     source.release();
     await bounded(bulk.reached, 'first native bulk');
     expect(await f.checkpoint(1)).not.toBe(position);
-    expect(await f.visible(1)).toEqual([{ id: id(3), version: Number(position) }]);
+    expect(await f.visible(1)).toEqual([await f.admittedDocument(1, id(3), position)]);
     await pending(pause, f);
     const nextSource = f.holdSource('source-two');
     bulk.release();
     await bounded(pause, 'pause before resume');
     await bounded(nextSource.reached, 'queued resume');
     expect(f.events.indexOf('pause:settled')).toBeLessThan(f.events.indexOf('source-two:held'));
-    expect(await f.checkpoint(1)).toBe(position);
+    expect(await f.processedThrough(1, position)).toBe(true);
     const finalPause = f.runner.pause();
     nextSource.release();
     await bounded(finalPause, 'second pause');
-    expect(await f.checkpoint(1)).toBe(nextPosition);
+    expect(await f.processedThrough(1, nextPosition)).toBe(true);
     expect(f.calls.filter((call) => call.startsWith('source '))).toEqual([`source ${id(3)}`, `source ${id(4)}`]);
   });
 });
@@ -409,9 +444,12 @@ for (const fail of [false, true]) {
   test(`stop seals an admitted discovery response, shares its drain and forbids late work (transport failure ${fail})`, async () => {
     await fixture(async (f) => {
       // An actually executed empty resolve would bootstrap if delivered to a live runner.
-      await native.request('DELETE', `/${index(1)}`);
-      const held = f.holdRequest('GET', resolvePath, 'stop-discovery', fail);
-      const refresh = f.runner.refresh();
+      await native.request('DELETE', `/${f.index(1)}`);
+      const held = f.holdRequest('GET', f.resolvePath, 'stop-discovery', fail);
+      const refresh = f.runner.refresh().then(
+        () => null,
+        (error: Error) => error.message,
+      );
       await bounded(held.reached, 'stop discovery');
       const start = f.calls.length;
       const closing = f.runner.stop();
@@ -420,12 +458,13 @@ for (const fail of [false, true]) {
       await f.runner.refresh();
       await pending(closing, f);
       held.release();
-      await bounded(Promise.all([refresh, closing]), 'stopped discovery');
+      await bounded(closing, 'stopped discovery');
+      expect(await refresh).toBe('Search runner stopped');
       await f.runner.pause();
       f.runner.resume();
       await f.runner.refresh();
       expect(f.calls.slice(start)).toEqual([]);
-      expect(await subjectGenerations(native, prefix)).toEqual({ generations: [], active: null });
+      expect(await subjectGenerations(native, f.prefix)).toEqual({ generations: [], active: null });
     });
   });
 }
@@ -445,8 +484,9 @@ for (const fail of [false, true]) {
       expect(await f.checkpoint(1)).toBe(before);
       held.release();
       await bounded(closing, 'Source drain');
-      expect(await f.checkpoint(1)).toBe(fail ? before : position);
-      expect(await f.visible(1)).toEqual(fail ? [] : [{ id: id(5), version: Number(position) }]);
+      if (fail) expect(await f.checkpoint(1)).toBe(before);
+      else expect(await f.processedThrough(1, position)).toBe(true);
+      expect(await f.visible(1)).toEqual(fail ? [] : [await f.admittedDocument(1, id(5), position)]);
       const calls = [...f.calls];
       f.runner.resume();
       await f.runner.refresh();
@@ -456,34 +496,45 @@ for (const fail of [false, true]) {
   });
 }
 
-test('stop waits for a real external-version conflict refresh response before checkpointing', async () => {
+test('stop drains a native external-version conflict and preserves the losing checkpoint', async () => {
   await fixture(async (f) => {
     const before = await f.checkpoint(1);
     const position = await f.append(6);
-    const bulk = f.holdBulk(1, 'initial-bulk');
+    const first = f.holdBulk(1, 'accepted');
     f.runner.resume();
-    await bounded(bulk.reached, 'initial native bulk');
+    await bounded(first.reached, 'seed native write');
     const pause = f.runner.pause();
-    bulk.release();
-    await bounded(pause, 'initial checkpoint');
-    expect(await f.checkpoint(1)).toBe(position);
-    // Crash replay: the engine already has this exact external version, but the durable cursor is behind.
+    first.release();
+    await bounded(pause, 'first checkpoint');
+    expect(await f.processedThrough(1, position)).toBe(true);
+
+    // A real competing write owns a higher external version when the old cursor replays.
+    const target = f.index(1);
+    const old = await native.request<{ _source: object; _version: number }>('GET', `/${target}/_doc/${id(6)}`);
+    const winner = old.body._version + 100_000;
+    const { writeAlias } = await readSearchWriterPhysicalTarget(native, target);
+    const installed = await native.bulk<{ errors: boolean }>(
+      [{ index: { _index: writeAlias, _id: id(6), version: winner, version_type: 'external' } }, old.body._source],
+      { query: { require_alias: true, refresh: true } },
+    );
+    expect(installed.errors).toBe(false);
     await f.admin.query('UPDATE core.consumer_checkpoint SET position = $3 WHERE partition_no = $1 AND consumer = $2', [
       partition,
-      consumer(1),
+      f.consumer(1),
       before,
     ]);
-    const held = f.holdRequest('POST', `/${index(1)}/_refresh`, 'native-refresh');
+    const held = f.holdBulk(1, 'conflicting replay');
     f.runner.resume();
-    await bounded(held.reached, 'actual conflict refresh');
+    await bounded(held.reached, 'actual conflict response');
+    expect(f.bulkStatuses.at(-1)).toBe(409);
     const closing = f.runner.stop();
     expect(f.runner.stop()).toBe(closing);
     await pending(closing, f);
     expect(await f.checkpoint(1)).toBe(before);
-    expect(await f.visible(1)).toEqual([{ id: id(6), version: Number(position) }]);
+    expect(await f.visible(1)).toEqual([{ id: id(6), version: winner }]);
     held.release();
-    await bounded(closing, 'native refresh drain');
-    expect(await f.checkpoint(1)).toBe(position);
+    await bounded(closing, 'native conflict drain');
+    expect(await f.checkpoint(1)).toBe(before);
   });
 });
 
@@ -498,13 +549,16 @@ test('failed delivery and concurrent refresh/resume recover using one current ge
     lost.release();
     await bounded(pause, 'failed projection drain');
     expect(await f.checkpoint(1)).toBe(before);
-    const metadata = f.holdRequest('GET', resolvePath, 'lost-metadata', true);
-    const failed = f.runner.refresh();
+    const metadata = f.holdRequest('GET', f.resolvePath, 'lost-metadata', true);
+    const failed = f.runner.refresh().then(
+      () => null,
+      (error: Error) => error.message,
+    );
     await bounded(metadata.reached, 'failed metadata');
     metadata.release();
-    await bounded(failed, 'failed discovery recovery');
-    await createSubjectIndex(native, prefix, 2);
-    const held = f.holdRequest('GET', resolvePath, 'replacement');
+    expect(await bounded(failed, 'failed discovery recovery')).toBe('Controlled transport failure: lost-metadata');
+    await createSubjectIndex(native, f.prefix, 2);
+    const held = f.holdRequest('GET', f.resolvePath, 'replacement');
     const one = f.runner.refresh();
     const two = f.runner.refresh();
     await bounded(held.reached, 'replacement admitted');
@@ -520,11 +574,11 @@ test('failed delivery and concurrent refresh/resume recover using one current ge
     second.release();
     await bounded(finish, 'recovered checkpoint');
     for (const generation of [1, 2]) {
-      expect(await f.checkpoint(generation)).toBe(position);
-      expect(await f.visible(generation)).toEqual([{ id: id(7), version: Number(position) }]);
+      expect(await f.processedThrough(generation, position)).toBe(true);
+      expect(await f.visible(generation)).toEqual([await f.admittedDocument(generation, id(7), position)]);
     }
-    expect(f.calls.filter((call) => call === `bulk ${index(1)}`)).toHaveLength(2);
-    expect(f.calls.filter((call) => call === `bulk ${index(2)}`)).toHaveLength(1);
+    expect(f.calls.filter((call) => call === `bulk ${f.index(1)}`)).toHaveLength(2);
+    expect(f.calls.filter((call) => call === `bulk ${f.index(2)}`)).toHaveLength(1);
     expect(f.calls.filter((call) => call.startsWith('source '))).toHaveLength(3);
   });
 });
@@ -562,14 +616,14 @@ test('a later pause cancels queued resume and paused or stopped runners own no s
       source.release();
       await bounded(Promise.all([first, last]), 'repeated pause');
       expect(scheduled.size).toBe(0);
-      expect(await f.checkpoint(1)).toBe(position);
+      expect(await f.processedThrough(1, position)).toBe(true);
       const next = await f.append(9);
       const calls = f.calls.length;
       const scans = f.sql.scans;
       await f.runner.refresh();
-      expect(f.calls.slice(calls)).toEqual([`GET ${resolvePath}`, `GET /${index(1)}/_mapping`]);
+      expect(f.calls.slice(calls)).toEqual([`GET ${f.resolvePath}`, `GET /${f.index(1)}/_mapping`]);
       expect(f.sql.scans).toBe(scans);
-      expect(await f.checkpoint(1)).toBe(position);
+      expect(await f.processedThrough(1, position)).toBe(true);
       expect(scheduled.size).toBe(0);
       const bulk = f.holdBulk(1, 'explicit-resume');
       f.runner.resume();
@@ -578,7 +632,7 @@ test('a later pause cancels queued resume and paused or stopped runners own no s
       const closing = f.runner.stop();
       bulk.release();
       await bounded(closing, 'scheduled runner stop');
-      expect(await f.checkpoint(1)).toBe(next);
+      expect(await f.processedThrough(1, next)).toBe(true);
       expect(scheduled.size).toBe(0);
       const stoppedCalls = [...f.calls];
       f.runner.resume();
