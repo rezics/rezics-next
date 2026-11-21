@@ -2743,17 +2743,20 @@ export function createNativePublicFilterSourceBinding(
           );
           if (plans) return plans;
         }
+        // An installed definition resolves from the current Source owner and its exact retained input.
+        // First-time registration still reconciles a concurrent writer under the unique keys.
+        const [retained] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
         // Caller digest equality is checked again against the actual immutable release owner.
         const release = await readRelease(db, meaning.digest);
         if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
           throw new BindingError('definition_missing');
-        if (readOnly) {
-          const [row] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
-          if (!row) throw new BindingError('definition_missing');
-          const definition = await loadDefinition(row.read_definition, db);
+        if (retained) {
+          const definition = restoreDefinition(retained.read_definition, retained, release, ports.search);
           freeze(definition);
+          if (!readOnly) resolvedDefinitions.add(definition);
           return { status: 'resolved' as const, definition, cost };
         }
+        if (readOnly) throw new BindingError('definition_missing');
         const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
         if (!source) throw new BindingError('owner_unavailable');
         const definition = (

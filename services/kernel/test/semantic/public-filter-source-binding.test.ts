@@ -260,7 +260,32 @@ test('native public Source configuration and immutable meaning/read definition r
     );
     expect(reused.status).toBe('resolved');
     if (reused.status !== 'resolved') throw new Error(`Native Source reuse ${reused.reason}`);
-    expect(reused.definition.readDefinition).toBe(result.definition.readDefinition);
+    expect(reused.definition).toEqual(result.definition);
+    await withConnection(f.db.admin, async (writer) => {
+      await writer.query('BEGIN');
+      try {
+        // A separate owner's pending update must leave the last committed exact definition readable.
+        await writer.query(
+          `SELECT d.read_definition FROM semantic.public_filter_read_definition d
+           JOIN semantic.public_filter_source s USING (partition_no,source_id,configuration)
+           WHERE d.partition_no=0 AND d.read_definition=$1 FOR UPDATE OF s,d`,
+          [result.definition.readDefinition],
+        );
+        const replies = await Promise.all(
+          [true, false].map((readOnly) =>
+            binding.resolve({ source, meaning: f.meaning, capture, readOnly }, readContext()),
+          ),
+        );
+        for (const reply of replies) {
+          expect(reply.status).toBe('resolved');
+          if (reply.status !== 'resolved') throw new Error(reply.reason);
+          expect(reply.definition).toEqual(result.definition);
+          expect(reply.cost.resultWrites).toBe(0);
+        }
+      } finally {
+        await writer.query('ROLLBACK');
+      }
+    });
     const obsoleteMeaning = { ...f.meaning, type: 'schema:Book' };
     expect(await binding.resolve({ source, meaning: obsoleteMeaning, capture }, readContext())).toMatchObject({
       status: 'unavailable',
@@ -283,7 +308,7 @@ test('native public Source configuration and immutable meaning/read definition r
   } finally {
     await f.close();
   }
-});
+}, 60_000);
 
 test('native Subject enrollment prepares disjoint ranges and rechecks the original ordered cut', async () => {
   const { publicFilterSource } = await nativeProducer();
