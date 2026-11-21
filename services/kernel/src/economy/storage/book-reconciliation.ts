@@ -18,21 +18,25 @@ type Position = AccountRow &
     restricted: string;
     revision: string;
   }>;
-type Entry = Readonly<{ position: string; posted: string; held: string }>;
-type Hold = Readonly<{ holdId: string; remaining: string; allocated: string; captured: string; released: string }>;
-type Allocation = Readonly<{
-  purpose: string;
-  reference: string;
-  amount: string;
-  status: 'protected' | 'captured' | 'released';
-}>;
+type Entry = AccountRow & Readonly<{ position: string; transactionId: string; posted: string; held: string }>;
+type HoldKey = AccountRow & Readonly<{ holdId: string }>;
+type Hold = HoldKey & Readonly<{ remaining: string; allocated: string; captured: string; released: string }>;
+type Allocation = HoldKey &
+  Readonly<{
+    purpose: string;
+    reference: string;
+    amount: string;
+    status: 'protected' | 'captured' | 'released';
+  }>;
 type Journal = AssetRow & Readonly<{ transactionId: string; kind: string }>;
 type Pending = AccountRow & Readonly<{ units: string }>;
 type PendingSource = Pending & Readonly<{ intentId: string; direction: string; phase: string }>;
-type CreatorSource = AssetRow &
-  Readonly<{ payoutId: string; creatorId: string; accountId: string | null; units: string; status: string }>;
-type Control = AccountRow & Readonly<{ role: string; reference: string; positionRole: string | null }>;
+type CreatorSource = Pending & Readonly<{ payoutId: string; status: string }>;
+type Control = AccountRow & Readonly<{ role: string; reference: string }>;
 type SourceAmount = AccountRow & { amount: bigint };
+type PostingTotals = AccountRow & { revision: bigint; posted: bigint; held: bigint };
+type JournalTotals = AssetRow & { transactionId: string; count: number; net: bigint };
+type AllocationTotals = HoldKey & { protected: bigint; captured: bigint; released: bigint };
 
 type Counter = {
   positions: number;
@@ -99,11 +103,19 @@ function keyed(row: AccountRow): string {
   return JSON.stringify([row.assetId, row.accountId]);
 }
 
-function collect(source: Map<string, SourceAmount>, row: AccountRow, amount: string): void {
+function collect(source: Map<string, SourceAmount>, row: AccountRow, amount: bigint): void {
   const key = keyed(row);
   const previous = source.get(key);
-  if (previous) previous.amount += BigInt(amount);
-  else source.set(key, { assetId: row.assetId, accountId: row.accountId, amount: BigInt(amount) });
+  if (previous) previous.amount += amount;
+  else source.set(key, { assetId: row.assetId, accountId: row.accountId, amount });
+}
+
+function holdKey({ assetId, accountId, holdId }: HoldKey): string {
+  return JSON.stringify([assetId, accountId, holdId]);
+}
+
+function journalKey({ assetId, transactionId }: AssetRow & Readonly<{ transactionId: string }>): string {
+  return JSON.stringify([assetId, transactionId]);
 }
 
 function reportAssets(assets: Map<string, AssetTotals>) {
@@ -171,45 +183,6 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       findings.push({ check: checkName, assetId, key, expected: String(expected), observed: String(observed) });
   }
 
-  async function verifyWalletHolds({ assetId, accountId }: Position): Promise<bigint> {
-    let held = 0n;
-    for await (const hold of pages<Hold, string>(
-      client,
-      meter,
-      (after) => [
-        `SELECT hold_id AS "holdId", remaining::text, allocated::text, captured::text, released::text
-         FROM economy.hold WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id > $4
-         ORDER BY hold_id LIMIT $5`,
-        [bookId, assetId, accountId, after],
-      ],
-      (row) => row.holdId,
-      '',
-    )) {
-      const sums = { protected: 0n, captured: 0n, released: 0n };
-      for await (const child of pages<Allocation, readonly [string, string]>(
-        client,
-        meter,
-        ([purpose, reference]) => [
-          `SELECT purpose, reference, amount::text, status FROM economy.hold_allocation
-          WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND hold_id = $4 AND (purpose, reference) > ($5, $6)
-          ORDER BY purpose, reference LIMIT $7`,
-          [bookId, assetId, accountId, hold.holdId, purpose, reference],
-        ],
-        (row) => [row.purpose, row.reference],
-        ['', ''],
-      ))
-        sums[child.status] += BigInt(child.amount);
-      const location = [accountId, hold.holdId];
-      check('hold_allocated', assetId, location, sums.protected, hold.allocated);
-      if (sums.captured > BigInt(hold.captured))
-        check('hold_capture_lower_bound', assetId, location, sums.captured, hold.captured);
-      if (sums.released > BigInt(hold.released))
-        check('hold_release_lower_bound', assetId, location, sums.released, hold.released);
-      held += BigInt(hold.remaining);
-    }
-    return held;
-  }
-
   let complete = true;
   try {
     for await (const { assetId } of pages<AssetRow, string>(
@@ -228,71 +201,159 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       return { kind: 'absent' as const, bookId, snapshot, pages: meter.pages, findingCount, findings };
     }
 
+    // One book-local entry stream is the independent source for both account and transaction counters.
+    const postingTotals = new Map<string, PostingTotals>();
+    const journalTotals = new Map<string, JournalTotals>();
+    for await (const entry of pages<Entry, readonly [string, string, string]>(
+      client,
+      meter,
+      ([assetId, accountId, position]) => [
+        `SELECT e.asset_id AS "assetId", e.account_id AS "accountId", e.position::text,
+                e.transaction_id AS "transactionId", e.posted_delta::text AS posted, e.held_delta::text AS held
+           FROM economy.entry AS e
+          WHERE e.book_id = $1 AND (e.asset_id, e.account_id, e.position) > ($2, $3::uuid, $4::bigint)
+          ORDER BY e.asset_id, e.account_id, e.position LIMIT $5`,
+        [bookId, assetId, accountId, position],
+      ],
+      (row) => [row.assetId, row.accountId, row.position],
+      ['', zeroAccount, '0'],
+    )) {
+      const { assetId, accountId, transactionId } = entry;
+      const key = keyed(entry);
+      const position = postingTotals.get(key) ?? { assetId, accountId, revision: 0n, posted: 0n, held: 0n };
+      const posted = BigInt(entry.posted);
+      position.revision++;
+      position.posted += posted;
+      position.held += BigInt(entry.held);
+      check('entry_position', assetId, [accountId, entry.position], position.revision, entry.position);
+      postingTotals.set(key, position);
+      const groupKey = journalKey(entry);
+      const journal = journalTotals.get(groupKey) ?? { assetId, transactionId, count: 0, net: 0n };
+      journal.count++;
+      journal.net += posted;
+      journalTotals.set(groupKey, journal);
+    }
+
+    const allocations = new Map<string, AllocationTotals>();
+    for await (const row of pages<Allocation, readonly [string, string, string, string, string]>(
+      client,
+      meter,
+      ([assetId, accountId, holdId, purpose, reference]) => [
+        `SELECT asset_id AS "assetId", account_id AS "accountId", hold_id AS "holdId", purpose, reference, amount::text, status
+           FROM economy.hold_allocation WHERE book_id = $1
+            AND (asset_id, account_id, hold_id, purpose, reference) > ($2, $3::uuid, $4, $5, $6)
+          ORDER BY asset_id, account_id, hold_id, purpose, reference LIMIT $7`,
+        [bookId, assetId, accountId, holdId, purpose, reference],
+      ],
+      (row) => [row.assetId, row.accountId, row.holdId, row.purpose, row.reference],
+      ['', zeroAccount, '', '', ''],
+    )) {
+      const key = holdKey(row);
+      const { assetId, accountId, holdId } = row;
+      const totals = allocations.get(key) ?? { assetId, accountId, holdId, protected: 0n, captured: 0n, released: 0n };
+      totals[row.status] += BigInt(row.amount);
+      allocations.set(key, totals);
+    }
+
+    const walletHolds = new Map<string, SourceAmount>();
+    for await (const hold of pages<Hold, readonly [string, string, string]>(
+      client,
+      meter,
+      ([assetId, accountId, holdId]) => [
+        `SELECT asset_id AS "assetId", account_id AS "accountId", hold_id AS "holdId",
+                remaining::text, allocated::text, captured::text, released::text
+           FROM economy.hold WHERE book_id = $1 AND (asset_id, account_id, hold_id) > ($2, $3::uuid, $4)
+          ORDER BY asset_id, account_id, hold_id LIMIT $5`,
+        [bookId, assetId, accountId, holdId],
+      ],
+      (row) => [row.assetId, row.accountId, row.holdId],
+      ['', zeroAccount, ''],
+    )) {
+      const { assetId, accountId, holdId } = hold;
+      const key = holdKey(hold);
+      const totals = allocations.get(key);
+      allocations.delete(key);
+      const location = [accountId, holdId];
+      check('hold_allocated', assetId, location, totals?.protected ?? 0n, hold.allocated);
+      if (totals && totals.captured > BigInt(hold.captured))
+        check('hold_capture_lower_bound', assetId, location, totals.captured, hold.captured);
+      if (totals && totals.released > BigInt(hold.released))
+        check('hold_release_lower_bound', assetId, location, totals.released, hold.released);
+      collect(walletHolds, hold, BigInt(hold.remaining));
+    }
+    for (const { assetId, accountId, holdId } of allocations.values())
+      check('allocation_parent', assetId, [accountId, holdId], 'present', 'missing');
+
     const creatorReserves = new Map<string, SourceAmount>();
     for await (const payout of pages<CreatorSource, string>(
       client,
       meter,
       (after) => [
-        `SELECT p.payout_id AS "payoutId", p.asset_id AS "assetId", p.creator_id AS "creatorId", p.units::text, p.status,
-              c.account_id AS "accountId"
-         FROM economy.creator_payout AS p
-         LEFT JOIN economy.funding_control_account AS c ON c.book_id = p.book_id AND c.asset_id = p.asset_id
-           AND c.account_role = 'creator_payable' AND c.reference = p.creator_id::text
-        WHERE p.book_id = $1 AND p.payout_id > $2 ORDER BY p.payout_id LIMIT $3`,
+        `SELECT payout_id AS "payoutId", asset_id AS "assetId", creator_id AS "accountId", units::text, status
+           FROM economy.creator_payout WHERE book_id = $1 AND payout_id > $2 ORDER BY payout_id LIMIT $3`,
         [bookId, after],
       ],
       (row) => row.payoutId,
       '',
     )) {
-      if (payout.status !== 'reserved') continue;
-      if (!payout.accountId)
-        check(
-          'creator_payout_account',
-          payout.assetId,
-          [payout.creatorId, payout.payoutId],
-          'creator_payable',
-          'missing',
-        );
-      else collect(creatorReserves, { assetId: payout.assetId, accountId: payout.accountId }, payout.units);
+      if (payout.status === 'reserved') collect(creatorReserves, payout, BigInt(payout.units));
     }
+
+    const roleAccounts = new Map<string, Control>();
+    const payableHolds = new Map<string, SourceAmount>();
+    for await (const control of pages<Control, readonly [string, string, string]>(
+      client,
+      meter,
+      ([assetId, role, reference]) => [
+        `SELECT asset_id AS "assetId", account_id AS "accountId", account_role AS role, reference
+           FROM economy.funding_control_account WHERE book_id = $1 AND (asset_id, account_role, reference) > ($2, $3, $4)
+          ORDER BY asset_id, account_role, reference LIMIT $5`,
+        [bookId, assetId, role, reference],
+      ],
+      (row) => [row.assetId, row.role, row.reference],
+      ['', '', ''],
+    )) {
+      roleAccounts.set(keyed(control), control);
+      if (control.role === 'creator_payable') {
+        const key = keyed({ assetId: control.assetId, accountId: control.reference });
+        const reserved = creatorReserves.get(key);
+        if (reserved) collect(payableHolds, control, reserved.amount);
+        creatorReserves.delete(key);
+      }
+    }
+    for (const { assetId, accountId } of creatorReserves.values())
+      check('creator_payout_account', assetId, [accountId], 'creator_payable', 'missing');
 
     for await (const position of pages<Position, readonly [string, string]>(
       client,
       meter,
       ([assetId, accountId]) => [
-        `SELECT asset_id AS "assetId", account_id AS "accountId", account_role AS role, posted::text, held::text, restricted::text, revision::text
-         FROM economy.position WHERE book_id = $1 AND (asset_id, account_id) > ($2, $3::uuid)
-         ORDER BY asset_id, account_id LIMIT $4`,
+        `SELECT asset_id AS "assetId", account_id AS "accountId", account_role AS role,
+                posted::text, held::text, restricted::text, revision::text
+           FROM economy.position WHERE book_id = $1 AND (asset_id, account_id) > ($2, $3::uuid)
+          ORDER BY asset_id, account_id LIMIT $4`,
         [bookId, assetId, accountId],
       ],
       (row) => [row.assetId, row.accountId],
       ['', zeroAccount],
     )) {
       const { assetId, accountId, role } = position;
-      let posted = 0n;
-      let held = 0n;
-      let revision = 0n;
-      for await (const entry of pages<Entry, string>(
-        client,
-        meter,
-        (after) => [
-          `SELECT position::text, posted_delta::text AS posted, held_delta::text AS held
-           FROM economy.entry AS entry WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 AND position > $4::bigint
-           ORDER BY entry.position LIMIT $5`,
-          [bookId, assetId, accountId, after],
-        ],
-        (row) => row.position,
-        '0',
-      )) {
-        revision++;
-        check('entry_position', assetId, [accountId, entry.position], revision, entry.position);
-        posted += BigInt(entry.posted);
-        held += BigInt(entry.held);
-      }
       const key = keyed(position);
-      const outstanding =
-        role === 'wallet' ? await verifyWalletHolds(position) : (creatorReserves.get(key)?.amount ?? 0n);
-      creatorReserves.delete(key);
+      const entries = postingTotals.get(key);
+      postingTotals.delete(key);
+      const mapped = roleAccounts.get(key);
+      if (mapped) check('role_position', assetId, [accountId], mapped.role, role);
+      else if (role !== 'wallet' && role !== 'issuer') check('role_account', assetId, [accountId], role, 'missing');
+      roleAccounts.delete(key);
+      let outstanding = 0n;
+      if (role === 'wallet') {
+        outstanding = walletHolds.get(key)?.amount ?? 0n;
+        walletHolds.delete(key);
+      } else if (role === 'creator_payable') {
+        outstanding = payableHolds.get(key)?.amount ?? 0n;
+        payableHolds.delete(key);
+      }
+      const { revision = 0n, posted = 0n, held = 0n } = entries ?? {};
       check('position_revision', assetId, [accountId], revision, position.revision);
       check('position_posted', assetId, [accountId], posted, position.posted);
       check('position_held_journal', assetId, [accountId], held, position.held);
@@ -310,26 +371,14 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       c.restricted += BigInt(position.restricted);
       controls.set(role, c);
     }
-    for (const { assetId, accountId, amount } of creatorReserves.values())
+    for (const { assetId, accountId, role } of roleAccounts.values())
+      check('role_position', assetId, [accountId], role, 'missing');
+    for (const { assetId, accountId, amount } of payableHolds.values())
       check('creator_payable_position', assetId, [accountId], amount, 'missing');
-
-    for await (const control of pages<Control, readonly [string, string, string]>(
-      client,
-      meter,
-      ([assetId, role, reference]) => [
-        `SELECT c.asset_id AS "assetId", c.account_id AS "accountId", c.account_role AS role, c.reference,
-              p.account_role AS "positionRole"
-         FROM economy.funding_control_account AS c
-         LEFT JOIN economy.position AS p USING (book_id, asset_id, account_id)
-        WHERE c.book_id = $1 AND (c.asset_id, c.account_role, c.reference) > ($2, $3, $4)
-        ORDER BY c.asset_id, c.account_role, c.reference LIMIT $5`,
-        [bookId, assetId, role, reference],
-      ],
-      (row) => [row.assetId, row.role, row.reference],
-      ['', '', ''],
-    )) {
-      check('role_position', control.assetId, [control.accountId], control.role, control.positionRole ?? 'missing');
-    }
+    for (const { assetId, accountId } of walletHolds.values())
+      check('wallet_hold_position', assetId, [accountId], 'wallet', 'missing');
+    for (const { assetId, accountId } of postingTotals.values())
+      check('entry_account_position', assetId, [accountId], 'present', 'missing');
 
     const expectedPending = new Map<string, SourceAmount>();
     for await (const intent of pages<PendingSource, string>(
@@ -344,7 +393,7 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       '',
     )) {
       if (intent.direction !== 'deposit' || (intent.phase !== 'submitted' && intent.phase !== 'unknown')) continue;
-      collect(expectedPending, intent, intent.units);
+      collect(expectedPending, intent, BigInt(intent.units));
       assets.get(intent.assetId)!.intentPending += BigInt(intent.units);
     }
     for await (const row of pages<Pending, readonly [string, string]>(
@@ -378,29 +427,16 @@ async function auditSnapshot(client: Query, bookId: string, limit: number) {
       ['', zeroAccount],
     )) {
       const { assetId, transactionId } = journal;
-      let net = 0n;
-      let count = 0;
-      // Start below the nil UUID as issuance's signed control is a valid journal entry.
-      for await (const leg of pages<{ accountId: string; posted: string }, string | null>(
-        client,
-        meter,
-        (after) => [
-          `SELECT account_id AS "accountId", posted_delta::text AS posted FROM economy.entry
-          WHERE book_id = $1 AND asset_id = $2 AND transaction_id = $3 ${after === null ? 'AND account_id >= $4::uuid' : 'AND account_id > $4::uuid'}
-          ORDER BY account_id LIMIT $5`,
-          [bookId, assetId, transactionId, after ?? zeroAccount],
-        ],
-        (row) => row.accountId,
-        null,
-      )) {
-        net += BigInt(leg.posted);
-        count++;
-      }
+      const key = journalKey(journal);
+      const { net = 0n, count = 0 } = journalTotals.get(key) ?? {};
+      journalTotals.delete(key);
       if (journal.kind !== 'allocate' && count === 0)
         check('journal_entries', assetId, [transactionId], 'present', 'missing');
       check('journal_posted_net', assetId, [transactionId], 0n, net);
       assets.get(assetId)!.journalNet += net;
     }
+    for (const { assetId, transactionId } of journalTotals.values())
+      check('entry_journal', assetId, [transactionId], 'present', 'missing');
     for (const [assetId, asset] of assets) check('asset_journal_net', assetId, [], 0n, asset.journalNet);
   } catch (error) {
     if (error !== outOfPages) throw error;
