@@ -1,11 +1,10 @@
 import { revisionResource } from '../../src/semantic/authorship.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
 import { accountAgentId, ensureAccountAgent } from '../../src/semantic/index.ts';
-import { newId } from '../../src/route/route.ts';
 import { patchTerms, termRevision } from '../../src/semantic/terms.ts';
 import { readSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 
@@ -80,8 +79,30 @@ test('Ordinary multilingual term correction and safe change explanation connect 
   });
   expect(current.labels).not.toHaveProperty('ja');
   expect((await patch(subject, 1, { descriptions: { en: null } })).status).toBe(412);
-  expect((await patch(subject, 2, {})).body).toEqual({ subject, revision: 2 });
+  const custody = async () =>
+    (
+      await f.admin.query(
+        `SELECT
+          (SELECT count(*)::int FROM core.outbox WHERE partition_no=$1 AND subject=$2) AS events,
+          (SELECT count(*)::int FROM core.history_locator
+           WHERE partition_no=$1 AND account_id=$3 AND artifact_type='command-receipt/v1') AS receipts`,
+        [partitionOf(routeOf(subject)!), subject, f.accounts.owner],
+      )
+    ).rows[0];
+  const beforeNoEffect = await custody();
+  const beforeRevisions = await f.revisions(subject);
+  const unchangedKey = `"${randomUUID()}"`;
+  const unchanged = await patch(subject, 2, {}, unchangedKey);
+  f.status(unchanged, 200);
+  expect(unchanged.body).toEqual({ subject, revision: 2 });
+  expect(unchanged.headers.get('etag')).toBe('"2"');
+  expect(await custody()).toEqual({ ...beforeNoEffect, receipts: beforeNoEffect.receipts + 1 });
+  expect(await f.revisions(subject)).toEqual(beforeRevisions);
   expect((await patch(subject, 2, { descriptions: { en: null } })).body).toEqual({ subject, revision: 3 });
+  const beforeReplay = await custody();
+  const unchangedReplay = await patch(subject, 2, {}, unchangedKey);
+  expect([unchangedReplay.status, unchangedReplay.body]).toEqual([200, unchanged.body]);
+  expect(await custody()).toEqual(beforeReplay);
   const replay = await patch(subject, 1, body, key);
   expect([replay.status, replay.body]).toEqual([200, { subject, revision: 2 }]);
   expect((await patch(subject, 1, { labels: { en: 'Conflict' } }, key)).status).toBe(422);
@@ -96,6 +117,13 @@ test('Ordinary multilingual term correction and safe change explanation connect 
       { field: 'aliases', languages: ['en'] },
     ],
   });
+  await f.real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  try {
+    expect((await patch(subject, 2, {}, unchangedKey)).status).toBe(403);
+    expect(await custody()).toEqual(beforeReplay);
+  } finally {
+    await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  }
 });
 
 test('term correction conceals nonvisible subjects, rejects derived Account terms and reauthorizes replay', async () => {

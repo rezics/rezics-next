@@ -206,7 +206,13 @@ export async function correctTerms(
       const current = listed(await readCurrent.run(tx, parameters));
       const terms = termsOf(current);
       const patched = patchTerms(terms, patch);
-      if (!patched.changes.length) return noEffect({ subject: input.subject, revision: state.revision });
+      if (!patched.changes.length) {
+        await declareCommandHistory(tx, 'subject.terms', {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: [],
+        });
+        return noEffect({ subject: input.subject, revision: state.revision });
+      }
       if (state.revision >= 2147483647)
         throw new SubjectInputError([{ pointer: '/headers/if-match', code: 'out_of_range' }]);
       const revision = state.revision + 1;
