@@ -6,6 +6,7 @@ import {
   WORKFLOW_STATUS_SCAN_RAW_LIMIT,
   WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES,
 } from '@dbos-inc/dbos-sdk';
+import { ClientHandle } from '@dbos-inc/dbos-sdk/internal/client';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -289,6 +290,54 @@ test('rawLimit is applied before eligibility and refuses an oversized page', asy
   );
 });
 
+test('finite partition claims preserve priority, version, cross-application exclusion and fair order', async () => {
+  const owner = client.retrieveWorkflow(id('queue-handle'));
+  if (!(owner instanceof ClientHandle)) throw new Error('Expected the native DBOS client handle');
+  const queue = await client.registerQueue(id('queue'), { partitionConcurrency: 1 });
+  const claim = (budget: number, latest: boolean) =>
+    owner.systemDatabase.findAndMarkStartablePartitionedWorkflows(queue, 'executor', 'current', budget, null, latest);
+  const add = (name: string, home: string, priority: number, time: number, version: string | null, pending = false) =>
+    pool.query(
+      `INSERT INTO dbos.workflow_status
+         (workflow_uuid, name, queue_name, queue_partition_key, priority, created_at, application_version, status, application_name)
+       VALUES ($1,'fixture',$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        id(name),
+        queue.name,
+        home,
+        priority,
+        time,
+        version,
+        pending ? 'PENDING' : 'ENQUEUED',
+        pending ? 'foreign' : null,
+      ],
+    );
+  try {
+    // This occupied partition fills the entire indexed prefix. Its other application's lease still excludes it.
+    await add('running', 'occupied', 0, 0, 'old', true);
+    await pool.query(
+      `INSERT INTO dbos.workflow_status
+         (workflow_uuid,name,queue_name,queue_partition_key,priority,created_at,application_version,status)
+       SELECT $1 || i, 'fixture', $2, 'occupied', 0, i, 'current', 'ENQUEUED' FROM generate_series(1,100) i`,
+      [id('waiting'), queue.name],
+    );
+    await add('old', 'old', 0, 0, 'old');
+    await add('previous-priority', 'priority', 1, 105, 'current');
+    await add('best-priority', 'priority', 0, 110, 'current');
+    await add('same-b', 'ties', 0, 107, 'current');
+    await add('same-a', 'ties', 0, 107, 'current');
+    await add('implicit-version', 'implicit', 0, 104, null);
+    await add('following', 'following', 0, 111, 'current');
+    expect((await claim(2, false)).sort()).toEqual([id('best-priority'), id('same-a')].sort());
+    expect(await claim(1, true)).toEqual([id('implicit-version')]);
+    const contested = (await Promise.all([claim(1, true), claim(1, true)])).flat();
+    expect(contested).toEqual([id('following')]);
+  } finally {
+    await pool.query('DELETE FROM dbos.workflow_status WHERE queue_name=$1', [queue.name]);
+    await pool.query('DELETE FROM dbos.queues WHERE name=$1', [queue.name]);
+  }
+});
+
 test(
   'fresh and upgraded SDK schema install the covering scan index without moving earlier migrations',
   async () => {
@@ -318,10 +367,15 @@ test(
     await upgrade.connect();
     try {
       await upgrade.query('DROP INDEX dbos.idx_workflow_status_scan');
-      await upgrade.query('UPDATE dbos.dbos_migrations SET version = version - 1');
+      await upgrade.query('DROP INDEX dbos.idx_workflow_partition_fair_order');
+      await upgrade.query('UPDATE dbos.dbos_migrations SET version = version - 2');
       expect(await readScanIndex(upgrade)).toBeUndefined();
       installDbosSchema(upgradeUrl);
       expectScanIndex(await readScanIndex(upgrade));
+      expect(
+        (await upgrade.query("SELECT to_regclass('dbos.idx_workflow_partition_fair_order') AS installed")).rows[0]
+          ?.installed,
+      ).toBe('dbos.idx_workflow_partition_fair_order');
       const patch = readFileSync(
         resolve(
           dirname(fileURLToPath(import.meta.url)),
