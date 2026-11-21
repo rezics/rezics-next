@@ -1,7 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { NestedPoolCheckoutError, withConnection } from '../database/pool.ts';
-import scanPartitions from './scan-partitions.sql';
-import upsertConsumerLag from './upsert-consumer-lag.sql';
+import { createRelayDiscovery } from './relay-discovery.ts';
 import type { BatchResult } from './log.ts';
 
 type RelayHome = { partition_no: number; position: string | bigint };
@@ -46,6 +45,7 @@ export function startRelays(
   if (max <= 1 ? concurrency !== 1 : concurrency >= max) {
     throw new RangeError('concurrency must be a positive integer below the pool size');
   }
+  const discover = createRelayDiscovery(pool);
   let paused = options.paused ?? false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -148,16 +148,13 @@ export function startRelays(
           else priority.delete(relay);
           dispatch();
         }
-        if (pending.has(relay)) continue;
-        const partitions = await withConnection(pool, async (client) => {
-          const rows = await scanPartitions.run(client, { consumer: relay.consumer });
-          const oldestPendingAt = rows[0]?.oldest_pending_at;
-          await upsertConsumerLag.run(client, {
-            consumer: relay.consumer,
-            oldest_pending_at: oldestPendingAt ? new Date(oldestPendingAt).toISOString() : '',
-          });
-          return rows;
-        });
+      }
+      if (paused || stopped) return;
+      const available = relays.filter((relay) => !pending.has(relay));
+      if (!available.length) return;
+      const backlogs = await discover(available.map((relay) => relay.consumer));
+      for (const relay of available) {
+        const partitions = backlogs.get(relay.consumer)!;
         if (!paused && !stopped && partitions.length) {
           pending.set(relay, partitions.values());
           dispatch();

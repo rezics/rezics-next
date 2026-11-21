@@ -1211,13 +1211,11 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Relay discovery
 
-- Touches: `events/scan-partitions.sql` runs one statement per live consumer each tick (default 100 ms), reading the
-  whole `core.partition` map and checkpoint `(partition_no,consumer)` probes, plus one `outbox_pkey` probe at
-  `(partition_no, checkpoint + 1, 0)` for each of the `A` partitions ahead of the consumer to order them by the
-  `recorded_at` of their first pending envelope, oldest first; returns at most 4,096 partitions and reads no
-  subject/history. Grow N/P with C and consumer count fixed.
-- Bound: Rows `O(4,096 + A)` with `A <= 4,096`; indexed blocks `O(4096*L(P) + A*L(H))`, one statement per
-  consumer, independent of H/b; sort is `O(A log A)`. This is periodic global coordination, not a scan per change.
+- The [event relay](../events/README.md#consumer-lag) reads at most 4,096 head positions per discovery turn.
+  For each consumer it rechecks up to 128 changed or pending homes by key, or uses the complete partition scan.
+  An ahead home contributes one outbox point at its next position to determine oldest-first order.
+- The complete scan examines O(4,096 + A) rows with at most 4,096 ahead homes and sorts O(A log A).
+  The incremental scan uses O(K) checkpoint and outbox points for K candidate homes. Neither path scans outbox history.
 - Growth check: [test/relay-effects.test.ts](../../test/relay-effects.test.ts): “effects relay discovery stays within
   its bound as outbox history grows”.
 

@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../src/database/pool.ts';
+import { createRelayDiscovery } from '../src/events/relay-discovery.ts';
 import { projectBatch } from '../src/events/log.ts';
 import { startRelays, type Relay } from '../src/events/relays.ts';
 
@@ -71,6 +72,35 @@ function recording(consumer: string, watched: ReadonlySet<number>, order: number
       }),
   };
 }
+
+test('discovery rechecks pending homes and recovers a covered checkpoint after rewind or deletion', async () => {
+  const home = 975;
+  await append(home);
+  const consumer = await consumerAtHead();
+  const scan = createRelayDiscovery(pool);
+  const pending = async () => (await scan([consumer])).get(consumer)!.map((row) => row.partition_no);
+  expect(await pending()).toEqual([]);
+  await append(home);
+  expect(await pending()).toEqual([home]);
+  expect(await pending()).toEqual([home]);
+  const catchUp = () =>
+    admin.query(
+      `UPDATE core.consumer_checkpoint c SET position=p.position,epoch=p.epoch FROM core.partition p
+     WHERE (c.partition_no,c.consumer)=(p.partition_no,$1) AND p.partition_no=$2`,
+      [consumer, home],
+    );
+  await catchUp();
+  expect(await pending()).toEqual([]);
+  await admin.query('UPDATE core.consumer_checkpoint SET position=0,epoch=NULL WHERE consumer=$1 AND partition_no=$2', [
+    consumer,
+    home,
+  ]);
+  expect(await pending()).toEqual([home]);
+  await catchUp();
+  expect(await pending()).toEqual([]);
+  await admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1 AND partition_no=$2', [consumer, home]);
+  expect(await pending()).toEqual([home]);
+});
 
 test('a relay starts the partition with the oldest pending envelope first, not the lowest partition number', async () => {
   const consumer = await consumerAtHead();

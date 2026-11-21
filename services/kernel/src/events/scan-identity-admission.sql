@@ -14,5 +14,9 @@ JOIN LATERAL (
   ORDER BY outbox.position
   LIMIT 1
 ) AS wake ON true
-WHERE partition.position > COALESCE(checkpoint.position, 0)
+WHERE EXISTS (
+  SELECT FROM core.outbox
+  WHERE type = 'com.rezics.semantic.identity-epoch.admitted.v1' AND payload_state = 'present'
+)
+AND partition.position > COALESCE(checkpoint.position, 0)
 ORDER BY wake.recorded_at, partition.partition_no;

@@ -1,8 +1,7 @@
 -- Keep idle relay heartbeats below follow-count freshness without writing on every poll.
 WITH candidate AS (
-  SELECT :consumer::text AS consumer,
-         NULLIF(:oldest_pending_at::text, '')::timestamptz AS oldest_pending_at,
-         clock_timestamp() AS observed_at
+  SELECT c.consumer, NULLIF(c.oldest, '')::timestamptz AS oldest_pending_at, statement_timestamp() AS observed_at
+  FROM unnest(:consumers::text[], :oldest_pending_ats::text[]) AS c(consumer, oldest)
 )
 INSERT INTO core.consumer_lag (consumer, oldest_pending_at, observed_at)
 SELECT candidate.consumer, candidate.oldest_pending_at, candidate.observed_at
@@ -14,6 +13,7 @@ WHERE NOT EXISTS (
     AND existing.oldest_pending_at IS NOT DISTINCT FROM candidate.oldest_pending_at
     AND existing.observed_at > candidate.observed_at - interval '60 seconds'
 )
+ORDER BY candidate.consumer
 ON CONFLICT (consumer) DO UPDATE
 SET oldest_pending_at = EXCLUDED.oldest_pending_at,
     observed_at = EXCLUDED.observed_at;

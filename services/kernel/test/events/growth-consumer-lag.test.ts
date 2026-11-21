@@ -66,8 +66,8 @@ test('Consumer lag record stays within its bound as consumer rows grow', async (
       const client = await database.pool.connect();
       try {
         await upsertConsumerLag.run(client, {
-          consumer: target,
-          oldest_pending_at: '',
+          consumers: [target],
+          oldest_pending_ats: [''],
         });
       } finally {
         client.release();

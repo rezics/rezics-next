@@ -1127,6 +1127,19 @@ $$;
 
 
 --
+-- Name: invalidate_relay_checkpoints(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.invalidate_relay_checkpoints() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE core.relay_checkpoint_reset SET revision = pg_current_xact_id() WHERE singleton;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: lock_publication_authority(integer[]); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -2807,6 +2820,17 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: relay_checkpoint_reset; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.relay_checkpoint_reset (
+    singleton boolean NOT NULL,
+    revision xid8 NOT NULL,
+    CONSTRAINT relay_checkpoint_reset_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: agent_identity_history_copy agent_identity_history_copy_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -3276,6 +3300,14 @@ ALTER TABLE ONLY editorial.write_basis
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: relay_checkpoint_reset relay_checkpoint_reset_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.relay_checkpoint_reset
+    ADD CONSTRAINT relay_checkpoint_reset_pkey PRIMARY KEY (singleton);
 
 
 --
@@ -4204,6 +4236,20 @@ CREATE TRIGGER record_history_preserve_source_set_copy BEFORE DELETE OR UPDATE O
 --
 
 CREATE TRIGGER record_purge_source_home_gate BEFORE UPDATE OF epoch, write_state, moved_to ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_home_gate();
+
+
+--
+-- Name: consumer_checkpoint relay_checkpoint_delete; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER relay_checkpoint_delete AFTER DELETE OR TRUNCATE ON core.consumer_checkpoint FOR EACH STATEMENT EXECUTE FUNCTION core.invalidate_relay_checkpoints();
+
+
+--
+-- Name: consumer_checkpoint relay_checkpoint_rewind; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER relay_checkpoint_rewind AFTER UPDATE OF partition_no, consumer, "position" ON core.consumer_checkpoint FOR EACH ROW WHEN ((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.consumer IS DISTINCT FROM new.consumer)) OR (new."position" < old."position"))) EXECUTE FUNCTION core.invalidate_relay_checkpoints();
 
 
 --

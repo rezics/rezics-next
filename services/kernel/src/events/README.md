@@ -20,8 +20,12 @@ imports those fixtures.
 ## Consumer lag
 
 `core.consumer_lag` stores one row per consumer with the oldest pending envelope time and the time the relay observed
-it. Each `startRelays` tick upserts the row using the minimum pending time returned by its existing partition scan;
-an empty scan records `oldest_pending_at = NULL`. This adds one row write per tick and does not add a scan.
+it. Each discovery turn reads the map of partition heads once in a repeatable-read snapshot. A consumer's first
+scan visits the whole map. Subsequent scans check the previously pending homes and every head that changed, using
+the full scan when more than 128 homes need checking or the map is incomplete. Covered checkpoints can advance
+without exposing a new pending envelope. A deletion, truncation, move or rewind changes the native reset revision
+in the same transaction and forces a complete scan. Each polled consumer records its oldest pending time, or NULL
+when caught up. Equal lag observations refresh the heartbeat after 60 seconds.
 
 `readConsumerLag(client, consumer)` returns the consumer's `{ oldestPendingAt, observedAt }` with one primary-key
 read, or `null` if no tick has recorded the consumer. `consumerReady(lag, { maxLagMs, now })` is true only when the
