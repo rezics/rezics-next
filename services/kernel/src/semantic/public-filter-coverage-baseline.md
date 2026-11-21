@@ -183,9 +183,10 @@ A held Subject repair can cover up to sixteen adjacent 32-home cuts in one verif
 native empty inventory and zero command bases at capture. The fresh producer stops at the first occupied
 inventory or positive command head using two ordered seeks. The independent reader reopens the same immutable
 pages under their current membership, definition and authority. A later creation preserves the original
-finite window. The two reads reserve at most 97 anchor and four keyed lookups per cut apiece, plus five
-lookups for the fresh producer probe. An authority change can require a separately committed native recheck
-of a single retained page before replay resumes.
+finite window. For N cut pages, each scan reserves 97 keyed inputs for the anchor plus 4N for originals
+and continuity. The fresh producer probe reserves five more. The producer and verifier therefore reserve
+at most 327 inputs together for 512 homes, before the ordinary binding and repair-chain work. A stale
+replay reserves 320 more inputs to recheck one retained page against its native owners before retrying.
 
 Held repair processes other inventory and finite command windows in ordered intervals of 32 homes.
 An empty raw Subject seek can close the contiguous prefix whose native outbox groups contain only
@@ -200,7 +201,9 @@ home comparisons. Each reader still checks placement, store, restore generation 
 
 The receiver may compare a complete aligned compact span of 64 to 512 homes against its independently
 adopted receiver pages and the verified Source step. It binds their adjacent roots under the current
-witness. Other leaves use the original per-home comparison as their ordered window closes. It decodes each packed Source step
+witness. After tree descent, a compact comparison reserves 136 + 8N keyed inputs and 64 + 8N KiB.
+Folding two children reserves 64 inputs and 64 KiB. Other leaves use the original per-home comparison
+as their ordered window closes. It decodes each packed Source step
 once and compares its homes with independently adopted receiver pages. Final assembly reopens the current
 witnesses and rebuilds stale leaves before linking the root to the terminal settlement.
 
