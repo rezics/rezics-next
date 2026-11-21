@@ -605,6 +605,19 @@ BEGIN
     WHERE (m.job,m.bootstrap)=(a.job,a.bootstrap) AND h.restore=m.restore_generation;
   SELECT root INTO STRICT window_root FROM search.subject_compact_window_v1(a.bootstrap,a.execution,NEW.binding,member,NEW.first_home)
     WHERE stop>=NEW.first_home+NEW.width;
+  -- Reopen the finite ends above the original bases. An ordinary later
+  -- append still covers the captured end. The page stamps cover rewinds.
+  IF EXISTS (
+    SELECT FROM (SELECT search.public_filter_ack_field(search.public_filter_ack_field(s.state::jsonb->1,'windowBatch'),
+        'commandEnds')#>>'{}' AS ends FROM semantic.public_filter_repair_step s
+      WHERE (s.partition_no,s.bootstrap,s.execution,s.verified_binding)=(0,a.bootstrap,a.execution,NEW.binding)
+        AND s.verified_home<=NEW.first_home AND s.verified_root IS NOT NULL AND NOT s.complete
+      ORDER BY s.verified_home DESC LIMIT 1) w
+    CROSS JOIN LATERAL jsonb_each_text(w.ends::jsonb) e
+    LEFT JOIN LATERAL (SELECT position FROM core.partition WHERE partition_no=e.key::int
+      AND position>=e.value::bigint LIMIT 1) h ON true
+    WHERE e.key::int>=NEW.first_home AND e.key::int<NEW.first_home+NEW.width AND h.position IS NULL
+  ) THEN RAISE EXCEPTION 'Original Subject command end unavailable' USING ERRCODE='40001'; END IF;
   INSERT INTO search.public_filter_ack_home_clock(partition_no,registration,bootstrap,first_home,width)
     VALUES(0,a.registration,a.bootstrap,NEW.first_home,NEW.width) ON CONFLICT DO NOTHING;
   NEW.witness:=search.public_filter_ack_range_witness(a.bootstrap,NEW.first_home,NEW.width,
@@ -618,7 +631,7 @@ BEGIN
       WHERE (p.birth,p.first_home,p.end_home,p.registration,p.bootstrap)=(member,i,i+32,a.registration,a.bootstrap) LIMIT 1) p
     CROSS JOIN LATERAL (SELECT FROM semantic.subject_access_page_v1 ap WHERE
       (ap.birth,ap.first_home,ap.end_home,ap.definition_digest)=(member,i,i+32,def)
-      AND semantic.subject_quiet_page_current_v1(ap) LIMIT 1) ap
+      AND semantic.subject_repair_page_current_v1(ap) LIMIT 1) ap
     CROSS JOIN LATERAL (SELECT FROM core.subject_retention_page_v1 cp
       WHERE (cp.birth,cp.first_home,cp.end_home)=(member,i,i+32) LIMIT 1) cp
   )
@@ -1291,7 +1304,7 @@ BEGIN
           SELECT count(*)=pages INTO stamps FROM generate_series(first_no,first_no+span-1,32) i
             CROSS JOIN LATERAL (SELECT FROM semantic.subject_access_page_v1 p
               WHERE (p.birth,p.first_home,p.end_home)=(member,i,i+32)
-                AND semantic.subject_quiet_page_current_v1(p) LIMIT 1) current_page;
+                AND semantic.subject_repair_page_current_v1(p) LIMIT 1) current_page;
           IF stamps THEN direct:=true; EXIT; END IF;
         END IF;
       END IF;
@@ -1317,7 +1330,8 @@ BEGIN
       left_id:=NULL; right_id:=NULL;
       -- Native binding, original closure of at most 64 keys, current foreign
       -- and local clocks; each 32-home page costs three originals and its stamp.
-      comparison_points:=136+8*pages; comparison_bytes:=65536+8192*pages;
+      -- Reopen one retained step (at most 16 KiB) and its 64 finite command ends.
+      comparison_points:=201+8*pages; comparison_bytes:=90112+8192*pages;
     ELSIF span<=leaf_limit THEN
       left_id:=NULL; right_id:=NULL;
       comparison_points:=40+20*span; comparison_bytes:=65536+24576*span;
@@ -2072,7 +2086,9 @@ BEGIN
     members:=search.public_filter_ack_field(batch,'count')::integer;
     IF search.public_filter_ack_field(batch,'originalCuts')='true' THEN
       IF (members BETWEEN 32 AND 512 AND lo>=first_no AND hi<=first_no+members) IS NOT TRUE THEN RETURN; END IF;
-      RETURN QUERY SELECT i,(cut->>'epoch')::integer,(cut->>'command')::bigint,(cut->>'command')::bigint,cut->>'receipt',member
+      ends:=(search.public_filter_ack_field(batch,'commandEnds')#>>'{}')::jsonb;
+      RETURN QUERY SELECT i,(cut->>'epoch')::integer,(cut->>'command')::bigint,
+        coalesce((ends->>i::text)::bigint,(cut->>'command')::bigint),cut->>'receipt',member
         FROM generate_series(lo,hi-1) i CROSS JOIN LATERAL (
           SELECT p.cuts->(i-p.first_home) AS cut FROM semantic.subject_access_page_v1 p
           WHERE (p.birth,p.first_home,p.end_home)=(member::bigint,i/32*32,i/32*32+32) LIMIT 1) x ORDER BY i;

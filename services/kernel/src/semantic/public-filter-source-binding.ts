@@ -70,6 +70,7 @@ import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairSourceScan from './public-filter-source-binding-repair-source-scan.sql';
+import { readHeldCommandRange } from './public-filter-held-command-range.ts';
 import { readHeldQuietRange } from './public-filter-held-quiet-range.ts';
 import {
   heldRepairHomes,
@@ -1239,6 +1240,7 @@ export function createNativePublicFilterSourceBinding(
     heldBirth?: string;
     /** Inventory and command closure advance together on new held executions. */
     heldPageStart?: number;
+    detailedHeldScan?: true;
     partition: number;
     after: { route: number; id: string } | null;
     subject: string | null;
@@ -1289,6 +1291,7 @@ export function createNativePublicFilterSourceBinding(
       digest: string;
       packed: string;
       originalCuts?: true;
+      commandEnds?: string;
       through?: readonly string[];
     }>;
   };
@@ -1332,23 +1335,52 @@ export function createNativePublicFilterSourceBinding(
       state.projection !== null
     )
       throw new BindingError('binding_mismatch');
+    const { detailedHeldScan, ...cursor } = state;
+    if (detailedHeldScan) state = cursor;
+    const requestDetailedScan = () => ({
+      next: { ...state, detailedHeldScan: true as const },
+      receipt: {
+        kind: 'semantic' as const,
+        homes: 0,
+        digest: hash(encode({ input: state, inputLimit, detailedHeldScan: true })),
+      },
+    });
     if (
+      !detailedHeldScan &&
       state.heldBirth !== undefined &&
       state.partition === state.heldPageStart &&
       state.after === null &&
       state.partition % heldRepairHomes === 0 &&
-      (retained ? retained.windowBatch?.originalCuts === true : compactSubjectCuts)
+      (retained ? retained.windowBatch?.originalCuts === true || retained.next.detailedHeldScan : compactSubjectCuts)
     ) {
-      const pages = await readHeldQuietRange(db, {
-        bootstrap,
-        birth: state.heldBirth,
-        start: state.partition,
-        ...(retained?.windowBatch && { retainedHomes: retained.windowBatch.count }),
-      });
+      // A declined funded attempt advances no cursor and closes no window.
+      // Its successor can use the full ordinary offer even after a lost reply.
+      if (retained?.next.detailedHeldScan) return requestDetailedScan();
+      const before = cost.inputKeys;
+      const interval = { bootstrap, birth: state.heldBirth, start: state.partition };
+      const saved = retained?.windowBatch;
+      const commands =
+        !saved || saved.commandEnds !== undefined
+          ? await readHeldCommandRange(
+              db,
+              interval,
+              context.deadline,
+              cost,
+              saved && { count: saved.count, commandEnds: saved.commandEnds! },
+            )
+          : undefined;
+      const pages = commands?.digests ?? (await readHeldQuietRange(db, { ...interval, retainedHomes: saved!.count }));
       if (pages.length) {
         const homes = pages.length * heldRepairHomes;
         const end = state.partition + homes;
-        const digest = hash(encode({ input: state, inputLimit, pages }));
+        const digest = hash(
+          encode({
+            input: state,
+            inputLimit,
+            pages,
+            ...(commands && { commandEnds: commands.commandEnds, envelopes: commands.envelopes }),
+          }),
+        );
         return {
           next: {
             ...state,
@@ -1358,9 +1390,18 @@ export function createNativePublicFilterSourceBinding(
             phase: end === 4096 ? 'window' : 'scan',
           },
           receipt: { kind: 'semantic', homes, digest },
-          windowBatch: { from: state.partition, count: homes, examined: homes, digest, originalCuts: true, packed: '' },
+          windowBatch: {
+            from: state.partition,
+            count: homes,
+            examined: homes,
+            digest,
+            originalCuts: true,
+            packed: '',
+            ...(commands && { commandEnds: commands.commandEnds }),
+          },
         };
       }
+      if (!retained && cost.inputKeys - before > 8) return requestDetailedScan();
     }
     const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
     const limit = Math.min(inputLimit, repairHomeBatchLimit, pageEnd - state.partition);

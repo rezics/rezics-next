@@ -187,14 +187,22 @@ each verified creation window with its own page, the original Core and Access tu
 The existing range parents, fenced repair settlement and independently committed manifest authorize Source's
 terminal ACK. The held traversal, alias readback and observation retirement use their existing fences.
 
-A held Subject repair can cover up to sixteen adjacent 32-home cuts in one verified step. Each cut binds
-native empty inventory and zero command bases at capture. The fresh producer stops at the first occupied
-inventory or positive command head using two ordered seeks. The independent reader reopens the same immutable
-pages under their current membership, definition and authority. A later creation preserves the original
-finite window. For N cut pages, each scan reserves 97 keyed inputs for the anchor plus 4N for originals
-and continuity. The fresh producer probe reserves five more. The producer and verifier therefore reserve
-at most 327 inputs together for 512 homes, before the ordinary binding and repair-chain work. A stale
-replay reserves 320 more inputs to recheck one retained page against its native owners before retrying.
+A held Subject repair can cover up to sixteen aligned 32-home cuts. Source seeks the first live Subject
+and up to 97 positive command heads. It compares these heads against the immutable command bases in
+their pages. A zero-base empty capture or the original complete, empty Source inventory binds each
+page to its Core and Access cut. For each of at most 64 post-base positions, Source seeks two outbox slots
+and the editorial basis. A complete, irrelevant singleton contributes its original identity, payload digest
+and basis to the step digest. Every other group stays on the ordinary bridge.
+
+The independent reader reopens the same pages, finite ends and event groups. A later append belongs to
+the writer. Both scans together use a 640-input allowance within the existing 768-input repair reservation.
+For N pages and K original membership keys, each anchor and page scan costs at most 34 + K + 5N inputs.
+The producer pays for its ordered inventory seek, membership and positive heads with one cut lookup per
+touched page. The reader looks up only the retained positive differences. Each captured position costs
+three points per scan. A declined probe can leave a zero-home successor for a separately funded detailed
+scan. A stale replay rechecks one page under its placement, privacy and cleanup authority before retrying.
+Retained zero-base steps keep their original digest and replay protocol. Older nonzero pages without
+the command-repair stamp use the detailed comparison.
 
 Held repair processes other inventory and finite command windows in ordered intervals of 32 homes.
 An empty raw Subject seek can close the contiguous prefix whose native outbox groups contain only
@@ -209,7 +217,8 @@ home comparisons. Each reader still checks placement, store, restore generation 
 
 The receiver may compare a complete aligned compact span of 64 to 512 homes against its independently
 adopted receiver pages and the verified Source step. It binds their adjacent roots under the current
-witness. After tree descent, a compact comparison reserves 136 + 8N keyed inputs and 64 + 8N KiB.
+witness. After tree descent, a compact comparison reserves 201 + 8N keyed inputs and 88 + 8N KiB.
+This includes reopening the verified step and at most 64 captured command ends.
 Folding two children reserves 64 inputs and 64 KiB. Other leaves use the original per-home comparison
 as their ordered window closes. It decodes each packed Source step
 once and compares its homes with independently adopted receiver pages. Final assembly reopens the current

@@ -10,6 +10,7 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectConsumer } from '../../src/search/consumer-name.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
+import { readHeldCommandRange } from '../../src/semantic/public-filter-held-command-range.ts';
 import { createSubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
 import {
   createPublicFilterSourceBinding,
@@ -126,6 +127,14 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
       expect((await pool.query('SELECT FROM semantic.subject_access_page_v1 WHERE birth=$1', [birth])).rowCount).toBe(
         0,
       );
+      const quietCommand = (partition: number) =>
+        runCommand(pool, { partition }, async () => ({
+          value: null,
+          events: [{ type: 'com.rezics.fixture.created.v1', data: null }],
+        }));
+      // A full 64-home ACK has nonzero bases and a later committed singleton in every home.
+      for (let home = 64; home < 128; home++) await quietCommand(home);
+      const base = await position(70);
       await writer.write(0, [resident], await position(0));
       await writer.write(47, [second!], await position(47));
       await search.request('POST', '/' + target + '/_refresh');
@@ -145,6 +154,7 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
           const result = await publication.step(prepared.job, context(), { enrollSource: true, batchSource: true });
           if ('reason' in result) throw new Error(result.reason);
           reconciled = result.status === 'reconciled';
+          if (reconciled) for (let home = 64; home < 128; home++) await quietCommand(home);
           continue;
         }
         const activation = await publication.activate(prepared.job, context(), { batchSource: true });
@@ -179,6 +189,44 @@ async function verifyPublication(url: string, verifyCompactWindow = false) {
         expect(proof).toMatchObject({ first_home: 0, width: 4096, matched: true, independent: true, ack_after: 4096 });
         expect(proof.compact_nodes).toBeGreaterThan(0);
         expect(proof.compact_width).toBeGreaterThan(32);
+        const compared = await pool.query(
+          `SELECT w.base,w.through_pos,s.bootstrap,
+              search.public_filter_ack_field(batch,'count')::int AS count,
+              search.public_filter_ack_field(batch,'commandEnds')#>>'{}' AS ends FROM search.public_filter_ack_range n
+           JOIN semantic.public_filter_repair_step s ON (s.bootstrap,s.execution,s.verified_binding,s.verified_home)=
+             (n.bootstrap,n.job::text,n.binding,64)
+           CROSS JOIN LATERAL (SELECT search.public_filter_ack_field(s.state::jsonb->1,'windowBatch') AS batch) source
+           CROSS JOIN LATERAL search.subject_ack_windows_v1(s.state,70,71) w
+           WHERE n.job=$1 AND n.first_home=64 AND n.width=64 AND n.left_child IS NULL`,
+          [prepared.job.job],
+        );
+        expect(compared.rows).toHaveLength(1);
+        const original = compared.rows[0]!;
+        expect(original).toMatchObject({ base: String(base), through_pos: String(base + 1n) });
+        const reopen = () =>
+          readHeldCommandRange(
+            pool,
+            { start: 64, birth, bootstrap: original.bootstrap },
+            context().deadline,
+            { rows: 0, inputKeys: 0, dependencyPoints: 0 },
+            { count: original.count, commandEnds: original.ends },
+          );
+        const sealed = await reopen();
+        await runCommand(pool, { partition: 70 }, async () => ({
+          value: null,
+          events: Array.from({ length: 2 }, () => ({ type: 'com.rezics.fixture.created.v1', data: null })),
+        }));
+        const current = await readHeldCommandRange(
+          pool,
+          { start: 64, birth, bootstrap: original.bootstrap },
+          context().deadline,
+          { rows: 0, inputKeys: 0, dependencyPoints: 0 },
+        );
+        expect(current.digests).toHaveLength(0);
+        expect(await reopen()).toEqual(sealed);
+        await pool.query('SELECT core.advance_subject_cleanup_v1(73)');
+        await expect(reopen()).rejects.toThrow();
+        expect(await reopen()).toEqual(sealed);
         const extended = (await prefix()).rows;
         expect(extended).toHaveLength(3);
         if (cleanLeaf === undefined) throw new Error('Missing original clean leaf');
