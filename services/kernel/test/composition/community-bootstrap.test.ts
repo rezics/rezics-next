@@ -61,7 +61,9 @@ test('ordinary Community composition precedes catalogue inspection and HTTP comp
     const actions = kernel.createKernelActionCatalogue(dependencies);
     kernel.createKernel(dependencies);
     kernel.createKernel(dependencies);
-    if (actions.length === 0) throw new Error('Community actions were missing from the mounted catalogue');
+    if (!actions.has('post:sell') || !actions.has('realm:read')) {
+      throw new Error('The shared catalogue lost a native or mounted action');
+    }
     const application = binding.tryCommunityApplication();
     if (!application || !application.elapsed(50) || application.elapsed(51)) {
       throw new Error('repeated Kernel construction lost the supplied Community deadline ambient');

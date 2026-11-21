@@ -42,21 +42,22 @@ test('a census maintenance turn yields after bounded progress and stops when aut
 });
 
 test('a retained native census resumes, replaces restored lifecycles and keeps incomplete authority preparing', async () => {
-  const author = (await fixture.context()).actor;
+  const signed = await fixture.context();
+  const author = () => fixture.access.authenticate(signed.bearer, { pool: fixture.pool, deadline: Date.now() + 30_000 });
   const board = (
     await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
   ).rows[0]!;
-  await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
+  await fixture.grant(signed.actor.accountId, 'thread:create', { route: board.route, id: board.board_id });
   const subject = newId(0x6bd0);
   await fixture.reader.query(
     `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
      VALUES($1,$2,'schema:Book',$2,'visible',1)`,
     [routeOf(subject), subject],
   );
-  const create = (target: string) =>
+  const create = async (target: string) =>
     createThread(
       { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
-      author,
+      await author(),
       {
         kind: 'review',
         title: 'A census review',
@@ -69,10 +70,6 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       { idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 },
     );
   const written = await create(subject);
-  await fixture.grant(author.accountId, 'post:erase', {
-    route: routeOf(written.value.itemId)!,
-    id: written.value.itemId,
-  });
   for (let index = 1; index < 26; index++) {
     const target = newId(0x6bd0);
     await fixture.reader.query(
@@ -146,7 +143,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     });
   await revisePost(
     { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey },
-    author,
+    await author(),
     {
       itemId: written.value.itemId,
       threadId: written.value.threadId,
@@ -185,8 +182,8 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     requestId: Bun.randomUUIDv7(),
     deadline: Date.now() + 30_000,
   });
-  await softDeletePost(deps, author, { postId: written.value.itemId, reason: 'Withdraw review' }, request());
-  await restorePost(deps, author, written.value.itemId, request());
+  await softDeletePost(deps, await author(), { postId: written.value.itemId, reason: 'Withdraw review' }, request());
+  await restorePost(deps, await author(), written.value.itemId, request());
   const restored = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
   expect(restored.revisionId).toBe(before.revisionId);
   expect(restored.sourceVersion).not.toBe(before.sourceVersion);

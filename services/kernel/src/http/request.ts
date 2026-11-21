@@ -77,12 +77,17 @@ function declaration(route: MountedRoute): RouteDeclaration {
 
 const actionCatalogues = new WeakMap<object, ActionCatalogue>();
 
+/** Bind the sealed Kernel's full declaration, including scopes with no public route. */
+export function bindKernelActionCatalogue(app: RouteApp, actions: ActionCatalogue): void {
+  actionCatalogues.set(app, actions);
+}
+
 /** Composes mounted routes with trusted native declarations, checking their agreement. */
 export function actionCatalogue(app: RouteApp, nativeActions?: ActionCatalogue): ActionCatalogue {
-  const mounted = mountedCatalogues.get(app);
-  if (mounted) return actionCatalogue(mounted, nativeActions);
   const cached = nativeActions === undefined ? actionCatalogues.get(app) : undefined;
   if (cached) return cached;
+  const mounted = mountedCatalogues.get(app);
+  if (mounted) return actionCatalogue(mounted, nativeActions);
   const catalogue = new Map<
     string,
     {

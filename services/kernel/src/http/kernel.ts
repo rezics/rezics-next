@@ -150,7 +150,7 @@ import {
 import { createSubjectPageFeed, type SubjectPageFeed } from '../semantic/subject-page-feed.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
-import { actionCatalogue, type MountedRoute } from './request.ts';
+import { actionCatalogue, bindKernelActionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
 import { historyExecutionPort } from '../history/application/index.ts';
 
@@ -1159,6 +1159,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       `Kernel action catalogue has ${consentedScopeCount} actions; consented scope bound is ${MAX_CONSENTED_SCOPES}`,
     );
   composedActions = actions;
+  bindKernelActionCatalogue(zones, actions);
   assertInternalActionDeclarations(actions);
   assertDeclaredResourceTypes(zones, dependencies.resourceRoles, actions);
   dependencies.onAccessReady?.(resolveAccess({ actions, realmRoleReader }), {
