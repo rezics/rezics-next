@@ -3114,7 +3114,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         adopted: false,
       };
       if (work.independentPit) unpublished = { registration: registration.id, bootstrap: work.bootstrap.id };
-      const encoded = await save(work, null, true, m, page?.bookBinding ? page : undefined, 'claim');
+      const fresh =
+        page && !publication && !config.discoveryTarget && native?.status === 'begun' ? native.freshPit : undefined;
+      // The persisted new claim proves no PIT was dispatched. Only the original opener
+      // may install its first work and acquire physical dispatch in one transition.
+      const initializeAtOpen = fresh?.independent === true && !m.enrollmentOnly;
+      const encoded = initializeAtOpen
+        ? boundedWork(work)
+        : await save(work, null, true, m, page?.bookBinding ? page : undefined, 'claim');
       if (
         begun.status === 'preparing' ||
         m.enrollmentOnly ||
@@ -3137,8 +3144,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in canonical &&
         canonical.bookTypeList === true &&
         begun.bootstrap.coveragePublication !== undefined;
-      const fresh =
-        page && !publication && !config.discoveryTarget && native?.status === 'begun' ? native.freshPit : undefined;
       const claim = fresh && !fresh.independent ? m.take(await fresh.unopened()) : undefined;
       if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
       const result = await advanceCapture(
@@ -3158,11 +3163,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               ...(fresh.independent
                 ? {
                     admitPhysicalOpen: async () => {
-                      const admission = await fresh.unopened();
+                      const admission = await fresh.unopened(initializeAtOpen ? encoded : undefined);
                       if (!('unopened' in admission) || !admission.unopened) {
                         m.take(admission);
                         return;
                       }
+                      if (initializeAtOpen) m.cost.frontierWrites++;
                       grantedOpen = true;
                       return () => {
                         m.take(admission);

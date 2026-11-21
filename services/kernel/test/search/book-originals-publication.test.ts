@@ -31,6 +31,9 @@ test('cold Subject publication discloses the originals and preserves relevance t
     // A crash after either commit must leave the matching recovery work with its native receipt.
     await database.pool.query(`CREATE FUNCTION search.check_test_pit_handoff() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
+        IF NEW.state='opening' AND (OLD.consumer_work IS NOT NULL OR NEW.consumer_work IS NULL) THEN
+          RAISE EXCEPTION 'The PIT grant did not install its original recovery work';
+        END IF;
         IF NEW.state='retained' AND NEW.consumer_work IS NOT DISTINCT FROM OLD.consumer_work THEN
           RAISE EXCEPTION 'The PIT receipt committed without its recovery work';
         END IF;
@@ -43,7 +46,7 @@ test('cold Subject publication discloses the originals and preserves relevance t
         RETURN NEW;
       END $$;
       CREATE TRIGGER check_test_pit_handoff AFTER UPDATE OF state ON search.public_filter_pit_claim
-      FOR EACH ROW WHEN (OLD.state<>NEW.state AND NEW.state IN ('retained','handed'))
+      FOR EACH ROW WHEN (OLD.state<>NEW.state AND NEW.state IN ('opening','retained','handed'))
       EXECUTE FUNCTION search.check_test_pit_handoff()`);
     const concurrent = await Promise.all(
       Array.from({ length: 4 }, () => fixture.request('anonymous', 'POST', '/v1/subjects:search', query)),

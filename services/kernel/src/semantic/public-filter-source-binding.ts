@@ -684,7 +684,7 @@ export type NativePublicFilterPreparation =
       freshPit?: Readonly<{
         independent?: true;
         transfer?: FreshPitTransfer;
-        unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
+        unopened(initialWork?: string): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
       }>;
     })
@@ -2979,21 +2979,22 @@ export function createNativePublicFilterSourceBinding(
               ...(independent
                 ? { independent: true as const, ...(definitionPayload === undefined ? {} : { transfer }) }
                 : {}),
-              unopened() {
+              unopened(initialWork?: string) {
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
                   if (independent) {
                     const opened = await store.query(
                       `/* semantic.native-keyed:5:12:1 */
-                       UPDATE search.public_filter_pit_claim c SET state='opening'
+                       UPDATE search.public_filter_pit_claim c SET state='opening',consumer_work=coalesce($7::text,c.consumer_work)
                        FROM semantic.public_filter_bootstrap b JOIN core.partition p USING(partition_no),
                          search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
                        WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2)
                          AND (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) AND b.state='begun' AND b.queried IS NULL
                          AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='pit' AND b.consumer=$3
                          AND p.epoch=b.owner_epoch AND p.write_state='active' AND c.state='new'
-                         AND c.consumer_work IS NOT NULL AND c.deadline>$4
+                         AND c.deadline>$4 AND (($7::text IS NOT NULL AND c.consumer_work IS NULL)
+                           OR ($7::text IS NULL AND c.consumer_work IS NOT NULL))
                          AND (r.partition_no,r.id)=(c.partition_no,c.registration) AND r.state='active'
                          AND r.consumer=$5 AND t.incarnation=$6 RETURNING c.bootstrap`,
                       [
@@ -3003,6 +3004,7 @@ export function createNativePublicFilterSourceBinding(
                         Date.now(),
                         ports.search.encodeConsumer(bootstrap.consumer),
                         bootstrap.consumer.incarnation,
+                        initialWork ?? null,
                       ],
                     );
                     return { unopened: opened.rowCount === 1, cost };
