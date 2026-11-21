@@ -115,10 +115,18 @@ async function findOpenListings(client: Query, bookId: string, { itemHomeId, lim
   };
 }
 
-async function findTrade(client: Query, bookId: string, id: string, lock = false): Promise<MarketTrade | null> {
+async function findTrade(
+  client: Query,
+  bookId: string,
+  id: string,
+  lock = false,
+  itemHomeId?: string,
+): Promise<MarketTrade | null> {
+  const home = itemHomeId === undefined ? '' : "AND (payload #>> '{terms,item,homeId}') = $3";
   const { rows } = await client.query<Payload>(
-    `SELECT payload::text FROM economy.market_trade WHERE book_id = $1 AND trade_id = $2 ${lock ? 'FOR UPDATE' : ''}`,
-    [bookId, id],
+    `SELECT payload::text FROM economy.market_trade
+     WHERE book_id = $1 AND trade_id = $2 ${home} ${lock ? 'FOR UPDATE' : ''}`,
+    itemHomeId === undefined ? [bookId, id] : [bookId, id, itemHomeId],
   );
   return rows[0] ? decodeMarketRecord<MarketTrade>(rows[0].payload) : null;
 }
@@ -237,6 +245,20 @@ async function advanceTrade(client: Query, bookId: string, previous: MarketTrade
   await syncTradeWork(client, bookId, next);
 }
 
+async function persistDecision(
+  client: Query,
+  bookId: string,
+  trade: MarketTrade,
+  revision: bigint,
+  kind: Decision['kind'],
+  now: bigint,
+): Promise<Result<Decision>> {
+  const result = decideMarketTrade(trade, revision, kind, now);
+  if (result.kind !== 'ok') return result;
+  await advanceTrade(client, bookId, trade, result.value);
+  return ok(result.value.decision!);
+}
+
 /** The coordinator is internal. An installed application binds actor and real owner authority. */
 export function createMarketStore(database: MarketStoreDatabase, bookId: string, owners: MarketOwnerProofs) {
   if (!isEconomyBookId(bookId)) throw new Error('Invalid market book ID');
@@ -345,10 +367,38 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
       return database.transaction(async (client) => {
         const trade = await findTrade(client, bookId, id, true);
         if (!trade) return { kind: 'not_found' };
-        const result = decideMarketTrade(trade, revision, kind, await nativeMillis(client));
-        if (result.kind !== 'ok') return result;
-        await advanceTrade(client, bookId, trade, result.value);
-        return ok(result.value.decision!);
+        return persistDecision(client, bookId, trade, revision, kind, await nativeMillis(client));
+      });
+    },
+
+    decideReadyTrade(id: string, itemHomeId: string): Promise<Result<Decision | null>> {
+      if (!ownerKey.test(id) || !ownerKey.test(itemHomeId)) return Promise.resolve({ kind: 'not_found' });
+      return database.transaction(async (client) => {
+        const trade = await findTrade(client, bookId, id, true, itemHomeId);
+        if (!trade || trade.buyer.tradeId !== id || trade.terms.price.ledgerBookId !== bookId)
+          return { kind: 'not_found' };
+        if (trade.decision !== null) return ok(null);
+        const now = await nativeMillis(client);
+        const kind = now >= trade.buyer.prepareUntil ? 'abort' : 'commit';
+        const result = await persistDecision(client, bookId, trade, trade.revision, kind, now);
+        return result.kind === 'unprepared' ? ok(null) : result;
+      });
+    },
+
+    listReadyForTrade(id: string, itemHomeId: string) {
+      return database.read(async (client) => {
+        // The coordinator issues at most two pending instructions per trade phase.
+        const { rows } = await client.query<{ id: string; kind: MarketWorkOwner['kind']; ownerId: string }>(
+          `SELECT instruction_id AS id, owner_kind AS kind, owner_id AS "ownerId" FROM economy.market_work
+           WHERE book_id = $1 AND trade_id = $2 AND status = 'pending' AND available_at <= statement_timestamp()
+             AND ((owner_kind = 'item' AND owner_id = $3) OR (owner_kind = 'ledger' AND owner_id = $1))
+           ORDER BY owner_kind, available_at, instruction_id LIMIT 2`,
+          [bookId, id, itemHomeId],
+        );
+        return rows.map(({ id: instructionId, kind, ownerId }) => ({
+          id: instructionId,
+          owner: { kind, id: ownerId },
+        }));
       });
     },
 
@@ -386,7 +436,7 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
       });
     },
 
-    claim(owner: MarketWorkOwner, id: string, claimId: string): Promise<Result<MarketWorkClaim>> {
+    claim(owner: MarketWorkOwner, id: string, claimId: string, tradeId?: string): Promise<Result<MarketWorkClaim>> {
       if (!validOwner(owner) || !workKey.test(id) || !uuid.test(claimId))
         return Promise.resolve({ kind: 'invalid_owner_request' });
       return database.transaction(async (client) => {
@@ -394,6 +444,11 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
         if (!row) return { kind: 'not_found' };
         if (row.status !== 'pending') return { kind: 'not_ready' };
         const work = decodeMarketRecord<MarketWork>(row.payload);
+        if (
+          tradeId !== undefined &&
+          (work.id !== id || work.bookId !== bookId || work.kind !== 'trade' || work.instruction.tradeId !== tradeId)
+        )
+          return { kind: 'not_found' };
         if (row.claimId === claimId) return ok({ work, claimId, availableAt: row.availableAt.toISOString() });
         const { rows } = await client.query<{ availableAt: Date }>(
           `UPDATE economy.market_work SET claim_id = $3, available_at = statement_timestamp() + $4 * interval '1 ms'
