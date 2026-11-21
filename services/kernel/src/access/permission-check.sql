@@ -110,6 +110,8 @@ WITH input AS MATERIALIZED (
                   COALESCE(lower(g.valid), '-infinity'::timestamptz))
             <= ROW(target.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, role.grant_role,
                    (SELECT at FROM authority))
+          -- This unbounded range ends before every timestamp, including the -infinity sentinel.
+          AND g.valid <> '(,-infinity)'::tstzrange
         ORDER BY g.route DESC, g.resource_id DESC, g.subject_kind DESC, g.subject_id DESC,
                  g.subject_role DESC, g.grant_role DESC,
                  COALESCE(lower(g.valid), '-infinity'::timestamptz) DESC LIMIT 1

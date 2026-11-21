@@ -2216,10 +2216,13 @@ interval before containment is tested. This is a bound on the actual lower bound
 surrogate whose residual containment work could grow. The Access constraint already requires nonempty intervals,
 inclusive finite lower bounds and exclusive upper bounds. It remains unchanged, as does the temporal primary key's
 non-overlap constraint. Future starts cannot hide a current interval; a predecessor ending before/at T denies;
-gaps, unbounded starts/ends and timestamp infinities keep their native range meaning.
+gaps, unbounded starts/ends and timestamp infinities keep their native range meaning. The physically distinct
+interval `(,-infinity)` contains no representable timestamp. The seek skips it so its normalized lower bound
+cannot tie with the effective interval starting at the timestamp `-infinity`.
 
-For one exact role key, the physical path examines zero or one source interval, with one B-tree descent of height
-h(N), one leaf candidate and at most one heap visibility fetch (a covering index-only read can avoid that fetch).
+For one exact role key, the physical path returns zero or one eligible interval, with one B-tree descent of height
+h(N). It may skip the single uninhabitable interval at the lower sentinel. A covering index-only read can
+avoid heap visibility fetches.
 No interval-history rows are traversed. Let S be the actual admitted subject keys (direct identity and active-account
 keys for actor/principal, plus admitted group keys), R the requested grant roles, V the targets and B the evaluated
 non-explicit branches. The upper bound is V*S*R probes for candidates and V*S*R*B for the final formula; empty,

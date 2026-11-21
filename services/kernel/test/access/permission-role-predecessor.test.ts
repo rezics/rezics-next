@@ -124,6 +124,52 @@ test('real native role permission seeks skip interval history with a semantic pr
   }
 }, 180000);
 
+test('a range ending at negative infinity cannot shadow a role valid from that timestamp', async () => {
+  const db = await openGrowthDatabase();
+  const resource = newId(0x4678);
+  const actor = newId(0);
+  const input = {
+    route: 0x4678,
+    resource_ids: [resource],
+    action: 'subject:read',
+    actor_id: actor,
+    principal_id: '',
+    roles: [{ account_id: actor, organization_id: actor, role: 'owner', member: true, valid: '(,)' }],
+    grant_roles: ['semantic.context.owner'],
+  };
+  const probe = async (at: string, allowed: boolean) => {
+    expect(
+      await permission.run(db.pool, {
+        ...input,
+        at,
+        include_global: false,
+        anonymous: false,
+        floor: false,
+        deadline: 'infinity',
+      }),
+    ).toMatchObject([{ resourceId: resource, allowed }]);
+    expect(await candidates.run(db.pool, { ...input, at })).toEqual(
+      allowed ? [{ accountId: actor, organizationId: actor }] : [],
+    );
+  };
+  try {
+    await db.admin.query(
+      `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,subject_role,grant_role,valid,transaction_id)
+       SELECT $1,$2,$3,role,'semantic.context.owner',span,$2 FROM unnest(ARRAY['','owner']) AS roles(role)
+       CROSS JOIN unnest(ARRAY[tstzrange('-infinity', NULL, '[)'), tstzrange(NULL, '-infinity', '()')]) AS intervals(span)`,
+      [input.route, resource, actor],
+    );
+    for (const at of ['-infinity', '2030-01-01T00:00:00Z', 'infinity']) await probe(at, true);
+    await db.admin.query(
+      'DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND upper_inf(valid)',
+      [input.route, resource],
+    );
+    await probe('2030-01-01T00:00:00Z', false);
+  } finally {
+    await db.close();
+  }
+});
+
 test('a complete current-role key access path never certifies stale or unknown roster absence', async () => {
   const db = await openGrowthDatabase();
   const resource = { route: 0x4679, id: newId(0x4679) };
