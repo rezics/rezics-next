@@ -1856,7 +1856,8 @@ structural original/pin scopes without session/copy/assignment IDs, revisions, n
 
 `library.ownerIndex` and `library.ownerIndexSweepSegment` use the existing maintenance queue. Operational
 successor intents contain only fenced account IDs and native phase/key frontiers; sweep locators contain
-partition and account keysets. Their DBOS input/output/history is Accounts shared-history custody, not an
+partition and account keysets. Each step seeks the next owner in the fact-head primary key and applies its
+current home fences. The first empty seek ends the sweep. Their DBOS input/output/history is Accounts shared-history custody, not an
 additional Library intent table. Current account and partition fences precede every application. No discovery
 or detail GET creates progress. Source coverage does not acknowledge identity publication, whole-query
 privacy, complete Library erasure, or shared-history erasure. The fixed ALL-Library epoch participant still

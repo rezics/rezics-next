@@ -118,6 +118,21 @@ export type OwnerIndexWorkFrontier = Readonly<{
   fact: string | null;
 }>;
 
+/** Resume a persisted sweep at its home boundary or after its exact last owner. */
+export async function nextOwnerIndexAccount(
+  client: Client,
+  cursor: { partition: number; route: number | null; account: string | null },
+) {
+  const atBoundary = cursor.route === null;
+  const { rows } = await client.query<{ route: number; account: string }>(
+    `SELECT route,account_id AS account FROM library.fact_source_head
+     WHERE ${atBoundary ? 'route >= $1' : '(route,account_id) > ($1,$2::uuid)'}
+     ORDER BY route,account_id LIMIT 1`,
+    atBoundary ? [cursor.partition * 16] : [cursor.route, cursor.account],
+  );
+  return rows[0];
+}
+
 /** Older owner directories need one additional pass even if their family bootstrap already completed. */
 export async function readOwnerIndexWorkFrontier(
   client: Client,

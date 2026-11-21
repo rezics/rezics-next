@@ -3,12 +3,17 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { CANONICAL_SOURCE_WORKFLOW } from './canonical-source-store.ts';
 import { workStepDeadline } from './collection-command-work.ts';
-import { readOwnerIndexWorkFrontier, stepOwnerIndex, type OwnerIndexWorkFrontier } from './owner-index.ts';
+import {
+  nextOwnerIndexAccount,
+  readOwnerIndexWorkFrontier,
+  stepOwnerIndex,
+  type OwnerIndexWorkFrontier,
+} from './owner-index.ts';
 import {
   applyOwnerPinMeaning,
   loadOwnerPinMeaning,
@@ -148,21 +153,13 @@ export async function registerOwnerIndexWork(context: WorkContext) {
   DBOS.registerWorkflow((input: Locator) => step(input), { name: OWNER_INDEX_WORKFLOW });
   const sweepPage = DBOS.registerStep(
     async (input: Sweep) => {
-      const { rows } = await withConnection(context.pool, (client) =>
-        client.query<{ route: number; account: string }>(
-          `SELECT route,account_id AS account FROM library.fact_source_head
-       WHERE route BETWEEN $1 AND $2 AND ($3::integer IS NULL OR (route,account_id)>($3,$4::uuid))
-       ORDER BY route,account_id LIMIT 1`,
-          [input.partition * 16, input.partition * 16 + 15, input.route, input.account],
-        ),
-      );
-      const row = rows[0];
-      if (!row) return { ...input, partition: input.partition + 1, route: null, account: null };
+      const row = await withConnection(context.pool, (client) => nextOwnerIndexAccount(client, input));
+      if (!row) return { ...input, partition: PARTITIONS, route: null, account: null };
       const frontier = await withConnection(context.pool, (client) => readOwnerIndexWorkFrontier(client, row.account));
       // This is already a registered step; call the transaction body, never nest DBOS steps.
       await apply({ accounts: [row.account], frontier, metadata: false });
       await apply({ accounts: [row.account], frontier: null, metadata: true });
-      return { ...input, route: row.route, account: row.account };
+      return { ...input, partition: partitionOf(row.route), route: row.route, account: row.account };
     },
     { name: 'library.ownerIndexSweepPage', ...COMMAND_STEP_RETRIES },
   );
@@ -182,8 +179,8 @@ export async function registerOwnerIndexWork(context: WorkContext) {
   );
   async function segment(input: Sweep) {
     let next = input;
-    for (let n = 0; n < 100 && next.partition < 4096; n++) next = await sweepPage(next);
-    if (next.partition < 4096) await continuation({ ...next, sequence: next.sequence + 1 });
+    for (let n = 0; n < 100 && next.partition < PARTITIONS; n++) next = await sweepPage(next);
+    if (next.partition < PARTITIONS) await continuation({ ...next, sequence: next.sequence + 1 });
   }
   DBOS.registerWorkflow(segment, { name: 'library.ownerIndexSweepSegment' });
   DBOS.registerWorkflow(
