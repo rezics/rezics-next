@@ -264,6 +264,8 @@ const typed = [
   'POST /v1/economy/market/listings/:listingId/purchases',
   'POST /v1/economy/market/listings/:listingId/cancel',
   'GET /v1/economy/market/trades/:tradeId',
+  'POST /v1/economy/test-funding/intents',
+  'GET /v1/economy/test-funding/intents/:intentId',
   'POST /v1/subjects/:id/candidates',
   'DELETE /v1/subjects/:id/candidates/:candidate',
   'POST /v1/subjects/:id/candidates/:candidate/$restoreDeleted',

@@ -5,6 +5,7 @@ import { isEconomyBookId } from './economy/contract.ts';
 import { createNativeEconomyWallet } from './composition/economy.ts';
 import { createNativeEconomySpot } from './composition/economy-spot.ts';
 import { createNativeEconomyMarket, readEconomyMarketConfig } from './composition/economy-market.ts';
+import { createNativeEconomyTestFunding, readEconomyTestFundingConfig } from './composition/economy-test-funding.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
@@ -76,6 +77,7 @@ export type ServerConfig = {
   economyBookId?: string;
   economyNode?: string;
   economyMarket?: NonNullable<ReturnType<typeof readEconomyMarketConfig>>;
+  economyTestFunding?: NonNullable<ReturnType<typeof readEconomyTestFundingConfig>>;
   content: ContentRuntime & { shelfTitleInputs?: ReturnType<typeof composeNativeContentShelfTitleInputs> };
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
@@ -104,8 +106,10 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   if (economyNode !== undefined && (!economyNode.trim() || economyNode.length > 255))
     throw new ConfigError('KERNEL_ECONOMY_NODE');
   const economyMarket = readEconomyMarketConfig(env);
-  if (economyMarket && economyBookId === undefined) throw new ConfigError('KERNEL_ECONOMY_BOOK_ID');
-  if (economyMarket && economyNode === undefined) throw new ConfigError('KERNEL_ECONOMY_NODE');
+  const economyTestFunding = readEconomyTestFundingConfig(env);
+  if ((economyMarket || economyTestFunding) && economyBookId === undefined)
+    throw new ConfigError('KERNEL_ECONOMY_BOOK_ID');
+  if ((economyMarket || economyTestFunding) && economyNode === undefined) throw new ConfigError('KERNEL_ECONOMY_NODE');
   return {
     databaseUrl,
     poolAcquireTimeoutMillis,
@@ -121,6 +125,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     ...(economyBookId === undefined ? {} : { economyBookId }),
     ...(economyNode === undefined ? {} : { economyNode }),
     ...(economyMarket === undefined ? {} : { economyMarket }),
+    ...(economyTestFunding === undefined ? {} : { economyTestFunding }),
     moneyPolicy: readCommerceMoneyPolicy(env),
     content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
@@ -264,6 +269,10 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       economyConfig === undefined || config.economyMarket === undefined
         ? undefined
         : createNativeEconomyMarket(pool, { ...config.economyMarket, ...economyConfig }).port;
+    const economyTestFunding =
+      process.env.NODE_ENV === 'production' || economyConfig === undefined || config.economyTestFunding === undefined
+        ? undefined
+        : createNativeEconomyTestFunding(pool, { ...config.economyTestFunding, ...economyConfig }).port;
     app = createKernel({
       ...(economyConfig === undefined
         ? {}
@@ -272,6 +281,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             economySpot: createNativeEconomySpot(pool, economyConfig),
           }),
       ...(economyMarket === undefined ? {} : { economyMarket }),
+      ...(economyTestFunding === undefined ? {} : { economyTestFunding }),
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
       pool,
