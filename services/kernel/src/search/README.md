@@ -2410,7 +2410,13 @@ The native Account Discovery purge remains separate; its local cleanup no longer
 Personal recent/trending cleanup records its own progress; only the all-copy worker can send the final ACK.
 
 Physical reconciliation uses current Source through the same ordinary Search writer, then its publication
-fence/drain/adopt extension before compaction. Fence strings are persisted locators and are revalidated by that
+fence/drain/adopt extension before compaction. Search writes each affected live target before waiting for
+terminal proof to drain the page. Consecutive historical roles can reuse a single-key physical effect after
+compaction and release. Each target must still have the same settled native writer transaction, current
+owner and incarnation. Search compares that writer's fresh projected action and version with the
+search-visible engine result and rechecks settlement. A changed or missing witness takes the ordinary repair
+path. Each historical role still supplies its own held Source page and receives independent verification.
+Fence strings are persisted locators and are revalidated by that
 native guard. Active, building and retiring physical UUIDs remain required. Unregistered native generations,
 incomplete population, missing deployment configuration, producer or native guard remain pending. The existing native Search writer supplies its extended guard through
 `SearchErasureRuntime.writerGuard`; no callback can certify completion.

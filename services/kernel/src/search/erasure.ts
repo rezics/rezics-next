@@ -16,6 +16,7 @@ import {
   verifySubjectErasureSourceProof,
 } from '../semantic/account-erasure-source.ts';
 import type {
+  SubjectErasureSourceProof,
   SubjectErasureSourceRecord,
   SubjectErasureSource,
   SubjectErasureSourcePage,
@@ -32,7 +33,8 @@ import { eraseDiscoveryAccount, nativeDiscoveryRegistry } from './account-discov
 import { createRatedSubjectSource } from './rated-source.ts';
 import type { DiscoveryRegistry } from './discovery.ts';
 import type { PublicFilterSourceFactory } from '../semantic/index.ts';
-import { createSearchWriterGuard } from './writer-guard.ts';
+import { createSearchWriterGuard, readSearchWriterGenerationActions } from './writer-guard.ts';
+import { assertNativeGenerationActionsVisible, GenerationReconciliationMismatch } from './generations.ts';
 import { SEARCH_ERASURE_PROGRESS } from './query-events.ts';
 import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import { subjectConsumer } from './runner.ts';
@@ -450,13 +452,14 @@ async function advanceSearchErasure(
       return progress('more', 'copies');
     }
     // An empty, sealed nonterminal page has no writer effects. Transfer its real receipt
-    // while Semantic advances the independent terminal chain. Physical cleanup and final ACK
-    // still require that terminal proof and the live target inventory.
+    // while Semantic advances the independent terminal chain.
     if (runtime.prefix && !isAdmittedSearchPrefix(runtime.prefix)) throw new TypeError('Invalid Search erasure prefix');
     const source = runtime.source;
     const page =
       search && runtime.prefix && source
-        ? await receive(() => source.readPage({ barrier, frontier: header.frontier, inputLimit: 100, context }))
+        ? await receive(() =>
+            source.readPage({ barrier, frontier: header.frontier, inputLimit: 100, coalesceEmptyHomes: true, context }),
+          )
         : undefined;
     if (page && (page.status === 'progress' || page.status === 'complete')) {
       if (
@@ -469,14 +472,12 @@ async function advanceSearchErasure(
           ? progress('more', 'source')
           : pending('source-changed', 'source');
     }
-    // Terminal Source custody is a separate all-home native chain. Advance it even when
-    // Search is disabled; no configuration, local EOF or page receipt supplies this proof.
-    turn.check();
-    const terminal = await advanceSubjectErasureSourceProof({ pool }, barrier, context);
-    turn.check();
-    if (terminal.status === 'progress') return progress('more', 'source');
-    if (terminal.status !== 'complete') return pending('source-unavailable', 'source');
-    if (!search || !runtime.prefix) return pending('configuration-unavailable', 'sealing');
+    if (!search || !runtime.prefix) {
+      const terminal = await advanceSubjectErasureSourceProof({ pool }, barrier, context);
+      if (terminal.status === 'progress') return progress('more', 'source');
+      if (terminal.status !== 'complete') return pending('source-unavailable', 'source');
+      return pending('configuration-unavailable', 'sealing');
+    }
     const accountCopy = await query(
       `SELECT 1 FROM search.discovery_copy WHERE route=$1 AND source_id=$2
       AND kind='account' LIMIT 1`,
@@ -524,17 +525,15 @@ async function advanceSearchErasure(
       (_, value) => (typeof value === 'bigint' ? value.toString() : value),
     );
     if (Buffer.byteLength(sourceBasis) > 4096) throw new TypeError('Unbounded Source erasure basis');
+    const ids = affected(record);
+    let drainNext: (() => Promise<SearchErasureProgress>) | undefined;
     for (const target of targets) {
       const effect =
         (
           await query<Effect>(
             `INSERT INTO search.erasure_effect(partition_no,account_id,
         physical_target,incarnation,record_key,source_basis,native_revision,consumer,barrier) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT(partition_no,account_id,physical_target,incarnation) DO UPDATE SET
-        record_key=EXCLUDED.record_key,source_basis=EXCLUDED.source_basis,native_revision=EXCLUDED.native_revision,
-        key_offset=0,phase='repair',fence=NULL
-        WHERE erasure_effect.phase='released' AND (erasure_effect.source_basis<>EXCLUDED.source_basis
-          OR erasure_effect.native_revision<>EXCLUDED.native_revision)
+        ON CONFLICT(partition_no,account_id,physical_target,incarnation) DO NOTHING
         RETURNING job::text,record_key,source_basis,native_revision,key_offset,fence,phase`,
             [
               0,
@@ -564,12 +563,7 @@ async function advanceSearchErasure(
           )
         ).rows[0];
       if (!effect) return pending('source-changed', 'repair');
-      if (
-        effect.phase === 'released' &&
-        effect.source_basis === sourceBasis &&
-        effect.native_revision === target.revision
-      )
-        continue;
+      if (effect.phase === 'released' && effect.source_basis === sourceBasis) continue;
       const consumer: PublicFilterConsumer = {
         physicalTarget: target.physicalTarget,
         incarnation: target.incarnation,
@@ -599,7 +593,29 @@ async function advanceSearchErasure(
          AND phase=$6 AND key_offset=$7 AND source_basis=$8`,
           [...binding, ...values],
         );
-      if (effect.source_basis !== sourceBasis || effect.native_revision !== target.revision) {
+      if (effect.source_basis !== sourceBasis) {
+        // Distinct historical roles can require the same physical effect. Reuse a
+        // prior compacted copy only while its exact settled writer remains current
+        // and the engine still exposes the ordinary writer's fresh projection.
+        if (effect.phase === 'released' && ids.length === 1 && effect.native_revision !== target.revision) {
+          const id = ids[0]!;
+          if ((await settledRevision(target, id)) === effect.native_revision) {
+            const actions = await readSearchWriterGenerationActions(guard, partitionOf(routeOf(id)!), [id], 0n);
+            if (actions?.length === 1 && actions[0]?.id === id) {
+              let matched = true;
+              try {
+                await assertNativeGenerationActionsVisible(search, target.physicalTarget, actions);
+              } catch (error) {
+                if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+                matched = false;
+              }
+              if (matched && (await settledRevision(target, id)) === effect.native_revision && (await exact(target))) {
+                await update('record_key=$9,source_basis=$10', [recordKey, sourceBasis]);
+                return progress('more', 'repair');
+              }
+            }
+          }
+        }
         if (effect.fence) {
           const old: SearchWriterPublicationFence = { ...native, fence: effect.fence };
           const drained = await receive(() => guard.drainPublication(old, context));
@@ -615,7 +631,6 @@ async function advanceSearchErasure(
         return progress('more', 'repair');
       }
       if (effect.phase === 'repair') {
-        const ids = affected(record);
         const id = ids[effect.key_offset];
         if (id) {
           const idRoute = routeOf(id);
@@ -629,42 +644,56 @@ async function advanceSearchErasure(
         } else await update("phase='fence'");
         return progress('more', 'repair');
       }
-      if (effect.phase === 'fence') {
-        const result = await receive(() => guard.fencePublication(native, context));
-        if (result.status !== 'fenced') return pending('writer-unavailable', 'drain');
-        await update("phase='drain',fence=$9", [result.fence.fence]);
-        return progress('more', 'drain');
-      }
-      if (!effect.fence) return pending('native-ambiguous', 'drain');
-      const fence: SearchWriterPublicationFence = { ...native, fence: effect.fence };
-      if (effect.phase === 'drain') {
-        const result = await receive(() => guard.drainPublication(fence, context));
-        if (result.status === 'drained') await update("phase='adopt'");
-        else if (result.status !== 'draining') return pending('writer-unavailable', 'drain');
-        return progress('more', 'drain');
-      }
-      if (effect.phase === 'adopt' || effect.phase === 'compact') {
-        // Adoption resolves the locator to current native gate/drain/copy custody each time.
-        const result = await receive(() => guard.adoptPublication(fence, context));
-        if (result.status !== 'held') return pending('writer-unavailable', 'drain');
-        await update("phase='compact'");
-        const merge = await engine('POST', `/${target.physicalTarget}/_forcemerge`, undefined, {
-          only_expunge_deletes: true,
-        });
-        validateRefreshResponse(merge.status, merge.body);
-        const clear = await engine('POST', `/${target.physicalTarget}/_cache/clear`);
-        validateRefreshResponse(clear.status, clear.body);
-        if (!(await exact(target))) return pending('population-unknown', 'drain');
-        await update("phase='settled'");
-        return progress('more', 'drain');
-      }
-      if (effect.phase === 'settled') {
-        const released = await receive(() => guard.releasePublication(fence, context));
-        if (released.status !== 'released') return pending('writer-unavailable', 'drain');
-        await update("phase='released',fence=NULL");
-        return progress('more', 'drain');
-      }
-      throw new TypeError('Invalid native erasure effect phase');
+      // Repair this page on every live target before waiting for the writer's
+      // independent terminal proof. One turn still performs one writer action.
+      drainNext ??= async () => {
+        if (effect.phase === 'fence') {
+          const result = await receive(() => guard.fencePublication(native, context));
+          if (result.status !== 'fenced') return pending('writer-unavailable', 'drain');
+          await update("phase='drain',fence=$9", [result.fence.fence]);
+          return progress('more', 'drain');
+        }
+        if (!effect.fence) return pending('native-ambiguous', 'drain');
+        const fence: SearchWriterPublicationFence = { ...native, fence: effect.fence };
+        if (effect.phase === 'drain') {
+          const result = await receive(() => guard.drainPublication(fence, context));
+          if (result.status === 'drained') await update("phase='adopt'");
+          else if (result.status !== 'draining') return pending('writer-unavailable', 'drain');
+          return progress('more', 'drain');
+        }
+        if (effect.phase === 'adopt' || effect.phase === 'compact') {
+          // Adoption resolves the locator to current native gate/drain/copy custody each time.
+          const result = await receive(() => guard.adoptPublication(fence, context));
+          if (result.status !== 'held') return pending('writer-unavailable', 'drain');
+          const merge = await engine('POST', `/${target.physicalTarget}/_forcemerge`, undefined, {
+            only_expunge_deletes: true,
+          });
+          validateRefreshResponse(merge.status, merge.body);
+          const clear = await engine('POST', `/${target.physicalTarget}/_cache/clear`);
+          validateRefreshResponse(clear.status, clear.body);
+          if (!(await exact(target))) return pending('population-unknown', 'drain');
+          const revision = ids.length === 1 ? await settledRevision(target, ids[0]!) : null;
+          await update("phase='settled',native_revision=$9", [revision ?? target.revision]);
+          return progress('more', 'drain');
+        }
+        if (effect.phase === 'settled') {
+          const released = await receive(() => guard.releasePublication(fence, context));
+          if (released.status !== 'released') return pending('writer-unavailable', 'drain');
+          await update("phase='released',fence=NULL");
+          return progress('more', 'drain');
+        }
+        throw new TypeError('Invalid native erasure effect phase');
+      };
+    }
+    let proof: SubjectErasureSourceProof | undefined;
+    if (drainNext || page.status === 'complete') {
+      turn.check();
+      const terminal = await advanceSubjectErasureSourceProof({ pool }, barrier, context);
+      turn.check();
+      if (terminal.status === 'progress') return progress('more', 'source');
+      if (terminal.status !== 'complete') return pending('source-unavailable', 'source');
+      if (drainNext) return await drainNext();
+      proof = terminal.proof;
     }
     // The producer validates its native barrier again after effects. A changed source never advances
     // the raw frontier, and no page receipt/record body is stored in DBOS history or Search SQL.
@@ -704,7 +733,7 @@ async function advanceSearchErasure(
     turn.check();
     const finalized = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
       turn.check();
-      if (!(await verifySubjectErasureSourceProof(tx, barrier, terminal.proof))) return noEffect(false);
+      if (!proof || !(await verifySubjectErasureSourceProof(tx, barrier, proof))) return noEffect(false);
       turn.check();
       const updated = await tx.query(
         `UPDATE search.erasure_progress SET phase='done',pending_reason=NULL
@@ -768,6 +797,22 @@ async function advanceSearchErasure(
     turn.check();
     if (!search) throw new Error('Search erasure unavailable');
     return search.request(method, path, body, query ? { query } : undefined);
+  }
+  // Captured under the adopted, compacted publication fence. A later enrollment,
+  // including a cancelled or unsettled dispatch, cannot reuse its settlement.
+  async function settledRevision(target: Target, id: string): Promise<string | null> {
+    const receipt = (
+      await query<{ settled_transaction_id: string }>(
+        `SELECT w.settled_transaction_id FROM search.identity_writer w
+       JOIN core.partition p ON p.partition_no=w.partition_no AND p.epoch=w.owner_epoch
+         AND p.position>=w.settled_position AND p.write_state='active'
+       WHERE w.partition_no=$1 AND w.physical_target=$2 AND w.original_id=$3 AND w.incarnation=$4
+         AND w.writer_token IS NULL AND w.dispatch_state='settled'
+         AND w.visible_transaction_id=w.settled_transaction_id AND w.visible_position=w.settled_position`,
+        [partitionOf(routeOf(id)!), target.physicalTarget, id, target.incarnation],
+      )
+    ).rows[0];
+    return receipt ? `${target.incarnation}/${id}/${receipt.settled_transaction_id}` : null;
   }
   async function exact(target: PublicFilterConsumer) {
     const response = await engine('GET', `/${target.physicalTarget}/_settings`);

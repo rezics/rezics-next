@@ -5,6 +5,7 @@ import type { Pool } from 'pg';
 import {
   authoritativeTimeValue,
   currentCommand,
+  registerCommandCallback,
   noEffect,
   runCommand,
   type CommandTransaction,
@@ -24,7 +25,7 @@ import {
 } from './events.ts';
 import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 import type { Effect } from '../events/effects.ts';
-import { recordSemanticSourceDisposition } from './erasure-producer.ts';
+import { recordSemanticSourceCommit, recordSemanticSourceDisposition } from './erasure-producer.ts';
 
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
@@ -892,12 +893,27 @@ async function advanceEmptyHome(
         [partition, accountId],
       );
       if (pending.rowCount) return noEffect(false);
-      if (progress.sourceProtocol === 1)
-        await tx.query(
+      if (progress.sourceProtocol === 1) {
+        const seal = await tx.query(
           `INSERT INTO semantic.erasure_source_seal(partition_no,account_id,version,at)
            VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
           [partition, accountId, progress.sourceVersion, progress.at],
         );
+        // Retain EOF in the sealing command only for a genuinely empty role directory.
+        // Both Source cursors can resolve this hold independently in its owning home.
+        if (seal.rowCount)
+          registerCommandCallback(tx, async (transactionId) => {
+            const held = await tx.query(
+              `INSERT INTO semantic.erasure_source_hold
+                 (partition_no,id,account_id,version,at,store,record_key,role,delivery_position,transaction_id,origin_key)
+               SELECT $1,$2,$2,$3,$4,'',0,'',0,$5,''
+               WHERE NOT EXISTS (SELECT 1 FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2)
+               ON CONFLICT DO NOTHING`,
+              [partition, accountId, progress.sourceVersion, progress.at, transactionId],
+            );
+            if (held.rowCount) await recordSemanticSourceCommit(tx, transactionId);
+          });
+      }
       await tx.query(
         `INSERT INTO semantic.erasure_home(partition_no,account_id,at,state,applied)
           VALUES($1,$2,$3,'complete',$4) ON CONFLICT(partition_no,account_id)
