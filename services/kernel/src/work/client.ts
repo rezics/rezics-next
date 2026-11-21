@@ -88,15 +88,24 @@ export async function hasRetainedWorkCopies(client: PoolClient, workflowId: stri
 }
 
 /** Enqueue without launching an executor. A supplied pool remains the caller's responsibility. */
-export async function createWorkClient(databaseUrl: string, pool?: Pool): Promise<WorkClient> {
+export async function createWorkClient(
+  databaseUrl: string,
+  pool?: Pool,
+  options?: { preserveSchedules?: boolean },
+): Promise<WorkClient> {
   const client = await DBOSClient.create({
     systemDatabaseUrl: databaseUrl,
     systemDatabaseSchemaName: DBOS_SCHEMA,
     applicationName: WORK_APPLICATION,
     systemDatabasePoolSize: 10,
+    ...(options?.preserveSchedules ? { preserveSchedules: true } : {}),
     ...(pool === undefined ? {} : { systemDatabasePool: pool }),
     logger: { info() {}, debug() {}, warn: console.warn, error: console.error },
   });
+  if (options?.preserveSchedules && client.preserveSchedules !== true) {
+    await client.destroy();
+    throw new Error('Historical worker requires the SDK with schedule-preserving registration');
+  }
   if (pool) bindSelectedWorkClient(client, pool);
   const listWorkflowSteps = client.listWorkflowSteps.bind(client);
   let ownsLookupPool = false;

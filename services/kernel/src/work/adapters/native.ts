@@ -149,6 +149,7 @@ export function createNativeWorkPorts(
           systemDatabaseSchemaName: config.systemDatabaseSchemaName,
           systemDatabasePool: asPool(config.systemDatabasePool),
           runMigrations: config.runMigrations,
+          ...(config.drainOriginals ? { drainOriginals: true } : {}),
           logLevel: config.logLevel as 'warn',
           ...(config.executorID === undefined ? {} : { executorID: config.executorID }),
         });

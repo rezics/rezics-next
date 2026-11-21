@@ -46,10 +46,13 @@ export function createComposer(
         systemDatabasePool: options.pool,
         runMigrations: false,
         logLevel: 'warn',
+        ...(options.drainOriginals ? { drainOriginals: true } : {}),
         ...(options.executorId === undefined ? {} : { executorID: options.executorId }),
       });
-      for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
-        await ports.sdkRuntime.registerQueue(options.client, name, parameters);
+      if (!options.drainOriginals) {
+        for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
+          await ports.sdkRuntime.registerQueue(options.client, name, parameters);
+        }
       }
       const collectedEffects: WorkEffect[] = [];
       const history = ports.historyRegistry.create();
@@ -65,6 +68,7 @@ export function createComposer(
         env,
         clock,
         history,
+        ...(options.drainOriginals ? { drainOriginals: true } : {}),
         getSelectedRuntime() {
           return (selectedRuntime ??= composeSelectedRuntime(options.pool, options.client));
         },
@@ -96,9 +100,9 @@ export function createComposer(
           if (!accepting) throw new WorkCompositionError('Cannot add native effects after work composition');
           collectedEffects.push(...effects);
         },
-        addService(start) {
+        addService(start, serviceOptions) {
           if (!accepting) throw new WorkCompositionError('Cannot add a service after composition');
-          serviceStarters.push(start);
+          if (!options.drainOriginals || serviceOptions?.servesOriginals) serviceStarters.push(start);
         },
       });
       try {

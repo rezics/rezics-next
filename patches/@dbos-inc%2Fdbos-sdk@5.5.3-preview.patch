@@ -15,8 +15,9 @@
 # retireWorkflow(id, invocation) with a finite maxAttempts, absolute deadline, prepaid reserve
 # and failed-work accounting. Lost COMMIT responses reread the same workflow ID. Reproducer:
 # sdk-retirement-fence.test.ts bounded invocation cases.
+# Historical worker mode keeps original versioned queue dispatch but leaves schedule ownership and new work with the active deployment.
 diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
-index 8a0fee52be..71a7eb41e6 100644
+index 8a0fee5..7b6e746 100644
 --- a/dist/src/client.d.ts
 +++ b/dist/src/client.d.ts
 @@ -1,3 +1,6 @@
@@ -26,7 +27,34 @@ index 8a0fee52be..71a7eb41e6 100644
  import { type SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
  import { DLogger } from './telemetry/logs';
  import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
-@@ -221,6 +224,23 @@ export declare class DBOSClient {
+@@ -50,6 +53,8 @@ export declare class ClientHandle<R> implements WorkflowHandle<R> {
+ export declare class DBOSClient {
+     #private;
+     readonly serializer: DBOSSerializer;
++    /** True when application schedule provisioning is disabled for this client. */
++    readonly preserveSchedules: boolean;
+     private readonly logger;
+     private readonly systemDatabase;
+     private constructor();
+@@ -68,7 +73,7 @@ export declare class DBOSClient {
+      * @param sharding - Whether the system database is sharded (requires @dbos-inc/dbos-enterprise). Defaults to false.
+      * @returns A Promise that resolves with the DBOSClient instance.
+      */
+-    static create({ systemDatabaseUrl, systemDatabasePool, serializer, systemDatabaseSchemaName, systemDatabasePoolSize, systemDatabasePollingConcurrency, logger, applicationName, observabilityQueryTimeoutMs, systemDatabaseIdleTransactionTimeoutMs, sharding, }: {
++    static create({ systemDatabaseUrl, systemDatabasePool, serializer, systemDatabaseSchemaName, systemDatabasePoolSize, systemDatabasePollingConcurrency, logger, applicationName, observabilityQueryTimeoutMs, systemDatabaseIdleTransactionTimeoutMs, sharding, preserveSchedules, }: {
+         systemDatabaseUrl: string;
+         systemDatabasePool?: Pool;
+         serializer?: DBOSSerializer;
+@@ -80,6 +85,8 @@ export declare class DBOSClient {
+         observabilityQueryTimeoutMs?: number;
+         systemDatabaseIdleTransactionTimeoutMs?: number;
+         sharding?: boolean;
++        /** Preserve the active deployment's schedules during registration of a historical worker. */
++        preserveSchedules?: boolean;
+     }): Promise<DBOSClient>;
+     /** The application this client acts on behalf of; undefined if it writes unclaimed rows. */
+     get applicationName(): string | undefined;
+@@ -221,6 +228,23 @@ export declare class DBOSClient {
      }): Promise<WorkflowHandle<Awaited<T>>[]>;
      setWorkflowPriority(workflowID: string, priority: number, options?: ShardKeyOptions): Promise<void>;
      setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
@@ -50,7 +78,7 @@ index 8a0fee52be..71a7eb41e6 100644
      deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      forkWorkflow(workflowID: string, startStep: number, options?: {
-@@ -253,6 +273,10 @@ export declare class DBOSClient {
+@@ -253,6 +277,10 @@ export declare class DBOSClient {
      getWorkflow(workflowID: string, options?: ShardKeyOptions): Promise<WorkflowStatus | undefined>;
      listWorkflows(input: GetWorkflowsInput): Promise<WorkflowStatus[]>;
      listQueuedWorkflows(input: GetWorkflowsInput): Promise<WorkflowStatus[]>;
@@ -62,10 +90,24 @@ index 8a0fee52be..71a7eb41e6 100644
      waitFirst(handles: WorkflowHandle<unknown>[], options?: WaitFirstOptions): Promise<WorkflowHandle<unknown>>;
      waitAll<R>(handles: WorkflowHandle<R>[], options?: WaitAllOptions): Promise<WorkflowHandle<R>[]>;
 diff --git a/dist/src/client.js b/dist/src/client.js
-index 7a6d950117..535517cb48 100644
+index 7a6d950..8fc1499 100644
 --- a/dist/src/client.js
 +++ b/dist/src/client.js
-@@ -368,6 +368,35 @@ class DBOSClient {
+@@ -82,11 +82,12 @@ class DBOSClient {
+      * @param sharding - Whether the system database is sharded (requires @dbos-inc/dbos-enterprise). Defaults to false.
+      * @returns A Promise that resolves with the DBOSClient instance.
+      */
+-    static async create({ systemDatabaseUrl, systemDatabasePool, serializer, systemDatabaseSchemaName, systemDatabasePoolSize, systemDatabasePollingConcurrency, logger, applicationName, observabilityQueryTimeoutMs, systemDatabaseIdleTransactionTimeoutMs, sharding, }) {
++    static async create({ systemDatabaseUrl, systemDatabasePool, serializer, systemDatabaseSchemaName, systemDatabasePoolSize, systemDatabasePollingConcurrency, logger, applicationName, observabilityQueryTimeoutMs, systemDatabaseIdleTransactionTimeoutMs, sharding, preserveSchedules, }) {
+         const client = new DBOSClient(systemDatabaseUrl, systemDatabasePool, serializer ?? serialization_1.DBOSJSON, systemDatabaseSchemaName, systemDatabasePoolSize, systemDatabasePollingConcurrency, logger, applicationName, observabilityQueryTimeoutMs, systemDatabaseIdleTransactionTimeoutMs, sharding);
+         try {
+             // Unkeyed statements on a sharded schema would read and write across every tenant's rows.
+             await client.systemDatabase.checkShardedSchema();
++            client.preserveSchedules = preserveSchedules === true;
+         }
+         catch (e) {
+             await client.destroy();
+@@ -368,6 +369,35 @@ class DBOSClient {
          const shardKey = typeof options === 'object' ? options.shardKey : undefined;
          return await (0, shard_keys_1.bindShardKeys)([[workflowID, shardKey]], () => this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS));
      }
@@ -101,7 +143,7 @@ index 7a6d950117..535517cb48 100644
      deleteWorkflow(workflowID, deleteChildren = false, options) {
          return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
-@@ -401,6 +430,12 @@ class DBOSClient {
+@@ -401,6 +431,12 @@ class DBOSClient {
      listQueuedWorkflows(input) {
          return (0, workflow_management_1.listQueuedWorkflows)(this.systemDatabase, input);
      }
@@ -114,8 +156,50 @@ index 7a6d950117..535517cb48 100644
      async listWorkflowSteps(workflowID, options) {
          return await (0, shard_keys_1.bindShardKeys)([[workflowID, options?.shardKey]], () => (0, workflow_management_1.listWorkflowSteps)(this.systemDatabase, workflowID, true, options));
      }
+@@ -537,6 +573,7 @@ class DBOSClient {
+         await this.systemDatabase.updateSchedule(name, internalUpdates);
+     }
+     async applySchedules(schedules) {
++        if (this.preserveSchedules) return;
+         const internals = [];
+         for (const sched of schedules) {
+             (0, crontab_1.validateCrontab)(sched.schedule);
+diff --git a/dist/src/config.js b/dist/src/config.js
+index 1ab8b4f..739fda2 100644
+--- a/dist/src/config.js
++++ b/dist/src/config.js
+@@ -157,6 +157,7 @@ function translateDbosConfig(options) {
+             },
+             otelAttributeFormat: options.otelAttributeFormat ?? 'legacy',
+         },
++        drainOriginals: options.drainOriginals,
+         schedulerPollingIntervalMs: options.schedulerPollingIntervalMs,
+         maxConcurrentQueueDispatches: options.maxConcurrentQueueDispatches,
+         useListenNotify: options.useListenNotify ?? true,
+diff --git a/dist/src/dbos-executor.d.ts b/dist/src/dbos-executor.d.ts
+index 48b8b27..51ed8e1 100644
+--- a/dist/src/dbos-executor.d.ts
++++ b/dist/src/dbos-executor.d.ts
+@@ -112,6 +112,8 @@ export interface DBOSConfig {
+      * reserves half) leave little of the pool for control-plane operations.
+      */
+     maxConcurrentQueueDispatches?: number;
++    /** Run already versioned work without starting scheduler or background producers. */
++    drainOriginals?: boolean;
+     schedulerPollingIntervalMs?: number;
+     useListenNotify?: boolean;
+     /** Interval (ms) for coalescing LISTEN/NOTIFY notifications (streams and events) off the write path; bounds read latency. Default 10, min 1. */
+@@ -176,6 +178,8 @@ export type DBOSConfigInternal = {
+     systemDatabaseSchemaName: string;
+     serializer: DBOSSerializer;
+     telemetry: TelemetryConfig;
++    /** Run already versioned work without starting scheduler or background producers. */
++    drainOriginals?: boolean;
+     schedulerPollingIntervalMs?: number;
+     maxConcurrentQueueDispatches?: number;
+     useListenNotify: boolean;
 diff --git a/dist/src/dbos-executor.js b/dist/src/dbos-executor.js
-index 8355716c2b..1c001646bb 100644
+index 8355716..4af8937 100644
 --- a/dist/src/dbos-executor.js
 +++ b/dist/src/dbos-executor.js
 @@ -53,6 +53,88 @@ exports.OperationType = {
@@ -207,7 +291,20 @@ index 8355716c2b..1c001646bb 100644
      config;
      initialized;
      conductor = undefined;
-@@ -653,7 +735,11 @@ class DBOSExecutor {
+@@ -141,6 +223,12 @@ class DBOSExecutor {
+         if (utils_1.globalParams.appVersion === '') {
+             utils_1.globalParams.appVersion = this.computeAppVersion();
+         }
++        // Do not register or recover under a new or active application version during historical drain.
++        if (this.config.drainOriginals) {
++            const versions = await this.systemDatabase.listApplicationVersions();
++            if (!versions.slice(1).some(version => version.versionName === utils_1.globalParams.appVersion))
++                throw new error_1.DBOSInitializationError(`Historical drain requires an existing, superseded application version: ${utils_1.globalParams.appVersion}`);
++        }
+         // Any initialization hooks
+         const classnames = (0, decorators_1.getAllRegisteredClassNames)();
+         for (const cls of classnames) {
+@@ -653,7 +741,11 @@ class DBOSExecutor {
                  };
                  await (0, context_1.runInStepContext)(lctx, funcID, attempt, async () => {
                      const sf = stepFn;
@@ -220,8 +317,29 @@ index 8355716c2b..1c001646bb 100644
                  });
              });
              if (timeoutMS === undefined) {
+@@ -886,6 +978,8 @@ class DBOSExecutor {
+             return;
+         this.#eventReceiversActive = true;
+         this.#wfqEnded = wfqueue_1.wfQueueRunner.dispatchLoop(this, listenQueues, this.config.maxConcurrentQueueDispatches);
++        // Queue dispatch alone executes existing descendants, sleeps, and retry records on this version.
++        if (this.config.drainOriginals) return;
+         // Background jobs outlive deactivateEventReceivers (they stop after the shutdown drain), so a restart must not start a second loop.
+         if (!this.#backgroundJobsAbort) {
+             this.#backgroundJobsAbort = new AbortController();
+@@ -901,6 +995,11 @@ class DBOSExecutor {
+         if (!this.#eventReceiversActive)
+             return;
+         this.#eventReceiversActive = false;
++        if (this.config.drainOriginals) {
++            wfqueue_1.wfQueueRunner.stop();
++            await this.#wfqEnded;
++            return;
++        }
+         this.logger.debug('Deactivating lifecycle listeners');
+         for (const lcl of (0, decorators_1.getLifecycleListeners)()) {
+             try {
 diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
-index dd663ff7a8..727a64ce01 100644
+index dd663ff..727a64c 100644
 --- a/dist/src/dbos.d.ts
 +++ b/dist/src/dbos.d.ts
 @@ -1,3 +1,6 @@
@@ -264,9 +382,18 @@ index dd663ff7a8..727a64ce01 100644
      /**
       * Run the enclosed `callback` as a checkpointed step within a DBOS workflow
 diff --git a/dist/src/dbos.js b/dist/src/dbos.js
-index 370a89e439..fbfd616bf6 100644
+index 370a89e..e9edf0a 100644
 --- a/dist/src/dbos.js
 +++ b/dist/src/dbos.js
+@@ -423,7 +423,7 @@ class DBOS {
+         }
+         await executor.init();
+         // Register the current application version
+-        await executor.systemDatabase.createApplicationVersion(utils_1.globalParams.appVersion);
++        if (!internalConfig.drainOriginals) await executor.systemDatabase.createApplicationVersion(utils_1.globalParams.appVersion);
+         const latest = await executor.systemDatabase.getLatestApplicationVersion();
+         if (latest.versionName !== utils_1.globalParams.appVersion) {
+             executor.logger.warn(`Current version '${utils_1.globalParams.appVersion}' is not the latest version. Latest version is '${latest.versionName}'.`);
 @@ -804,6 +804,14 @@ class DBOS {
       * @param input - `GetWorkflowsInput` predicate for filtering returned workflows
       * @returns `WorkflowStatus` array containing details of the matching workflows
@@ -318,7 +445,7 @@ index 370a89e439..fbfd616bf6 100644
          const name = config.name ?? func.name;
          (0, step_1.validateStepConfig)(config, name);
 diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
-index 5d56b40172..c8c9541778 100644
+index 5d56b40..c8c9541 100644
 --- a/dist/src/index.d.ts
 +++ b/dist/src/index.d.ts
 @@ -1,3 +1,8 @@
@@ -331,7 +458,7 @@ index 5d56b40172..c8c9541778 100644
  export type { StepReservation } from './dbos';
  export { DBOSClient } from './client';
 diff --git a/dist/src/index.js b/dist/src/index.js
-index f549f85e59..4d177df971 100644
+index f549f85..4d177df 100644
 --- a/dist/src/index.js
 +++ b/dist/src/index.js
 @@ -37,6 +37,12 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
@@ -349,7 +476,7 @@ index f549f85e59..4d177df971 100644
  Object.defineProperty(exports, "DebouncerClient", { enumerable: true, get: function () { return debouncer_1.DebouncerClient; } });
 diff --git a/dist/src/selected_execution.d.ts b/dist/src/selected_execution.d.ts
 new file mode 100644
-index 0000000000..9fb11a30c8
+index 0000000..9fb11a3
 --- /dev/null
 +++ b/dist/src/selected_execution.d.ts
 @@ -0,0 +1,11 @@
@@ -409,7 +536,7 @@ index 7f21387..35e47b6 100644
 \ No newline at end of file
 diff --git a/dist/src/sysdb_migrations/internal/selected_step_execution.js b/dist/src/sysdb_migrations/internal/selected_step_execution.js
 new file mode 100644
-index 0000000000..188d63ded2
+index 0000000..188d63d
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/selected_step_execution.js
 @@ -0,0 +1,109 @@
@@ -524,7 +651,7 @@ index 0000000000..188d63ded2
 +exports.selectedStepExecutionMigration = selectedStepExecutionMigration;
 diff --git a/dist/src/sysdb_migrations/internal/workflow_status_scan.js b/dist/src/sysdb_migrations/internal/workflow_status_scan.js
 new file mode 100644
-index 0000000000..70247378cc
+index 0000000..7024737
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/workflow_status_scan.js
 @@ -0,0 +1,14 @@
@@ -544,7 +671,7 @@ index 0000000000..70247378cc
 +}
 diff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 new file mode 100644
-index 0000000000..59a4b3fcd2
+index 0000000..59a4b3f
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 @@ -0,0 +1,201 @@
@@ -750,7 +877,7 @@ index 0000000000..59a4b3fcd2
 +}
 +exports.workflowWriterFenceTransactionMigration = workflowWriterFenceTransactionMigration;
 diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
-index 8f66187dfd..ea06b82e2f 100644
+index 8f66187..ea06b82 100644
 --- a/dist/src/system_database.d.ts
 +++ b/dist/src/system_database.d.ts
 @@ -1,3 +1,5 @@
@@ -1070,9 +1197,27 @@ index 79ef595..0bf82b7 100644
      async listWorkflows(input, options = {}) {
          return await this.#listWorkflows(input, options);
      }
+diff --git a/dist/src/wfqueue.js b/dist/src/wfqueue.js
+index 77c32ef..7a3c9f7 100644
+--- a/dist/src/wfqueue.js
++++ b/dist/src/wfqueue.js
+@@ -731,11 +731,11 @@ class WFQueueRunner {
+         };
+         // Each scope dequeues independently; a sharded system database has one per shard key with work.
+         let scopes;
+-        let isLatestVersion = undefined;
++        let isLatestVersion = exec.config.drainOriginals ? false : undefined;
+         try {
+             scopes = await sysdb.dequeueScopes(queue.name);
+             // A sharded database keeps the version row under another key, so read it once per poll outside the claims.
+-            if (scopes.length > 0 && sysdb.sharded) {
++            if (isLatestVersion === undefined && scopes.length > 0 && sysdb.sharded) {
+                 isLatestVersion = await sysdb.isLatestVersion(utils_1.globalParams.appVersion);
+             }
+         }
 diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
 new file mode 100644
-index 0000000000..c4b5d0f995
+index 0000000..c4b5d0f
 --- /dev/null
 +++ b/dist/src/workflow_retirement.d.ts
 @@ -0,0 +1,47 @@
@@ -1125,7 +1270,7 @@ index 0000000000..c4b5d0f995
 +}
 diff --git a/dist/src/workflow_retirement.js b/dist/src/workflow_retirement.js
 new file mode 100644
-index 0000000000..993b515a0a
+index 0000000..993b515
 --- /dev/null
 +++ b/dist/src/workflow_retirement.js
 @@ -0,0 +1,6 @@
@@ -1137,7 +1282,7 @@ index 0000000000..993b515a0a
 +exports.WorkflowRetirementBudgetError = invoke.WorkflowRetirementBudgetError;
 diff --git a/dist/src/workflow_retirement_invoke.js b/dist/src/workflow_retirement_invoke.js
 new file mode 100644
-index 0000000000..89462830d2
+index 0000000..8946283
 --- /dev/null
 +++ b/dist/src/workflow_retirement_invoke.js
 @@ -0,0 +1,230 @@
@@ -1373,7 +1518,7 @@ index 0000000000..89462830d2
 +exports.invokeRetireWorkflow = invokeRetireWorkflow;
 diff --git a/dist/src/workflow_status_scan.d.ts b/dist/src/workflow_status_scan.d.ts
 new file mode 100644
-index 0000000000..0c434b63d6
+index 0000000..0c434b6
 --- /dev/null
 +++ b/dist/src/workflow_status_scan.d.ts
 @@ -0,0 +1,45 @@
@@ -1424,7 +1569,7 @@ index 0000000000..0c434b63d6
 +export declare const WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES: readonly WorkflowStatusString[];
 diff --git a/dist/src/workflow_status_scan.js b/dist/src/workflow_status_scan.js
 new file mode 100644
-index 0000000000..5a191fafce
+index 0000000..5a191fa
 --- /dev/null
 +++ b/dist/src/workflow_status_scan.js
 @@ -0,0 +1,158 @@

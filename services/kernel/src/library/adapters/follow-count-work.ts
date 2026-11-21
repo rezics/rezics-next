@@ -215,10 +215,12 @@ export async function registerFollowCountWork(context: WorkContext) {
     },
   ]);
   // Cold registration wakes the same deduplicated sweep before the first cron turn.
-  const { rowCount: cold } = await withConnection(pool, (tx) =>
-    tx.query('SELECT 1 FROM library.follow_count_health WHERE node=0 AND NOT ready'),
-  );
-  if (cold) await enqueueSweep();
+  if (!context.drainOriginals) {
+    const { rowCount: cold } = await withConnection(pool, (tx) =>
+      tx.query('SELECT 1 FROM library.follow_count_health WHERE node=0 AND NOT ready'),
+    );
+    if (cold) await enqueueSweep();
+  }
   addEffects([
     {
       name: 'library_follow_count_account',

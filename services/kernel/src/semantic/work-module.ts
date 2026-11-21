@@ -103,7 +103,7 @@ export function createSemanticWorkModule(
     async register(context) {
       const searchNativePorts = await composeSearchNativePorts?.();
       // Establish the writer cut before DBOS can resume an old bootstrap delivery.
-      await installIdentityEpochBootstrap(context.pool);
+      if (!context.drainOriginals) await installIdentityEpochBootstrap(context.pool);
       const config = readMembershipWorkConfig(context.env);
       const names = new Set(Object.values(roles.roles).flat());
       const actions = new Map(

@@ -19,18 +19,20 @@ export type WorkContext = {
   readonly client: WorkClient;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly clock: KernelClock;
+  readonly drainOriginals?: boolean;
   readonly history?: HistoryRegistry;
   getAuthorization(): WorkerAuthorization;
   getSelectedRuntime?(): SelectedRuntime;
   getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
   addEffects(effects: Effect[]): void;
   addNativeEffects?(effects: NativeEffect[]): void;
-  addService(start: () => WorkService | Promise<WorkService>): void;
+  addService(start: () => WorkService | Promise<WorkService>, options?: { servesOriginals: true }): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
 export type WorkOptions = {
   databaseUrl: string;
   executorId?: string;
+  drainOriginals?: boolean;
   pool: Pool;
   client: WorkClient;
   env?: Readonly<Record<string, string | undefined>>;
@@ -50,6 +52,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     pool: options.pool,
     client: options.client,
     env: options.env ?? process.env,
+    ...(options.drainOriginals ? { drainOriginals: true } : {}),
     clock: options.clock ?? systemClock,
     ...(options.executorId === undefined ? {} : { executorId: options.executorId }),
     ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),

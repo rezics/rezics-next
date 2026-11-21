@@ -63,6 +63,7 @@ export type WorkerConfig = {
   databaseUrl: string;
   executorId?: string;
   poolSize: number;
+  drainOriginals?: boolean;
   receiptKeys?: KeyRing;
   /** Trusted service composition only; never read from the environment. */
   clock?: KernelClock;
@@ -96,6 +97,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   if (!/^\d+$/.test(size) || Number(size) < 3 || Number(size) > 100) {
     throw new ConfigError('KERNEL_WORKER_POOL_SIZE');
   }
+  const mode = env.KERNEL_WORKER_MODE ?? 'active';
+  if (mode !== 'active' && mode !== 'drain-originals') throw new ConfigError('KERNEL_WORKER_MODE');
   let executorId = env.KERNEL_EXECUTOR_ID;
   if (executorId !== undefined) {
     if (!/^[A-Za-z0-9_.:-]{1,255}$/.test(executorId)) throw new ConfigError('KERNEL_EXECUTOR_ID');
@@ -113,6 +116,7 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   return {
     databaseUrl: databaseUrl!,
     poolSize: Number(size),
+    ...(mode === 'drain-originals' ? { drainOriginals: true } : {}),
     ...(receiptKeys === undefined ? {} : { receiptKeys }),
     ...(executorId === undefined ? {} : { executorId }),
   };
@@ -166,7 +170,7 @@ export async function startWorker(
   composeLibraryDomain({ pool });
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
-    client = await createWorkClient(config.databaseUrl, pool);
+    client = await createWorkClient(config.databaseUrl, pool, { preserveSchedules: config.drainOriginals === true });
     bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   } catch (error) {
     content.stop();
@@ -240,19 +244,19 @@ export async function startWorker(
           let serviceIndex = 0;
           return module.register({
             ...context,
-            addService(start) {
+            addService(start, options) {
               const phase = `service.${module.name}.${serviceIndex++}.stop`;
               context.addService(async () => {
                 const service = await start();
                 return { ...service, stop: () => shutdownPhase(phase).run(() => service.stop()) };
-              });
+              }, options);
             },
           });
         },
       }));
       work = await composeWork(tracedModules, { ...config, pool, client, env });
       await work.launch();
-      if (config.effectsRelay !== false) {
+      if (!config.drainOriginals && config.effectsRelay !== false) {
         relays = startRelays(pool, [effectsRelay(pool, work.effects, config.effectsRelayProbe)], {
           concurrency: relayConcurrencyForPool(pool),
         });

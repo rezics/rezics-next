@@ -43,7 +43,7 @@ export const economyTestFundingWorkModule: WorkModule = {
     const target = binding(context.env);
     const client = context.client;
     const { scheduleName, workflowName } = ECONOMY_TEST_FUNDING_WORK;
-    const prior = await client.getSchedule(scheduleName);
+    const prior = context.drainOriginals ? null : await client.getSchedule(scheduleName);
     if (prior && (prior.workflowName !== workflowName || prior.applicationName !== WORK_APPLICATION))
       throw new Error(`Unexpected owner of Economy schedule ${scheduleName}`);
     if (!target) {

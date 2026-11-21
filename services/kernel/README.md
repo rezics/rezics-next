@@ -412,6 +412,15 @@ in `src/composition/work-modules.ts`, just as its HTTP routes register in `creat
 options and work client. Duplicate module names and registration after launch are refused. Modules never launch
 DBOS or create their own worker. The list is empty until modules add their work.
 
+For a rolling deployment, start the current worker first. Run the previous release with its original
+executor identity and `KERNEL_WORKER_MODE=drain-originals`. The drain process requires a previously
+registered, superseded SDK application version. Its queues run work already assigned to that version,
+including descendants and partitioned effects. The current deployment owns schedules, unversioned work,
+effects admission and periodic repair. Keep the old process available while any of its original workflows
+are pending, queued, delayed or suspended, including queues waiting for a partition held by another version.
+After they settle, release the old process through its normal SIGTERM shutdown. The dedicated Auth
+channel stays available to its in-flight Kernel work until that shutdown completes. The default mode is `active`.
+
 Every test that starts the shared kernel worker takes its environment from `workerTestEnv(overrides)` in
 `test/support/worker-env.ts`. Use `overrides` for optional all-or-nothing groups such as commerce's Stripe settings.
 Add a fixture there whenever a module adds a required worker variable; `test/support/worker-env.test.ts` fails when a

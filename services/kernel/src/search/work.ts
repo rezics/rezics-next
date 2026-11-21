@@ -405,7 +405,7 @@ export function createSearchWorkModule(
         { name: SCOPE_PREPARATION_WORKFLOW },
       );
       registerPublicPreparationWork(preparationGate.ready, context.client);
-      context.addService(async () => {
+      const startPreparation = async () => {
         const defaults = composeRuntimeDefaults({
           env: { ...context.env },
           clock: context.clock,
@@ -469,20 +469,22 @@ export function createSearchWorkModule(
         const publicRuntime = runtime;
         let scopeTick: Promise<void> | undefined;
         let scopeStopped = false;
-        const scopeTimer = setInterval(() => {
-          if (scopeStopped || scopeTick) return;
-          scopeTick = scopeStore
-            .due()
-            .catch(() => {
-              /* the next bounded discovery retries */
-            })
-            .finally(() => {
-              scopeTick = undefined;
-            });
-        }, 1000);
+        const scopeTimer = context.drainOriginals
+          ? undefined
+          : setInterval(() => {
+              if (scopeStopped || scopeTick) return;
+              scopeTick = scopeStore
+                .due()
+                .catch(() => {
+                  /* the next bounded discovery retries */
+                })
+                .finally(() => {
+                  scopeTick = undefined;
+                });
+            }, 1000);
         const halt = async () => {
           scopeStopped = true;
-          clearInterval(scopeTimer);
+          if (scopeTimer) clearInterval(scopeTimer);
           await scopeTick;
         };
         const closeGates = () => {
@@ -506,17 +508,18 @@ export function createSearchWorkModule(
           await publicRuntime.close();
           throw error;
         }
-        let runner: Awaited<ReturnType<typeof startSearchIndexing>>;
+        let runner: Awaited<ReturnType<typeof startSearchIndexing>> | undefined;
         try {
-          runner = await startSearchIndexing({
-            pool: context.pool,
-            search,
-            source,
-            listing,
-            prefix: searchConfig.prefix,
-            discovery: { routeKey, producers: discoveryProducers },
-            publicPreparation: preparation,
-          });
+          if (!context.drainOriginals)
+            runner = await startSearchIndexing({
+              pool: context.pool,
+              search,
+              source,
+              listing,
+              prefix: searchConfig.prefix,
+              discovery: { routeKey, producers: discoveryProducers },
+              publicPreparation: preparation,
+            });
         } catch (error) {
           await halt();
           closeGates();
@@ -528,17 +531,15 @@ export function createSearchWorkModule(
           throw error;
         }
         return {
-          pause: runner.pause,
-          resume: runner.resume,
-          refresh: runner.refresh,
+          ...(runner && { pause: runner.pause, resume: runner.resume, refresh: runner.refresh }),
           async stopAdmission() {
-            await Promise.all([halt(), runner.stopPolling()]);
+            await Promise.all([halt(), runner?.stopPolling()]);
           },
           async stop() {
             await halt();
             closeGates();
             try {
-              await runner.stop();
+              await runner?.stop();
             } finally {
               try {
                 await preparation.stop();
@@ -548,7 +549,8 @@ export function createSearchWorkModule(
             }
           },
         };
-      });
+      };
+      context.addService(startPreparation, { servesOriginals: true });
     },
   };
 }

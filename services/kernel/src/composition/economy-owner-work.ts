@@ -387,6 +387,7 @@ export const economyOwnerWorkModule: WorkModule = {
     registerSpotMatchWake(context, book);
     registerMarket(context, market);
     registerCreditExpiry(context, book);
+    if (context.drainOriginals) return;
     await reconcileSchedule(context.client, ECONOMY_SPOT_OWNER_WORK, book);
     await reconcileSchedule(context.client, ECONOMY_MARKET_OWNER_WORK, market);
     await reconcileSchedule(context.client, ECONOMY_CREDIT_EXPIRY_WORK, book);
