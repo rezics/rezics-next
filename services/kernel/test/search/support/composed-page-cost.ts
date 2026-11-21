@@ -33,7 +33,7 @@ const measured = new AsyncLocalStorage<PageSample>();
 type ReadStage = {
   filter: PublicFilterConsumerCaptureInput['filterDocument'];
   slots: number;
-  snapshot: 'pit' | 'prepared';
+  snapshot: Parameters<DefaultPublicFilterRuntime['bindRequest']>[0]['snapshot'];
   stage: 'bind' | 'capture' | 'query' | 'consume' | 'finish';
   status?: string;
   reason?: string;
