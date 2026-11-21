@@ -155,6 +155,57 @@ async function mergeMapped(
   }
 }
 
+test('repeated native Source capture keeps one write-basis row and reopens a completed home for pending work', async () => {
+  const actor = await f.author();
+  const id = await subject(actor, 'Repeated actor source');
+  const route = routeOf(id)!;
+  const home = partitionOf(route);
+  const client = await f.db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const revision = (
+      await client.query<{ key: string; tx: string }>(
+        'SELECT erasure_key::text AS key,recorded_transaction_id::text AS tx FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=1',
+        [route, id],
+      )
+    ).rows[0]!;
+    const capture = () =>
+      client.query("SELECT semantic.capture_erasure_roles($1,'revision',$2,$3)", [home, revision.key, revision.tx]);
+    const row = async () =>
+      (
+        await client.query<{ key: string; version: string }>(
+          'SELECT record_key::text AS key,ctid::text AS version FROM semantic.erasure_provenance WHERE partition_no=$1 AND transaction_id=$2',
+          [home, revision.tx],
+        )
+      ).rows[0]!;
+    await capture();
+    const owned = await row();
+    expect(owned).toBeDefined();
+    const pending = await client.query(
+      "SELECT 1 FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND role='actor' AND store='write_basis' AND record_key=$3 AND state='pending'",
+      [home, actor.accountId, owned.key],
+    );
+    expect(pending.rowCount).toBe(1);
+    await client.query(
+      "INSERT INTO semantic.erasure_home(partition_no,account_id,at,state) VALUES($1,$2,now(),'complete')",
+      [home, actor.accountId],
+    );
+    await capture();
+    expect(await row()).toEqual(owned);
+    expect(
+      (
+        await client.query('SELECT state FROM semantic.erasure_home WHERE partition_no=$1 AND account_id=$2', [
+          home,
+          actor.accountId,
+        ])
+      ).rows[0]?.state,
+    ).toBe('local');
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+}, 60_000);
+
 test('Search receives sealed role-complete Subject source disposition and actual source custody for the committed erased account without scalar-role or structural identity substitution', async () => {
   const author = await f.author();
   const survivor = await f.author();

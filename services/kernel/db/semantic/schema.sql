@@ -1096,9 +1096,15 @@ BEGIN
  END LOOP;
  SELECT * INTO b FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx;
  IF NOT FOUND THEN RETURN; END IF;
- INSERT INTO semantic.erasure_provenance(partition_no,transaction_id) VALUES(p_home,p_tx)
- ON CONFLICT(partition_no,transaction_id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
- RETURNING record_key INTO provenance_key;
+ -- Every captured record can refer to the same immutable write basis. Its own
+ -- transaction already holds the provenance row it just created or locked.
+ SELECT record_key INTO provenance_key FROM semantic.erasure_provenance
+ WHERE partition_no=p_home AND transaction_id=p_tx AND xmin::text=pg_current_xact_id()::text;
+ IF NOT FOUND THEN
+   INSERT INTO semantic.erasure_provenance(partition_no,transaction_id) VALUES(p_home,p_tx)
+   ON CONFLICT(partition_no,transaction_id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
+   RETURNING record_key INTO provenance_key;
+ END IF;
  IF b.principal_kind='account' THEN
   PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor',p_store,p_key,p_tx,b.position);
   PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor','write_basis',provenance_key,p_tx,b.position);
@@ -4318,7 +4324,7 @@ END; $$;
 CREATE FUNCTION semantic.record_erasure_locator(p_home integer, p_account uuid, p_role text, p_store text, p_key bigint, p_tx uuid, p_position bigint) RETURNS void
     LANGUAGE plpgsql
     AS $$
-DECLARE delivery bigint; is_global boolean:=false;
+DECLARE delivery bigint; locator_state text; is_global boolean:=false;
 BEGIN
  IF EXISTS(SELECT 1 FROM semantic.erasure_source_seal s WHERE s.partition_no=p_home AND s.account_id=p_account) THEN
   -- Re-reporting unchanged provenance of a survivor's existing row creates no new role.
@@ -4348,9 +4354,19 @@ BEGIN
  SET source_transaction_id=EXCLUDED.source_transaction_id,source_position=EXCLUDED.source_position,delivery_position=EXCLUDED.delivery_position,
  state=CASE WHEN semantic.erasure_locator.delivery_position IS DISTINCT FROM EXCLUDED.delivery_position THEN 'pending' ELSE semantic.erasure_locator.state END
  WHERE (erasure_locator.source_transaction_id,erasure_locator.source_position,erasure_locator.delivery_position)
-    IS DISTINCT FROM (EXCLUDED.source_transaction_id,EXCLUDED.source_position,EXCLUDED.delivery_position);
- -- A new native local obligation invalidates a previously empty local page. Late resolution uses the account-home inbox.
- UPDATE semantic.erasure_home SET state='local' WHERE partition_no=p_home AND account_id=p_account AND state='complete' AND EXISTS (SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.state='pending');
+    IS DISTINCT FROM (EXCLUDED.source_transaction_id,EXCLUDED.source_position,EXCLUDED.delivery_position)
+ RETURNING state INTO locator_state;
+ -- The writer already owns the locator. A changed row reports its state directly.
+ -- An unchanged survivor only needs its state checked when a completed home can reopen.
+ IF locator_state='pending' THEN
+  UPDATE semantic.erasure_home SET state='local'
+  WHERE partition_no=p_home AND account_id=p_account AND state='complete';
+ ELSIF locator_state IS NULL THEN
+  UPDATE semantic.erasure_home h SET state='local'
+  WHERE h.partition_no=p_home AND h.account_id=p_account AND h.state='complete'
+    AND EXISTS (SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=h.partition_no
+      AND l.account_id=h.account_id AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.state='pending');
+ END IF;
 END; $$;
 
 
