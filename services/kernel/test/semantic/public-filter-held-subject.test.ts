@@ -13,7 +13,10 @@ import {
   readHeldRepairHomes,
   readHeldSubjectOriginals,
 } from '../../src/semantic/public-filter-held-subject-originals.ts';
-import { readPublicFilterCreationWindow } from '../../src/semantic/public-filter-creation-window.ts';
+import {
+  readHeldQuietCommands,
+  readPublicFilterCreationWindow,
+} from '../../src/semantic/public-filter-creation-window.ts';
 import { identityEpochDatabase } from './support/identity-epoch.ts';
 import { retentionFixture } from '../history/subject-retention-fixture.ts';
 
@@ -341,6 +344,25 @@ test('held repair reopens the exact ordered prefix through a real original and r
     expect(
       await readHeldRepairHomes(db.pool, successor, context(), { heads: empty.map((row) => row.head), key: null }),
     ).toEqual(empty);
+    const command = (partition: number, count: number) =>
+      runCommand(db.pool, { partition }, async () => ({
+        value: null,
+        events: Array.from({ length: count }, () => ({ type: 'com.rezics.fixture.created.v1', data: null })),
+      }));
+    await command(1, 1);
+    await command(2, 2);
+    const windowInput = { ...input, after: null, inventory: false };
+    const windows = await readHeldRepairHomes(db.pool, windowInput, context());
+    const commands = await readHeldQuietCommands(db.pool, windows, 32);
+    expect(commands.get(1)).toHaveLength(1);
+    expect(commands.has(2)).toBe(false); // The complete multi-slot envelope belongs to the ordinary bridge.
+    expect(commands.has(3)).toBe(false); // A Book creation still requires Subject repair.
+    await command(1, 1);
+    const reopened = await readHeldRepairHomes(db.pool, windowInput, context(), {
+      heads: windows.map((row) => row.head),
+      key: null,
+    });
+    expect(await readHeldQuietCommands(db.pool, reopened, 32)).toEqual(commands);
     const client = await db.admin.connect();
     try {
       await client.query('BEGIN');

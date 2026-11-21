@@ -423,3 +423,62 @@ export async function readPublicFilterCreationEvents(
     packed: input.subjectRange && (target || stopped) ? `[${packed.join(',')}]` : undefined,
   };
 }
+
+/** Read every slot of small single-event command groups inside the caller's
+ * held-page snapshot. A gap, extra slot, minimized payload or relevant event
+ * leaves that entire home to the ordinary creation bridge. */
+export async function readHeldQuietCommands(
+  db: CreationReader,
+  homes: readonly Readonly<{ partition: number; epoch: number; base: string; head: string }>[],
+  eventLimit: number,
+) {
+  if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 32 || homes.length > 32)
+    throw new TypeError('Invalid held creation window allowance');
+  const positions: { home: number; position: string; epoch: number }[] = [];
+  const quiet = new Map<number, string[]>();
+  for (const home of homes) {
+    const base = BigInt(home.base),
+      head = BigInt(home.head);
+    if (head - base > BigInt(eventLimit - positions.length)) break;
+    quiet.set(home.partition, []);
+    for (let position = base + 1n; position <= head; position++)
+      positions.push({ home: home.partition, position: String(position), epoch: home.epoch });
+  }
+  if (!positions.length) return quiet;
+  const points = positions.length * 3;
+  const { rows } = await db.query<{
+    home: number;
+    position: string;
+    epoch: number;
+    id: string;
+    type: string;
+    subject: string | null;
+    digest: string;
+    basis: string | null;
+  }>(
+    `/* semantic.native-keyed:${points}:${points} */
+    SELECT k.home,k.position::text,k.epoch,o.id,o.type,o.subject,
+      encode(sha256(convert_to(o.data::text,'UTF8')),'hex') AS digest,b.transaction_id AS basis
+    FROM jsonb_to_recordset($1::jsonb) k(home integer,position bigint,epoch integer)
+    CROSS JOIN LATERAL (SELECT id,type,subject,data FROM core.outbox
+      WHERE (partition_no,position,event_seq)=(k.home,k.position,0) AND epoch=k.epoch AND event_count=1 AND payload_state='present'
+      LIMIT 1) o
+    LEFT JOIN LATERAL (SELECT transaction_id FROM editorial.write_basis
+      WHERE (partition_no,position,epoch)=(k.home,k.position,k.epoch) LIMIT 1) b ON true
+    WHERE NOT EXISTS (SELECT FROM core.outbox WHERE (partition_no,position)=(k.home,k.position) AND event_seq>0)
+    ORDER BY k.home,k.position`,
+    [JSON.stringify(positions)],
+  );
+  for (const row of rows) {
+    if (publicFilterCreationAction(row.type, false) !== null) quiet.delete(row.home);
+    else
+      quiet
+        .get(row.home)
+        ?.push(JSON.stringify([row.position, row.epoch, row.id, row.type, row.subject, row.digest, row.basis]));
+  }
+  for (const home of homes) {
+    if (BigInt(quiet.get(home.partition)?.length ?? -1) !== BigInt(home.head) - BigInt(home.base))
+      quiet.delete(home.partition);
+  }
+  return quiet;
+}

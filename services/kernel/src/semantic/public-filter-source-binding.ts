@@ -47,6 +47,7 @@ import {
   readPublicFilterCreationEvent,
   readPublicFilterCreationEvents,
   publicFilterCreationAction,
+  readHeldQuietCommands,
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
@@ -1733,7 +1734,10 @@ export function createNativePublicFilterSourceBinding(
     retained?: RepairRecord,
   ) {
     const batch = retained?.windowBatch;
-    const limit = Math.min(inputLimit, heldRepairHomes);
+    // Two independent reads share the ordinary 768-input reservation. A
+    // page with command evidence admits 16 homes and at most 32 commands.
+    const inspectEvents = !batch || batch.through !== undefined;
+    const limit = Math.min(inputLimit, inspectEvents ? 16 : heldRepairHomes);
     if (
       !state.heldBirth ||
       state.owner !== 'semantic' ||
@@ -1744,7 +1748,7 @@ export function createNativePublicFilterSourceBinding(
       state.projection ||
       state.bridge ||
       state.resumeBridge ||
-      (batch && (batch.from !== state.partition || batch.examined > limit || batch.through !== undefined))
+      (batch && (batch.from !== state.partition || batch.examined > limit))
     )
       throw new BindingError('binding_mismatch');
     const heads =
@@ -1755,18 +1759,27 @@ export function createNativePublicFilterSourceBinding(
         if (!window || window.partition !== partition) throw new BindingError('binding_mismatch');
         return String(window.through);
       });
-    const rows = await readHeldRepairHomes(
+    const birth = state.heldBirth;
+    const { rows, quiet } = await withReadTransaction(
       db,
-      {
-        bootstrap: nativeId(bootstrap),
-        birth: state.heldBirth,
-        partition: state.partition,
-        limit,
-        after: null,
-        inventory: false,
+      async (client) => {
+        const rows = await readHeldRepairHomes(
+          client,
+          {
+            bootstrap: nativeId(bootstrap),
+            birth,
+            partition: state.partition,
+            limit,
+            after: null,
+            inventory: false,
+          },
+          context,
+          heads ? { heads, key: null } : undefined,
+        );
+        const quiet = inspectEvents ? await readHeldQuietCommands(client, rows, Math.min(inputLimit, 32)) : null;
+        return { rows, quiet };
       },
-      context,
-      heads ? { heads, key: null } : undefined,
+      context.deadline,
     );
     const closed: PublicFilterCreationWindow[] = [];
     let open: PublicFilterCreationWindow | undefined;
@@ -1784,12 +1797,16 @@ export function createNativePublicFilterSourceBinding(
         sequence: 0,
         eventCount: null,
       };
-      if (through !== base) {
-        open = window;
+      if (through !== base && !quiet?.has(row.partition)) {
+        // Bind the nonempty closed prefix separately so its per-home through
+        // positions are independently decodable by the receiver. Old compact
+        // pages can include the first open home in the same receipt.
+        if (!inspectEvents || closed.length === 0) open = window;
         break;
       }
       closed.push(window);
     }
+    const commandProof = inspectEvents && !open;
     const examined = closed.length + Number(!!open);
     return {
       next: open
@@ -1800,7 +1817,15 @@ export function createNativePublicFilterSourceBinding(
         count: closed.length,
         examined,
         packed: packClosedCreationWindows(closed),
-        digest: hash(encode({ input: state, inputLimit, rows: rows.slice(0, examined) })),
+        ...(commandProof && { through: closed.map((w) => String(w.through)) }),
+        digest: hash(
+          encode({
+            input: state,
+            inputLimit,
+            rows: rows.slice(0, examined),
+            ...(commandProof && { commands: closed.map((w) => quiet!.get(w.partition) ?? []) }),
+          }),
+        ),
       },
     };
   }
