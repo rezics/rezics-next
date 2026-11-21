@@ -117,8 +117,19 @@ export type SpotOrderFill = Readonly<
 >;
 export type SpotOrderFillsPage = Readonly<{ fills: SpotOrderFill[]; after: string | null }>;
 
+export type SpotDiscoveryPage<T> = Readonly<{ entries: T[]; after: string | null }>;
+
+export const SPOT_DISCOVERY_PAGE_LIMIT = 100;
 export const SPOT_TRADE_PAGE_LIMIT = 100;
 export const SPOT_ORDER_FILL_PAGE_LIMIT = 100;
+
+export function isSpotInstrumentId(value: string): boolean {
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(value);
+}
+
+export function isSpotOrderSequence(value: string): boolean {
+  return /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= (1n << 63n) - 1n;
+}
 
 export function isSpotFillId(value: string): boolean {
   return /^[a-zA-Z0-9_/-]{1,255}$/.test(value);

@@ -3,11 +3,15 @@ import type { PoolClient } from 'pg';
 import {
   isEconomyBookId,
   isSpotFillId,
+  isSpotInstrumentId,
+  isSpotOrderSequence,
   isSpotTradePosition,
+  SPOT_DISCOVERY_PAGE_LIMIT,
   SPOT_ORDER_FILL_PAGE_LIMIT,
   SPOT_TRADE_PAGE_LIMIT,
   type EconomyFailure,
   type EconomyLedger,
+  type SpotDiscoveryPage,
   type SpotFillSettlement,
   type SpotOrderFill,
   type SpotOrderFillsPage,
@@ -99,14 +103,7 @@ function accountId(value: string): string | null {
   return uuid.test(value) && value !== nilAccount ? value.toLowerCase() : null;
 }
 
-async function readInstrument(tx: Query, bookId: string, id: string, lock = false): Promise<Instrument | null> {
-  const { rows } = await tx.query<InstrumentRow>(
-    `SELECT ${instrumentColumns} FROM economy.spot_instrument
-     WHERE book_id = $1 AND instrument_id = $2 ${lock ? 'FOR UPDATE' : ''}`,
-    [bookId, id],
-  );
-  const row = rows[0];
-  if (!row) return null;
+function instrumentOf(row: InstrumentRow): Instrument {
   const {
     feeAccountId,
     revision,
@@ -134,6 +131,15 @@ async function readInstrument(tx: Query, bookId: string, id: string, lock = fals
       },
     },
   };
+}
+
+async function readInstrument(tx: Query, bookId: string, id: string, lock = false): Promise<Instrument | null> {
+  const { rows } = await tx.query<InstrumentRow>(
+    `SELECT ${instrumentColumns} FROM economy.spot_instrument
+     WHERE book_id = $1 AND instrument_id = $2 ${lock ? 'FOR UPDATE' : ''}`,
+    [bookId, id],
+  );
+  return rows[0] ? instrumentOf(rows[0]) : null;
 }
 
 function orderOf(row: OrderRow, policyVersion: bigint): SpotOrder {
@@ -304,6 +310,26 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
       });
     },
 
+    listInstruments(limit: number, after: string | null): Promise<Result<SpotDiscoveryPage<SpotBook>>> {
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > SPOT_DISCOVERY_PAGE_LIMIT ||
+        (after !== null && !isSpotInstrumentId(after))
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return run('read', async (tx) => {
+        const { rows } = await tx.query<InstrumentRow>(
+          `SELECT ${instrumentColumns} FROM economy.spot_instrument
+           WHERE book_id = $1 AND instrument_id > $2
+           ORDER BY instrument_id LIMIT $3`,
+          [bookId, after ?? '', limit + 1],
+        );
+        const entries = rows.slice(0, limit).map((row) => instrumentOf(row).book);
+        return ok({ entries, after: rows.length > limit ? entries.at(-1)!.instrument.id : null });
+      });
+    },
+
     readBook(instrumentId: string): Promise<Result<SpotBook>> {
       return run('read', async (tx) => {
         const instrument = key.test(instrumentId) ? await readInstrument(tx, bookId, instrumentId) : null;
@@ -341,6 +367,36 @@ export function createSpotStore(database: EconomyDatabase, bookId: string) {
           trades: shown.map(({ fillId, ...trade }) => trade),
           after: rows.length > limit && last ? [last.settledAt, last.fillId] : null,
         });
+      });
+    },
+
+    listOwnOrders(
+      instrumentId: string,
+      owner: string,
+      limit: number,
+      after: string | null,
+    ): Promise<Result<SpotDiscoveryPage<SpotOrder>>> {
+      const ownerId = accountId(owner);
+      if (!ownerId || !isSpotInstrumentId(instrumentId)) return Promise.resolve(failure('not_found'));
+      if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > SPOT_DISCOVERY_PAGE_LIMIT ||
+        (after !== null && !isSpotOrderSequence(after))
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      return run('read', async (tx) => {
+        const instrument = await readInstrument(tx, bookId, instrumentId);
+        if (!instrument) return failure('not_found');
+        const { rows } = await tx.query<OrderRow>(
+          `SELECT ${orderColumns} FROM economy.spot_order AS orders
+           WHERE book_id = $1 AND account_id = $2 AND instrument_id = $3
+           ${after === null ? '' : 'AND orders.sequence < $5::bigint'}
+           ORDER BY orders.sequence DESC LIMIT $4`,
+          [bookId, ownerId, instrumentId, limit + 1, ...(after === null ? [] : [after])],
+        );
+        const entries = rows.slice(0, limit).map((row) => orderOf(row, instrument.book.instrument.policyVersion));
+        return ok({ entries, after: rows.length > limit ? rows[limit - 1]!.sequence : null });
       });
     },
 

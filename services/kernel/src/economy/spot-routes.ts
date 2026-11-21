@@ -17,10 +17,14 @@ import {
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   isSpotFillId,
+  isSpotInstrumentId,
+  isSpotOrderSequence,
   isSpotTradePosition,
+  SPOT_DISCOVERY_PAGE_LIMIT,
   SPOT_ORDER_FILL_PAGE_LIMIT,
   SPOT_TRADE_PAGE_LIMIT,
   type EconomyFailure,
+  type SpotDiscoveryPage,
   type SpotOrderFillsPage,
   type SpotTradePage,
   type SpotTradePosition,
@@ -31,15 +35,19 @@ type CoreFailure = Exclude<ReturnType<typeof matchSpotOrder>['kind'], 'ok'>;
 export type SpotAccessResult<T> =
   | Readonly<{ kind: 'ok'; value: T }>
   | Readonly<{ kind: EconomyFailure | CoreFailure | 'not_found' | 'idle' | 'stale_claim' }>;
-type RequestScope = Readonly<{ accountId: string; instrumentId: string; deadline: number }>;
+type AccountScope = Readonly<{ accountId: string; deadline: number }>;
+type RequestScope = AccountScope & Readonly<{ instrumentId: string }>;
+type PageScope = Readonly<{ limit: number; after: string | null }>;
 type OrderScope = RequestScope & Readonly<{ orderId: string }>;
 type OrderReceipt = Readonly<{ orderId: string; sequence: bigint }>;
 export interface SpotAccessPort {
   readonly bookId: string;
+  listInstruments(input: AccountScope & PageScope): Promise<SpotAccessResult<SpotDiscoveryPage<SpotBook>>>;
   readInstrument(input: RequestScope): Promise<SpotAccessResult<SpotBook>>;
   readTrades(
     input: RequestScope & Readonly<{ limit: number; after: SpotTradePosition | null }>,
   ): Promise<SpotAccessResult<SpotTradePage>>;
+  listOwnOrders(input: RequestScope & PageScope): Promise<SpotAccessResult<SpotDiscoveryPage<SpotOrder>>>;
   readOrder(input: OrderScope): Promise<SpotAccessResult<SpotOrder>>;
   readOrderFills(
     input: OrderScope & Readonly<{ limit: number; after: string | null }>,
@@ -77,7 +85,10 @@ const instrumentSchema = t.Object(
   },
   closed,
 );
+const instrumentsPath = '/v1/economy/spot';
 const tradesPath = '/v1/economy/spot/:instrumentId/trades';
+const ordersPath = '/v1/economy/spot/:instrumentId/orders';
+const defaultPageLimit = 20;
 const orderFillsPath = '/v1/economy/spot/:instrumentId/orders/:orderId/fills';
 const receiptSchema = t.Object({ orderId: key, sequence: positive }, closed);
 const orderSchema = t.Object(
@@ -203,6 +214,20 @@ export function economySpotRoutes(
   deps: { pool: Pool; spot?: SpotAccessPort; cursorKeys: KeyRing; clock: () => Date },
 ) {
   const cursor = t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.default.maxTokenLength });
+  const next = t.Union([cursor, t.Null()]);
+  const listQuery = (maximum: number) =>
+    t.Object(
+      { limit: t.Optional(t.Numeric({ minimum: 1, maximum, multipleOf: 1 })), cursor: t.Optional(cursor) },
+      closed,
+    );
+  const instrumentsSchema = t.Object(
+    { instruments: t.Array(instrumentSchema, { maxItems: SPOT_DISCOVERY_PAGE_LIMIT }), next },
+    closed,
+  );
+  const ordersSchema = t.Object(
+    { orders: t.Array(orderSchema, { maxItems: SPOT_DISCOVERY_PAGE_LIMIT }), next },
+    closed,
+  );
   const tradesSchema = t.Object(
     {
       trades: t.Array(
@@ -218,7 +243,7 @@ export function economySpotRoutes(
         ),
         { maxItems: SPOT_TRADE_PAGE_LIMIT },
       ),
-      next: t.Union([cursor, t.Null()]),
+      next,
     },
     closed,
   );
@@ -242,23 +267,64 @@ export function economySpotRoutes(
         ]),
         { maxItems: SPOT_ORDER_FILL_PAGE_LIMIT },
       ),
-      next: t.Union([cursor, t.Null()]),
+      next,
     },
     closed,
   );
 
-  async function privateCall<T>(
+  async function singleAfter(
+    token: string | undefined,
+    binding: ListCursorBinding,
+    at: Date,
+    valid: (position: string) => boolean,
+  ) {
+    if (token === undefined) return null;
+    const decoded = await decodeListCursor(deps.cursorKeys, binding, token, at);
+    if (!decoded.ok || decoded.epoch !== 1 || decoded.after.length !== 1) throw new ProblemError('invalid_cursor');
+    const [position] = decoded.after;
+    if (typeof position !== 'string' || !valid(position)) throw new ProblemError('invalid_cursor');
+    return position;
+  }
+
+  function singleNext(binding: ListCursorBinding, after: string | null, at: Date) {
+    return after === null ? null : encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: [after] }, at);
+  }
+
+  async function privateCall<T, Target extends Readonly<Record<string, string>>>(
     ctx: ActorContext,
-    instrumentId: string,
-    work: (port: SpotAccessPort, scope: RequestScope) => Promise<T>,
+    target: Target,
+    work: (port: SpotAccessPort, scope: AccountScope & Target) => Promise<T>,
   ) {
     const accountId = await requireActor(deps.pool, ctx);
     return ctx.admission.run('normal', ctx.job, () => {
       if (!deps.spot) throw new ProblemError('dependency_unavailable');
-      return work(deps.spot, { accountId, instrumentId, deadline: ctx.job.deadline });
+      return work(deps.spot, { ...target, accountId, deadline: ctx.job.deadline });
     });
   }
   return app
+    .get(
+      instrumentsPath,
+      {
+        query: listQuery(SPOT_DISCOVERY_PAGE_LIMIT),
+        response: { 200: instrumentsSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('spot.list_instruments', 'spot:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return privateCall(ctx, {}, async (spot, scope) => {
+          const limit = ctx.query.limit ?? defaultPageLimit;
+          const at = deps.clock();
+          const binding: ListCursorBinding = {
+            route: `GET ${instrumentsPath}`,
+            viewer: scope.accountId.toLowerCase(),
+            query: { bookId: spot.bookId, limit },
+          };
+          const after = await singleAfter(ctx.query.cursor, binding, at, isSpotInstrumentId);
+          const page = valueOf(await spot.listInstruments({ ...scope, limit, after }));
+          return { instruments: page.entries.map(instrumentView), next: await singleNext(binding, page.after, at) };
+        });
+      },
+    )
     .get(
       '/v1/economy/spot/:instrumentId',
       {
@@ -268,7 +334,7 @@ export function economySpotRoutes(
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) =>
+        return privateCall(ctx, ctx.params, async (spot, scope) =>
           instrumentView(valueOf(await spot.readInstrument(scope))),
         );
       },
@@ -277,20 +343,14 @@ export function economySpotRoutes(
       tradesPath,
       {
         params: instrumentParams,
-        query: t.Object(
-          {
-            limit: t.Optional(t.Numeric({ minimum: 1, maximum: SPOT_TRADE_PAGE_LIMIT, multipleOf: 1 })),
-            cursor: t.Optional(cursor),
-          },
-          closed,
-        ),
+        query: listQuery(SPOT_TRADE_PAGE_LIMIT),
         response: { 200: tradesSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
         detail: detail('spot.read_trades', 'spot:read'),
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
-          const limit = ctx.query.limit ?? 20;
+        return privateCall(ctx, ctx.params, async (spot, scope) => {
+          const limit = ctx.query.limit ?? defaultPageLimit;
           const at = deps.clock();
           const binding: ListCursorBinding = {
             route: `GET ${tradesPath}`,
@@ -316,6 +376,30 @@ export function economySpotRoutes(
       },
     )
     .get(
+      ordersPath,
+      {
+        params: instrumentParams,
+        query: listQuery(SPOT_DISCOVERY_PAGE_LIMIT),
+        response: { 200: ordersSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: detail('spot.list_own_orders', 'spot:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return privateCall(ctx, ctx.params, async (spot, scope) => {
+          const limit = ctx.query.limit ?? defaultPageLimit;
+          const at = deps.clock();
+          const binding: ListCursorBinding = {
+            route: `GET ${ordersPath}`,
+            viewer: scope.accountId.toLowerCase(),
+            query: { bookId: spot.bookId, instrumentId: scope.instrumentId, limit },
+          };
+          const after = await singleAfter(ctx.query.cursor, binding, at, isSpotOrderSequence);
+          const page = valueOf(await spot.listOwnOrders({ ...scope, limit, after }));
+          return { orders: page.entries.map(orderView), next: await singleNext(binding, page.after, at) };
+        });
+      },
+    )
+    .get(
       '/v1/economy/spot/:instrumentId/orders/:orderId',
       {
         params: orderParams,
@@ -324,58 +408,36 @@ export function economySpotRoutes(
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) =>
-          orderView(valueOf(await spot.readOrder({ ...scope, orderId: ctx.params.orderId }))),
-        );
+        return privateCall(ctx, ctx.params, async (spot, scope) => orderView(valueOf(await spot.readOrder(scope))));
       },
     )
     .get(
       orderFillsPath,
       {
         params: orderParams,
-        query: t.Object(
-          {
-            limit: t.Optional(t.Numeric({ minimum: 1, maximum: SPOT_ORDER_FILL_PAGE_LIMIT, multipleOf: 1 })),
-            cursor: t.Optional(cursor),
-          },
-          closed,
-        ),
+        query: listQuery(SPOT_ORDER_FILL_PAGE_LIMIT),
         response: { 200: orderFillsSchema, ...failures(), 400: problemSchema('invalid_request', 'invalid_cursor') },
         detail: detail('spot.read_order_fills', 'spot:read'),
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
-          const { orderId } = ctx.params;
-          const limit = ctx.query.limit ?? 20;
+        return privateCall(ctx, ctx.params, async (spot, scope) => {
+          const { orderId } = scope;
+          const limit = ctx.query.limit ?? defaultPageLimit;
           const at = deps.clock();
           const binding: ListCursorBinding = {
             route: `GET ${orderFillsPath}`,
             viewer: scope.accountId.toLowerCase(),
             query: { bookId: spot.bookId, instrumentId: scope.instrumentId, orderId, limit },
           };
-          let after: string | null = null;
-          if (ctx.query.cursor !== undefined) {
-            const decoded = await decodeListCursor(deps.cursorKeys, binding, ctx.query.cursor, at);
-            if (!decoded.ok || decoded.epoch !== 1 || decoded.after.length !== 1)
-              throw new ProblemError('invalid_cursor');
-            const [fillId] = decoded.after;
-            if (typeof fillId !== 'string' || !isSpotFillId(fillId)) throw new ProblemError('invalid_cursor');
-            after = fillId;
-          }
-          const page = valueOf(await spot.readOrderFills({ ...scope, orderId, limit, after }));
-          return {
-            fills: page.fills,
-            next:
-              page.after === null
-                ? null
-                : await encodeListCursor(deps.cursorKeys, binding, { epoch: 1, after: [page.after] }, at),
-          };
+          const after = await singleAfter(ctx.query.cursor, binding, at, isSpotFillId);
+          const page = valueOf(await spot.readOrderFills({ ...scope, limit, after }));
+          return { fills: page.fills, next: await singleNext(binding, page.after, at) };
         });
       },
     )
     .post(
-      '/v1/economy/spot/:instrumentId/orders',
+      ordersPath,
       {
         params: instrumentParams,
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }),
@@ -385,7 +447,7 @@ export function economySpotRoutes(
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
+        return privateCall(ctx, ctx.params, async (spot, scope) => {
           const idempotency = idempotencyKeyOf(ctx.headers[IDEMPOTENCY_HEADER]);
           const orderId = deriveOrderId(scope.accountId, scope.instrumentId, idempotency);
           const result = await spot.place({
@@ -408,8 +470,8 @@ export function economySpotRoutes(
       },
       async (ctx) => {
         ctx.set.headers['cache-control'] = 'private, no-store';
-        return privateCall(ctx, ctx.params.instrumentId, async (spot, scope) => {
-          const result = await spot.cancel({ ...scope, orderId: ctx.params.orderId });
+        return privateCall(ctx, ctx.params, async (spot, scope) => {
+          const result = await spot.cancel(scope);
           if (result.kind === 'invalid_order')
             throw new ProblemError('conflict', { detail: 'The order cannot be cancelled.' });
           return receiptView(valueOf(result));
