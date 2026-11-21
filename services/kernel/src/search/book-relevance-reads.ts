@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { withBookBindingSteps, type BindingOffer, type BindingStep } from '../request/book-binding-steps.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { PublicSearchPage, SearchPrincipal } from './service-contract.ts';
 
@@ -21,6 +22,59 @@ type Queue = { waiting: Member[]; capturing: boolean; active: number };
 const readerLimit = 192;
 const waveLimit = 96;
 const pageLimit = 2;
+
+/** PIT owners accept distinct registrations in one native operation. Drain arrivals
+ * behind the current operation before they compete for the same target row.
+ * Each member supplies its own observation, checked key and original deadline.
+ */
+export function createBookCaptureReads() {
+  type Pending = BindingOffer & { answer: PromiseWithResolvers<unknown> };
+  const owners = new WeakMap<object, Map<string, Pending[]>>();
+  function offer(step: BindingStep, input: BindingOffer) {
+    if (!['pitOwner', 'beforePit', 'afterPit', 'retain', 'reference', 'successor'].includes(step)) return;
+    const lanes = owners.get(input.owner) ?? new Map<string, Pending[]>();
+    owners.set(input.owner, lanes);
+    const key = JSON.stringify([step, input.cohort]);
+    const lane = lanes.get(key);
+    const answer = Promise.withResolvers<unknown>();
+    const member = { ...input, read: AsyncLocalStorage.bind(input.read), answer };
+    if (lane) lane.push(member);
+    else {
+      const waiting = [member];
+      lanes.set(key, waiting);
+      void drain(waiting, () => lanes.delete(key));
+    }
+    return answer.promise;
+  }
+  async function drain(waiting: Pending[], idle: () => void) {
+    while (waiting.length) {
+      const peers: Pending[] = [];
+      const keys = new Set<string>();
+      while (waiting.length && peers.length < 16 && !keys.has(waiting[0]!.key)) {
+        const member = waiting.shift()!;
+        if (member.deadline <= Date.now()) member.answer.reject(new ProblemError('deadline_exceeded'));
+        else {
+          keys.add(member.key);
+          peers.push(member);
+        }
+      }
+      if (!peers.length) continue;
+      const first = peers.reduce((a, b) => (a.deadline <= b.deadline ? a : b));
+      try {
+        const rows = await first.read(
+          peers.map((member) => member.input),
+          first.deadline,
+        );
+        if (rows.length !== peers.length) throw new Error('Incomplete Book capture');
+        peers.forEach((member, i) => member.answer.resolve(rows[i]));
+      } catch (error) {
+        for (const member of peers) member.answer.reject(error);
+      }
+    }
+    idle();
+  }
+  return <T>(capture: () => Promise<T>) => withBookBindingSteps(offer, capture);
+}
 
 /** Freeze the readers before opening the immutable cut. The next capture can
  * start once native custody has transferred the previous registration claim.

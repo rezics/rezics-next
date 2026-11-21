@@ -1,4 +1,4 @@
-import { createBookRelevanceReads, type CompleteBookReads } from './book-relevance-reads.ts';
+import { createBookCaptureReads, createBookRelevanceReads, type CompleteBookReads } from './book-relevance-reads.ts';
 import {
   admitFilter,
   admitDiscoveryFilter,
@@ -1592,14 +1592,14 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
               hasPublicBookSearchShape(request);
             const snapshot =
               indexedTypeList && boundedOrder ? 'pit' : boundedRelevance ? 'bounded-relevance' : 'prepared';
-            const bound = await indexRequest(() =>
+            const bind = () =>
               runtime.bindRequest(
                 { plan: capturePlan, snapshot },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
                 bookPage,
-              ),
-            );
+              );
+            const bound = await indexRequest(() => (capturedBook ? bookCapture(bind) : bind()));
             operations = bound.operations;
             capture = bound.capture;
             if (capture.status === 'captured') capturedBook?.();
@@ -2196,6 +2196,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
   };
   const search = service.search;
   const bookReads = createBookRelevanceReads();
+  const bookCapture = createBookCaptureReads();
   service.search = (principal, request, now, active, context) =>
     executeRequest(context, (bounded) => {
       const permits = bounded?.bookAdmission;

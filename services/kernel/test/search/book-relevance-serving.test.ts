@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bookRelevanceBound } from '../../src/search/book-relevance-bound.ts';
-import { createBookRelevanceReads } from '../../src/search/book-relevance-reads.ts';
+import { bookBindingStep } from '../../src/request/book-binding-steps.ts';
+import { createBookCaptureReads, createBookRelevanceReads } from '../../src/search/book-relevance-reads.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import type { PublicSearchPage, SearchPrincipal } from '../../src/search/service-contract.ts';
 
@@ -131,4 +132,38 @@ test('a page with more hits gives each waiting reader its own observation and cu
   gate.resolve();
   await first;
   expect((await replies).map((result) => result.next)).toEqual(['cursor-a', 'cursor-b']);
+});
+
+test('PIT retention batches distinct waiting registrations under their earliest remaining deadline', async () => {
+  const capture = createBookCaptureReads();
+  const owner = {};
+  const gate = Promise.withResolvers<void>();
+  const now = Date.now();
+  const batches: { keys: readonly string[]; deadline: number }[] = [];
+  const retain = (key: string, deadline: number) =>
+    capture(async () =>
+      bookBindingStep('retain', owner, 'one target', key, deadline, key, async (keys, until) => {
+        batches.push({ keys, deadline: until });
+        if (key === 'first') await gate.promise;
+        return keys.map((id) => 'observation:' + id);
+      }),
+    );
+  const first = retain('first', now + 3000);
+  const second = retain('a', now + 2400);
+  const third = retain('b', now + 2100);
+  const expired = Promise.allSettled([retain('lost', now - 1)]);
+  const repeat = retain('b', now + 2500);
+  gate.resolve();
+  expect(await Promise.all([first, second, third, repeat])).toEqual([
+    'observation:first',
+    'observation:a',
+    'observation:b',
+    'observation:b',
+  ]);
+  expect((await expired)[0]).toMatchObject({ status: 'rejected', reason: { code: 'deadline_exceeded' } });
+  expect(batches).toEqual([
+    { keys: ['first'], deadline: now + 3000 },
+    { keys: ['a', 'b'], deadline: now + 2100 },
+    { keys: ['b'], deadline: now + 2500 },
+  ]);
 });
