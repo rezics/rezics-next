@@ -40,6 +40,15 @@ occupied. Final capture releases unused value. Release or expiry frees eligible 
 allocation remains protected until settlement or a fenced abort. Capture, release, expiry and funds checks serialize
 at the protected position. Policy-restricted units preserve their restrictions through refunds and transfers.
 
+## Points and promotional credit
+
+One immutable programme version owns one asset, an issuance source, enrolled award recipients and an outstanding
+supply cap. New versions use new asset identities. Mint and redemption source references name one journaled effect
+across versions of the same programme. Redeeming returns the consumed units to the issuer. Transferable point
+programmes use the wallet transfer rules. Expiring promotional credit is non-transferable and uses redemption
+where the programme permits it. Native time makes expired units unavailable, and a named expiry posting returns
+the remaining units to the issuer. Provider funding uses independently issued assets.
+
 ## External funds and trading
 
 Ingest authenticated, distinct external movements by provider namespace, mode and movement ID. Pending or ambiguous

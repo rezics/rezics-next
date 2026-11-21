@@ -52,6 +52,8 @@ const entry = t.Object(
       t.Literal('withdrawal_return'),
       t.Literal('chargeback'),
       t.Literal('withdrawal_refusal'),
+      t.Literal('redeem'),
+      t.Literal('credit_expiry'),
     ]),
     postedDelta: signed,
     heldDelta: signed,
@@ -95,6 +97,10 @@ function valueOf<T>(result: EconomyResult<T>): T {
       throw new ProblemError('idempotency_conflict');
     case 'insufficient_funds':
       throw new ProblemError('conflict', { detail: 'Insufficient available balance.' });
+    case 'program_ineligible':
+    case 'program_expired':
+    case 'program_supply_exceeded':
+      throw new ProblemError('conflict', { detail: 'The asset programme does not admit this operation.' });
     case 'asset_not_transferable':
       throw new ProblemError('conflict', { detail: 'This asset cannot be transferred.' });
     case 'invalid_amount':

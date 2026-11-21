@@ -8,6 +8,16 @@ export type EconomyAsset = Readonly<{
   transferable: boolean;
 }>;
 
+export type AssetProgram = EconomyAsset &
+  Readonly<{
+    programId: string;
+    version: string;
+    issuanceSource: string;
+    supplyCap: string;
+    redeemable: boolean;
+    expiresAt: string | null;
+  }>;
+
 export type WalletBalance = Readonly<{
   asset: EconomyAsset;
   posted: string;
@@ -31,7 +41,9 @@ export type WalletEntry = Readonly<{
     | 'withdrawal'
     | 'withdrawal_return'
     | 'chargeback'
-    | 'withdrawal_refusal';
+    | 'withdrawal_refusal'
+    | 'redeem'
+    | 'credit_expiry';
   postedDelta: string;
   heldDelta: string;
   recordedAt: string;
@@ -53,6 +65,9 @@ export type EconomyFailure =
   | 'allocation_closed'
   | 'invalid_amount'
   | 'invalid_operation'
+  | 'program_ineligible'
+  | 'program_expired'
+  | 'program_supply_exceeded'
   | 'unavailable';
 
 export type EconomyResult<T> = Readonly<{ kind: 'ok'; value: T }> | Readonly<{ kind: EconomyFailure }>;
@@ -108,6 +123,18 @@ export interface EconomyWalletPort {
 export interface EconomyLedger extends EconomyWalletPort {
   provisionAsset(input: EconomyAsset): Promise<EconomyResult<EconomyAsset>>;
   issue(input: WalletCommand & Readonly<{ amount: string }>): Promise<EconomyResult<EconomyReceipt>>;
+  provisionAssetProgram(input: AssetProgram): Promise<EconomyResult<AssetProgram>>;
+  enrollAssetProgramRecipient(input: WalletKey & Readonly<{ issuanceSource: string }>): Promise<EconomyResult<null>>;
+  issueProgramUnits(
+    input: WalletKey & Readonly<{ issuanceSource: string; sourceReference: string; amount: string }>,
+  ): Promise<EconomyResult<EconomyReceipt>>;
+  redeemProgramUnits(
+    input: WalletKey & Readonly<{ amount: string; redemptionReference: string }>,
+  ): Promise<EconomyResult<EconomyReceipt>>;
+  expireProgramCredits(input: WalletKey): Promise<EconomyResult<EconomyReceipt>>;
+  listExpiredProgramCredits(
+    input: Readonly<{ assetId: string; limit: number; after?: string }>,
+  ): Promise<EconomyResult<Readonly<{ accounts: readonly string[]; next: string | null }>>>;
   reserve(input: WalletHold & Readonly<{ amount: string; expiresAt: string }>): Promise<EconomyResult<EconomyReceipt>>;
   capture(
     input: WalletHold & Readonly<{ recipientId: string; amount: string; final: boolean }>,

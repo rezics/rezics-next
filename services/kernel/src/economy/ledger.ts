@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
   isEconomyBookId,
+  type AssetProgram,
   type EconomyAsset,
   type EconomyFailure,
   type EconomyLedger,
@@ -120,6 +121,62 @@ async function getAsset(client: Query, bookId: string, assetId: string): Promise
     [bookId, assetId],
   );
   return result.rows[0];
+}
+
+async function getAssetProgram(client: Query, bookId: string, assetId: string): Promise<AssetProgram | undefined> {
+  const { rows } = await client.query<Omit<AssetProgram, 'expiresAt'> & { expiresAt: Date | null }>(
+    `SELECT asset.asset_id AS id, asset.scale, asset.transferable, program.program_id AS "programId",
+            program.version::text, program.issuance_source AS "issuanceSource", program.supply_cap::text AS "supplyCap",
+            program.redeemable, program.expires_at AS "expiresAt"
+     FROM economy.asset_program AS program JOIN economy.asset AS asset USING (book_id, asset_id)
+     WHERE program.book_id = $1 AND program.asset_id = $2`,
+    [bookId, assetId],
+  );
+  const row = rows[0];
+  return row && { ...row, expiresAt: row.expiresAt?.toISOString() ?? null };
+}
+
+function sameAssetProgram(a: AssetProgram, b: AssetProgram): boolean {
+  return (
+    a.id === b.id &&
+    a.scale === b.scale &&
+    a.transferable === b.transferable &&
+    a.programId === b.programId &&
+    a.version === b.version &&
+    a.issuanceSource === b.issuanceSource &&
+    a.supplyCap === b.supplyCap &&
+    a.redeemable === b.redeemable &&
+    a.expiresAt === b.expiresAt
+  );
+}
+
+function programExpired(program: AssetProgram, at: Date): boolean {
+  return program.expiresAt !== null && new Date(program.expiresAt) <= at;
+}
+
+type ProgramSource = Readonly<{ kind: 'mint' | 'redeem'; reference: string }>;
+
+async function programSourceExists(context: Context, program: AssetProgram, source: ProgramSource): Promise<boolean> {
+  const { client, bookId } = context;
+  const key = [bookId, program.programId, source.kind, source.reference];
+  // One scope across versions. Lock source before any issuer or wallet position.
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtextextended(jsonb_build_array($1::text, 'asset-program', $2::text, $3::text, $4::text)::text, 0))`,
+    key,
+  );
+  const existing = await client.query(
+    'SELECT 1 FROM economy.asset_program_source WHERE book_id = $1 AND program_id = $2 AND kind = $3 AND source_reference = $4',
+    key,
+  );
+  return existing.rowCount === 1;
+}
+
+function recordProgramSource(context: Context, program: AssetProgram, source: ProgramSource, transactionId: string) {
+  return context.client.query(
+    `INSERT INTO economy.asset_program_source (book_id, asset_id, program_id, kind, source_reference, transaction_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [context.bookId, context.asset.id, program.programId, source.kind, source.reference, transactionId],
+  );
 }
 
 async function getTime(client: Query): Promise<Date> {
@@ -388,7 +445,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       return Promise.resolve(failure('invalid_operation'));
     const { assetId, operationId } = input;
     // User-chosen transfer keys cannot claim an issuance or reserve chosen by a trusted owner.
-    const namespace = kind === 'transfer' ? 'wallet' : 'owner';
+    const namespace = kind === 'transfer' || kind === 'redeem' ? 'wallet' : 'owner';
     const digest = createHash('sha256')
       .update(JSON.stringify([1, kind, assetId, holdId, ...operands]))
       .digest();
@@ -659,6 +716,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
           if (protectedAllocation.status !== 'protected') return failure('allocation_closed');
           if (BigInt(protectedAllocation.amount) !== amount) return failure('operation_conflict');
         }
+        if (await getAssetProgram(context.client, bookId, context.asset.id)) return failure('program_ineligible');
         const at = await getTime(context.client);
         let deltas: readonly Delta[];
         let recipient: string | null = null;
@@ -693,6 +751,45 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
           },
         };
       },
+    );
+  }
+
+  function burnProgramUnits(
+    input: Operation,
+    purpose:
+      | Readonly<{ kind: 'redeem'; units: bigint; reference: string }>
+      | Readonly<{ kind: 'credit_expiry'; admittedAt: Date; connection: Query }>,
+  ) {
+    const redemption = purpose.kind === 'redeem' ? purpose : null;
+    return command(
+      input,
+      purpose.kind,
+      null,
+      redemption ? [redemption.units.toString(), redemption.reference] : [],
+      async (context) => {
+        const program = await getAssetProgram(context.client, bookId, context.asset.id);
+        if (!program) return failure('asset_missing');
+        if (redemption && !program.redeemable) return failure('program_ineligible');
+        if (redemption && (await programSourceExists(context, program, redemption)))
+          return failure('operation_conflict');
+        const [owner, issuer] = await positions(context, issuerAccount);
+        const at = purpose.kind === 'credit_expiry' ? purpose.admittedAt : await getTime(context.client);
+        if (redemption && programExpired(program, at)) return failure('program_expired');
+        const spendable = available(owner);
+        const units = redemption?.units ?? spendable;
+        if (units === 0n || units > spendable) return failure('insufficient_funds');
+        return {
+          at,
+          deltas: [delta(owner, -units), delta(issuer, units)],
+          ...(redemption
+            ? {
+                persistHold: (transactionId: string) =>
+                  recordProgramSource(context, program, redemption, transactionId),
+              }
+            : {}),
+        };
+      },
+      purpose.kind === 'credit_expiry' ? purpose.connection : undefined,
     );
   }
 
@@ -732,6 +829,148 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       });
     },
 
+    provisionAssetProgram(input) {
+      const { id, scale, transferable, programId, version, issuanceSource, supplyCap, redeemable } = input;
+      const expiresAt = input.expiresAt === null ? null : expiryDate(input.expiresAt);
+      if (
+        ![id, programId, issuanceSource].every(validIdentifier) ||
+        !Number.isInteger(scale) ||
+        scale < 0 ||
+        scale > 18 ||
+        ![transferable, redeemable].every((value) => typeof value === 'boolean') ||
+        positiveInteger(version) === null ||
+        positiveInteger(supplyCap) === null ||
+        (input.expiresAt !== null && (expiresAt === null || transferable))
+      )
+        return Promise.resolve(failure('invalid_operation'));
+      const expected = { ...input, expiresAt: expiresAt?.toISOString() ?? null };
+      return database.transaction(async (client) => {
+        await client.query('SAVEPOINT economy_provision_program');
+        const asset = await client.query(
+          'INSERT INTO economy.asset (book_id, asset_id, scale, transferable) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+          [bookId, id, scale, transferable],
+        );
+        if (!asset.rowCount) {
+          const existing = await getAssetProgram(client, bookId, id);
+          return existing && sameAssetProgram(existing, expected) ? success(existing) : failure('operation_conflict');
+        }
+        const program = await client.query(
+          `INSERT INTO economy.asset_program
+           (book_id, asset_id, program_id, version, issuance_source, supply_cap, redeemable, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+          [bookId, id, programId, version, issuanceSource, supplyCap, redeemable, expiresAt],
+        );
+        if (!program.rowCount) {
+          await client.query('ROLLBACK TO SAVEPOINT economy_provision_program');
+          return failure('operation_conflict');
+        }
+        return success(expected);
+      });
+    },
+
+    enrollAssetProgramRecipient(input) {
+      const accountId = walletAccount(input.accountId);
+      if (accountId === null || ![input.assetId, input.issuanceSource].every(validIdentifier))
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (client) => {
+        const program = await getAssetProgram(client, bookId, input.assetId);
+        if (!program) return failure('asset_missing');
+        if (program.issuanceSource !== input.issuanceSource) return failure('program_ineligible');
+        if (programExpired(program, await getTime(client))) return failure('program_expired');
+        await client.query(
+          `INSERT INTO economy.asset_program_recipient (book_id, asset_id, account_id)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [bookId, input.assetId, accountId],
+        );
+        return success(null);
+      });
+    },
+
+    issueProgramUnits(input) {
+      const units = positiveInteger(input.amount);
+      if (units === null) return Promise.resolve(failure('invalid_amount'));
+      if (!validIdentifier(input.issuanceSource) || !validOperationKey(input.sourceReference))
+        return Promise.resolve(failure('invalid_operation'));
+      const sourceId = createHash('sha256')
+        .update(JSON.stringify([input.assetId, input.issuanceSource, input.sourceReference]))
+        .digest('hex');
+      return command(
+        { ...input, operationId: `program-mint/${sourceId}` },
+        'issue',
+        null,
+        [input.issuanceSource, input.sourceReference, input.amount],
+        async (context) => {
+          const { client, asset, accountId } = context;
+          const program = await getAssetProgram(client, bookId, asset.id);
+          if (!program) return failure('asset_missing');
+          if (program.issuanceSource !== input.issuanceSource) return failure('program_ineligible');
+          const enrolled = await client.query(
+            'SELECT 1 FROM economy.asset_program_recipient WHERE book_id = $1 AND asset_id = $2 AND account_id = $3',
+            [bookId, asset.id, accountId],
+          );
+          if (!enrolled.rowCount) return failure('program_ineligible');
+          const source = { kind: 'mint', reference: input.sourceReference } as const;
+          if (await programSourceExists(context, program, source)) return failure('operation_conflict');
+          const [owner, issuer] = await positions(context, issuerAccount);
+          const at = await getTime(client);
+          if (programExpired(program, at)) return failure('program_expired');
+          if (units - BigInt(issuer.posted) > BigInt(program.supplyCap)) return failure('program_supply_exceeded');
+          return {
+            at,
+            deltas: [delta(issuer, -units), delta(owner, units)],
+            persistHold: (transactionId) => recordProgramSource(context, program, source, transactionId),
+          };
+        },
+      );
+    },
+
+    redeemProgramUnits(input) {
+      const units = positiveInteger(input.amount);
+      if (units === null) return Promise.resolve(failure('invalid_amount'));
+      if (!validOperationKey(input.redemptionReference)) return Promise.resolve(failure('invalid_operation'));
+      const key = createHash('sha256')
+        .update(JSON.stringify([input.assetId, input.redemptionReference]))
+        .digest('hex');
+      return burnProgramUnits(
+        { ...input, operationId: `program-redeem/${key}` },
+        { kind: 'redeem', units, reference: input.redemptionReference },
+      );
+    },
+
+    expireProgramCredits(input) {
+      if (!walletAccount(input.accountId) || !validIdentifier(input.assetId))
+        return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (connection) => {
+        const program = await getAssetProgram(connection, bookId, input.assetId);
+        if (!program) return failure('asset_missing');
+        const admittedAt = await getTime(connection);
+        // An early sweep has no terminal effect. Keep the same key available when native time reaches expiry.
+        if (!programExpired(program, admittedAt)) return failure('invalid_operation');
+        return burnProgramUnits(
+          { ...input, operationId: `program-expiry/${input.assetId}` },
+          { kind: 'credit_expiry', admittedAt, connection },
+        );
+      });
+    },
+
+    listExpiredProgramCredits({ assetId, limit, after }) {
+      const account = after === undefined ? issuerAccount : walletAccount(after);
+      if (account === null || !validIdentifier(assetId) || !Number.isInteger(limit) || limit < 1 || limit > 100)
+        return Promise.resolve(failure('invalid_operation'));
+      return database.read(async (client) => {
+        const { rows } = await client.query<{ accountId: string }>(
+          `SELECT position.account_id::text AS "accountId" FROM economy.asset_program AS program
+           JOIN economy.position AS position USING (book_id, asset_id)
+           WHERE program.book_id = $1 AND program.asset_id = $2 AND program.expires_at <= statement_timestamp()
+             AND position.account_role = 'wallet' AND position.posted > 0 AND position.account_id > $3
+           ORDER BY position.account_id LIMIT $4`,
+          [bookId, assetId, account, limit + 1],
+        );
+        const accounts = rows.slice(0, limit).map((row) => row.accountId);
+        return success({ accounts, next: rows.length > limit ? accounts[accounts.length - 1]! : null });
+      });
+    },
+
     readBalance(input) {
       const accountId = walletAccount(input.accountId);
       const { assetId } = input;
@@ -741,9 +980,13 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
           `SELECT asset.asset_id AS id, asset.scale, asset.transferable, $3::uuid::text AS "accountId",
                   COALESCE(position.account_role, 'wallet') AS "accountRole",
                   COALESCE(position.posted, 0)::text AS posted, COALESCE(position.held, 0)::text AS held,
-                  COALESCE(position.restricted, 0)::text AS restricted, COALESCE(position.revision, 0)::text AS revision,
+                  (CASE WHEN program.expires_at <= statement_timestamp()
+                    THEN COALESCE(position.posted - position.held, 0)
+                    ELSE COALESCE(position.restricted, 0) END)::text AS restricted,
+                  COALESCE(position.revision, 0)::text AS revision,
                   COALESCE(pending.units, 0)::text AS pending
            FROM economy.asset AS asset
+           LEFT JOIN economy.asset_program AS program USING (book_id, asset_id)
            LEFT JOIN economy.position AS position
              ON position.book_id = asset.book_id AND position.asset_id = asset.asset_id AND position.account_id = $3
            LEFT JOIN economy.pending_deposit AS pending
@@ -810,6 +1053,7 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       const amount = positiveInteger(input.amount);
       if (amount === null) return Promise.resolve(failure('invalid_amount'));
       return command(input, 'issue', null, [input.amount], async (context) => {
+        if (await getAssetProgram(context.client, bookId, context.asset.id)) return failure('program_ineligible');
         const [owner, issuer] = await positions(context, issuerAccount);
         return { at: await getTime(context.client), deltas: [delta(issuer, -amount), delta(owner, amount)] };
       });
@@ -836,6 +1080,8 @@ export function createEconomyLedger(database: EconomyDatabase, bookId: string): 
       if (amount === null) return Promise.resolve(failure('invalid_amount'));
       if (expiry === null) return Promise.resolve(failure('invalid_operation'));
       return command(input, 'reserve', holdId, [amount.toString(), expiry.toISOString()], async (context) => {
+        if (!context.asset.transferable && (await getAssetProgram(context.client, bookId, context.asset.id)))
+          return failure('asset_not_transferable');
         const [owner] = await positions(context);
         if ((await getHold(context, holdId, false)) !== undefined) return failure('operation_conflict');
         const at = await getTime(context.client);
