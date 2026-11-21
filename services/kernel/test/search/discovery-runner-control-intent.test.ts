@@ -99,15 +99,16 @@ mock.module('../../src/events/relays.ts', () => ({
 const { startDiscoveryIndexing } = await import('../../src/search/runner.ts');
 type RunnerOptions = Parameters<typeof startDiscoveryIndexing>[0];
 const search = {
-  async request(_method: string, path: string) {
-    const name = path.slice(1);
+  async request(method: string, path: string) {
+    const [, name, suffix] = /^\/([^/]+)(\/_settings\/index\.refresh_interval)?$/.exec(path) ?? [];
+    if (method !== 'GET' || !name) throw new Error(`Unexpected Search request ${method} ${path}`);
     const target = availableGenerations.find(({ prefix, generation }) => name === `${prefix}discovery-g${generation}`);
     if (!target) throw new Error(`Unexpected Search request ${path}`);
     return {
       status: 200,
       body: {
         [name]: {
-          settings: { index: { uuid: target.uuid } },
+          settings: { index: suffix ? { refresh_interval: '100ms' } : { uuid: target.uuid } },
           mappings: { _meta: { incarnation: target.incarnation } },
         },
       },

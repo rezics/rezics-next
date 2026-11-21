@@ -50,7 +50,7 @@ import {
   subjectGenerations,
   subjectIndexName,
   subjectAlias,
-  upgradeSubjectRefreshInterval,
+  upgradeSearchRefreshInterval,
 } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
@@ -256,7 +256,7 @@ export async function startSearchIndexing(options: {
           liveGenerations.map(async (generation) => {
             await readSubjectCalendarMappingFormat(search, options.prefix, generation);
             await readSubjectCreditMappingFormat(search, options.prefix, generation);
-            await upgradeSubjectRefreshInterval(search, options.prefix, generation);
+            await upgradeSearchRefreshInterval(search, options.prefix, generation, 'subject');
             return createSubjectIndexer({
               pool: options.pool,
               search: relaySearch,
@@ -538,6 +538,7 @@ export function startDiscoveryIndexing(options: {
       }[] = [];
       for (const target of relayTargets) {
         if (stopped || paused) return;
+        await upgradeSearchRefreshInterval(search, options.prefix, target.generation, 'discovery');
         const projection = createDiscoveryProjection({
           ...options,
           search,

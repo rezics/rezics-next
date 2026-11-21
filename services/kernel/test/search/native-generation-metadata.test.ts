@@ -10,6 +10,7 @@ import { resolveDiscoveryOwnerAdapters } from '../../src/search/discovery-owner-
 import { advanceDiscovery, discoveryGenerations } from '../../src/search/generations.ts';
 import { createOpenSearch, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
 import {
+  createDiscoveryIndex,
   createSubjectIndex,
   discoveryIndexName,
   markSubjectCalendarReady,
@@ -17,6 +18,7 @@ import {
   subjectAlias,
   subjectGenerations,
   subjectIndexName,
+  upgradeSearchRefreshInterval,
 } from '../../src/search/indices.ts';
 import { publishSubjectActivationMetadata } from '../../src/search/generation-publication.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
@@ -81,6 +83,48 @@ test('native mixed generation settles the exact Collection copy and can replay i
     }
   }
 }, 120_000);
+
+test('mixed discovery adopts the original refresh interval once and preserves configured overrides', async () => {
+  const native = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `interval-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = discoveryIndexName(prefix, 1);
+  const path = `/${index}/_settings`;
+  const interval = async () => {
+    const { body } = await native.request<Record<string, { settings: { index: { refresh_interval: string } } }>>(
+      'GET',
+      `${path}/index.refresh_interval`,
+    );
+    return body[index]!.settings.index.refresh_interval;
+  };
+  let writes = 0;
+  const lostAcknowledgement: OpenSearch = {
+    ...native,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const response = await native.request<T>(...args);
+      if (args[0] === 'PUT' && args[1] === path) {
+        writes++;
+        throw new Error('Lost settings acknowledgement after native apply');
+      }
+      return response;
+    },
+  };
+  await createDiscoveryIndex(native, prefix, 1, '1');
+  try {
+    expect(await interval()).toBe('100ms');
+    await native.request('PUT', path, { index: { refresh_interval: '1s' } });
+    await upgradeSearchRefreshInterval(lostAcknowledgement, prefix, 1, 'discovery');
+    expect(await interval()).toBe('100ms');
+    await upgradeSearchRefreshInterval(lostAcknowledgement, prefix, 1, 'discovery');
+    for (const override of ['2s', '-1']) {
+      await native.request('PUT', path, { index: { refresh_interval: override } });
+      await upgradeSearchRefreshInterval(lostAcknowledgement, prefix, 1, 'discovery');
+      expect(await interval()).toBe(override);
+    }
+    expect(writes).toBe(1);
+  } finally {
+    await native.request('DELETE', `/${index}`);
+  }
+});
 
 test('contradictory duplicate alias receipts cannot choose their first native target', async () => {
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);

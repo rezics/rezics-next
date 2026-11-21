@@ -1,3 +1,4 @@
+import discovery from '../../db/search/indices/discovery.json';
 import subjects from '../../db/search/indices/subjects.json';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
@@ -451,9 +452,16 @@ export async function ensureSubjectActivationMetadata(
   return Date.parse(activatedAt);
 }
 
-/** Upgrade the previous allocation default once when installing the relay for a live Subject generation. */
-export async function upgradeSubjectRefreshInterval(search: OpenSearch, prefix: string, generation: number) {
-  const index = subjectIndexName(prefix, generation);
+/** Upgrade the old allocation default when a relay adopts a live generation. */
+export async function upgradeSearchRefreshInterval(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  family: 'subject' | 'discovery',
+) {
+  const index = family === 'subject' ? subjectIndexName(prefix, generation) : discoveryIndexName(prefix, generation);
+  const definition = family === 'subject' ? subjects : discovery;
+  const refresh_interval = definition.settings.refresh_interval;
   const path = `/${index}/_settings`;
   const interval = async () => {
     const { body } = await search.request<Record<string, { settings?: { index?: { refresh_interval?: string } } }>>(
@@ -463,11 +471,12 @@ export async function upgradeSubjectRefreshInterval(search: OpenSearch, prefix: 
     return body[index]?.settings?.index?.refresh_interval;
   };
   if ((await interval()) !== '1s') return;
-  const refresh_interval = subjects.settings.refresh_interval;
   await observedWrite(
     () => search.request('PUT', path, { index: { refresh_interval } }),
     async () => (await interval()) === refresh_interval,
-    'Subject refresh interval could not be established',
+    family === 'subject'
+      ? 'Subject refresh interval could not be established'
+      : 'Discovery refresh interval could not be established',
   );
 }
 

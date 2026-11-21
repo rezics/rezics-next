@@ -2256,6 +2256,11 @@ Existing generation allocation, live-three-generation quota and activation expir
 by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
 Discovery allocation obtains the historical high water with the primary key's descending full-key LIMIT 1 and the live set through `discovery_generation_live` with LIMIT 4; a fourth live row or unsafe integer exhaustion is unavailable before inserts.
 
+Mixed discovery generations use a 100 ms refresh interval. On relay installation, Search reads the physical
+index setting and upgrades the former 1 s allocation default. Readback confirms the setting after a lost
+acknowledgement. Other configured intervals are retained. The generation lock covers the same copy intent,
+refresh-visible bulk and settlement as before, including the custody shared with erasure and retirement.
+
 The ordinary writer owns native admission, dispatch, uncertainty and settlement. Generation publication and
 erasure share one target fence. A registration replay may confirm the exact stored definition and incarnation while
 the fence is held. Creating registrations, observations, prepared rows, segments, reader references or new writer
