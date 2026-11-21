@@ -8,6 +8,7 @@ export let REVIEW_DISCOVERY_READ_LIMIT: SearchNativePorts['REVIEW_DISCOVERY_READ
 export let SPACE_DISCOVERY_NATIVE_EVENTS: SearchNativePorts['SPACE_DISCOVERY_NATIVE_EVENTS'];
 export let accountDiscoverySource: SearchNativePorts['accountDiscoverySource'];
 export let activeRelease: SearchNativePorts['activeRelease'];
+export let boundedActiveRelease: SearchNativePorts['boundedActiveRelease'];
 export let admitCollectionKindPreparationStep: SearchNativePorts['admitCollectionKindPreparationStep'];
 export let admitCollectionMemberQuery: SearchNativePorts['admitCollectionMemberQuery'];
 export let admitCollectionPublicationStep: SearchNativePorts['admitCollectionPublicationStep'];
@@ -78,6 +79,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   SPACE_DISCOVERY_NATIVE_EVENTS = port.SPACE_DISCOVERY_NATIVE_EVENTS;
   accountDiscoverySource = port.accountDiscoverySource;
   activeRelease = port.activeRelease;
+  boundedActiveRelease = port.boundedActiveRelease;
   admitCollectionKindPreparationStep = port.admitCollectionKindPreparationStep;
   admitCollectionMemberQuery = port.admitCollectionMemberQuery;
   admitCollectionPublicationStep = port.admitCollectionPublicationStep;

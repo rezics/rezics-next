@@ -27,7 +27,7 @@ export {
   StaleEditorialHeadError,
 } from './contract/definition-values.ts';
 export { freeze } from './core/freeze.ts';
-export { activeRelease, readRelease } from './definition-release-read.ts';
+export { activeRelease, boundedActiveRelease, readRelease } from './definition-release-read.ts';
 import { stageReleaseTypeDirectory } from './definition-type-directory-stage.ts';
 
 import { GLOBAL_CONTEXT, GLOBAL_CONTEXT_RESOURCE as resource } from './contract/global-context.ts';

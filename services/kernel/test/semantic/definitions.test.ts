@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -11,7 +11,7 @@ import { createRealAccess } from './real-access.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { reconcilePageDataDefinitions } from '../../../auth/scripts/dev-stack.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { activeRelease } from '../../src/semantic/definition-release-read.ts';
+import { activeRelease, boundedActiveRelease } from '../../src/semantic/definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../../src/semantic/contract/subject-values.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -212,6 +212,20 @@ test('activation is a compare-and-swap on the active head', async () => {
   expect(conflict.body.code).toBe('idempotency_conflict');
   expect((await activate(two, 3)).body).toEqual({ digest: two, head: 4 });
   expect(await activeRelease(pool)).toEqual({ digest: two, head: 4, release: second });
+  const observations: string[] = [];
+  const current = await withQueryAccounting(
+    {
+      connection: (dispatch) => dispatch(),
+      query(sql, _operands, dispatch) {
+        observations.push(sql);
+        return dispatch();
+      },
+    },
+    () => boundedActiveRelease(pool, Date.now() + 5_000, () => new Error('release deadline')),
+  );
+  expect(current).toEqual({ digest: two, head: 4, release: second });
+  expect(observations).toHaveLength(1);
+  expect(observations[0]).toContain('FROM semantic.definition_activation');
   const { rows } = await admin.query('SELECT head, digest FROM semantic.definition_activation ORDER BY head');
   expect(rows).toEqual([
     { head: 1, digest: one },

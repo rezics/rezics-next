@@ -1155,7 +1155,7 @@ export async function listSubjectLinks(
   };
   const release =
     options.type || options.filter
-      ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
+      ? (options.release ?? (await activeRelease(pool, undefined, deadline))?.release)
       : undefined;
   const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
@@ -1384,7 +1384,7 @@ export async function listSubjectLinks(
   const includeLabels = options.includeLabels ?? options.property !== null;
   const summaryRelease =
     includeLabels || options.type || options.authorizeSummary
-      ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
+      ? (options.release ?? (await activeRelease(pool, undefined, deadline))?.release)
       : undefined;
   const relatedIds = [
     ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),

@@ -49,7 +49,7 @@ import {
   readPublicFilterSourceDefinition,
 } from '../semantic/index.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
-import { activeRelease, readRelease } from '../semantic/definitions.ts';
+import { activeRelease, boundedActiveRelease, readRelease } from '../semantic/definitions.ts';
 import { hasVerifiedReleaseDigest } from '../semantic/definition-release-read.ts';
 import { identityEpochStore, recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/index.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
@@ -112,6 +112,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     SPACE_DISCOVERY_NATIVE_EVENTS,
     accountDiscoverySource,
     activeRelease,
+    boundedActiveRelease,
     admitCollectionKindPreparationStep,
     admitCollectionMemberQuery,
     admitCollectionPublicationStep,

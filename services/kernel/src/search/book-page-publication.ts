@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
 import { activeRelease } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../semantic/read.ts';
 import type { BookPagePublication } from './service-contract.ts';
 
 type ReleaseHead = NonNullable<Awaited<ReturnType<typeof activeRelease>>>;
@@ -12,7 +11,7 @@ export function createBookPagePublication(pool: Pool, deadline: number) {
     page,
     async readRelease() {
       // Inherit the page's profile snapshot. A separate current-head check follows Search execution.
-      const release = await withReadTransaction(pool, (client) => activeRelease(client, 'native'), deadline);
+      const release = await activeRelease(pool, 'native', deadline);
       if (release) openings.set(page, { pool, deadline, release: Object.freeze(release) });
       return release;
     },

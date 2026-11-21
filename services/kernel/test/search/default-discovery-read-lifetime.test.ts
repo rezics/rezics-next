@@ -57,7 +57,7 @@ test('pool wait and late checkout use the Search deadline without dispatching en
 }, 5_000);
 
 test('a stalled rollback retires the snapshot client and preserves the first read failure', async () => {
-  const readFailure = new Error('figure read failed');
+  const readFailure = Object.assign(new Error('figure read failed'), { code: '42P01', severity: 'ERROR' });
   const released = deferred<Error | boolean | undefined>();
   const statements: string[] = [];
   const visit = withBoundedReadOnlyTransaction(

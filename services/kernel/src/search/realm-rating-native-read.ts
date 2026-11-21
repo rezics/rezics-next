@@ -16,7 +16,7 @@ import { createCurrentTextMatcher } from './disclosure/current-text.ts';
 import { analyzeInstalledMany } from './engine-analysis.ts';
 import { compileFilter } from './filter.ts';
 import { subjectIndexName } from './indices.ts';
-import { activeRelease } from './native-bindings.ts';
+import { activeRelease, boundedActiveRelease } from './native-bindings.ts';
 import type { OpenSearch } from './opensearch.ts';
 import {
   normalizeRealmRatingHit,
@@ -37,10 +37,7 @@ type ScoredPage = Awaited<ReturnType<RealmRankOrderSource['readScoredCanonicalPa
 
 /** Each release observation closes its local snapshot before any native owner work. */
 export function readRealmRatingRelease(pool: Pool, deadline: number): ReturnType<typeof activeRelease> {
-  return withBoundedReadOnlyTransaction(pool, deadline, (client) => activeRelease(client), {
-    deadlineError: () => new ProblemError('deadline_exceeded'),
-    isUncertainSettledQueryError: () => true,
-  });
+  return boundedActiveRelease(pool, deadline, () => new ProblemError('deadline_exceeded'));
 }
 
 function compareNames(left: NameKey, right: NameKey): number {

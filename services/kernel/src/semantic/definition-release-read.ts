@@ -8,6 +8,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { DefinitionInputError, DefinitionNotFoundError } from './contract/definition-values.ts';
 import { freeze } from './core/freeze.ts';
 import releaseExists from './definitions-exists.sql';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import releaseRead from './definitions-read.sql';
 import releaseBodies from './definitions-read-bodies.sql';
@@ -83,26 +84,49 @@ export async function readBaseReleases(db: Db, digests: readonly string[]): Prom
   });
 }
 
+type ActiveRelease = { digest: string; head: number; release: Release };
+
+function activeHead(db: Db, mode?: 'native') {
+  return mode === 'native' ? nativeSourceQuery(db, releasePointer, { route: 0 }) : releasePointer.run(db, { route: 0 });
+}
+
+// A missing pointer is authoritative. Only a present pointer with an uncached body needs another snapshot.
+async function cachedActiveRelease(db: Db, mode?: 'native'): Promise<ActiveRelease | null | undefined> {
+  const head = await activeHead(db, mode);
+  if (!head) return null;
+  const release = releases.get(head.digest);
+  return release && { ...head, release };
+}
+
 export async function activeRelease(
   pool: Pool | CommandTransaction,
   mode?: 'native',
-): Promise<{ digest: string; head: number; release: Release } | null> {
-  const pointer = (db: Db) =>
-    mode === 'native' ? nativeSourceQuery(db, releasePointer, { route: 0 }) : releasePointer.run(db, { route: 0 });
+  deadline?: number,
+): Promise<ActiveRelease | null> {
   if (pool instanceof Pool) {
-    const active = await withReadStatement(pool, pointer);
-    if (!active) return null;
-    const release = releases.get(active.digest);
-    if (release) return { ...active, release };
+    const active = await withReadStatement(pool, (db) => cachedActiveRelease(db, mode), deadline);
+    if (active !== undefined) return active;
   }
   // A cold body and its pointer still come from the same snapshot.
-  return definitionRead(pool, async (db) => {
-    const active = await pointer(db);
-    if (!active) return null;
-    const release = releases.get(active.digest) ?? (await readRelease(db, active.digest));
-    if (!release) throw new Error('Active definition release is missing');
-    return { ...active, release };
-  });
+  return definitionRead(
+    pool,
+    async (db) => {
+      const active = await activeHead(db, mode);
+      if (!active) return null;
+      const release = releases.get(active.digest) ?? (await readRelease(db, active.digest));
+      if (!release) throw new Error('Active definition release is missing');
+      return { ...active, release };
+    },
+    deadline,
+  );
+}
+
+/** A Search observation retains its caller's deadline and uncertain-connection policy on both paths. */
+export async function boundedActiveRelease(pool: Pool, deadline: number, deadlineError: () => Error) {
+  const options = { deadlineError, isUncertainSettledQueryError: () => true };
+  const active = await withBoundedReadConnection(pool, deadline, (db) => cachedActiveRelease(db), options);
+  if (active !== undefined) return active;
+  return withBoundedReadOnlyTransaction(pool, deadline, activeRelease, options);
 }
 
 type Layer = { digest: string; release: Release };

@@ -16,7 +16,7 @@ type SemanticSearchSourceApi = Pick<
   typeof import('../semantic/search-source.ts'),
   'readIdentitySourceProjection' | 'prepareRetainedIdentitySourceProjections' | 'subjectSource'
 >;
-type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'readRelease'>;
+type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'boundedActiveRelease' | 'readRelease'>;
 type SemanticDefinitionDigestApi = Pick<
   typeof import('../semantic/definition-release-read.ts'),
   'hasVerifiedReleaseDigest'

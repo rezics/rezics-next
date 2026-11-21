@@ -21,8 +21,7 @@ import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
-import { activeRelease } from '../semantic/definitions.ts';
-import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { boundedActiveRelease } from '../semantic/definitions.ts';
 import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
   decodeSearchCursor,
@@ -348,11 +347,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     createSearchDisclosureApplication({
       analyze: (index, analyzer, texts) => analyzeInstalledMany(client, index, { analyzer, text: texts }),
     });
-  const readActiveRelease = () =>
-    withBoundedReadOnlyTransaction(pool, requestDeadline(), activeRelease, {
-      deadlineError: indexNotReady,
-      isUncertainSettledQueryError: () => true,
-    });
+  const readActiveRelease = () => boundedActiveRelease(pool, requestDeadline(), indexNotReady);
   const { request: requestPlanner, cursor: cursorPlanner, result: resultAssembler } = modules;
   const scopedFacets = createScopedFacetApplication({
     ...(facetAccess === undefined ? {} : { access: facetAccess }),

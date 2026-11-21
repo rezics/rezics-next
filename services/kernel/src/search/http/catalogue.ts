@@ -5,8 +5,7 @@ import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, summaryAuthorization, type SubjectSummary } from '../../semantic/summaries.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
-import { activeRelease } from '../../semantic/definitions.ts';
-import { withBoundedReadOnlyTransaction } from '../../database/pool.ts';
+import { activeRelease, boundedActiveRelease } from '../../semantic/definitions.ts';
 import { deadlineFor, withRequestDeadline } from '../../request/deadline.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { relatedReadDecisionEligibility, relatedReadEligibility } from '../../semantic/eligibility.ts';
@@ -158,11 +157,7 @@ async function completeCatalogue<T>(deadline: number | undefined, read: (deadlin
 
 /** Shared native summary hydration for catalogue and suggestion responses. */
 export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool; routeKey: Uint8Array }) {
-  const readActiveRelease = (deadline: number) =>
-    withBoundedReadOnlyTransaction(pool, deadline, activeRelease, {
-      deadlineError: catalogueExpired,
-      isUncertainSettledQueryError: () => true,
-    });
+  const readActiveRelease = (deadline: number) => boundedActiveRelease(pool, deadline, catalogueExpired);
 
   async function fill<T extends { subjects: { id: string; type: string; labels: Record<string, string> }[] }>(
     page: T,
