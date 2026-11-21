@@ -2228,7 +2228,10 @@ confirm(selected: readonly ConversationActivitySelection[], deadline: number): P
 ```
 
 Both methods accept at most 100 raw keys, deduplicate them, group by represented Content partition, and release
-each read-only snapshot before the next home starts. The `ConversationActivitySelection` union is either
+each read-only snapshot before the next home starts. A thread and its board have independently routed identities.
+The batch reads the board and its generation at the board's encoded route. Board invalidation pages seek the
+board's thread IDs across thread homes. Each repaired opening retains its own partition's source position.
+The `ConversationActivitySelection` union is either
 `{threadId,status:'current',cohort:'public',replyCount,lastContributionAt,witness}` or a typed withholding
 with reason `missing`, `coverage`, `unsupported-cohort` or `stale`. `ConversationActivityReplyCount` distinguishes
 `{kind:'exact',value}` from `{kind:'lower-bound',value}`. Exact zero is a real zero and retains the opening's
@@ -2254,7 +2257,8 @@ only that native activity coverage and its native witnesses stayed current; it c
 The effect remains the sole producer and is installed by `registerContent` in the existing supervisor. Its
 admission transaction validates the exact source outbox envelope. A post-local publication, erase, restoration
 or takedown replaces that episode's current eligibility and adjusts an already-current opening summary by the
-old/new inclusion delta. Removing its latest contribution runs the public live-episode index with `LIMIT 1` to
+old/new inclusion delta. Workflow replay updates the native episode and its earliest publication time. Only
+admission and bounded repair replace the public inclusion bit alongside the opening summary. Removing its latest contribution runs the public live-episode index with `LIMIT 1` to
 find the next current contribution. If the opening summary is not current or the transition lacks time proof,
 the producer retires it for repair. An edit changes episode source progress but does not invalidate or advance
 the contribution time. A board or thread moderation event advances its invalidation frontier; it does not

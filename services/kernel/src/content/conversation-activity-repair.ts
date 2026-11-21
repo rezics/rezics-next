@@ -3,7 +3,7 @@ import { deadlineClient, within } from './access-port.ts';
 import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessClient } from '../request/access.ts';
-import { PARTITIONS } from '../route/route.ts';
+import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import repairThreads from './conversation-activity-repair-threads.sql';
 import repairPosts from './conversation-activity-repair-posts.sql';
 import repairEpisodes from './conversation-activity-repair-upsert.sql';
@@ -42,9 +42,6 @@ type BoardFrontier = Readonly<{
   route: number;
   board_id: string;
   generation: string;
-  source_epoch: number;
-  source_position: string;
-  source_event_seq: number;
   after_thread_id: string | null;
 }>;
 type OpeningRow = Readonly<{
@@ -308,8 +305,7 @@ async function repairBoardPage(
   'scannedThreads' | 'repairedPosts' | 'completedThreads' | 'more'
 > | null> {
   const { rows } = await client.query<BoardFrontier>(
-    `SELECT route, board_id, generation::text, source_epoch, source_position::text,
-            source_event_seq, after_thread_id
+    `SELECT route, board_id, generation::text, after_thread_id
        FROM content.conversation_activity_board_frontier
       WHERE route BETWEEN $1 AND $2 AND NOT complete
       ORDER BY route, board_id
@@ -318,31 +314,25 @@ async function repairBoardPage(
   );
   const board = rows[0];
   if (!board) return null;
-  const { rows: threads } = await client.query<ThreadRow>(
-    `SELECT thread.route, thread.thread_id, thread.first_post_id,
-            thread.security_revision::text AS thread_security_revision,
-            thread.board_id, board.security_revision::text AS board_security_revision
-       FROM content.thread AS thread
-       JOIN content.board AS board
-         ON board.route=thread.route AND board.board_id=thread.board_id
-      WHERE thread.route=$1 AND thread.board_id=$2
-        AND thread.thread_id>=COALESCE($3::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
-        AND ($3::uuid IS NULL OR thread.thread_id>$3::uuid)
-      ORDER BY thread.thread_id LIMIT $4`,
-    [board.route, board.board_id, board.after_thread_id, CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE + 1],
+  const { rows: threads } = await client.query<Pick<ThreadRow, 'route' | 'thread_id'>>(
+    `SELECT route, thread_id FROM content.thread
+      WHERE board_id=$1 AND thread_id>COALESCE($2::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      ORDER BY thread_id LIMIT $3`,
+    [board.board_id, board.after_thread_id, CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE + 1],
   );
   const page = threads.slice(0, CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE);
-  await seedOpenings(client, page, board.source_epoch, board.source_position);
+  // The board generation invalidates the summary. Only a thread-home source or repair can advance its log position.
   if (page.length) {
+    const homes = [...new Set(page.map((thread) => partitionOf(thread.route)))];
+    const owners = await client.query(
+      `SELECT partition_no FROM core.partition WHERE partition_no=ANY($1::integer[]) AND write_state='active'
+        ORDER BY partition_no FOR SHARE`,
+      [homes],
+    );
+    if (owners.rowCount !== homes.length) throw new Error('Conversation activity target partition is unavailable');
     await client.query(
       `UPDATE content.conversation_activity_episode AS opening
           SET coverage_state='uncovered', coverage_generation=opening.coverage_generation+1,
-              coverage_epoch=CASE WHEN (opening.coverage_epoch,opening.coverage_position,opening.coverage_event_seq)
-                < ($4,$5,$6) THEN $4 ELSE opening.coverage_epoch END,
-              coverage_position=CASE WHEN (opening.coverage_epoch,opening.coverage_position,opening.coverage_event_seq)
-                < ($4,$5,$6) THEN $5 ELSE opening.coverage_position END,
-              coverage_event_seq=CASE WHEN (opening.coverage_epoch,opening.coverage_position,opening.coverage_event_seq)
-                < ($4,$5,$6) THEN $6 ELSE opening.coverage_event_seq END,
               coverage_reply_count=0, coverage_latest_post_id=NULL, coverage_latest_at=NULL,
               coverage_thread_security_revision=NULL, coverage_board_id=NULL,
               coverage_board_security_revision=NULL, repair_generation=NULL,
@@ -351,14 +341,7 @@ async function repairBoardPage(
          FROM unnest($1::integer[], $2::uuid[]) AS selected(route, thread_id)
         WHERE opening.route=selected.route AND opening.thread_id=selected.thread_id AND opening.opening
           AND opening.coverage_board_generation::text IS DISTINCT FROM $3`,
-      [
-        page.map((thread) => thread.route),
-        page.map((thread) => thread.thread_id),
-        board.generation,
-        board.source_epoch,
-        board.source_position,
-        board.source_event_seq,
-      ],
+      [page.map((thread) => thread.route), page.map((thread) => thread.thread_id), board.generation],
     );
   }
   const hasMore = threads.length > CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE;
@@ -463,6 +446,23 @@ async function repairThreadPage(
     return { repairedPosts: 0, completed: true, more: false };
   }
 
+  const first = page[0]!;
+  const boardGenerationAtCut = await boardGeneration(client, first.board_id);
+  if (
+    resumed &&
+    (opening.coverage_board_id !== first.board_id ||
+      opening.coverage_board_generation !== boardGenerationAtCut ||
+      opening.coverage_board_security_revision !== first.board_security_revision ||
+      opening.coverage_thread_security_revision !== first.thread_security_revision)
+  ) {
+    // A later page may observe a different visibility generation from its saved prefix.
+    await client.query(
+      `UPDATE content.conversation_activity_episode SET coverage_state='uncovered', repair_generation=NULL
+        WHERE route=$1 AND post_id=$2 AND coverage_generation=$3`,
+      [opening.route, opening.post_id, generation.toString()],
+    );
+    return { repairedPosts: 0, completed: false, more: true };
+  }
   const episodes = page.map((post) => {
     const nativeEligible =
       post.post_availability === 'available' &&
@@ -536,10 +536,10 @@ async function repairThreadPage(
       replyCount.toString(),
       latestAt,
       latestPostId,
-      page[0]!.thread_security_revision,
-      page[0]!.board_id,
-      page[0]!.board_security_revision,
-      await boardGeneration(client, opening.route, page[0]!.board_id),
+      first.thread_security_revision,
+      first.board_id,
+      first.board_security_revision,
+      boardGenerationAtCut,
       generation.toString(),
       last.created_at,
       last.post_id,
@@ -562,11 +562,11 @@ function isLater(
   );
 }
 
-async function boardGeneration(client: AccessClient, route: number, boardId: string): Promise<string> {
+async function boardGeneration(client: AccessClient, boardId: string): Promise<string> {
   const { rows } = await client.query<{ generation: string }>(
     `SELECT COALESCE((SELECT generation FROM content.conversation_activity_board_frontier
                        WHERE route=$1 AND board_id=$2),0)::text AS generation`,
-    [route, boardId],
+    [routeOf(boardId), boardId],
   );
   return rows[0]!.generation;
 }

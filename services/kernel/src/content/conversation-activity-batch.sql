@@ -27,9 +27,10 @@ FROM input
 LEFT JOIN content.thread AS thread
   ON thread.route = input.route AND thread.thread_id = input.thread_id
 LEFT JOIN content.board AS board
-  ON board.route = thread.route AND board.board_id = thread.board_id
+  ON board.route = get_byte(uuid_send(thread.board_id), 10) * 256 + get_byte(uuid_send(thread.board_id), 11)
+    AND board.board_id = thread.board_id
 LEFT JOIN content.conversation_activity_board_frontier AS board_frontier
-  ON board_frontier.route = thread.route AND board_frontier.board_id = thread.board_id
+  ON board_frontier.route = board.route AND board_frontier.board_id = thread.board_id
 LEFT JOIN content.conversation_activity_episode AS opening
   ON opening.route = thread.route AND opening.post_id = thread.first_post_id
     AND opening.thread_id = thread.thread_id AND opening.opening;

@@ -9,7 +9,8 @@ SELECT thread.route, thread.thread_id, thread.first_post_id,
        thread.board_id, board.security_revision::text AS board_security_revision
 FROM content.thread AS thread
 JOIN content.board AS board
-  ON board.route = thread.route AND board.board_id = thread.board_id
+  ON board.route = get_byte(uuid_send(thread.board_id), 10) * 256 + get_byte(uuid_send(thread.board_id), 11)
+    AND board.board_id = thread.board_id
 JOIN input ON true
 WHERE thread.route BETWEEN input.first_route AND input.last_route
   AND (thread.route, thread.thread_id) >

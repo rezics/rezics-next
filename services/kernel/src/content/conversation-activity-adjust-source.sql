@@ -25,7 +25,8 @@ LEFT JOIN content.post AS post
 LEFT JOIN content.thread AS thread
   ON thread.route=target.route AND thread.thread_id=COALESCE(post.thread_id,episode.thread_id)
 LEFT JOIN content.board AS board
-  ON board.route=thread.route AND board.board_id=thread.board_id
+  ON board.route = get_byte(uuid_send(thread.board_id), 10) * 256 + get_byte(uuid_send(thread.board_id), 11)
+    AND board.board_id = thread.board_id
 LEFT JOIN content.revision AS head
   ON head.route=post.route AND head.thread_id=post.thread_id
     AND head.post_id=post.post_id AND head.revision_id=post.head_revision_id

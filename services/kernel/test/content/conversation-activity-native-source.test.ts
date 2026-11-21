@@ -24,7 +24,11 @@ test.serial(
     let runtime: RankingRuntime | undefined;
     try {
       const boardId = await world.board();
-      const created = await world.thread(boardId, world.start);
+      const boardHome = partitionOf(routeOf(boardId)!);
+      const actorHomes = [world.base.author, world.base.other].map(({ accountId }) => partitionOf(routeOf(accountId)!));
+      let threadHome = (boardHome + 1) % 4096;
+      while (actorHomes.includes(threadHome)) threadHome = (threadHome + 1) % 4096;
+      const created = await world.thread(boardId, world.start, threadHome);
       const thread = created.thread;
       const partition = partitionOf(routeOf(thread.id)!);
       const emptyHome = (partition + 1) % 4096;
@@ -83,11 +87,17 @@ test.serial(
 
       await world.time(plus(world.start, 3));
       const edited = await world.capture(partition, () =>
-        world.command('POST', `/v1/posts/${first.value.post.id}/revisions`, {
-          body: fromPlainText('Old wording corrected'),
-          licence: 'CC0-1.0',
-          subjectIds: [],
-        }),
+        world.command(
+          'POST',
+          `/v1/posts/${first.value.post.id}/revisions`,
+          {
+            body: fromPlainText('Old wording corrected'),
+            licence: 'CC0-1.0',
+            subjectIds: [],
+          },
+          world.base.author,
+          200,
+        ),
       );
       await runtime.consume(edited.envelopes);
       expect((await source()).contributions).toEqual(full);
@@ -139,6 +149,27 @@ test.serial(
       expect(batch).toHaveLength(1);
       expect(batch[0]!.coverage).toBe('unproven');
       expect(batch[0]!.contributions).toEqual(full);
+
+      await world.grant(boardId, world.base.governance, ['moderation:takedown']);
+      const moderated = await world.capture(boardHome, () =>
+        world.command(
+          'POST',
+          `/v1/boards/${boardId}:takeDown`,
+          { reason: 'Withdraw the discussion board' },
+          world.base.governance,
+          200,
+        ),
+      );
+      await runtime.consume(moderated.envelopes);
+      expect((await activity.confirm([populated], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect(await repairConversationActivityPage(world.pool, boardHome, Date.now() + 30_000)).toMatchObject({
+        kind: 'board',
+        scannedThreads: 1,
+      });
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]).toMatchObject({
+        status: 'withheld',
+        reason: 'unsupported-cohort',
+      });
     } finally {
       try {
         await runtime?.stop();

@@ -16,6 +16,7 @@ const registerContent = createContentWorkModule({
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
 import { BATCH_ENVELOPES, readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, WORK_APPLICATION } from '../../src/work/client.ts';
@@ -562,6 +563,7 @@ export async function startRankingWorker(world: RankingWorld, partitions: readon
 }
 
 async function worker(): Promise<void> {
+  installNativeHistoryPreload();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
   let runtime: RankingRuntime | undefined;
   try {

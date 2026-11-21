@@ -2264,7 +2264,6 @@ CREATE TABLE content.conversation_activity_episode (
     CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
     CONSTRAINT conversation_activity_episode_coverage_board_generation_check CHECK ((coverage_board_generation >= 0)),
-    CONSTRAINT conversation_activity_episode_coverage_board_route_check CHECK (((coverage_board_id IS NULL) OR (route = ((get_byte(uuid_send(coverage_board_id), 10) * 256) + get_byte(uuid_send(coverage_board_id), 11))))),
     CONSTRAINT conversation_activity_episode_coverage_count_check CHECK ((coverage_reply_count >= 0)),
     CONSTRAINT conversation_activity_episode_coverage_event_seq_check CHECK (((coverage_event_seq >= 0) AND (coverage_event_seq <= 1000))),
     CONSTRAINT conversation_activity_episode_coverage_generation_check CHECK ((coverage_generation > 0)),
@@ -7241,10 +7240,10 @@ CREATE INDEX conversation_activity_board_frontier_pending_idx ON content.convers
 
 
 --
--- Name: conversation_activity_board_threads_idx; Type: INDEX; Schema: content; Owner: -
+-- Name: conversation_activity_board_members; Type: INDEX; Schema: content; Owner: -
 --
 
-CREATE INDEX conversation_activity_board_threads_idx ON content.thread USING btree (route, board_id, thread_id);
+CREATE INDEX conversation_activity_board_members ON content.thread USING btree (board_id, thread_id) INCLUDE (route);
 
 
 --

@@ -585,7 +585,7 @@ async function applyActivityChange(
   const { rows: boardRows } = await client.query<{ generation: string }>(
     `SELECT COALESCE((SELECT generation FROM content.conversation_activity_board_frontier
                        WHERE route=$1 AND board_id=$2),0)::text AS generation`,
-    [change.route, change.boardId],
+    [route(change.boardId), change.boardId],
   );
   const boardGeneration = boardRows[0]!.generation;
   if (
@@ -739,7 +739,7 @@ export function createConversationActivityEffect(pool: Pool): Effect {
               // retained episode without reconstructing an erased contribution.
               const retired = await tx.query(
                 `UPDATE content.conversation_activity_episode
-                    SET native_eligible=false, public_eligible=false,
+                    SET native_eligible=false,
                         source_epoch=CASE WHEN (source_epoch,source_position,source_event_seq)
                           < ($3,$4,$5) THEN $3 ELSE source_epoch END,
                         source_position=CASE WHEN (source_epoch,source_position,source_event_seq)
@@ -764,12 +764,6 @@ export function createConversationActivityEffect(pool: Pool): Effect {
               current.head_availability === 'available' &&
               !current.author_erased &&
               ['published', 'protected'].includes(current.post_visibility!);
-            const publicEligible =
-              eligible &&
-              current.post_visibility === 'published' &&
-              current.thread_visibility === 'published' &&
-              current.thread_availability === 'available' &&
-              current.board_visibility === 'published';
             const parameters = {
               route: postRoute,
               post_id: postId,
@@ -777,7 +771,9 @@ export function createConversationActivityEffect(pool: Pool): Effect {
               opening: current.first_post_id === postId,
               contributed_at: input.contributedAt,
               eligible,
-              public_eligible: publicEligible,
+              // The relay admission owns the counted inclusion bit and its matching opening delta.
+              // A directly replayed workflow may precede that admission.
+              public_eligible: null,
               security_revision: BigInt(current.security_revision),
               source_epoch: sourceIdentity.epoch,
               source_position: sourceIdentity.position,
@@ -841,7 +837,7 @@ export async function readConversationActivitySources(
         if (partition.writeState === 'moved')
           throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
         const rows = await page.run(client, {
-          keys: JSON.stringify(keys),
+          keys,
           limit: CONVERSATION_ACTIVITY_SOURCE_LIMIT,
         });
         return { rows, anchor: { partition, epoch: partition.epoch, position: partition.position } };
