@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { drainExpiredServingPits } from '../../src/search/public-filter-custody.ts';
 import { subjectConsumer } from '../../src/search/consumer-name.ts';
 import { readFreshness } from '../../src/search/freshness.ts';
 import { publishBookOriginals } from './support/book-composition.ts';
@@ -121,6 +122,42 @@ test('cold Subject publication discloses the originals and preserves relevance t
     expect((await cutIds()).filter((row) => !existing.has(row.bootstrap))).toEqual([
       expect.objectContaining({ state: 'aborted', queried: null, claim: null }),
     ]);
+    expect(await nativePits()).toBe(held);
+    // A refused original admission leaves a provably undispatched child. Expire it
+    // with the already-closed child and keep all live, independently signed pages.
+    const priorCuts = new Set((await cutIds()).map((row) => row.bootstrap));
+    await database.pool.query(`CREATE FUNCTION search.refuse_test_open() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER refuse_test_open BEFORE UPDATE ON search.public_filter_pit_claim
+      FOR EACH ROW WHEN (OLD.state='new' AND NEW.state='opening') EXECUTE FUNCTION search.refuse_test_open()`);
+    try {
+      const failed = await fixture.request('anonymous', 'POST', '/v1/subjects:search', query);
+      expect(failed.status).toBe(503);
+    } finally {
+      await database.pool.query(
+        'DROP TRIGGER refuse_test_open ON search.public_filter_pit_claim; DROP FUNCTION search.refuse_test_open()',
+      );
+    }
+    const [undispatched] = (await cutIds()).filter((row) => !priorCuts.has(row.bootstrap));
+    expect(undispatched).toEqual(expect.objectContaining({ state: 'begun', queried: null, claim: 'new' }));
+    expect(await nativePits()).toBe(held);
+    const expired = await database.pool.query(
+      `UPDATE search.public_filter_pit_claim c SET deadline=$2,retry_after=$2
+      WHERE registration=$1 AND (c.bootstrap=$3 OR EXISTS (SELECT FROM search.public_filter_observation o
+        WHERE (o.partition_no,o.registration,o.observation)=(c.partition_no,c.registration,c.partition_no::text||':'||c.bootstrap::text)
+          AND o.state='closed')) RETURNING bootstrap`,
+      [originalsHeld.rows[0]!.registration, Date.now() - 1, undispatched!.bootstrap],
+    );
+    expect(expired.rows.length).toBeGreaterThanOrEqual(1);
+    expect(
+      await drainExpiredServingPits(database.pool, engine, fixture.search!.indexPrefix, {
+        deadline: Date.now() + 5000,
+      }),
+    ).toBe(false);
+    const retired = new Set(expired.rows.map((row) => row.bootstrap));
+    for (const row of (await cutIds()).filter((row) => retired.has(row.bootstrap))) {
+      expect(row).toEqual(expect.objectContaining({ state: 'aborted', claim: null }));
+    }
     expect(await nativePits()).toBe(held);
     const continuations = await Promise.all(
       concurrent.map((response) =>

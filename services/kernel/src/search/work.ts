@@ -1,6 +1,6 @@
 import { knowledgeDiscoveryEffect } from './knowledge-discovery-native.ts';
 import { collectionPublicationScopeRuntimes } from './scope-runtime.ts';
-import { retireServingPitClaim } from './public-filter-custody.ts';
+import { startServingPitRetirement } from './public-filter-custody.ts';
 import { readSearchConfig } from './config.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
@@ -343,19 +343,14 @@ export function createSearchWorkModule(
         let running: Promise<unknown> | undefined;
         const timer = setInterval(() => {
           if (stopped || running) return;
-          const retireUnpublished = async () => {
-            if (!preparedSearch) return;
-            const deadline = Date.now() + 5_000;
-            for (let attempt = 0; attempt < 16 && Date.now() < deadline; attempt++) {
-              const cost = await retireServingPitClaim(context.pool, search, preparedSearch.config.prefix, {
-                deadline,
-              });
-              if (cost.resultWrites === 0) break;
-            }
-          };
-          running = Promise.allSettled([trends.expire(), retireUnpublished()]).finally(() => {
-            running = undefined;
-          });
+          running = trends
+            .expire()
+            .catch(() => {
+              /* retry next bounded tick */
+            })
+            .finally(() => {
+              running = undefined;
+            });
         }, 60_000);
         return {
           async stop() {
@@ -370,6 +365,7 @@ export function createSearchWorkModule(
       const { config: searchConfig, routeKey } = preparedSearch;
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(searchConfig.url);
+      context.addService(() => startServingPitRetirement(context.pool, search, searchConfig.prefix));
       const source = createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source;
       collectionPublicationScopeRuntimes.set(context.pool, {
         pool: context.pool,

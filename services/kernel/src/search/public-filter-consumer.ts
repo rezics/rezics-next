@@ -924,6 +924,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   >();
   let closed = false;
   let closing: Promise<void> | undefined;
+  let claimRetirement: Promise<void> | undefined;
   const track = <T>(context: PublicFilterConsumerContext, run: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new ConsumerFailure('observation_lost'));
     const operation = withRequestDeadline(context.deadline, run);
@@ -2214,6 +2215,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     bookPage?: boolean,
     freshPit?: {
       bootstrap: PublicSourceBootstrap;
+      admitPhysicalOpen?: () => Promise<(() => void) | undefined>;
       adopt: (q: PublicFilterQueriedObservation) => ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
     },
   ): Promise<PublicFilterConsumerCapture> {
@@ -2281,6 +2283,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           config.search,
           context,
+          freshPit?.admitPhysicalOpen,
         ),
       );
       if (retained.status !== 'retained') return m.unavailable('observation_lost');
@@ -2729,6 +2732,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     preparationMeter?: Meter,
   ): Promise<PublicFilterConsumerCapture> {
     let unpublished: { registration: string; bootstrap: string } | undefined;
+    let grantedOpen = false;
     const m = page?.m ?? preparationMeter ?? meter(context);
     if (snapshot !== 'pit' && snapshot !== 'prepared') throw new TypeError('Unknown immutable snapshot kind');
     // All grammar, private-owner and optional DSL validation precedes the first native call.
@@ -3006,7 +3010,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         begun.bootstrap.coveragePublication !== undefined;
       const fresh =
         page && !publication && !config.discoveryTarget && native?.status === 'begun' ? native.freshPit : undefined;
-      const claim = fresh && m.take(await fresh.unopened());
+      const claim = fresh && !fresh.independent ? m.take(await fresh.unopened()) : undefined;
       if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
       const result = await advanceCapture(
         work,
@@ -3017,30 +3021,57 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         publication,
         true,
         bookPage,
-        fresh && claim?.unopened ? { bootstrap: begun.bootstrap, adopt: fresh.adopt } : undefined,
+        fresh && (fresh.independent || claim?.unopened)
+          ? {
+              bootstrap: begun.bootstrap,
+              adopt: fresh.adopt,
+              ...(fresh.independent
+                ? {
+                    admitPhysicalOpen: async () => {
+                      const admission = await fresh.unopened();
+                      if (!('unopened' in admission) || !admission.unopened) {
+                        m.take(admission);
+                        return;
+                      }
+                      grantedOpen = true;
+                      return () => {
+                        m.take(admission);
+                      };
+                    },
+                  }
+                : {}),
+            }
+          : undefined,
       );
       if (result.status === 'captured') unpublished = undefined;
       return result;
     } catch (error) {
       return failure(error, m);
     } finally {
-      if (unpublished) {
+      if (unpublished && grantedOpen && !claimRetirement) {
         // No signed cursor has escaped this fresh invocation. Its persisted claim is
         // also the retry point if the cleanup reply or the original HTTP open was lost.
+        const original = unpublished;
         const deadline = Date.now() + 5_000;
+        const retirement = withRequestDeadline(deadline, () =>
+          retireServingPitClaim(
+            config.pool,
+            config.search,
+            target.replace(/subjects-g[1-9][0-9]*$/, ''),
+            { deadline },
+            original,
+          ),
+        ).then(
+          (cost) => m.add(cost),
+          () => {},
+        );
+        claimRetirement = retirement;
+        pending.add(retirement);
         try {
-          const cost = await withRequestDeadline(deadline, () =>
-            retireServingPitClaim(
-              config.pool,
-              config.search,
-              target.replace(/subjects-g[1-9][0-9]*$/, ''),
-              { deadline },
-              unpublished,
-            ),
-          );
-          m.add(cost);
-        } catch {
-          // The worker retries this exact durable claim after its original deadline.
+          await retirement;
+        } finally {
+          pending.delete(retirement);
+          claimRetirement = undefined;
         }
       }
     }

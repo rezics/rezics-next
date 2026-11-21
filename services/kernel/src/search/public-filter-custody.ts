@@ -379,11 +379,13 @@ async function engine<T>(
   method: Parameters<OpenSearch['request']>[0],
   path: string,
   body?: unknown,
+  onDispatch?: () => void,
 ) {
   check(context);
   meter.engineRequests++;
   meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
   if (path.endsWith('/_search')) meter.engineSearches++;
+  onDispatch?.();
   const response = await search.request<T>(method, path, body, {
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
@@ -1784,9 +1786,10 @@ export function createPublicFilterCustody(
         return { status: 'registered' as const, registration: identity, consumer, cost: meter };
       });
     },
-    openPit(request, search, context) {
+    openPit(request, search, context, admitPhysicalOpen) {
       const input = decode<typeof request>(encode(request));
       lifetime(input.keepAliveMs);
+      requireValue((input.claim !== undefined) === (admitPhysicalOpen !== undefined));
       if (input.claim !== undefined) {
         requireValue(
           input.registration.partition === 0 &&
@@ -1843,14 +1846,42 @@ export function createPublicFilterCustody(
           return result.incarnation;
         };
         if ((await checkTarget('beforePit')) !== consumer.incarnation) throw new Failure('binding_mismatch');
+        // Before this grant, the durable intent proves the physical request could never have run.
+        const fund = admitPhysicalOpen && (await admitPhysicalOpen());
+        if (admitPhysicalOpen && !fund) throw new Failure('binding_mismatch');
+        let dispatched = false;
         const openedAt = Date.now();
-        const opened = await engine<{ pit_id: string; _shards: { failed: number } }>(
-          search,
-          meter,
-          context,
-          'POST',
-          `/${consumer.physicalTarget}/_search/point_in_time?keep_alive=${input.keepAliveMs}ms`,
-        );
+        let opened: { pit_id: string; _shards: { failed: number } };
+        try {
+          fund?.();
+          opened = await engine<typeof opened>(
+            search,
+            meter,
+            context,
+            'POST',
+            `/${consumer.physicalTarget}/_search/point_in_time?keep_alive=${input.keepAliveMs}ms`,
+            undefined,
+            () => {
+              dispatched = true;
+            },
+          );
+        } catch (error) {
+          // A granted caller that exhausted its deadline or budget before dispatch has
+          // the same proof of absence as the exact opener with a confirmed deletion.
+          if (fund && input.claim && !dispatched) {
+            const claim = input.claim;
+            const cleanup = { deadline: Date.now() + 5_000 };
+            const retirement = operationCost(pool, cleanup);
+            try {
+              await withRequestDeadline(cleanup.deadline, () =>
+                settleUnretainedServingPit(pool, retirement, input.registration.id, claim),
+              );
+            } finally {
+              addCost(meter, retirement);
+            }
+          }
+          throw error;
+        }
         text(opened.pit_id);
         try {
           if (opened._shards.failed) throw new Failure('observation_lost');
@@ -1941,25 +1972,7 @@ export function createPublicFilterCustody(
             try {
               await withRequestDeadline(cleanup.deadline, async () => {
                 await deletePit(opened.pit_id, search, cleanup, retirement);
-                await sql(
-                  pool,
-                  retirement,
-                  `WITH original AS MATERIALIZED (
-                     SELECT c.partition_no,c.bootstrap FROM search.public_filter_pit_claim c
-                     JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
-                     WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2) AND c.state IN ('opening','uncertain')
-                       AND b.state IN ('begun','aborting') AND b.queried IS NULL AND b.publication_job IS NULL
-                       AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='pit' AND NOT EXISTS
-                         (SELECT FROM search.public_filter_observation o WHERE (o.partition_no,o.observation)=(0,$3))
-                     FOR UPDATE OF c,b
-                   ), settled AS (
-                     UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM original c
-                     WHERE (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) RETURNING b.partition_no,b.bootstrap
-                   ) DELETE FROM search.public_filter_pit_claim c USING settled b
-                     WHERE (c.partition_no,c.bootstrap)=(b.partition_no,b.bootstrap)`,
-                  [input.registration.id, claim.slice(2), claim],
-                  { points: 5, keys: 12, writes: 2 },
-                );
+                await settleUnretainedServingPit(pool, retirement, input.registration.id, claim);
               });
             } finally {
               addCost(meter, retirement);
@@ -2825,6 +2838,116 @@ async function deletePit(pit: string, search: OpenSearch, context: PublicFilterC
   assertRetainedPitDeletion(pit, receipt);
 }
 
+/** Called only by the single positively admitted opener with a pre-dispatch or exact physical deletion receipt. */
+function settleUnretainedServingPit(pool: Pool, meter: Meter, registration: string, claim: string) {
+  return sql(
+    pool,
+    meter,
+    `WITH original AS MATERIALIZED (
+                     SELECT c.partition_no,c.bootstrap FROM search.public_filter_pit_claim c
+                     JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+                     WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2) AND c.state IN ('opening','uncertain')
+                       AND b.state IN ('begun','aborting') AND b.queried IS NULL AND b.publication_job IS NULL
+                       AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='pit' AND NOT EXISTS
+                         (SELECT FROM search.public_filter_observation o WHERE (o.partition_no,o.observation)=(0,$3))
+                     FOR UPDATE OF c,b
+                   ), settled AS (
+                     UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM original c
+                     WHERE (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) RETURNING b.partition_no,b.bootstrap
+                   ) DELETE FROM search.public_filter_pit_claim c USING settled b
+                     WHERE (c.partition_no,c.bootstrap)=(b.partition_no,b.bootstrap)`,
+    [registration, claim.slice(2), claim],
+    { points: 5, keys: 12, writes: 2 },
+  );
+}
+
+/** Drain the indexed due prefix without one transaction per already-closed or undispatched PIT.
+ * All other phases still need their original native cleanup. Nothing here proves a lost OS reply. */
+export async function drainExpiredServingPits(
+  pool: Pool,
+  search: OpenSearch,
+  prefix: string,
+  context: PublicFilterConsumerContext,
+): Promise<boolean> {
+  const meter = operationCost(pool, context);
+  for (let turn = 0; turn < 16; turn++) {
+    if (Date.now() >= context.deadline) return true;
+    const result = await sql(
+      pool,
+      meter,
+      `WITH due AS MATERIALIZED (
+         SELECT c.partition_no,c.bootstrap,c.registration,c.state,c.deadline,c.target_prefix
+         FROM search.public_filter_pit_claim c WHERE c.target_prefix=$1 AND c.retry_after<=$2 AND c.state<>'uncertain'
+         ORDER BY c.retry_after,c.partition_no,c.bootstrap LIMIT 32 FOR UPDATE SKIP LOCKED
+       ), proven AS MATERIALIZED (
+         SELECT c.partition_no,c.bootstrap FROM due c
+         JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+         JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+         JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(c.partition_no,c.registration)
+         LEFT JOIN search.public_filter_observation o ON (o.partition_no,o.registration,o.observation)=
+           (c.partition_no,c.registration,c.partition_no::text||':'||c.bootstrap::text)
+         WHERE c.deadline<=$2 AND b.snapshot_kind='pit' AND b.coverage_publication IS NOT NULL AND b.publication_job IS NULL
+           AND regexp_replace(r.physical_target,'subjects-g[1-9][0-9]*$','')=c.target_prefix
+           AND ((c.state='new' AND b.state='begun' AND b.queried IS NULL AND o.observation IS NULL)
+             OR (c.state IN ('retained','handed','closing') AND o.state='closed'
+               AND (o.consumer_work IS NULL OR o.consumer_bootstrap=o.observation)
+               AND b.state IN ('begun','adopted','aborting','aborted')
+               AND (b.queried IS NULL OR b.queried=o.observation)
+               AND NOT EXISTS (SELECT FROM search.public_filter_pit pit
+                 WHERE (pit.partition_no,pit.observation)=(o.partition_no,o.observation) AND pit.state='owned')))
+         FOR UPDATE OF b
+       ), settled AS (
+         UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM proven p
+         WHERE (b.partition_no,b.bootstrap)=(p.partition_no,p.bootstrap) RETURNING b.partition_no,b.bootstrap
+       ), removed AS (
+         DELETE FROM search.public_filter_pit_claim c USING settled s
+         WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap) RETURNING c.bootstrap
+       ) SELECT (SELECT count(*)::integer FROM due) AS due,(SELECT count(*)::integer FROM removed) AS removed`,
+      [prefix, Date.now()],
+      { points: 225, keys: 609, writes: 64 },
+    );
+    const { due, removed } = result.rows[0];
+    if (due === 0) return false;
+    if (removed === 0) {
+      const retired = await retireServingPitClaim(pool, search, prefix, context);
+      if (!retired.resultWrites) return false;
+    }
+  }
+  return true;
+}
+
+/** The worker owns one bounded scan. Quiet prefixes sleep; remaining work schedules the next scan promptly. */
+export function startServingPitRetirement(pool: Pool, search: OpenSearch, prefix: string) {
+  let stopped = false;
+  let running: Promise<void> | undefined;
+  let timer: ReturnType<typeof setTimeout>;
+  const schedule = (delay: number) => {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      let more = false;
+      running = drainExpiredServingPits(pool, search, prefix, { deadline: Date.now() + 2_000 })
+        .then(
+          (pending) => {
+            more = pending;
+          },
+          () => {},
+        )
+        .finally(() => {
+          running = undefined;
+          schedule(more ? 250 : 10_000);
+        });
+    }, delay);
+  };
+  schedule(1_000);
+  return {
+    async stop() {
+      stopped = true;
+      clearTimeout(timer);
+      await running;
+    },
+  };
+}
+
 /** Reclaim one unpublished independent opener. A missing receipt after dispatch stays
  * uncertain. Only the exact retained original can certify physical closure. */
 export async function retireServingPitClaim(
@@ -2871,7 +2994,19 @@ export async function retireServingPitClaim(
       [keys.partition_no, keys.bootstrap, prefix, original?.registration ?? null, now],
       { points: 5, keys: 14, writes: 0 },
     );
-    if (!claim) return;
+    if (!claim) {
+      // A fenced owner may return later. Keep its exact claim, but let other
+      // indexed originals progress while its epoch or Source binding is unavailable.
+      if (!original)
+        await sql(
+          db,
+          meter,
+          `UPDATE search.public_filter_pit_claim SET retry_after=$3
+        WHERE (partition_no,bootstrap)=($1,$2) AND state<>'uncertain' AND retry_after<=$4`,
+          [keys.partition_no, keys.bootstrap, now + 10_000, now],
+        );
+      return;
+    }
     const ids = [keys.partition_no, keys.bootstrap];
     if (claim.state === 'new' && claim.queried === null) {
       // HTTP dispatch requires the prior committed new -> opening transition.
@@ -2893,7 +3028,8 @@ export async function retireServingPitClaim(
     await sql(
       db,
       meter,
-      `UPDATE search.public_filter_pit_claim SET state=$3,retry_after=$4
+      `UPDATE search.public_filter_pit_claim SET state=$3,retry_after=$4,
+          consumer_work=CASE WHEN $3='uncertain' THEN NULL ELSE consumer_work END
       WHERE (partition_no,bootstrap)=($1,$2)`,
       [...ids, claim.queried === null ? 'uncertain' : 'closing', now + 5_000],
     );

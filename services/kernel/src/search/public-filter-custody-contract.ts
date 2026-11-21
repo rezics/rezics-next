@@ -183,6 +183,8 @@ export interface PublicFilterCustody {
     }>,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
+    /** An original grant returns the budget check to perform immediately before its sole physical dispatch. */
+    admitPhysicalOpen?: () => Promise<(() => void) | undefined>,
   ): Promise<CustodyRetained | CustodyFailure>;
   /** Immutable SQL prepared input owned by this observation, not a mutable cache or population proof. */
   retainPrepared(
