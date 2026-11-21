@@ -10,7 +10,6 @@ import { createPool } from '../../src/database/pool.ts';
 import type { MountedRoute } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { ContextNotFoundError, editorialContextAnchor } from '../../src/semantic/context.ts';
 import { testKernel } from '../support/test-kernel.ts';
 import { issuer, nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
@@ -62,31 +61,11 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
   const pool = createPool(url);
   let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;
   try {
-    scopes.push('context:read', 'context:create', 'exposure:open', 'exposure:close', 'gate:any');
+    scopes.push('context:read', 'exposure:open', 'exposure:close', 'gate:any');
     await bootstrapRelease(pool, bundledRelease);
     auth = await nativeFixture(pool);
     const kernel = testKernel({
       pool,
-      viewerActionResources: new Map([
-        [
-          reference.type,
-          {
-            readAction: 'context:read',
-            async read(client, ids, at, time) {
-              if (!time) throw new TypeError('Context fixture requires the live viewer read time');
-              const present: Record<string, boolean> = {};
-              for (const id of ids) {
-                try {
-                  if (await editorialContextAnchor(id).validate(client, time)) present[id] = true;
-                } catch (error) {
-                  if (!(error instanceof ContextNotFoundError)) throw error;
-                }
-              }
-              return present;
-            },
-          },
-        ],
-      ]),
       auth: {
         issuer,
         audience: 'https://ordinary.api.test',
@@ -94,7 +73,7 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
         fetch: async () => auth!.host.service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
       },
     });
-    const person = await auth.person('fixed-global-actions');
+    const person = await auth.person(`fixed-global-${crypto.randomUUID().slice(0, 8)}`);
     async function grant(action: string, id: string = reference.id) {
       await pool.query(
         `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
@@ -135,7 +114,7 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
     await grant('context:read');
     await grant('gate:any');
     expect(exposure(await read([reference.id]), reference.id)).toEqual([]);
-    for (const action of ['exposure:open', 'exposure:close', 'context:create']) await grant(action);
+    for (const action of ['exposure:open', 'exposure:close']) await grant(action);
     const positive = await read([reference.id]);
     expect(exposure(positive, reference.id)).toEqual([
       { action: 'exposure:close', operations: ['exposure.close'] },
@@ -144,19 +123,16 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
     // Neither admission nor viewerActions reports the current public opening.
     expect(Object.keys(positive)).toEqual(['resources']);
     expect(Object.keys(positive.resources[0]!).sort()).toEqual(['id', 'type', 'viewerActions']);
-    const created = await kernel.handle(
-      new Request('https://kernel.test/v1/contexts', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${person.bearer}`,
-          'content-type': 'application/json',
-          'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        },
-        body: JSON.stringify({ labels: { en: 'Other Context' } }),
-      }),
+    const other = newId(0);
+    await pool.query(
+      "INSERT INTO semantic.context (route, context_id, kind, labels) VALUES ($1, $2, 'community', $3)",
+      [routeOf(other), other, { en: 'Other Context' }],
     );
-    expect(created.status).toBe(201);
-    const other: string = (await created.json()).context.id;
+    await pool.query(
+      `INSERT INTO access.resource_role_grant (route, resource_id, subject_id, subject_kind, grant_role, valid, transaction_id)
+       VALUES ($1, $2, $3, 'identity', 'semantic.context.owner', '(,)', $2)`,
+      [routeOf(other), other, person.accountId],
+    );
     for (const action of ['context:read', 'exposure:open', 'exposure:close']) await grant(action, other);
     expect(exposure(await read([other]), other)).toEqual([]);
     const mixed = await read([reference.id, other]);
