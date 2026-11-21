@@ -18,6 +18,7 @@ import { contentDeclaration, type ContentWorkAmbient } from '../content/register
 import type { WorkModule } from '../work/registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { economyOwnerWorkModule } from './economy-owner-work.ts';
+import { economyTestFundingWorkModule } from './economy-test-funding-work.ts';
 import { removeMembershipFollow } from '../library/follows.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { createSemanticWorkModule, type SemanticDomainComposer } from '../semantic/work-module.ts';
@@ -141,6 +142,7 @@ export function createKernelWorkModules(
     ratingNativeWorkModule,
     commerceWorkModule,
     economyOwnerWorkModule,
+    economyTestFundingWorkModule,
     libraryWorkModule,
     community.work,
     semanticWorkModule,
