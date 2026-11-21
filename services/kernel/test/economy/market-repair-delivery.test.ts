@@ -233,6 +233,8 @@ test('lost repair completion reclaims only the named request and preserves origi
 });
 
 test('the existing market schedule processes one private pass and leaves further progress to its sweep', async () => {
+  // The private clone can inherit versions from earlier worker fixtures. Scheduled work targets the latest version.
+  await pool.query('TRUNCATE dbos.application_versions');
   const f = await marketFixture();
   expect(await f.accept()).toEqual({ kind: 'queued' });
   const program = `
