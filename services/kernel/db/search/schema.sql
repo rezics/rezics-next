@@ -2581,8 +2581,8 @@ CREATE TABLE search.public_filter_coverage_baseline (
 CREATE TABLE search.public_filter_coverage_page (
     partition_no integer NOT NULL,
     id uuid NOT NULL,
-    observation text NOT NULL,
-    registration text NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    registration text NOT NULL COLLATE pg_catalog."C",
     definition text NOT NULL,
     consumer text NOT NULL,
     deadline bigint NOT NULL,
