@@ -14,6 +14,7 @@ import {
   type EconomyLedger,
   type EconomyReceipt,
   type EconomyResult,
+  type ExpiredAssetProgram,
   type HoldAllocation,
   type HoldAllocationKey,
   type HoldAllocationPurpose,
@@ -1282,6 +1283,54 @@ export function createEconomyLedger(
       );
     },
 
+    nextExpiredAssetProgram(after) {
+      if (after !== undefined && !validIdentifier(after.assetId)) return Promise.resolve(failure('invalid_operation'));
+      return database.read(async (client) => {
+        const { rows } = await client.query<ExpiredAssetProgram>(
+          `SELECT asset_id AS "assetId", expires_at::text AS "expiresAt"
+           FROM economy.asset_program_expiry
+           WHERE book_id = $1 AND retired_at IS NULL AND expires_at <= statement_timestamp()
+             AND (expires_at, asset_id) > ($2::timestamptz, $3)
+           ORDER BY expires_at, asset_id LIMIT 1`,
+          [bookId, after?.expiresAt ?? '-infinity', after?.assetId ?? ''],
+        );
+        return success(rows[0] ?? null);
+      });
+    },
+
+    retireExpiredAssetProgram(assetId) {
+      if (!validIdentifier(assetId)) return Promise.resolve(failure('invalid_operation'));
+      return database.transaction(async (client) => {
+        const ready = await client.query(
+          `SELECT 1 FROM economy.asset_program_expiry
+           WHERE book_id = $1 AND asset_id = $2 AND retired_at IS NULL AND expires_at <= statement_timestamp()`,
+          [bookId, assetId],
+        );
+        if (!ready.rowCount) return success(false);
+        await client.query("SET LOCAL lock_timeout = '1s'");
+        // Mint locks the issuer before checking expiry. Wait out any admitted mint, including the first.
+        await client.query(
+          `INSERT INTO economy.position (book_id, asset_id, account_id, account_role)
+           VALUES ($1, $2, $3, 'issuer') ON CONFLICT DO NOTHING`,
+          [bookId, assetId, issuerAccount],
+        );
+        await client.query(
+          `SELECT 1 FROM economy.position WHERE book_id = $1 AND asset_id = $2 AND account_id = $3 FOR UPDATE`,
+          [bookId, assetId, issuerAccount],
+        );
+        const retired = await client.query(
+          `UPDATE economy.asset_program_expiry SET retired_at = statement_timestamp()
+           WHERE book_id = $1 AND asset_id = $2 AND retired_at IS NULL AND expires_at <= statement_timestamp()
+             AND NOT EXISTS (
+               SELECT 1 FROM economy.position WHERE book_id = $1 AND asset_id = $2
+                 AND account_role = 'wallet' AND posted > 0
+             )`,
+          [bookId, assetId],
+        );
+        return success(retired.rowCount === 1);
+      });
+    },
+
     expireProgramCredits(input) {
       if (!walletAccount(input.accountId) || !validIdentifier(input.assetId))
         return Promise.resolve(failure('invalid_operation'));
@@ -1291,6 +1340,8 @@ export function createEconomyLedger(
         const admittedAt = await getTime(connection);
         // An early sweep has no terminal effect. Keep the same key available when native time reaches expiry.
         if (!programExpired(program, admittedAt)) return failure('invalid_operation');
+        // Stop the native lock wait before the worker's connection deadline can leave other positions blocked.
+        await connection.query("SET LOCAL lock_timeout = '1s'");
         return burnProgramUnits(
           { ...input, operationId: `program-expiry/${input.assetId}` },
           { kind: 'credit_expiry', admittedAt, connection },
