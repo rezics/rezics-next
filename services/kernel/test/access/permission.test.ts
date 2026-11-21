@@ -390,7 +390,7 @@ test('the already-read actor state and epoch fail closed without an actor reread
   expect(await (await accessCheck(missing, actor, action, resource, ctx))(pool)).toBe(false);
 });
 
-test('unresolved account, grant, assignment and membership reads deny at the production boundary', async () => {
+test('unresolved account evidence denies and unavailable native ACL sources report unavailability', async () => {
   expect(await run()).toBe(true);
   await unavailable('account', async () => {
     const missing = createAccess({
@@ -408,13 +408,13 @@ test('unresolved account, grant, assignment and membership reads deny at the pro
   });
   for (const table of ['resource_grant', 'resource_denial', 'principal_assignment']) {
     await unavailable(table, async () => {
-      expect(await run()).toBe(false);
+      await expect(run()).rejects.toBeInstanceOf(AccessUnavailableError);
     });
   }
   await organizationGrant();
   expect(await run()).toBe(true);
   await unavailable('organization_member', async () => {
-    expect(await run()).toBe(false);
+    await expect(run()).rejects.toBeInstanceOf(AccessUnavailableError);
   });
   await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [routeOf(principalId), principalId]);
   expect(await run()).toBe(false);

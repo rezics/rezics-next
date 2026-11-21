@@ -530,7 +530,8 @@ test('Permission preparation stays within its bound as O grows', async () => {
     growth('Permission preparation stays within its bound as O grows', async (growthDb) => prepare(growthDb.pool)),
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  expect(report.samples.every(({ cost }) => cost.statements === 3)).toBe(true);
+  // This actor has complete empty inverse coverage. Preparation reads time and coverage.
+  expect(report.samples.every(({ cost }) => cost.statements === 2)).toBe(true);
 }, 85_000);
 
 test('Final permission check stays within its bound as G grows', async () => {

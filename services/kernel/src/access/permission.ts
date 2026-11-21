@@ -62,7 +62,11 @@ import {
   type Resource,
 } from './check.ts';
 import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
-import { permissionReadClient, withPermissionReadConnection } from './permission-read-connection.ts';
+import {
+  permissionReadClient,
+  permissionReadTransport,
+  withPermissionReadConnection,
+} from './permission-read-connection.ts';
 import { MEMBERSHIP_LIMIT, type MembershipPrincipal } from './membership-inverse.ts';
 import { routeOf as readRoute } from '../route/route.ts';
 import { deadlineClient, within } from './deadline.ts';
@@ -514,10 +518,13 @@ async function checkPreparedPermission(
     const policyCore =
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
+    // Without a candidate lookup this is the first ACL read. Preserve source
+    // unavailability on this same checkout when the ACL query cannot run.
+    const source = !facts.anonymous && !facts.roles.length ? permissionReadTransport(client) : client;
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
       compiledPermissionChecks.getStore()
-        ? nativeSourceQuery(client, permissionRead, formula.input, 'compiled')
-        : permissionRead.run(client, formula.input),
+        ? nativeSourceQuery(source, permissionRead, formula.input, 'compiled')
+        : permissionRead.run(source, formula.input),
     );
     if (
       !stillValid() ||
@@ -921,6 +928,10 @@ export function createAccess(config: PermissionConfig): Access {
                 valid: 'empty',
               });
         }
+      }
+      // Candidate hits select group homes to visit. Direct and active-account ACLs
+      // are decided on the resource snapshot even when neither operand has a group.
+      if (actor.kind === 'account' && roles.length) {
         const candidateInput = {
           route: resource.route,
           resource_ids: [...(page?.ids ?? [resource.id])],
