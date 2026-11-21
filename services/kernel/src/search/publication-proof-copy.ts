@@ -107,22 +107,26 @@ export async function hasRetainedWriterPublicationCopies(
   return retained.rowCount !== 0;
 }
 
-/** The held target fence prevents new occupied homes. Target rows cover registrations in every state. */
-export async function nextWriterPublicationHome(
+/** The held fence prevents new occupied homes. Seek both target-leading indexes once per distinct home. */
+export async function nextWriterPublicationHomes(
   tx: Pick<import('pg').PoolClient, 'query'>,
   from: number,
   physicalTarget: string,
-): Promise<number> {
-  const {
-    rows: [row],
-  } = await tx.query<{ home: number }>(
-    `SELECT LEAST(
-      COALESCE((SELECT partition_no FROM search.identity_writer
-        WHERE physical_target=$1 AND partition_no >= $2 ORDER BY partition_no LIMIT 1),4096),
-      COALESCE((SELECT partition_no FROM search.public_filter_target
-        WHERE physical_target=$1 AND partition_no >= $2 ORDER BY partition_no LIMIT 1),4096)
-    ) AS home`,
-    [physicalTarget, from],
+  limit: number,
+): Promise<number[]> {
+  const result = await tx.query<{ home: number }>(
+    `WITH RECURSIVE occupied(home, ordinal) AS (
+       VALUES ($2::integer - 1, 0)
+       UNION ALL
+       SELECT LEAST(
+         COALESCE((SELECT partition_no FROM search.identity_writer
+           WHERE physical_target=$1 AND partition_no > prior.home ORDER BY partition_no LIMIT 1),4096),
+         COALESCE((SELECT partition_no FROM search.public_filter_target
+           WHERE physical_target=$1 AND partition_no > prior.home ORDER BY partition_no LIMIT 1),4096)
+       ), prior.ordinal + 1
+       FROM occupied prior WHERE prior.ordinal < $3 AND prior.home < 4096
+     ) SELECT home FROM occupied WHERE ordinal > 0 ORDER BY ordinal`,
+    [physicalTarget, from, limit],
   );
-  return row!.home;
+  return result.rows.map(({ home }) => home);
 }

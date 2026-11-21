@@ -5,7 +5,7 @@ import type { AccountDiscoveryRepairObservation } from '../access/account-discov
 import {
   drainGenerationPublicationProofCopy,
   hasRetainedWriterPublicationCopies,
-  nextWriterPublicationHome,
+  nextWriterPublicationHomes,
 } from './publication-proof-copy.ts';
 import {
   advanceWriterPublicationAdmission,
@@ -1035,6 +1035,7 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
     drainPublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
+      inputLimit?: number,
     ): Promise<
       | {
           status: 'draining' | 'drained';
@@ -1480,6 +1481,8 @@ export function createSearchWriterGuard(options: {
       clearTimeout(timer);
     }
   }
+  const publicationWriterPageSize = 32;
+  const publicationHomeInputLimit = publicationWriterPageSize + 3; // Two target heads and a writer lookahead.
   async function drainPublicationHome(
     input: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
@@ -1521,7 +1524,7 @@ export function createSearchWriterGuard(options: {
             `WITH page AS MATERIALIZED (
            SELECT original_id,dispatch_state,writer_token,incarnation,owner_epoch FROM search.identity_writer
            WHERE partition_no=$1 AND physical_target=$2 AND ($3::uuid IS NULL OR original_id>$3)
-           ORDER BY original_id LIMIT 32 FOR UPDATE
+           ORDER BY original_id LIMIT ${publicationWriterPageSize} FOR UPDATE
          ) SELECT COALESCE(jsonb_agg(to_jsonb(page) ORDER BY original_id),'[]') AS copies,
            EXISTS(SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
              AND original_id>COALESCE((SELECT max(original_id::text)::uuid FROM page),$3::uuid)
@@ -1644,38 +1647,62 @@ export function createSearchWriterGuard(options: {
         };
       });
     },
-    drainPublication(value, context) {
+    drainPublication(value, context, inputLimit = publicationHomeInputLimit) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost, context) => {
+        // Direct guard callers retain their one-home allowance.
+        if (!Number.isSafeInteger(inputLimit) || inputLimit < 0) throw new TypeError('Invalid drain input limit');
+        const homeLimit = Math.min(8, Math.floor(inputLimit / publicationHomeInputLimit));
         await publicationPhysical(input, context);
-        const { before, home } = await withReadTransaction(
+        const { before, homes } = await withReadTransaction(
           options.pool,
           async (tx) => {
             const before = await publicationRetained(tx, input, context);
             const from = before.publication_home;
+            if (!homeLimit) return { before, homes: [] };
             // Replays within a writer page must stay in that home. Across homes the exact
             // held fence makes occupancy monotone; the final revision check also detects
             // release or replacement while this read was in flight.
-            if (before.publication_after !== null || from === 4096) return { before, home: from };
-            cost.inputKeys += 2; // At most one head from each target-leading index.
-            return {
-              before,
-              home: await nextWriterPublicationHome(publicationQueries(tx, context), from, options.index),
-            };
+            if (before.publication_after !== null || from === 4096) return { before, homes: [from] };
+            const homes = await nextWriterPublicationHomes(
+              publicationQueries(tx, context),
+              from,
+              options.index,
+              homeLimit,
+            );
+            cost.inputKeys += 2 * homes.length;
+            return { before, homes };
           },
           context.deadline,
         );
         publicationDeadline(context);
+        if (!homes.length) return { status: 'draining' as const, fence: input, cost, advanced: false };
         if (before.publication_home === 4096) {
           const source = await confirmDrainedPublication(input, context, cost);
           const result = { status: 'drained' as const, fence: input, cost };
           if (source) heldPublicationSources.set(result, source);
           return result;
         }
-        const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
-        publicationDeadline(context);
-        const nextHome = home === 4096 || progress?.uncertain || progress?.after ? home : home + 1;
-        const after = progress?.uncertain ? before.publication_after : (progress?.after ?? null);
+        // Each home still settles in its own native command. One revision-checked
+        // frontier can record the entire verified prefix under the same gate.
+        let nextHome = before.publication_home;
+        let after = before.publication_after;
+        let copiesChanged = false;
+        let longest = 0;
+        for (const home of homes) {
+          nextHome = home;
+          if (home === 4096) break;
+          const homeStarted = Date.now();
+          if (longest && homeStarted + 2 * longest >= context.deadline) break;
+          const progress = await drainPublicationHome(input, context, cost, before, home);
+          publicationDeadline(context);
+          copiesChanged ||= progress.changed;
+          if (progress.uncertain) break;
+          after = progress.after;
+          if (after !== null) break;
+          nextHome = home + 1;
+          longest = Math.max(1, longest, Date.now() - homeStarted);
+        }
         const moved = nextHome !== before.publication_home || after !== before.publication_after;
         if (moved) {
           await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
@@ -1702,7 +1729,7 @@ export function createSearchWriterGuard(options: {
           status: 'draining' as const,
           fence: input,
           cost,
-          advanced: moved || progress?.changed === true,
+          advanced: moved || copiesChanged,
         };
       });
     },

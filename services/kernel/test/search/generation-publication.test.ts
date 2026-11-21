@@ -161,6 +161,66 @@ test('only a completely reconciled native physical generation with actual writer
   }
 });
 
+test('drains sparse writer homes in one funded checkpoint and stops before a dispatched writer', async () => {
+  const f = await fixture();
+  try {
+    const prepared = await f.operations.prepare(f.registered.consumer, context());
+    if (prepared.status !== 'preparing') throw new Error(prepared.reason);
+    const target = f.registered.consumer.physicalTarget;
+    const guard = createSearchWriterGuard({
+      pool,
+      search,
+      index: target,
+      consumer: 'publication_test',
+      source: {
+        async read() {
+          throw new Error('Drain must use the native writer');
+        },
+        async count() {
+          throw new Error('Drain must use the native writer');
+        },
+      },
+      listing: { read: async () => new Map() },
+    });
+    const homes = [11, 39, 103, 239, 789, 2013];
+    // Preserve dispatched uncertainty in the middle of a page of settled homes.
+    await pool.query(
+      `INSERT INTO search.identity_writer
+       (partition_no,physical_target,original_id,incarnation,owner_epoch,writer_token,writer_transaction_id,writer_position,dispatch_state)
+       SELECT home,$1,gen_random_uuid(),$2,p.epoch,
+         CASE WHEN home=239 THEN gen_random_uuid() END,gen_random_uuid(),1,
+         CASE WHEN home=239 THEN 'dispatched' ELSE 'settled' END
+       FROM unnest($3::integer[]) home JOIN core.partition p ON p.partition_no=home`,
+      [target, f.registered.consumer.incarnation, homes],
+    );
+    const installed = await guard.fencePublication(prepared.job, context());
+    if (installed.status !== 'fenced') throw new Error(installed.reason);
+    const frontier = async () =>
+      (
+        await pool.query<{ home: number; revision: number }>(
+          'SELECT publication_home AS home,publication_revision::integer AS revision FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
+          [target],
+        )
+      ).rows[0]!;
+    const start = await frontier();
+    expect(await guard.drainPublication(installed.fence, context(), 34)).toMatchObject({
+      status: 'draining',
+      advanced: false,
+    });
+    expect(await frontier()).toEqual(start);
+    const batch = await guard.drainPublication(installed.fence, context(), 1000);
+    expect(batch).toMatchObject({ status: 'draining', advanced: true, cost: { frontierWrites: 1 } });
+    expect(await frontier()).toEqual({ home: 239, revision: start.revision + 1 });
+    expect(await guard.drainPublication(installed.fence, context(), 1000)).toMatchObject({
+      status: 'draining',
+      advanced: false,
+    });
+    expect(await frontier()).toEqual({ home: 239, revision: start.revision + 1 });
+  } finally {
+    await f.operations.close();
+  }
+});
+
 test('physical recreation invalidates the original job and the replacement adopts its own native incarnation', async () => {
   const f = await fixture();
   try {

@@ -2295,7 +2295,11 @@ export function createSearchGenerationPublication(
           }
           try {
             if (!job.fenced_pass) {
-              const result = await writerGuard.drainPublication(fence(job), context);
+              const result = await writerGuard.drainPublication(
+                fence(job),
+                context,
+                PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - Math.max(meter.inputKeys, meter.resultWrites),
+              );
               add(meter, result.cost);
               if ('reason' in result) throw new Pending(result.reason);
               if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
