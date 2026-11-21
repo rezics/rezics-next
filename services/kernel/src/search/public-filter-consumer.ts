@@ -666,6 +666,7 @@ import type { PublicFilterPreparationSegmentEntry } from './public-filter-prepar
 import {
   createPublicFilterCustody,
   stepRetainedObservationErasure,
+  retireServingPitClaim,
   encodePublicFilterNativeState as encodeNative,
   decodePublicFilterNativeState as decodeNative,
   readPublicFilterRepairSettlement,
@@ -730,6 +731,23 @@ class ConsumerFailure extends Error {
     super(reason);
   }
 }
+// Only a confirmed zero-row update proves that this caller's physical locator was never enrolled.
+class LostWorkUpdate extends ConsumerFailure {
+  constructor() {
+    super('source_pending');
+  }
+}
+
+const unpublishedPits = new WeakMap<PublicFilterQueriedObservation, () => void>();
+
+/** The response owner alone can relinquish its freshly captured, unpublished first-page PIT. */
+export function finishPublicFilterPit(original: PublicFilterQueriedObservation, published: boolean): void {
+  const discard = unpublishedPits.get(original);
+  if (!discard) return;
+  unpublishedPits.delete(original);
+  if (!published) discard();
+}
+
 class MixedOwnerPending extends ConsumerFailure {
   constructor() {
     super('source_pending');
@@ -776,7 +794,36 @@ type RetainedWindow = Readonly<{
   rounds: number;
   charged: number;
 }>;
+const transferServingPit = `WITH owned AS MATERIALIZED (
+  SELECT c.partition_no,c.registration,c.bootstrap FROM search.public_filter_pit_claim c
+  JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+  JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(c.partition_no,c.registration)
+  JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
+  WHERE (c.partition_no,c.registration,c.bootstrap)=($1,$2,substring($4::text from 3)::uuid)
+    AND c.state='retained' AND c.deadline>$9 AND c.consumer_work=$3 AND r.state='active' AND t.incarnation=$10 AND r.consumer=$11
+    AND b.state='adopted' AND b.snapshot_kind='pit' AND b.queried=$5 AND b.coverage_publication IS NOT NULL
+    AND b.publication_job IS NULL AND $4=$5 FOR UPDATE OF c
+), moved AS (
+  UPDATE search.public_filter_observation o SET consumer_work=$6,consumer_bootstrap=$4
+  FROM owned c WHERE (o.partition_no,o.registration,o.observation)=(c.partition_no,c.registration,$5)
+    AND o.state='open' AND o.consumer_work IS NULL AND o.queried=$7 AND o.covered=$8 AND o.expires_at>$9
+  RETURNING c.bootstrap
+) UPDATE search.public_filter_pit_claim c SET state='handed',consumer_work=NULL FROM moved
+  WHERE (c.partition_no,c.bootstrap)=($1,moved.bootstrap) RETURNING c.bootstrap`;
+
+function rankedBookCapture(plan: PublicCanonicalCaptureInput): boolean {
+  return (
+    !('representation' in plan) &&
+    'sort' in plan &&
+    plan.sort === 'relevance' &&
+    plan.text?.kind === 'term' &&
+    !plan.overflowProperties?.length &&
+    hasPublicBookSearchShape({ filter: plan.filterDocument })
+  );
+}
+
 type ConsumerWork = {
+  independentPit?: true;
   registration: CustodyRegistration;
   bootstrap: Omit<PublicSourceBootstrap, 'definition'>;
   queried: PublicFilterQueriedObservation | null;
@@ -1219,6 +1266,56 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   function own(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, m: Meter) {
     owned.set(queried.snapshot.observation, { queried, context: Object.freeze({ deadline: context.deadline }), m });
   }
+  async function closeExact(
+    q: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    abortSource: boolean,
+  ) {
+    const result = await custody.closeObservation(q, config.search, { deadline: context.deadline });
+    if (result.status !== 'closed') throw new ConsumerFailure('observation_lost');
+    owned.delete(q.snapshot.observation);
+    if (abortSource && bootstrapBinding(binding)) {
+      const m = meter(context);
+      const row = (
+        await m.sql<{ consumer_work: string | null }>(
+          'SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)',
+          [locatorHome(q.snapshot.observation), q.snapshot.observation],
+        )
+      ).rows[0];
+      if (row?.consumer_work) await binding.abort({ bootstrap: decodeWork(row.consumer_work).bootstrap.id }, context);
+    }
+  }
+
+  const undelivered = new Map<string, { q: PublicFilterQueriedObservation; abortSource: boolean }>();
+  let drainingUndelivered = false;
+  function retireUndelivered(q: PublicFilterQueriedObservation, abortSource: boolean): void {
+    undelivered.set(q.snapshot.observation, { q, abortSource });
+    if (drainingUndelivered) return;
+    drainingUndelivered = true;
+    const drain = (async () => {
+      try {
+        for (const [id, entry] of undelivered) {
+          undelivered.delete(id);
+          const current = owned.get(id)?.queried ?? entry.q;
+          // Native deletion owns a separate deadline. It cannot advance or renew a serving observation.
+          const context = { deadline: Date.now() + 2000 };
+          try {
+            await withRequestDeadline(context.deadline, () => closeExact(current, context, entry.abortSource));
+          } catch {
+            // The exact native locator remains durable for subsequent owner cleanup.
+          }
+        }
+      } finally {
+        drainingUndelivered = false;
+      }
+    })();
+    pending.add(drain);
+    void drain.finally(() => pending.delete(drain)).catch(() => {});
+  }
+  function markUnpublishedIndependentPit(q: PublicFilterQueriedObservation): void {
+    unpublishedPits.set(q, () => retireUndelivered(q, true));
+  }
+
   async function releaseUse(use: CustodyUse, context: PublicFilterConsumerContext, m: Meter) {
     const released = m.take(await custody.release(use, context));
     if (released.status !== 'released')
@@ -1523,8 +1620,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           `SELECT consumer_work,false AS registration
         FROM search.public_filter_observation WHERE partition_no=$1 AND consumer_bootstrap=$2 AND state='open'
         UNION ALL SELECT consumer_work,true AS registration FROM search.public_filter_registration
-        WHERE partition_no=$1 AND consumer_bootstrap=$2 AND state='active' LIMIT 1`,
-          [home, bootstrap],
+        WHERE partition_no=$1 AND consumer_bootstrap=$2 AND state='active'
+        UNION ALL SELECT consumer_work,true AS registration FROM search.public_filter_pit_claim
+        WHERE partition_no=$1 AND bootstrap=$3 AND state IN ('new','opening','retained') AND consumer_work IS NOT NULL LIMIT 1`,
+          [
+            home,
+            bootstrap,
+            /^0:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(bootstrap) ? bootstrap.slice(2) : null,
+          ],
         )
       ).rows[0];
       if (!row?.consumer_work) throw new ConsumerFailure('observation_lost');
@@ -1556,6 +1659,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page?: Page,
     phase?: 'claim' | 'savePit' | 'saveReservation' | 'saveWindow',
   ) {
+    const firstWindow = !registration && work.independentPit && phase === 'saveWindow';
+    if (firstWindow) delete work.independentPit;
     const encoded = encodeWork(work);
     if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
     const q = work.queried ?? work.materializing;
@@ -1566,7 +1671,50 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       old,
       work.bootstrap.id,
     ];
+    if (registration && work.independentPit) {
+      const saved = await m.sql(
+        `UPDATE search.public_filter_pit_claim SET consumer_work=$3
+         WHERE (partition_no,registration,bootstrap)=($1,$2,$5) AND consumer_work IS NOT DISTINCT FROM $4
+           AND state IN ('new','opening','retained') AND deadline>$6 RETURNING bootstrap`,
+        [work.registration.partition, work.registration.id, encoded, old, work.bootstrap.id.slice(2), Date.now()],
+      );
+      if (saved.rowCount !== 1) throw new ConsumerFailure('source_pending');
+      m.cost.frontierWrites++;
+      return encoded;
+    }
     const observation = q?.snapshot.observation;
+    if (firstWindow) {
+      // No continuation can escape before this actual retained execution and its
+      // durable window. Until then a crashed transfer stays independently reclaimable.
+      const saved = await m.sql(
+        `WITH owned AS MATERIALIZED (
+           SELECT c.partition_no,c.bootstrap,c.registration FROM search.public_filter_pit_claim c
+           WHERE (c.partition_no,c.registration,c.bootstrap)=($1,$2,substring($5::text from 3)::uuid)
+             AND c.state='handed' AND c.deadline>$7 FOR UPDATE
+         ), complete AS (
+           UPDATE search.public_filter_observation o SET consumer_work=$3
+           FROM owned c,search.public_filter_execution e
+           WHERE (o.partition_no,o.registration,o.observation)=(c.partition_no,c.registration,$5)
+             AND o.consumer_work=$4 AND o.consumer_bootstrap=$5 AND o.state='open'
+             AND (e.partition_no,e.observation,e.id)=(o.partition_no,o.observation,$6)
+             AND e.consumer_window IS NOT NULL AND (e.page_id IS NULL OR e.page_status='complete')
+           RETURNING c.partition_no,c.bootstrap
+         ) DELETE FROM search.public_filter_pit_claim c USING complete w
+           WHERE (c.partition_no,c.bootstrap)=(w.partition_no,w.bootstrap) RETURNING c.bootstrap`,
+        [
+          work.registration.partition,
+          work.registration.id,
+          encoded,
+          old,
+          work.bootstrap.id,
+          work.execution,
+          Date.now(),
+        ],
+      );
+      if (saved.rowCount !== 1) throw new ConsumerFailure('source_pending');
+      m.cost.frontierWrites += 2;
+      return encoded;
+    }
     const grouped =
       page &&
       phase &&
@@ -1579,7 +1727,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         () => values,
       );
     if (grouped) {
-      if (!(await grouped)) throw new ConsumerFailure('source_pending');
+      if (!(await grouped)) throw new LostWorkUpdate();
     } else {
       const result = await m.sql(
         registration
@@ -1587,7 +1735,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           : "UPDATE search.public_filter_observation SET consumer_work=$3,consumer_bootstrap=$5 WHERE (partition_no,observation)=($1,$2) AND consumer_work IS NOT DISTINCT FROM $4 AND state='open' RETURNING observation",
         values,
       );
-      if (result.rowCount !== 1) throw new ConsumerFailure('source_pending');
+      if (result.rowCount !== 1) throw new LostWorkUpdate();
     }
     m.cost.frontierWrites++;
     // The saved enrollment lets the next worker recover the open PIT even
@@ -2120,9 +2268,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m);
     }
     if (work.queried === null && work.materializing === null) {
+      // The original claim may have opened a physical PIT before losing its response.
+      // Recovery can adopt that exact committed observation, but cannot issue another open.
+      if (work.independentPit && !freshPit) return { status: 'preparing', repair: job, cost: m.cost };
       const retained = m.take(
         await custody.openPit(
-          { registration: work.registration, covered: work.bootstrap.covered, keepAliveMs: 300_000 },
+          {
+            registration: work.registration,
+            covered: work.bootstrap.covered,
+            keepAliveMs: 300_000,
+            ...(work.independentPit ? { claim: work.bootstrap.id } : {}),
+          },
           config.search,
           context,
         ),
@@ -2131,7 +2287,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (work.bootstrap.snapshot === 'prepared') work.materializing = retained.queried;
       else work.queried = retained.queried;
       own(retained.queried, context, m);
-      encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
+      try {
+        encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
+      } catch (error) {
+        // A lost reply leaves custody uncertain. Only an observed CAS loss proves this PIT is ours to close.
+        if (!work.independentPit && error instanceof LostWorkUpdate) retireUndelivered(retained.queried, false);
+        throw error;
+      }
     }
     if (work.materializing && !work.queried) {
       // Each funded capture can retain one small segment of the same attached
@@ -2486,17 +2648,35 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     // Transfer work to THIS immutable observation before clearing the registration's bootstrap intent.
     if (!transferred && servingSubject) {
+      if (work.independentPit) {
+        // Keep the reclaimable intent until the final immutable Source join succeeds.
+        const joined = await join(q, undefined, m, context);
+        if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+      }
       // Adoption can survive a lost reply. Move the exact work and release its registration together.
-      const moved = await m.sql(pageControls.transfer(1), [
+      const moved = await m.sql(work.independentPit ? transferServingPit : pageControls.transfer(1), [
         work.registration.partition,
         work.registration.id,
         encoded,
         work.bootstrap.id,
         q.snapshot.observation,
         encodeWork(work),
+        ...(work.independentPit
+          ? [
+              encodeNative(q),
+              encodeNative(work.bootstrap.covered),
+              Date.now(),
+              q.consumer.incarnation,
+              encodeNative(q.consumer),
+            ]
+          : []),
       ]);
       if (moved.rowCount !== 1) return m.unavailable('source_pending');
       m.cost.frontierWrites += 2;
+      if (work.independentPit && page && freshPit) {
+        markUnpublishedIndependentPit(q);
+        return { status: 'captured', queried: q, repair: job, cost: m.cost };
+      }
     } else if (!transferred) {
       await save(work, null, false, m);
       await m.sql(
@@ -2544,6 +2724,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: PublicFilterConsumer,
     preparationMeter?: Meter,
   ): Promise<PublicFilterConsumerCapture> {
+    let unpublished: { registration: string; bootstrap: string } | undefined;
     const m = page?.m ?? preparationMeter ?? meter(context);
     if (snapshot !== 'pit' && snapshot !== 'prepared') throw new TypeError('Unknown immutable snapshot kind');
     // All grammar, private-owner and optional DSL validation precedes the first native call.
@@ -2739,7 +2920,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
               ? {
                   usePublishedCoverage:
-                    config.discoveryPreparation === 'enrollment' ? ('reconcile' as const) : (true as const),
+                    config.discoveryPreparation === 'enrollment'
+                      ? ('reconcile' as const)
+                      : page && !config.discoveryTarget && snapshot === 'pit' && rankedBookCapture(canonical)
+                        ? ('independent-pit' as const)
+                        : (true as const),
                 }
               : {}),
             inputLimit,
@@ -2777,6 +2962,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const work: ConsumerWork = {
         registration,
         bootstrap: retainedBootstrap(begun.bootstrap),
+        ...(native?.status === 'begun' && native.freshPit?.independent ? { independentPit: true as const } : {}),
         queried: null,
         materializing: null,
         projectionSource: null,
@@ -2790,6 +2976,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         charged: 0,
         adopted: false,
       };
+      if (work.independentPit) unpublished = { registration: registration.id, bootstrap: work.bootstrap.id };
       const encoded = await save(work, null, true, m, page?.bookBinding ? page : undefined, 'claim');
       if (
         begun.status === 'preparing' ||
@@ -2817,7 +3004,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         page && !publication && !config.discoveryTarget && native?.status === 'begun' ? native.freshPit : undefined;
       const claim = fresh && m.take(await fresh.unopened());
       if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
-      return await advanceCapture(
+      const result = await advanceCapture(
         work,
         encoded,
         m,
@@ -2828,8 +3015,30 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         bookPage,
         fresh && claim?.unopened ? { bootstrap: begun.bootstrap, adopt: fresh.adopt } : undefined,
       );
+      if (result.status === 'captured') unpublished = undefined;
+      return result;
     } catch (error) {
       return failure(error, m);
+    } finally {
+      if (unpublished) {
+        // No signed cursor has escaped this fresh invocation. Its persisted claim is
+        // also the retry point if the cleanup reply or the original HTTP open was lost.
+        const deadline = Date.now() + 5_000;
+        try {
+          const cost = await withRequestDeadline(deadline, () =>
+            retireServingPitClaim(
+              config.pool,
+              config.search,
+              target.replace(/subjects-g[1-9][0-9]*$/, ''),
+              { deadline },
+              unpublished,
+            ),
+          );
+          m.add(cost);
+        } catch {
+          // The worker retries this exact durable claim after its original deadline.
+        }
+      }
     }
   }
   async function queryPlan(
@@ -3005,14 +3214,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (raw.some((hit) => 'key' in hit)) return m.unavailable('observation_lost');
         // A serving Book page checks each hit's current type, text and disclosure after
         // this identity window. Its FINAL uses every examined original and terminal.
-        const rankedBook =
-          page !== undefined &&
-          !('representation' in plan) &&
-          'sort' in plan &&
-          plan.sort === 'relevance' &&
-          plan.text?.kind === 'term' &&
-          !plan.overflowProperties?.length &&
-          hasPublicBookSearchShape({ filter: plan.filterDocument });
+        const rankedBook = page !== undefined && rankedBookCapture(plan);
         const checked = await ownRows(
           raw as SearchResult['hits'],
           m,
@@ -3733,20 +3935,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     closeObservation(input, context) {
       const q = structuredClone(input);
       return track(context, async () => {
-        const result = await custody.closeObservation(q, config.search, { deadline: context.deadline });
-        if (result.status !== 'closed') throw new ConsumerFailure('observation_lost');
-        owned.delete(q.snapshot.observation);
-        if (bootstrapBinding(binding)) {
-          const m = meter(context);
-          const row = (
-            await m.sql<{ consumer_work: string | null }>(
-              'SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)',
-              [locatorHome(q.snapshot.observation), q.snapshot.observation],
-            )
-          ).rows[0];
-          if (row?.consumer_work)
-            await binding.abort({ bootstrap: decodeWork(row.consumer_work).bootstrap.id }, context);
-        }
+        await closeExact(q, context, true);
       });
     },
     close(disposal) {

@@ -84,6 +84,7 @@ import type { IndexedSubject, RelationFacetMatch, SubjectSource } from './source
 import { compileText, parseText, positiveText } from './text.ts';
 import { publicCatalogueKindCounts } from './kind-count-proof.ts';
 import { collectUsefulPage } from './useful-page.ts';
+import { finishPublicFilterPit } from './public-filter-consumer.ts';
 import { readPublicSearchPage } from './public-runtime.ts';
 import type { PublicFilterConsumerOperations, PublicFilterConsumerCapture } from './public-filter-consumer-contract.ts';
 import type { SearchHit as NativeSearchHit } from './query.ts';
@@ -1569,6 +1570,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       let operations: PublicFilterConsumerOperations | undefined;
       let capture: PublicFilterConsumerCapture | undefined;
       let disposeRetainedPage: (() => Promise<void>) | undefined;
+      let published = false;
+      let firstPagePit: Extract<PublicFilterConsumerCapture, { status: 'captured' }> | undefined;
       try {
         if (runtime) {
           if (retained) {
@@ -1597,22 +1600,24 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             const boundedOrder =
               !capturePlan.bookTypeList ||
               (await (bookPage ? (bookPage.nameOrdered ??= readNameOrder()) : readNameOrder()));
-            const bound = await indexRequest(() =>
-              runtime.bindRequest(
+            const bound = await indexRequest(async () => {
+              const opened = await runtime.bindRequest(
                 { plan: capturePlan, snapshot: (indexedTypeList && boundedOrder) || indexedText ? 'pit' : 'prepared' },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
                 bookPage,
-              ),
-            );
+              );
+              if (opened.capture.status === 'captured') firstPagePit = opened.capture;
+              return opened;
+            });
             operations = bound.operations;
             capture = bound.capture;
           }
         }
         const installed = operations;
         const retainedRead = installed
-          ? await indexRequest(() =>
-              readPublicSearchPage({
+          ? await indexRequest(async () => {
+              const page = await readPublicSearchPage({
                 operations: installed,
                 context,
                 plan: capturePlan,
@@ -1622,10 +1627,11 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 check: checkCandidates,
                 canonicalId: (subject) =>
                   canonicalIds && canonicalIds.status === 'ready' ? canonicalIds.canonicalId(subject) : subject.id,
-              }),
-            )
+              });
+              disposeRetainedPage = page.dispose;
+              return page;
+            })
           : undefined;
-        disposeRetainedPage = retainedRead?.dispose;
         if (
           retainedRead &&
           (retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
@@ -1758,6 +1764,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         await ((bookPage &&
           composedBookCurrent('releaseCurrent', bookPage, JSON.stringify(releaseBinding), assertCurrentRelease)) ??
           assertCurrentRelease());
+        published = true;
         return response;
       } finally {
         try {
@@ -1765,6 +1772,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           // failed work never substitutes for the missing final disclosure.
           await disposeRetainedPage?.();
         } finally {
+          if (firstPagePit) finishPublicFilterPit(firstPagePit.queried, published);
           await operations?.close();
         }
       }

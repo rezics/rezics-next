@@ -1787,6 +1787,13 @@ export function createPublicFilterCustody(
     openPit(request, search, context) {
       const input = decode<typeof request>(encode(request));
       lifetime(input.keepAliveMs);
+      if (input.claim !== undefined) {
+        requireValue(
+          input.registration.partition === 0 &&
+            input.claim === input.covered.observation &&
+            /^0:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(input.claim),
+        );
+      }
       text(input.covered.observation);
       return run(context, async (meter, context) => {
         const owners = bookRows(
@@ -1852,32 +1859,34 @@ export function createPublicFilterCustody(
             consumer,
             snapshot: {
               kind: 'pit',
-              observation: `${input.registration.partition}:${randomUUID()}`,
+              observation: input.claim ?? `${input.registration.partition}:${randomUUID()}`,
               pit: opened.pit_id,
             },
           };
-          const batch = bookRows(
-            'retain',
-            JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
-            input.registration.id,
-            {
-              id: input.registration.id,
-              observation: q.snapshot.observation,
-              queried: encode(q),
-              consumer: encode(consumer),
-              covered: encode(input.covered),
-              expires: openedAt + input.keepAliveMs,
-              pit: opened.pit_id,
-              hash: digest(opened.pit_id),
-            },
-            meter,
-            (items, shared) =>
-              transaction(shared, async (client) => {
-                await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
-                return sql(
-                  client,
-                  shared,
-                  `WITH target AS MATERIALIZED (
+          const batch =
+            !input.claim &&
+            bookRows(
+              'retain',
+              JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
+              input.registration.id,
+              {
+                id: input.registration.id,
+                observation: q.snapshot.observation,
+                queried: encode(q),
+                consumer: encode(consumer),
+                covered: encode(input.covered),
+                expires: openedAt + input.keepAliveMs,
+                pit: opened.pit_id,
+                hash: digest(opened.pit_id),
+              },
+              meter,
+              (items, shared) =>
+                transaction(shared, async (client) => {
+                  await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
+                  return sql(
+                    client,
+                    shared,
+                    `WITH target AS MATERIALIZED (
                 SELECT partition_no,physical_target FROM search.lock_retained_copy_target($2,$3)
                 WHERE incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
                     WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)), admitted AS MATERIALIZED (
@@ -1888,35 +1897,74 @@ export function createPublicFilterCustody(
                 SELECT partition_no,observation,id,queried,covered,expires,'open' FROM admitted RETURNING partition_no,observation,registration),
                 owned AS (INSERT INTO search.public_filter_pit SELECT r.partition_no,r.observation,i.hash,i.pit,'owned'
                   FROM retained r JOIN admitted i USING(observation)) SELECT registration AS id FROM retained`,
-                  [JSON.stringify(items), input.registration.partition, consumer.physicalTarget, consumer.incarnation],
-                );
-              }),
-          );
+                    [
+                      JSON.stringify(items),
+                      input.registration.partition,
+                      consumer.physicalTarget,
+                      consumer.incarnation,
+                    ],
+                  );
+                }),
+            );
           if (batch) {
             if (!(await batch)) throw new Failure('binding_mismatch');
             return { status: 'retained' as const, queried: q, cost: meter };
           }
           return await transaction(meter, async (client) => {
             await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
-            return retain(
-              input.registration,
-              {
-                consumer,
-                snapshot: {
-                  kind: 'pit',
-                  observation: `${input.registration.partition}:${randomUUID()}`,
-                  pit: opened.pit_id,
-                },
-              },
-              input.covered,
-              openedAt + input.keepAliveMs,
-              null,
-              meter,
-              client,
-            );
+            if (input.claim) {
+              const admitted = await sql(
+                client,
+                meter,
+                `UPDATE search.public_filter_pit_claim c SET state='retained'
+                 FROM semantic.public_filter_bootstrap b
+                 WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2) AND c.state='opening'
+                   AND c.deadline>$3 AND c.consumer_work IS NOT NULL
+                   AND (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap)
+                   AND b.state='begun' AND b.snapshot_kind='pit' AND b.queried IS NULL
+                   AND b.coverage_publication IS NOT NULL AND b.publication_job IS NULL RETURNING c.bootstrap`,
+                [input.registration.id, input.claim.slice(2), Date.now()],
+              );
+              if (admitted.rowCount !== 1) throw new Failure('binding_mismatch');
+            }
+            return retain(input.registration, q, input.covered, openedAt + input.keepAliveMs, null, meter, client);
           });
         } catch (error) {
-          await deletePit(opened.pit_id, search, context, meter);
+          if (!input.claim) {
+            await deletePit(opened.pit_id, search, context, meter);
+          } else {
+            // Only the sole physical opener can supply this exact deletion receipt.
+            // A late response can settle an uncertain slot even after the caller timed out.
+            const claim = input.claim;
+            const cleanup = { deadline: Date.now() + 5_000 };
+            const retirement = operationCost(pool, cleanup);
+            try {
+              await withRequestDeadline(cleanup.deadline, async () => {
+                await deletePit(opened.pit_id, search, cleanup, retirement);
+                await sql(
+                  pool,
+                  retirement,
+                  `WITH original AS MATERIALIZED (
+                     SELECT c.partition_no,c.bootstrap FROM search.public_filter_pit_claim c
+                     JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+                     WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2) AND c.state IN ('opening','uncertain')
+                       AND b.state IN ('begun','aborting') AND b.queried IS NULL AND b.publication_job IS NULL
+                       AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='pit' AND NOT EXISTS
+                         (SELECT FROM search.public_filter_observation o WHERE (o.partition_no,o.observation)=(0,$3))
+                     FOR UPDATE OF c,b
+                   ), settled AS (
+                     UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM original c
+                     WHERE (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) RETURNING b.partition_no,b.bootstrap
+                   ) DELETE FROM search.public_filter_pit_claim c USING settled b
+                     WHERE (c.partition_no,c.bootstrap)=(b.partition_no,b.bootstrap)`,
+                  [input.registration.id, claim.slice(2), claim],
+                  { points: 5, keys: 12, writes: 2 },
+                );
+              });
+            } finally {
+              addCost(meter, retirement);
+            }
+          }
           throw error;
         }
       });
@@ -2773,6 +2821,113 @@ function addCost(target: Meter, value: CustodyCost) {
 async function deletePit(pit: string, search: OpenSearch, context: PublicFilterConsumerContext, meter: Meter) {
   const receipt = await engine(search, meter, context, 'DELETE', '/_search/point_in_time', { pit_id: [pit] });
   assertRetainedPitDeletion(pit, receipt);
+}
+
+/** Reclaim one unpublished independent opener. A missing receipt after dispatch stays
+ * uncertain. Only the exact retained original can certify physical closure. */
+export async function retireServingPitClaim(
+  pool: Pool,
+  search: OpenSearch,
+  prefix: string,
+  context: PublicFilterConsumerContext,
+  original?: Readonly<{ registration: string; bootstrap: string }>,
+): Promise<CustodyCost> {
+  const meter = operationCost(pool, context);
+  const now = Date.now();
+  const attempt = await transaction(meter, async (db) => {
+    const keys = original
+      ? { partition_no: 0, bootstrap: original.bootstrap.slice(2) }
+      : (
+          await sql(
+            db,
+            meter,
+            `SELECT partition_no,bootstrap FROM search.public_filter_pit_claim
+           WHERE target_prefix=$1 AND retry_after<=$2 AND state<>'uncertain'
+           ORDER BY retry_after,partition_no,bootstrap LIMIT 1 FOR UPDATE SKIP LOCKED`,
+            [prefix, now],
+          )
+        ).rows[0];
+    if (!keys) return;
+    const {
+      rows: [claim],
+    } = await sql(
+      db,
+      meter,
+      `SELECT c.bootstrap,c.state,c.registration,o.queried,o.state AS observation_state
+       FROM search.public_filter_pit_claim c JOIN semantic.public_filter_bootstrap b USING(partition_no,bootstrap)
+       JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(c.partition_no,c.registration)
+       JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+       LEFT JOIN search.public_filter_observation o ON (o.partition_no,o.registration,o.observation)=
+          (c.partition_no,c.registration,c.partition_no::text||':'||c.bootstrap::text)
+       WHERE (c.partition_no,c.bootstrap)=($1,$2) AND c.target_prefix=$3 AND ($4::text IS NULL OR c.registration=$4)
+         AND c.state<>'uncertain' AND (c.deadline<=$5 OR $4::text IS NOT NULL)
+         AND regexp_replace(r.physical_target,'subjects-g[1-9][0-9]*$','')=c.target_prefix
+         AND b.state IN ('begun','adopted','aborting') AND b.snapshot_kind='pit' AND b.coverage_publication IS NOT NULL
+         AND b.publication_job IS NULL AND (b.queried IS NULL OR b.queried='0:'||b.bootstrap::text)
+         AND (o.consumer_work IS NULL OR (c.state IN ('handed','closing') AND o.consumer_bootstrap='0:'||c.bootstrap::text))
+         FOR UPDATE OF c,b`,
+      [keys.partition_no, keys.bootstrap, prefix, original?.registration ?? null, now],
+      { points: 5, keys: 14, writes: 0 },
+    );
+    if (!claim) return;
+    const ids = [keys.partition_no, keys.bootstrap];
+    if (claim.state === 'new' && claim.queried === null) {
+      // HTTP dispatch requires the prior committed new -> opening transition.
+      await sql(
+        db,
+        meter,
+        "UPDATE semantic.public_filter_bootstrap SET state='aborted' WHERE (partition_no,bootstrap)=($1,$2)",
+        ids,
+      );
+      await sql(db, meter, 'DELETE FROM search.public_filter_pit_claim WHERE (partition_no,bootstrap)=($1,$2)', ids);
+      return;
+    }
+    await sql(
+      db,
+      meter,
+      "UPDATE semantic.public_filter_bootstrap SET state='aborting' WHERE (partition_no,bootstrap)=($1,$2)",
+      ids,
+    );
+    await sql(
+      db,
+      meter,
+      `UPDATE search.public_filter_pit_claim SET state=$3,retry_after=$4
+      WHERE (partition_no,bootstrap)=($1,$2)`,
+      [...ids, claim.queried === null ? 'uncertain' : 'closing', now + 5_000],
+    );
+    if (claim.queried === null) return;
+    const q = decode<PublicFilterQueriedObservation>(claim.queried);
+    queried(q);
+    if (
+      q.snapshot.kind !== 'pit' ||
+      q.snapshot.observation !== '0:' + claim.bootstrap ||
+      !q.consumer.physicalTarget.startsWith(prefix + 'subjects-g')
+    )
+      throw new Failure('binding_mismatch');
+    return { q, ids, registration: claim.registration as string };
+  });
+  if (!attempt) return meter;
+  const closed = await createPublicFilterCustody(pool).closeObservation(attempt.q, search, context);
+  addCost(meter, closed.cost);
+  if (closed.status !== 'closed') return meter;
+  await sql(
+    pool,
+    meter,
+    `WITH proven AS MATERIALIZED (
+       SELECT c.partition_no,c.bootstrap FROM search.public_filter_pit_claim c
+       JOIN search.public_filter_observation o ON (o.partition_no,o.registration,o.observation)=(c.partition_no,c.registration,$4)
+       WHERE (c.partition_no,c.bootstrap,c.registration)=($1,$2,$3) AND c.state='closing' AND o.state='closed'
+         AND (o.consumer_work IS NULL OR o.consumer_bootstrap=$4) AND o.queried=$5 AND NOT EXISTS (
+          SELECT FROM search.public_filter_pit p WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation) AND p.state='owned')
+       FOR UPDATE OF c
+     ), settled AS (
+       UPDATE semantic.public_filter_bootstrap b SET state='aborted' FROM proven p
+       WHERE (b.partition_no,b.bootstrap)=(p.partition_no,p.bootstrap) AND b.state='aborting' RETURNING b.partition_no,b.bootstrap
+     ) DELETE FROM search.public_filter_pit_claim c USING settled s WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap)`,
+    [...attempt.ids, attempt.registration, attempt.q.snapshot.observation, encode(attempt.q)],
+    { points: 6, keys: 14, writes: 2 },
+  );
+  return meter;
 }
 
 /** Exact located native copy, supplied by inventory receiving custody. No payload in workflow input. */

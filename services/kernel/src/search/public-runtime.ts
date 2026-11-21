@@ -24,7 +24,7 @@ import { subjectConsumer } from './runner.ts';
 import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { createPublicSuggestionOperations, type PublicSuggestionOperations } from './public-suggestion.ts';
-import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';
+import { createPublicFilterConsumerOperations, finishPublicFilterPit } from './public-filter-consumer.ts';
 import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerCaptureInput,
@@ -563,6 +563,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           throw new ProblemError('search_restart_required');
         const operations = requestHandle(await subjectOperations(target, release, context));
         const capture = await operations.capture(structuredClone(request), context);
+        if (capture.status === 'captured' && Date.now() >= context.deadline)
+          finishPublicFilterPit(capture.queried, false);
         checkDeadline(context);
         return { operations, capture };
       });

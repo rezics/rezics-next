@@ -246,6 +246,13 @@ for imported-source fence checks. Other server credentials are not required; `up
 The worker replays the log into the new generation. A failed rebuild reports one of `timeout`, `mismatch`, `busy`,
 `running`, or `limit`. The previous generation is deleted 15 minutes after the switch.
 
+A ranked Book first page with a published Source cut has its own durable PIT-opening claim. Apply the Search
+claim migration before deploying these readers. Existing cursors continue through their retained observation.
+The worker retires expired unpublished claims using the original registration, bootstrap and physical PIT.
+A lost OpenSearch open response without a retained locator stays uncertain until its original deletion is confirmed.
+Before rolling the schema back, stop new independent captures and let their worker drain active claims.
+The down migration refuses outstanding or uncertain claims.
+
 ## Run the kernel
 
 Run `bun run db up`, then `bun run dev` from this workspace to serve the API locally. The server reads

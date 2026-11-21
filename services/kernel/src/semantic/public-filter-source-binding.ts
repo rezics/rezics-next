@@ -654,7 +654,7 @@ type NativePreparationInput =
   | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
       Readonly<{
         inputLimit?: number;
-        usePublishedCoverage?: true | 'reconcile';
+        usePublishedCoverage?: true | 'reconcile' | 'independent-pit';
         definition?: PublicFilterSourceDefinition;
       }>)
   | Readonly<{
@@ -667,6 +667,7 @@ export type NativePublicFilterPreparation =
   | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
       enrollmentAdvanced?: true;
       freshPit?: Readonly<{
+        independent?: true;
         unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
       }>;
@@ -2797,7 +2798,7 @@ export function createNativePublicFilterSourceBinding(
       receiptPageOnly?: true;
     },
     inputLimit = preparationInputLimit,
-    usePublishedCoverage: boolean | 'reconcile' = false,
+    usePublishedCoverage: boolean | 'reconcile' | 'independent-pit' = false,
     definition?: PublicFilterSourceDefinition,
     collect?: (item: BookCutGroup) => void,
     bookRegistration?: Awaited<ReturnType<typeof ports.search.readGenerationPublicationCustody>>,
@@ -2894,6 +2895,7 @@ export function createNativePublicFilterSourceBinding(
                   OR s.security_revision::text IS DISTINCT FROM w->>'revision'
               ))`
           : 'NULL::jsonb';
+        const independent = usePublishedCoverage === 'independent-pit' && !mixed && !bookList && snapshot === 'pit';
         const newId = randomUUID();
         const attachedCut = async (id: string, row?: BootstrapRow) => {
           const cut = await loadBootstrap('0:' + id, db, resolved.definition, row);
@@ -2908,10 +2910,35 @@ export function createNativePublicFilterSourceBinding(
             bootstrap,
             cost,
             freshPit: {
+              ...(independent ? { independent: true as const } : {}),
               unopened() {
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
+                  if (independent) {
+                    const opened = await store.query(
+                      `/* semantic.native-keyed:5:12:1 */
+                       UPDATE search.public_filter_pit_claim c SET state='opening'
+                       FROM semantic.public_filter_bootstrap b JOIN core.partition p USING(partition_no),
+                         search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
+                       WHERE (c.partition_no,c.registration,c.bootstrap)=(0,$1,$2)
+                         AND (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap) AND b.state='begun' AND b.queried IS NULL
+                         AND b.coverage_publication IS NOT NULL AND b.snapshot_kind='pit' AND b.consumer=$3
+                         AND p.epoch=b.owner_epoch AND p.write_state='active' AND c.state='new'
+                         AND c.consumer_work IS NOT NULL AND c.deadline>$4
+                         AND (r.partition_no,r.id)=(c.partition_no,c.registration) AND r.state='active'
+                         AND r.consumer=$5 AND t.incarnation=$6 RETURNING c.bootstrap`,
+                      [
+                        registration.registration.id,
+                        id,
+                        encode(bootstrap.consumer),
+                        Date.now(),
+                        ports.search.encodeConsumer(bootstrap.consumer),
+                        bootstrap.consumer.incarnation,
+                      ],
+                    );
+                    return { unopened: opened.rowCount === 1, cost };
+                  }
                   const batch =
                     bookList &&
                     bookBindingStep(
@@ -3102,15 +3129,17 @@ export function createNativePublicFilterSourceBinding(
           if (captured.awaiting) throw new BindingError('owner_unavailable');
         } else {
           const attached = await db.query<{ bootstrap: string }>({
-            name: mixed
-              ? 'semantic_attach_mixed_coverage_v1'
-              : bookList
-                ? 'semantic_attach_book_coverage_v1'
-                : 'semantic_attach_subject_coverage_v1',
-            text: `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
+            name: independent
+              ? 'semantic_attach_request_pit_v1'
+              : mixed
+                ? 'semantic_attach_mixed_coverage_v1'
+                : bookList
+                  ? 'semantic_attach_book_coverage_v1'
+                  : 'semantic_attach_subject_coverage_v1',
+            text: `/* semantic.native-keyed:${independent ? '21:30:2' : bookList ? '36:52:1' : '18:24:1'} */
            WITH parent AS MATERIALIZED (
              SELECT * FROM ${coverage}
-           ), cut AS MATERIALIZED (SELECT parent.*, ${withdrawals} AS withdrawals FROM parent)
+           ), cut AS MATERIALIZED (SELECT parent.*, ${withdrawals} AS withdrawals FROM parent)${independent ? ', attached AS (' : ''}
            INSERT INTO semantic.public_filter_bootstrap
              (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,
               owner_epoch,source_position,state,coverage_generation,coverage_publication,book_withdrawals)
@@ -3127,18 +3156,28 @@ export function createNativePublicFilterSourceBinding(
              SELECT 1 FROM semantic.public_filter_privacy_head h WHERE h.population_fenced
            )
            ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
-           DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap::text`,
+           DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap${
+             independent
+               ? `)
+             INSERT INTO search.public_filter_pit_claim(partition_no,registration,bootstrap,deadline,target_prefix,retry_after)
+             SELECT 0,$10,bootstrap,$11,regexp_replace($1,'subjects-g[1-9][0-9]*$',''),$11 FROM attached RETURNING bootstrap::text`
+               : '::text'
+           }`,
             values: [
               consumer.physicalTarget,
               consumer.incarnation,
               resolved.definition.readDefinition,
               mixed ? [] : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
               newId,
-              hash(encode({ consumer, snapshot })),
+              independent ? 'pit:' + newId : hash(encode({ consumer, snapshot })),
               encode(consumer),
               snapshot,
               resolved.definition.source.epoch,
-              ...(mixed ? [ports.search.encodeConsumer(consumer)] : []),
+              ...(independent
+                ? [registration.registration.id, deadline]
+                : mixed
+                  ? [ports.search.encodeConsumer(consumer)]
+                  : []),
             ],
           });
           if (attached.rows[0]) return attachedCut(attached.rows[0].bootstrap);

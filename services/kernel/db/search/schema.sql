@@ -2493,6 +2493,24 @@ CREATE TABLE search.public_filter_pit (
 
 
 --
+-- Name: public_filter_pit_claim; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_pit_claim (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    deadline bigint NOT NULL,
+    target_prefix text NOT NULL COLLATE pg_catalog."C",
+    retry_after bigint NOT NULL,
+    state text DEFAULT 'new'::text NOT NULL,
+    consumer_work text,
+    CONSTRAINT public_filter_pit_claim_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
+    CONSTRAINT public_filter_pit_claim_state_check CHECK ((state = ANY (ARRAY['new'::text, 'opening'::text, 'retained'::text, 'handed'::text, 'closing'::text, 'uncertain'::text])))
+);
+
+
+--
 -- Name: public_filter_preparation_segment; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -3353,6 +3371,14 @@ ALTER TABLE ONLY search.public_filter_observation
 
 
 --
+-- Name: public_filter_pit_claim public_filter_pit_claim_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_pit_claim
+    ADD CONSTRAINT public_filter_pit_claim_pkey PRIMARY KEY (partition_no, bootstrap);
+
+
+--
 -- Name: public_filter_pit public_filter_pit_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -3813,6 +3839,13 @@ CREATE INDEX public_filter_observation_publication ON search.public_filter_obser
 --
 
 CREATE INDEX public_filter_observation_registration ON search.public_filter_observation USING btree (partition_no, registration, observation);
+
+
+--
+-- Name: public_filter_pit_claim_due; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_pit_claim_due ON search.public_filter_pit_claim USING btree (target_prefix, retry_after, partition_no, bootstrap) WHERE (state <> 'uncertain'::text);
 
 
 --
@@ -4453,6 +4486,22 @@ ALTER TABLE ONLY search.public_filter_execution
 
 ALTER TABLE ONLY search.public_filter_observation
     ADD CONSTRAINT public_filter_observation_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_pit_claim public_filter_pit_claim_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_pit_claim
+    ADD CONSTRAINT public_filter_pit_claim_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_pit_claim public_filter_pit_claim_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_pit_claim
+    ADD CONSTRAINT public_filter_pit_claim_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
 
 
 --

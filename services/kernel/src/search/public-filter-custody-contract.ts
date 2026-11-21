@@ -175,7 +175,12 @@ export interface PublicFilterCustody {
     | CustodyFailure
   >;
   openPit(
-    request: Readonly<{ registration: CustodyRegistration; covered: PrivacyReductionStart; keepAliveMs: number }>,
+    request: Readonly<{
+      registration: CustodyRegistration;
+      covered: PrivacyReductionStart;
+      keepAliveMs: number;
+      claim?: string;
+    }>,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
   ): Promise<CustodyRetained | CustodyFailure>;
