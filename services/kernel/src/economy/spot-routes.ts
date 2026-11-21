@@ -26,6 +26,7 @@ import {
   type EconomyFailure,
   type SpotDiscoveryPage,
   type SpotOrderFillsPage,
+  type SpotQuote,
   type SpotTradePage,
   type SpotTradePosition,
 } from './contract.ts';
@@ -44,6 +45,7 @@ export interface SpotAccessPort {
   readonly bookId: string;
   listInstruments(input: AccountScope & PageScope): Promise<SpotAccessResult<SpotDiscoveryPage<SpotBook>>>;
   readInstrument(input: RequestScope): Promise<SpotAccessResult<SpotBook>>;
+  readQuote(input: RequestScope): Promise<SpotAccessResult<SpotQuote>>;
   readTrades(
     input: RequestScope & Readonly<{ limit: number; after: SpotTradePosition | null }>,
   ): Promise<SpotAccessResult<SpotTradePage>>;
@@ -228,22 +230,23 @@ export function economySpotRoutes(
     { orders: t.Array(orderSchema, { maxItems: SPOT_DISCOVERY_PAGE_LIMIT }), next },
     closed,
   );
-  const tradesSchema = t.Object(
+  const tradeSchema = t.Object(
     {
-      trades: t.Array(
-        t.Object(
-          {
-            price: positive,
-            lots: positive,
-            baseUnits: positive,
-            quoteUnits: positive,
-            settledAt: t.String({ format: 'date-time' }),
-          },
-          closed,
-        ),
-        { maxItems: SPOT_TRADE_PAGE_LIMIT },
-      ),
-      next,
+      price: positive,
+      lots: positive,
+      baseUnits: positive,
+      quoteUnits: positive,
+      settledAt: t.String({ format: 'date-time' }),
+    },
+    closed,
+  );
+  const tradesSchema = t.Object({ trades: t.Array(tradeSchema, { maxItems: SPOT_TRADE_PAGE_LIMIT }), next }, closed);
+  const quoteSchema = t.Object(
+    {
+      revision: unsigned,
+      bestBid: t.Union([positive, t.Null()]),
+      bestAsk: t.Union([positive, t.Null()]),
+      latestTrade: t.Union([tradeSchema, t.Null()]),
     },
     closed,
   );
@@ -337,6 +340,18 @@ export function economySpotRoutes(
         return privateCall(ctx, ctx.params, async (spot, scope) =>
           instrumentView(valueOf(await spot.readInstrument(scope))),
         );
+      },
+    )
+    .get(
+      '/v1/economy/spot/:instrumentId/quote',
+      {
+        params: instrumentParams,
+        response: { 200: quoteSchema, ...failures() },
+        detail: detail('spot.read_quote', 'spot:read'),
+      },
+      async (ctx) => {
+        ctx.set.headers['cache-control'] = 'private, no-store';
+        return privateCall(ctx, ctx.params, async (spot, scope) => valueOf(await spot.readQuote(scope)));
       },
     )
     .get(

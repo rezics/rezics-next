@@ -4,6 +4,7 @@ import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeEconomyLedger } from '../../src/composition/economy.ts';
 import { createNativeEconomySpot, createNativeEconomySpotWork } from '../../src/composition/economy-spot.ts';
+import type { SpotQuote, SpotTrade } from '../../src/economy/contract.ts';
 import type { SpotAccessPort } from '../../src/economy/spot-routes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -30,6 +31,7 @@ let work: ReturnType<typeof createNativeEconomySpotWork>;
 let sellerToken: string;
 let readOnlyToken: string;
 let placeOnlyToken: string;
+let marketOnlyToken: string;
 let viewerToken: string;
 let secondToken: string;
 let ordinaryToken: string;
@@ -91,14 +93,16 @@ beforeAll(async () => {
       [routeOf(id), id],
     );
   }
-  [sellerToken, readOnlyToken, placeOnlyToken, viewerToken, secondToken, ordinaryToken] = await Promise.all([
-    sign(seller, scopes),
-    sign(viewer, ['spot:read']),
-    sign(viewer, ['spot:place']),
-    sign(viewer, scopes),
-    sign(second, scopes),
-    sign(ordinary, scopes),
-  ]);
+  [sellerToken, readOnlyToken, placeOnlyToken, viewerToken, secondToken, ordinaryToken, marketOnlyToken] =
+    await Promise.all([
+      sign(seller, scopes),
+      sign(viewer, ['spot:read']),
+      sign(viewer, ['spot:place']),
+      sign(viewer, scopes),
+      sign(second, scopes),
+      sign(ordinary, scopes),
+      sign(viewer, ['market:read']),
+    ]);
   const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(31)]]) };
   mount = (economySpot?: SpotAccessPort) =>
     createKernel({
@@ -169,6 +173,7 @@ test('spot instrument and order routes require a direct grant, matching client s
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/orders']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/trades']).toBeUndefined();
+  expect(hiddenPaths['/v1/economy/spot/{instrumentId}/quote']).toBeUndefined();
   expect(hiddenPaths['/v1/economy/spot/{instrumentId}/orders/{orderId}/fills']).toBeUndefined();
   await grant(viewer);
   const unbound = await call(closed, marketPath, viewerToken);
@@ -764,4 +769,153 @@ test('private discovery returns installed instruments and seeks only the actorâ€
   const pageScope = { accountId: seller, deadline: Date.now() + 2000, limit: 1, after: null };
   await expect(owner.listInstruments(pageScope)).rejects.toMatchObject({ code: 'platform_closed' });
   await expect(owner.listOwnOrders({ ...pageScope, instrumentId })).rejects.toMatchObject({ code: 'platform_closed' });
+}, 90_000);
+
+test('the signed quote follows resting prices and only the exact latest settled trade', async () => {
+  const instrumentId = 'quote-pair';
+  const { bookId } = spot;
+  const root = `/v1/economy/spot/${instrumentId}`;
+  const path = `${root}/quote`;
+  const center = 9_007_199_254_741_093n;
+  const deepBid = center - 20n;
+  const bestBid = center - 10n;
+  const bestAsk = center + 10n;
+  const deepAsk = center + 20n;
+  const baseUnits = 9_007_199_254_740_995n;
+  await grant(seller);
+  expect(
+    await work.provision({
+      id: instrumentId,
+      ledgerBookId: bookId,
+      policyVersion: 1n,
+      baseAssetId: 'base',
+      quoteAssetId: 'quote',
+      baseUnitsPerLot: baseUnits,
+      quoteUnitsPerPriceTick: 1n,
+      makerFeeBps: 0n,
+      takerFeeBps: 0n,
+      feeAccountId: crypto.randomUUID(),
+    }),
+  ).toMatchObject({ kind: 'ok' });
+  for (const [accountId, assetId] of [
+    [seller, 'base'],
+    [second, 'quote'],
+  ] as const) {
+    expect(
+      await ledger.issue({ accountId, assetId, amount: '100000000000000000', operationId: 'quote-opening' }),
+    ).toMatchObject({ kind: 'ok' });
+  }
+
+  let revision = 0n;
+  async function expectQuote(bestBid: bigint | null, bestAsk: bigint | null, latestTrade: SpotTrade | null) {
+    const response = await call(app, path, readOnlyToken);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const expected = {
+      revision: revision.toString(),
+      bestBid: bestBid?.toString() ?? null,
+      bestAsk: bestAsk?.toString() ?? null,
+      latestTrade,
+    } satisfies SpotQuote;
+    expect(await response.json()).toEqual(expected);
+  }
+  await expectQuote(null, null, null);
+  expect((await call(app, '/v1/economy/spot/missing-quote/quote', readOnlyToken)).status).toBe(404);
+
+  revision = 9_007_199_254_740_993n;
+  await db.admin.query('UPDATE economy.spot_instrument SET revision = $3 WHERE book_id = $1 AND instrument_id = $2', [
+    bookId,
+    instrumentId,
+    revision.toString(),
+  ]);
+
+  async function place(accountId: string, orderId: string, side: 'buy' | 'sell', price: bigint) {
+    const accepted = await spot.place({
+      accountId,
+      instrumentId,
+      orderId,
+      side,
+      price,
+      lots: 1n,
+      deadline: Date.now() + 2000,
+    });
+    if (accepted.kind !== 'ok') throw new Error(`Placement failed: ${accepted.kind}`);
+    expect(accepted.value.sequence).toBe(++revision);
+  }
+
+  async function match(status: 'resting' | 'filled') {
+    const matched = await work.match(instrumentId, revision);
+    if (matched.kind !== 'ok') throw new Error(`Matching failed: ${matched.kind}`);
+    expect(matched.value.status).toBe(status);
+    expect(matched.value.revision).toBe(++revision);
+    return matched.value.fillIds;
+  }
+
+  async function settle(fillId: string, price: bigint, settledAt: string) {
+    const claim = await work.claimFill(fillId);
+    if (claim.kind !== 'ok') throw new Error(`Claim failed: ${claim.kind}`);
+    expect(await work.settleFill(fillId, claim.value.token)).toEqual({ kind: 'ok', value: { operationId: fillId } });
+    await db.admin.query('UPDATE economy.spot_fill SET settled_at = $3 WHERE book_id = $1 AND fill_id = $2', [
+      bookId,
+      fillId,
+      settledAt,
+    ]);
+    return {
+      price: price.toString(),
+      lots: '1',
+      baseUnits: baseUnits.toString(),
+      quoteUnits: price.toString(),
+      settledAt,
+    };
+  }
+
+  await place(second, 'deep-bid', 'buy', deepBid);
+  await expectQuote(null, null, null);
+  await match('resting');
+  await place(second, 'best-bid', 'buy', bestBid);
+  await match('resting');
+  await expectQuote(bestBid, null, null);
+  await place(seller, 'deep-ask', 'sell', deepAsk);
+  await match('resting');
+  await place(seller, 'best-ask', 'sell', bestAsk);
+  await match('resting');
+  await expectQuote(bestBid, bestAsk, null);
+
+  await place(second, 'cross-ask', 'buy', bestAsk);
+  await expectQuote(bestBid, bestAsk, null);
+  const [buyFill] = await match('filled');
+  await expectQuote(bestBid, deepAsk, null);
+  const older = await settle(buyFill!, bestAsk, '2026-11-21T00:00:00.123456Z');
+  await expectQuote(bestBid, deepAsk, older);
+
+  await place(seller, 'cross-bid', 'sell', bestBid);
+  const [sellFill] = await match('filled');
+  await expectQuote(deepBid, deepAsk, older);
+  const latest = await settle(sellFill!, bestBid, '2026-11-21T00:00:00.123457Z');
+  await expectQuote(deepBid, deepAsk, latest);
+  const feed = await call(app, `${root}/trades?limit=1`, readOnlyToken);
+  expect(feed.status).toBe(200);
+  expect((await feed.json()).trades).toEqual([latest]);
+
+  for (const token of [placeOnlyToken, marketOnlyToken, ordinaryToken]) {
+    expect((await call(app, path, token)).status).toBe(403);
+  }
+  expect((await call(closed, path)).status).toBe(403);
+  expect((await call(closed, path, readOnlyToken)).status).toBe(503);
+  expect(openApiDocument(app).paths['/v1/economy/spot/{instrumentId}/quote']?.get).toMatchObject({
+    operationId: 'spot.read_quote',
+    'x-exposure': 'gate:economy',
+    'x-action': 'spot:read',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': ['access.account'],
+    security: [{ bearerAuth: [] }],
+  });
+  await db.admin.query(
+    `DELETE FROM access.resource_grant WHERE route = 0 AND resource_id = $1 AND subject_id = $2 AND action = 'gate:economy'`,
+    [GLOBAL_CONTEXT.id, viewer],
+  );
+  expect((await call(app, path, readOnlyToken)).status).toBe(403);
+  await expect(spot.readQuote({ accountId: viewer, instrumentId, deadline: Date.now() + 2000 })).rejects.toMatchObject({
+    code: 'platform_closed',
+  });
 }, 90_000);

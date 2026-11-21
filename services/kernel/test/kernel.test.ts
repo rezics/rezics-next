@@ -262,6 +262,7 @@ const typed = [
   'POST /v1/economy/wallets/:assetId/transfers',
   'GET /v1/economy/spot',
   'GET /v1/economy/spot/:instrumentId',
+  'GET /v1/economy/spot/:instrumentId/quote',
   'GET /v1/economy/spot/:instrumentId/trades',
   'GET /v1/economy/spot/:instrumentId/orders',
   'GET /v1/economy/spot/:instrumentId/orders/:orderId',
