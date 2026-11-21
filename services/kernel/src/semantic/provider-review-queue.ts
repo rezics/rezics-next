@@ -21,7 +21,7 @@ import { contextSnapshot } from './context.ts';
 import { readRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { effectiveRelease } from './definition-release-read.ts';
-import type { SemanticCopyRole } from './erasure-producer.ts';
+import { recordSemanticSourceCommit, type SemanticCopyRole } from './erasure-producer.ts';
 import { fencedIds } from './fences.ts';
 import { factDataTypes, resolveItem, type Statement } from './item.ts';
 import { PageCursorError } from './page.ts';
@@ -39,6 +39,11 @@ import readHidden from './slots-read-hidden.sql';
 export const PROVIDER_REVIEW_CONSUMER = 'semantic_provider_review';
 export const PROVIDER_REVIEW_PROJECTED = 'com.rezics.semantic.provider-review.projected.v1';
 const WORKFLOW = 'semantic.provider-review.prepare';
+const projectionBasis = {
+  actorAccountId: '00000000-0000-8000-8000-000000000001',
+  clientId: 'internal-semantic-provider-review',
+  requestedBy: null,
+};
 const NIL = '00000000-0000-0000-0000-000000000000';
 export type ProviderReviewStatus = 'pending' | 'accepted_unselected';
 export type ProviderReviewScope = { source: string; context: string; status: ProviderReviewStatus };
@@ -185,7 +190,7 @@ async function publishKeys(pool: Pool, partition: number, through: bigint): Prom
       ).rows,
   );
   if (!keys.length) return 0;
-  await runCommand(pool, { partition: 0 }, async (tx, { transactionId }) => {
+  await runCommand(pool, { partition: 0, basis: projectionBasis }, async (tx, { transactionId }) => {
     let changed = false;
     for (let index = 0; index < keys.length; index++) {
       const key = keys[index]!;
@@ -203,6 +208,9 @@ async function publishKeys(pool: Pool, partition: number, through: bigint): Prom
         [key.source, key.subject_id, key.candidate_id, transactionId],
       );
       if (!inserted.rows[0]) continue;
+      // Capture runs in the command body. The deferred Source constraint binds this receipt
+      // to the receiving command's own write basis and position at commit.
+      if (!changed) await recordSemanticSourceCommit(tx, transactionId);
       changed = true;
       for (const role of nativeRoles)
         await tx.query(

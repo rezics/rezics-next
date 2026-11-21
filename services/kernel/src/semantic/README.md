@@ -359,6 +359,9 @@ The checked-in native source example is the captured official response at `test/
 
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
+The Subject-home queue key keeps the proposal transaction and position. On the first new entry in a
+receiving batch, partition 0 enrolls its own Source commit. Its platform write basis, projected event,
+entries and copied roles commit together. Retrying source acknowledgement reuses those entries and origins.
 Provider queue pages retain `context:read` and `context:accept` admission. Their private BFF includes an independent current
 `actions` component. It projects only installed accept/reject/adopt operations through `readViewerActions` on the
 exact native Context anchor through the existing generated viewerActions endpoint, once per bounded page. A failed action read is explicitly unavailable; it never grants
