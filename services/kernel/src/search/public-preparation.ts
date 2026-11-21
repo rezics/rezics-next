@@ -188,8 +188,8 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       options.pool,
       context.deadline,
       (client) =>
-        client.query<{ consumer: GenerationPublicationJob['consumer'] }>(
-          `SELECT consumer FROM search.generation_publication
+        client.query<{ consumer: GenerationPublicationJob['consumer']; subscription_protocol: number }>(
+          `SELECT consumer,subscription_protocol FROM search.generation_publication
        WHERE partition_no=0 AND job=$1 AND physical_target=$2`,
           [state.publication, index],
         ),
@@ -200,7 +200,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
-      const reconciliation = await options.runtime.publication.step(job, context, { enrollSource: true });
+      const reconciliation = await options.runtime.publication.step(job, context, {
+        enrollSource: true,
+        ...(retained.rows[0]!.subscription_protocol === 1 ? { batchSource: true } : {}),
+      });
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';

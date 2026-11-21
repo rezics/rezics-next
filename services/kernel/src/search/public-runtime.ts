@@ -279,7 +279,23 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       return track(async () => {
         const native = await publicationFor(job.consumer, context);
         try {
-          return await native.step(job, context, options);
+          // The worker holds the delivery lease. Each native step still locks and
+          // checks the job, commits its own frontier and spends its own allowance.
+          let started = Date.now();
+          let result = await native.step(job, context, options);
+          if (!options?.batchSource) return result;
+          const previous = [];
+          let longest = Date.now() - started;
+          while (result.status === 'progress' && result.sourceAdvanced && previous.length < 15) {
+            started = Date.now();
+            if (started + 2 * longest >= context.deadline) break;
+            previous.push(result.cost, ...(result.additionalEnrollmentCosts ?? []));
+            result = await native.step(job, context, options);
+            longest = Math.max(longest, Date.now() - started);
+          }
+          if (previous.length && (result.status === 'progress' || result.status === 'reconciled'))
+            return { ...result, additionalEnrollmentCosts: [...previous, ...(result.additionalEnrollmentCosts ?? [])] };
+          return result;
         } finally {
           await native.close();
         }

@@ -98,7 +98,7 @@ export type SearchGenerationPublication = Readonly<{
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
-    options?: Readonly<{ enrollSource: boolean }>,
+    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean }>,
   ): Promise<
     | {
         status: 'progress' | 'reconciled';
@@ -1648,11 +1648,12 @@ export function createSearchGenerationPublication(
     // An empty Subject home without writer custody can be witnessed at its current position.
     // The completed engine pass accounted for existing keys. Occupied homes and homes that
     // may own an engine copy still replay on any change.
+    const originalHomes = job.subscription_protocol === 1 && job.pass === '1';
     const query = `WITH homes AS (
          SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
                 p.epoch AS current_epoch,p.position AS current_position,p.write_state
            FROM ${
-             job.subscription_protocol === 1 && job.pass === '1'
+             originalHomes
                ? `(
              SELECT partition_no,job,pass,epoch,position,account_revision,claim_revision
                FROM search.generation_publication_home WHERE partition_no >= $1 AND partition_no < $2 AND job=$3 AND pass=$4
@@ -1666,17 +1667,29 @@ export function createSearchGenerationPublication(
           WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
        ),
        refreshed AS (
-         UPDATE search.generation_publication_home h
-            SET position=homes.current_position
+         ${
+           originalHomes
+             ? `INSERT INTO search.generation_publication_home AS h
+               (partition_no,job,pass,epoch,position,account_revision,claim_revision)
+              SELECT homes.partition,$3,$4,homes.epoch,homes.current_position,homes.account_revision,homes.claim_revision`
+             : `UPDATE search.generation_publication_home h SET position=homes.current_position`
+         }
            FROM homes
            LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
-          WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
+          WHERE $5::text IS NOT NULL
+            ${originalHomes ? '' : 'AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition'}
             AND homes.epoch=homes.current_epoch AND homes.write_state='active'
             AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
             AND NOT EXISTS (
               SELECT 1 FROM search.identity_writer w
               WHERE w.physical_target=$5 AND w.partition_no=homes.partition
             )
+          ${
+            originalHomes
+              ? `ON CONFLICT (partition_no,job) DO UPDATE SET position=EXCLUDED.position
+             WHERE h.pass=EXCLUDED.pass AND h.epoch=EXCLUDED.epoch AND h.position<EXCLUDED.position`
+              : ''
+          }
          RETURNING h.partition_no
        )
        SELECT homes.partition,homes.epoch,
