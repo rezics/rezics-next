@@ -26,6 +26,12 @@ type ListingInput = Omit<Parameters<typeof openMarketListing>[0], 'now'>;
 type PurchaseRequest = Parameters<typeof purchaseMarketListing>[2];
 type Decision = NonNullable<MarketTrade['decision']>;
 type Receipt = MarketTradeAck['receipt'];
+type TradePage = Readonly<{
+  itemHomeId: string;
+  accountId: string;
+  limit: number;
+  after: readonly [startedAt: string, tradeId: string] | null;
+}>;
 
 export type MarketWorkOwner = Readonly<{ kind: 'item' | 'ledger'; id: string }>;
 export type MarketWork = Readonly<{
@@ -98,6 +104,29 @@ async function findTrade(client: Query, bookId: string, id: string, lock = false
     [bookId, id],
   );
   return rows[0] ? decodeMarketRecord<MarketTrade>(rows[0].payload) : null;
+}
+
+async function findParticipantTrades(client: Query, bookId: string, input: TradePage) {
+  const { itemHomeId, accountId, limit, after } = input;
+  const startedAt = "(payload #>> '{buyer,startedAt,$marketInteger}')::bigint";
+  const range = after === null ? '' : `AND (${startedAt}, trade_id) < ($5::bigint, $6::text)`;
+  const participant = (path: '{buyer,buyerId}' | '{terms,item,holderId}') => `
+      (SELECT payload, trade_id, ${startedAt} AS started_at FROM economy.market_trade
+       WHERE book_id = $1 AND (payload #>> '{terms,item,homeId}') = $2 AND (payload #>> '${path}') = $3
+       ${range}
+       ORDER BY started_at DESC, trade_id DESC LIMIT $4)`;
+  // Purchase rejects self-trades, so the two participant lanes never overlap.
+  const { rows } = await client.query<Payload>(
+    `SELECT payload::text FROM (
+       ${participant('{buyer,buyerId}')} UNION ALL ${participant('{terms,item,holderId}')}
+     ) AS participants
+     ORDER BY started_at DESC, trade_id DESC LIMIT $4`,
+    [bookId, itemHomeId, accountId, limit + 1, ...(after ?? [])],
+  );
+  return {
+    trades: rows.slice(0, limit).map(({ payload }) => decodeMarketRecord<MarketTrade>(payload)),
+    more: rows.length > limit,
+  };
 }
 
 async function findWork(
@@ -198,6 +227,17 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
   return {
     readListing: (id: string) => database.read((client) => findListing(client, bookId, id)),
     readTrade: (id: string) => database.read((client) => findTrade(client, bookId, id)),
+    readParticipantTrades(input: TradePage) {
+      if (
+        !ownerKey.test(input.itemHomeId) ||
+        !uuid.test(input.accountId) ||
+        !Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > maxPage
+      )
+        throw new TypeError('Invalid market trade page');
+      return database.read((client) => findParticipantTrades(client, bookId, input));
+    },
 
     async open(input: ListingInput): Promise<Result<{ listingId: string }>> {
       if (input.price.ledgerBookId !== bookId || !ownerKey.test(input.listingId)) return { kind: 'invalid_listing' };

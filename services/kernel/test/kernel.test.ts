@@ -269,6 +269,7 @@ const typed = [
   'GET /v1/economy/market/listings/:listingId',
   'POST /v1/economy/market/listings/:listingId/purchases',
   'POST /v1/economy/market/listings/:listingId/cancel',
+  'GET /v1/economy/market/trades',
   'GET /v1/economy/market/trades/:tradeId',
   ...testFundingRoutes,
   'POST /v1/subjects/:id/candidates',
