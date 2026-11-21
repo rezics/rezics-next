@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { CommandTransaction } from '../command/command.ts';
+import { CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { routeOf } from '../route/route.ts';
 import projectionBuild from '../semantic/public-filter-projection-build-read.sql';
@@ -258,12 +258,8 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
           if (!home) throw unavailable('Search writer canonical terms lost their Source build');
           // The retained step IDs and the completed term cursor came from an earlier
           // snapshot of this actual home. The unchanged position joins both observations.
-          if (
-            saved.home?.writeState !== 'active' ||
-            saved.home.epoch !== home.epoch ||
-            saved.home.position !== home.position
-          )
-            return null;
+          if (saved.home?.writeState !== 'active' || saved.home.epoch !== home.epoch) return null;
+          if (saved.home.position !== home.position) throw new CommandUnavailableError('contention', home.partitionNo);
           const terms = await readIdentitySearchIndexTerms(tx, basis.change.original, cursor);
           return terms ? { home, terms } : null;
         };

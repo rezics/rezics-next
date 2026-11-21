@@ -1,11 +1,10 @@
 import { facetProperties, relationFacetProperty } from '@rezics/filter';
-import type { CommandTransaction } from '../command/command.ts';
+import { CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import readListingCounts from '../library/listing-counts.sql';
 import type { Partition } from '../partition/partition.ts';
 import { readNativeSearchPublicRating } from '../rating/public-rating-source.ts';
 import { routeOf } from '../route/route.ts';
-import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { identityErasureRoles } from '../semantic/erasure-producer.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { WorkHeader } from '../semantic/credit-search-cut.ts';
@@ -173,10 +172,9 @@ export async function prepareCanonicalIdentityDocument(
         release?.digest !== input.runtime.digest ||
         release.head !== input.runtime.head
       )
-        throw new IdentityEpochStoreError(
-          'identity_epoch_unavailable',
-          'Canonical Search document changed before preparation',
-        );
+        // Roll back the close and let the durable Search step rebuild the document
+        // from a fresh snapshot before it uses the next native version.
+        throw new CommandUnavailableError('contention', partition);
     },
   };
 }
