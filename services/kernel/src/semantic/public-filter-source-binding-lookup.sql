@@ -1,5 +1,6 @@
-/* semantic.native-keyed:3:3 */
+/* semantic.native-keyed:4:5 */
 SELECT d.read_definition::text, s.source_id::text, s.configuration::text, s.owner_epoch,
+  EXISTS (SELECT 1 FROM semantic.definition_release base WHERE base.route=0 AND base.digest=d.release_digest) AS base_release,
   d.release_digest, d.capture, d.dependency_keys
 FROM core.partition p
 JOIN semantic.public_filter_source s ON s.partition_no=p.partition_no AND s.owner_epoch=p.epoch

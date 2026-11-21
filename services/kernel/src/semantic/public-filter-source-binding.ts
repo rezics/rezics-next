@@ -14,7 +14,7 @@ import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { hasVerifiedReleaseDigest, readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readRelease, verifiedBaseRelease } from './definition-release-read.ts';
 import { withReadTransaction } from './read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
@@ -993,7 +993,9 @@ export async function readNativePublicFilterSourceDefinition(
   if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
   const bytes = Number(row.definition_bytes);
   if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
-  const release = await readRelease(db, row.release_digest);
+  const release =
+    (row.base_release ? verifiedBaseRelease(row.release_digest) : undefined) ??
+    (await readRelease(db, row.release_digest));
   if (!release || Object.keys(release.types).length === 0) throw new BindingError('definition_missing');
   return { definition: restoreDefinition(id, row, release, search), bytes };
 }
@@ -3188,7 +3190,9 @@ export function createNativePublicFilterSourceBinding(
         const [retained] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
         if (!retained && readOnly) throw new BindingError('definition_missing');
         // Caller digest equality is checked again against the actual immutable release owner.
-        const release = await readRelease(db, meaning.digest);
+        const release =
+          (retained?.base_release ? verifiedBaseRelease(meaning.digest) : undefined) ??
+          (await readRelease(db, meaning.digest));
         if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
           throw new BindingError('definition_missing');
         if (retained) {
@@ -3340,7 +3344,12 @@ export function createNativePublicFilterSourceBinding(
           const bootstrap = cut.bootstrap;
           // A conflict can return an earlier begun cut with an uncertain PIT.
           // Only the UUID inserted by THIS invocation may take the fresh path.
-          if (!bookList || id !== newId || cut.row.state !== 'begun' || cut.row.queried !== null)
+          if (
+            !(bookList || (definition && !mixed && snapshot === 'prepared')) ||
+            id !== newId ||
+            cut.row.state !== 'begun' ||
+            cut.row.queried !== null
+          )
             return { status: 'begun' as const, bootstrap, cost };
           freeze(bootstrap);
           return {
@@ -3352,6 +3361,9 @@ export function createNativePublicFilterSourceBinding(
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
+                  // A prepared ranking still requires the live parent publication
+                  // under its claim before materializing the first PIT segment.
+                  if (snapshot === 'prepared') await requireServingCoverage(cut, store);
                   const batch = bookBindingStep(
                     'unopened',
                     binding,
@@ -3375,7 +3387,7 @@ export function createNativePublicFilterSourceBinding(
                            JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,i.registration)
                            WHERE b.state='begun' AND b.queried IS NULL AND r.state='active' AND r.consumer_bootstrap=i.locator AND r.consumer=i.consumer
                              AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o WHERE (o.partition_no,o.registration)=(0,r.id)
-                               AND o.state='open' AND o.prepared_build IS NULL AND md5(o.covered)=md5(i.covered) AND o.covered=i.covered)`,
+                               AND o.state='open' AND md5(o.covered)=md5(i.covered) AND o.covered=i.covered)`,
                           [JSON.stringify(members)],
                         );
                         return { ids: new Set(rows.rows.map((r) => r.id)), cost: shared };
@@ -3386,7 +3398,11 @@ export function createNativePublicFilterSourceBinding(
                       });
                     },
                   );
-                  if (batch) return batch;
+                  if (batch) {
+                    const checked = await batch;
+                    addCost(cost, checked.cost);
+                    return { ...checked, cost };
+                  }
                   const result = await store.query(
                     `/* semantic.native-keyed:4:9 */
                     SELECT b.bootstrap FROM semantic.public_filter_bootstrap b
@@ -3395,7 +3411,7 @@ export function createNativePublicFilterSourceBinding(
                     WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='begun' AND b.queried IS NULL
                       AND r.state='active' AND r.consumer_bootstrap=$3 AND r.consumer=$4
                       AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o
-                        WHERE (o.partition_no,o.registration)=(0,r.id) AND o.state='open' AND o.prepared_build IS NULL
+                        WHERE (o.partition_no,o.registration)=(0,r.id) AND o.state='open'
                           AND md5(o.covered)=md5($5) AND o.covered=$5)`,
                     [
                       id,
@@ -3409,6 +3425,8 @@ export function createNativePublicFilterSourceBinding(
                 });
               },
               adopt(queried: PublicFilterQueriedObservation) {
+                if (snapshot === 'prepared')
+                  return bootstrapBinding.adopt({ bootstrap: bootstrap.id, queried }, { deadline });
                 const q = structuredClone(queried);
                 return run({ deadline }, async (adoptionCost, store) => {
                   if (q.snapshot.kind !== 'pit' || !isDeepStrictEqual(q.consumer, bootstrap.consumer))
@@ -4849,11 +4867,14 @@ export function createNativePublicFilterSourceBinding(
     async adopt(request, context) {
       const input = structuredClone(request),
         deadline = context.deadline;
-      const joined = await binding.join({ queried: input.queried }, { deadline });
+      const joined = await joinNativeCut({ queried: input.queried }, { deadline }, 'serve');
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
-        const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
+        const cut =
+          input.bootstrap === joined.cut.bootstrap.id
+            ? joined.cut
+            : await loadBootstrap(input.bootstrap, db, joined.definition);
         if (
           encode(joined.covered) !== encode(cut.bootstrap.covered) ||
           joined.definition.readDefinition !== cut.definition.readDefinition ||

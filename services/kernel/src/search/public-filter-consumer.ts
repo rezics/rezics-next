@@ -2816,8 +2816,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in canonical &&
         canonical.bookTypeList === true &&
         begun.bootstrap.coveragePublication !== undefined;
-      const fresh = bookPage && native?.status === 'begun' ? native.freshBook : undefined;
-      const claim = fresh && m.take(await fresh.unopened());
+      const fresh =
+        page &&
+        native?.status === 'begun' &&
+        (bookPage || (snapshot === 'prepared' && isTextBookCapture(canonical, 'relevance')))
+          ? native.freshBook
+          : undefined;
+      const claim = fresh && (snapshot === 'prepared' ? m.takePreparation : m.take)(await fresh.unopened());
       if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
       return await advanceCapture(
         work,

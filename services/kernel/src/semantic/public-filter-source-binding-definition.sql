@@ -1,4 +1,6 @@
+/* semantic.native-keyed:4:5 */
 SELECT s.source_id::text, s.configuration::text, s.owner_epoch, s.route_digest,
+  EXISTS (SELECT 1 FROM semantic.definition_release base WHERE base.route=0 AND base.digest=d.release_digest) AS base_release,
   d.release_digest, d.capture, d.dependency_keys,
   octet_length(d.capture)::bigint + octet_length(d.dependency_keys::text)::bigint AS definition_bytes
 FROM semantic.public_filter_read_definition d

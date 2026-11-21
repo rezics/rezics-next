@@ -22,7 +22,7 @@ import { withReadTransaction } from './read.ts';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const releases = new Map<string, Release>();
-/** Resolve a base body only after its active digest has been observed in the caller's snapshot. */
+/** Reuse a verified base body after the caller observes its stored digest or active pointer in its snapshot. */
 export function verifiedBaseRelease(digest: string): Release | undefined {
   return releases.get(digest);
 }

@@ -29,7 +29,7 @@ import { sourceTuple } from './fences.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
-import { readBaseReleases, readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readBaseReleases, readRelease } from './definition-release-read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
@@ -373,7 +373,7 @@ function validMeaning(meaning: PublicFilterProjectionMeaning): boolean {
   return (
     hasPublicFilterMeaningShape(meaning) &&
     typeof meaning.digest === 'string' &&
-    releaseDigest(meaning.release) === meaning.digest &&
+    (hasVerifiedReleaseDigest(meaning.release, meaning.digest) || releaseDigest(meaning.release) === meaning.digest) &&
     Object.keys(meaning.release.types).length > 0
   );
 }
@@ -724,17 +724,21 @@ type IdentityPoint = SubjectRow & { epoch: number; privacy_position: string };
 async function readIdentityPoints(
   config: Configuration,
   keys: { id: string; route: number }[],
-  time: AuthoritativeTime,
+  readTime: (client: PoolClient) => Promise<AuthoritativeTime | null>,
   deadline: number,
 ) {
   const context = { pool: config.pool, deadline };
   const actor = { kind: 'anonymous' } as const;
   const input = { ids: keys.map(({ id }) => id), routes: keys.map(({ route }) => route) };
   // Small catalogues can otherwise scan every Subject once per supplied key.
-  const floors = await inSnapshot(config.pool, deadline, async (client) => {
+  const first = await inSnapshot(config.pool, deadline, async (client) => {
+    const time = await readTime(client);
+    if (!time) return null;
     await client.query('SET LOCAL enable_seqscan = off');
-    return nativeSourceQuery(client, readIdentityFloors, input);
+    return { time, floors: await nativeSourceQuery(client, readIdentityFloors, input) };
   });
+  if (!first) return null;
+  const { time, floors } = first;
   const prepared = new Map(floors.map((row) => [row.id, row]));
   const decisions = await prepareReadDecisions(config.access, {
     actor,
@@ -780,7 +784,7 @@ async function readIdentityWindows(
   config: Configuration,
   port: PublicFilterAccessBindingPort,
   windows: IdentityWindow[],
-  time: AuthoritativeTime,
+  readTime: (client: PoolClient) => Promise<AuthoritativeTime | null>,
   deadline: number,
 ) {
   for (let depth = 0; depth < 8; depth++) {
@@ -815,7 +819,8 @@ async function readIdentityWindows(
         payer.cost.accessPoints++;
         payer.cost.dependencyPoints++;
       }
-      const result = await readIdentityPoints(config, keys, time, deadline);
+      const result = await readIdentityPoints(config, keys, readTime, deadline);
+      if (!result) return false;
       for (const { id, route } of keys) {
         const state = result.get(id);
         const partition = partitionOf(route);
@@ -841,6 +846,7 @@ async function readIdentityWindows(
   }
   for (const { observed, pending } of windows)
     if ([...pending].some((id) => !observed.states.has(id))) observed.complete = false;
+  return true;
 }
 
 function resolveIdentity(
@@ -889,19 +895,27 @@ export async function readPublicFilterSubjectIdentityWindows(
   if (identitySourceSupportRoot() || identitySourceSupportJob())
     return members.map(({ window }) => unready('identity_pending', window.cost));
   try {
-    const time = await inSnapshot(config.pool, deadline, async (client) =>
-      (await storedMeaningRelease(client, meaning.digest)) ? mintReadTime(client, config.clock, config.pool) : null,
-    );
-    if (!time) return members.map(({ window }) => unready('metadata_missing', window.cost));
+    // The first visibility-floor snapshot can also resolve the pinned release
+    // and mint the native read time used by every redirect depth of this window.
+    let pinned: AuthoritativeTime | null = null;
+    const readTime = async (client: PoolClient) => {
+      if (pinned) return pinned;
+      if (!(await storedMeaningRelease(client, meaning.digest))) return null;
+      pinned = await mintReadTime(client, config.clock, config.pool);
+      return pinned;
+    };
     if (config.access.prepareReadDecisions) {
-      await readIdentityWindows(
+      const ready = await readIdentityWindows(
         config,
         accessPort,
         members.map(({ window }) => window),
-        time,
+        readTime,
         deadline,
       );
+      if (!ready) return members.map(({ window }) => unready('metadata_missing', window.cost));
     } else {
+      const time = await inSnapshot(config.pool, deadline, readTime);
+      if (!time) return members.map(({ window }) => unready('metadata_missing', window.cost));
       for (const { subjects, window } of members)
         window.observed = await readPublicIdentities(
           config,
