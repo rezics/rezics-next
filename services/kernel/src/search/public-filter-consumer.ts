@@ -2900,25 +2900,28 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (old?.consumer_work) {
         const retained = decodeWork(old.consumer_work);
         // A previous request may have ended between physical adoption and the Search handoff.
-        const handoff =
-          !publication &&
-          !config.discoveryTarget &&
-          retained.bootstrap.coveragePublication &&
-          retained.queried &&
-          bootstrapBinding(binding) &&
-          binding.releaseAdoptedRegistration
-            ? m.takePreparation(
-                await binding.releaseAdoptedRegistration(
-                  {
-                    bootstrap: retained.bootstrap.id,
-                    registration: registration.id,
-                    observation: retained.queried.snapshot.observation,
-                    work: old.consumer_work,
-                  },
-                  context,
-                ),
-              )
+        const releaseAdopted = bootstrapBinding(binding) && binding.releaseAdoptedRegistration;
+        const claim =
+          !publication && !config.discoveryTarget && retained.bootstrap.coveragePublication && retained.queried
+            ? {
+                bootstrap: retained.bootstrap.id,
+                registration: registration.id,
+                observation: retained.queried.snapshot.observation,
+                work: old.consumer_work,
+              }
             : undefined;
+        let handoff;
+        if (claim && releaseAdopted) {
+          handoff = m.takePreparation(await releaseAdopted(claim, context));
+          if (handoff.status === 'closing') {
+            for (const observation of handoff.observations) {
+              const closed = m.takePreparation(await custody.closeObservation(observation, config.search, context));
+              if (closed.status !== 'closed') return m.unavailable('source_pending');
+            }
+            handoff = m.takePreparation(await releaseAdopted(claim, context));
+            if (handoff.status !== 'released') return m.unavailable('source_pending');
+          }
+        }
         let retired = false;
         if (
           handoff?.status === 'pending' &&

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { bookBindingStep, bookCostShare } from '../request/book-binding-steps.ts';
 import { MAX_PAGE_READS } from '@rezics/composition';
 import { isDeepStrictEqual } from 'node:util';
@@ -534,7 +535,11 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
     releaseAdoptedRegistration?(
       request: Readonly<{ bootstrap: string; registration: string; observation: string; work: string }>,
       context: PublicFilterConsumerContext,
-    ): Promise<Readonly<{ status: 'released' | 'pending'; cost: PublicFilterCost }> | PublicFilterBindingFailure>;
+    ): Promise<
+      | Readonly<{ status: 'released' | 'pending'; cost: PublicFilterCost }>
+      | Readonly<{ status: 'closing'; observations: readonly PublicFilterQueriedObservation[]; cost: PublicFilterCost }>
+      | PublicFilterBindingFailure
+    >;
     abort(
       request: Readonly<{
         bootstrap: string;
@@ -995,6 +1000,11 @@ function restoreDefinition(
     dependencyKeys: keys,
   };
 }
+const retireSplitObservations = readFileSync(
+  new URL('./public-filter-source-retire-split.sql', import.meta.url),
+  'utf8',
+);
+
 function checkDeadline(context: PublicFilterConsumerContext): void {
   if (!Number.isFinite(context.deadline) || context.deadline <= Date.now()) throw new BindingError('deadline');
 }
@@ -4524,6 +4534,16 @@ export function createNativePublicFilterSourceBinding(
           bootstrap: { id: string };
           queried: PublicFilterQueriedObservation | null;
           adopted: boolean;
+          materializing?: unknown;
+          execution?: unknown;
+          dispatch?: unknown;
+          frontier?: unknown;
+          repair?: unknown;
+          repairPage?: unknown;
+          records?: readonly unknown[];
+          projectionSource?: unknown;
+          rounds?: number;
+          charged?: number;
         }>(work);
         if (
           previous.registration.partition !== 0 ||
@@ -4568,8 +4588,52 @@ export function createNativePublicFilterSourceBinding(
             encode(previous.queried.consumer),
           ],
         );
-        if (result.rowCount === 1) cost.frontierWrites += 1 + Number(result.rows[0]!.transferred);
-        return { status: result.rowCount === 1 ? ('released' as const) : ('pending' as const), cost };
+        if (result.rowCount === 1) {
+          cost.frontierWrites += 1 + Number(result.rows[0]!.transferred);
+          return { status: 'released' as const, cost };
+        }
+        if (
+          previous.adopted !== false ||
+          previous.queried.snapshot.kind !== 'pit' ||
+          previous.materializing != null ||
+          previous.execution != null ||
+          previous.dispatch != null ||
+          previous.frontier != null ||
+          previous.repair != null ||
+          previous.repairPage != null ||
+          previous.projectionSource != null ||
+          previous.records?.length ||
+          previous.rounds ||
+          previous.charged
+        )
+          return { status: 'pending' as const, cost };
+        // Two interrupted openers can leave different physical PITs on the same original cut.
+        // Retire both expired, unclaimed observations under their own native IDs before clearing the registration.
+        const split = await db.query<{ closing: string[]; writes: number; released: boolean }>(
+          retireSplitObservations,
+          [
+            id,
+            registration,
+            observation,
+            bootstrap,
+            work,
+            ports.search.encodeState(previous.queried),
+            encode(previous.queried.consumer),
+            ports.search.encodeState({ observation: bootstrap }),
+            Date.now(),
+            ports.search.encodeConsumer(previous.queried.consumer),
+            previous.queried.consumer.incarnation,
+          ],
+        );
+        const retired = split.rows[0];
+        if (!retired) return { status: 'pending' as const, cost };
+        cost.frontierWrites += retired.writes + Number(retired.released);
+        if (retired.released) return { status: 'released' as const, cost };
+        return {
+          status: 'closing' as const,
+          observations: retired.closing.map((value) => ports.search.decodeState<PublicFilterQueriedObservation>(value)),
+          cost,
+        };
       });
     },
     async abort(request, context) {

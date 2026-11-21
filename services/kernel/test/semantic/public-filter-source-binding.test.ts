@@ -813,6 +813,93 @@ test('adopted serving handoff preserves live work and releases only the exact in
     );
     expect((await handoff()).status).toBe('released');
     expect(await retained()).toEqual({ claim: null, consumer_bootstrap: build, observed: advanced, state: 'adopted' });
+
+    // An older opener can retain a different PIT than the one Source adopted for this same cut.
+    const otherId = crypto.randomUUID();
+    const otherCut = '0:' + otherId;
+    await f.db.pool.query(
+      `INSERT INTO semantic.public_filter_bootstrap
+         (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,owner_epoch,
+          source_position,state,coverage_publication,coverage_generation)
+       SELECT partition_no,$2::uuid,read_definition,($2::uuid)::text,consumer,snapshot_kind,pg_current_snapshot(),owner_epoch,
+              source_position,'begun',coverage_publication,coverage_generation
+       FROM semantic.public_filter_bootstrap WHERE partition_no=0 AND bootstrap=$1`,
+      [bootstrap, otherId],
+    );
+    const open = () =>
+      custody.openPit(
+        { registration: stored.registration, covered: { observation: otherCut }, keepAliveMs: 30_000 },
+        search,
+        readContext(),
+      );
+    const loser = await open(),
+      winner = await open();
+    if (loser.status !== 'retained' || winner.status !== 'retained') throw new Error('Two original PITs required');
+    expect(loser.queried.snapshot.observation).not.toBe(winner.queried.snapshot.observation);
+    const splitWork = JSON.stringify(tree({ ...state, bootstrap: { id: otherCut }, queried: loser.queried }, 'value'));
+    const split = (work = splitWork) =>
+      binding.releaseAdoptedRegistration!(
+        {
+          registration: stored.registration.id,
+          work,
+          bootstrap: otherCut,
+          observation: loser.queried.snapshot.observation,
+        },
+        readContext(),
+      );
+    await f.db.pool.query(
+      "UPDATE semantic.public_filter_bootstrap SET state='adopted',queried=$2 WHERE partition_no=0 AND bootstrap=$1",
+      [otherId, winner.queried.snapshot.observation],
+    );
+    await f.db.pool.query(
+      'UPDATE search.public_filter_registration SET consumer_bootstrap=$2,consumer_work=$3 WHERE partition_no=0 AND id=$1',
+      [stored.registration.id, otherCut, splitWork],
+    );
+    const expire = (observation: string) =>
+      f.db.pool.query(
+        'UPDATE search.public_filter_observation SET expires_at=$2 WHERE partition_no=0 AND observation=$1',
+        [observation, Date.now() - 1],
+      );
+    await expire(loser.queried.snapshot.observation);
+    expect((await split()).status).toBe('pending');
+    await expire(winner.queried.snapshot.observation);
+    const uncertain = JSON.stringify(
+      tree(
+        {
+          ...state,
+          bootstrap: { id: otherCut },
+          queried: loser.queried,
+          dispatch: { state: 'uncertain' },
+        },
+        'value',
+      ),
+    );
+    const storeWork = (value: string) =>
+      f.db.pool.query('UPDATE search.public_filter_registration SET consumer_work=$2 WHERE partition_no=0 AND id=$1', [
+        stored.registration.id,
+        value,
+      ]);
+    await storeWork(uncertain);
+    expect((await split(uncertain)).status).toBe('pending');
+    await storeWork(splitWork);
+    const both = await split();
+    if (both.status !== 'closing') throw new Error('Both original observations must drain');
+    expect(both.observations).toEqual(
+      [loser.queried, winner.queried].sort((a, b) => a.snapshot.observation.localeCompare(b.snapshot.observation)),
+    );
+    expect((await custody.closeObservation(loser.queried, search, readContext())).status).toBe('closed');
+    const remaining = await split();
+    expect(remaining).toMatchObject({ status: 'closing', observations: [winner.queried] });
+    expect((await custody.closeObservation(winner.queried, search, readContext())).status).toBe('closed');
+    expect((await Promise.all([split(), split()])).map((x) => x.status).sort()).toEqual(['pending', 'released']);
+    expect(
+      (
+        await f.db.pool.query(
+          'SELECT consumer_work,consumer_bootstrap FROM search.public_filter_registration WHERE partition_no=0 AND id=$1',
+          [stored.registration.id],
+        )
+      ).rows,
+    ).toEqual([{ consumer_work: null, consumer_bootstrap: null }]);
   } finally {
     await custody.close();
     await search.request('DELETE', `/${index}`);
