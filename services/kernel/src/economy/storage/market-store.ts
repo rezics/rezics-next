@@ -26,12 +26,12 @@ type ListingInput = Omit<Parameters<typeof openMarketListing>[0], 'now'>;
 type PurchaseRequest = Parameters<typeof purchaseMarketListing>[2];
 type Decision = NonNullable<MarketTrade['decision']>;
 type Receipt = MarketTradeAck['receipt'];
-type TradePage = Readonly<{
+type MarketPage = Readonly<{
   itemHomeId: string;
-  accountId: string;
   limit: number;
-  after: readonly [startedAt: string, tradeId: string] | null;
+  after: readonly [time: string, id: string] | null;
 }>;
+type TradePage = MarketPage & Readonly<{ accountId: string }>;
 
 export type MarketWorkOwner = Readonly<{ kind: 'item' | 'ledger'; id: string }>;
 export type MarketWork = Readonly<{
@@ -96,6 +96,23 @@ async function findListing(client: Query, bookId: string, id: string, lock = fal
     [bookId, id],
   );
   return rows[0] ? decodeMarketRecord<MarketListing>(rows[0].payload) : null;
+}
+
+async function findOpenListings(client: Query, bookId: string, { itemHomeId, limit, after }: MarketPage) {
+  const expiry = "(payload #>> '{expiresAt,$marketInteger}')::bigint";
+  const range = after === null ? '' : `AND (${expiry}, listing_id) > ($4::bigint, $5::text)`;
+  const { rows } = await client.query<Payload>(
+    `SELECT payload::text FROM economy.market_listing
+     WHERE book_id = $1 AND item_home_id = $2 AND payload ->> 'status' = 'open'
+       AND ${expiry} > floor(extract(epoch FROM statement_timestamp()) * 1000)::bigint
+       ${range}
+     ORDER BY ${expiry}, listing_id LIMIT $3`,
+    [bookId, itemHomeId, limit + 1, ...(after ?? [])],
+  );
+  return {
+    listings: rows.slice(0, limit).map(({ payload }) => decodeMarketRecord<MarketListing>(payload)),
+    more: rows.length > limit,
+  };
 }
 
 async function findTrade(client: Query, bookId: string, id: string, lock = false): Promise<MarketTrade | null> {
@@ -226,6 +243,16 @@ export function createMarketStore(database: MarketStoreDatabase, bookId: string,
 
   return {
     readListing: (id: string) => database.read((client) => findListing(client, bookId, id)),
+    readOpenListings(input: MarketPage) {
+      if (
+        !ownerKey.test(input.itemHomeId) ||
+        !Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > maxPage
+      )
+        throw new TypeError('Invalid market listing page');
+      return database.read((client) => findOpenListings(client, bookId, input));
+    },
     readTrade: (id: string) => database.read((client) => findTrade(client, bookId, id)),
     readParticipantTrades(input: TradePage) {
       if (

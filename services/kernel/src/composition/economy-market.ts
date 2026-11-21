@@ -142,6 +142,19 @@ function visibleListing(listing: MarketListing, accountId: string): boolean {
   );
 }
 
+function listingView(listing: MarketListing) {
+  return {
+    listingId: listing.listingId,
+    itemId: listing.item.itemId,
+    generation: listing.item.generation.toString(),
+    assetId: listing.price.assetId,
+    amount: listing.price.units.toString(),
+    expiresAt: listing.expiresAt.toString(),
+    revision: listing.revision.toString(),
+    status: listing.status,
+  };
+}
+
 function tradeReceipt(trade: MarketTrade) {
   const { price } = trade.terms;
   return {
@@ -194,16 +207,18 @@ export function createNativeEconomyMarket(pool: Pool, config: MarketConfig & { b
       request(input, async (_, { market }, accountId) => {
         const listing = await market.readListing(input.listingId);
         if (!listing || !visibleListing(listing, accountId)) throw new ProblemError('not_found');
-        return {
-          listingId: listing.listingId,
-          itemId: listing.item.itemId,
-          generation: listing.item.generation.toString(),
-          assetId: listing.price.assetId,
-          amount: listing.price.units.toString(),
-          expiresAt: listing.expiresAt.toString(),
-          revision: listing.revision.toString(),
-          status: listing.status,
-        };
+        return listingView(listing);
+      }),
+    listListings: (input) =>
+      request(input, async (_, { market }) => {
+        const { listings, more } = await market.readOpenListings({
+          itemHomeId,
+          limit: input.limit,
+          after: input.after,
+        });
+        const page = listings.map(listingView);
+        const last = page.at(-1);
+        return { listings: page, after: more && last ? [last.expiresAt, last.listingId] : null };
       }),
     readTrade: (input) =>
       request(input, async (_, { market }, accountId) => {

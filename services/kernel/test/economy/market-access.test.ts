@@ -177,6 +177,12 @@ test('private market uses exact grant and operator policy through the native fix
   const listingPath = `${base}/listings/${listingId}`;
   const listed = await request(listingPath, buyerToken);
   expect(listed.status).toBe(200);
+  const discovered = await request(`${base}/listings`, viewerToken);
+  expect(discovered.status).toBe(200);
+  expect(await discovered.json()).toMatchObject({
+    listings: [{ listingId, amount: price, status: 'open' }],
+    next: null,
+  });
   expect(listed.headers.get('cache-control')).toBe('private, no-store');
   expect(await listed.json()).toMatchObject({
     listingId,
