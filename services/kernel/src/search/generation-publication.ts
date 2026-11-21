@@ -1782,13 +1782,14 @@ export function createSearchGenerationPublication(
         checkingEnrollment ? context : undefined,
       );
       if (verified === 'matched') return;
-      // Subject population first waits for ordinary settlement to avoid competing for its initial write.
-      // A settled copy can still lag a native projection that finished preparing after that write.
-      // Repair the mismatch through the ordinary writer while the generation remains open.
-      if (checkingEnrollment || job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
-        throw new Pending('source_pending');
+      if (checkingEnrollment || job.fenced_pass) throw new Pending('source_pending');
       // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
+        if (job.phase === 'subject' && verified === 'writer-pending') {
+          // Recover only a retained ordinary dispatch. The next page read must verify the changed home.
+          if (await writerGuard.recoverRelayDispatch?.(partition, ids, context)) meter.resultWrites++;
+          throw new Pending('source_pending');
+        }
         await writerGuard.write(partition, ids, position);
       } catch (error) {
         if (error instanceof IdentityEpochStoreError && error.code === 'identity_epoch_unavailable')

@@ -66,19 +66,22 @@ A guarded 409 rejects. The live relay retains compact original bulk items and th
 the dispatch token before checking the allocation again and settling. A relay replay may consume those committed
 items under the same owner, physical UUID and write alias, and then apply its full current Source obligation
 before advancing its checkpoint. Settlement clears the temporary items and retains the last visible native
-receipt and Source position. No Subject body is stored in the temporary receipt.
+receipt and Source position.
 An existing proof can drain under a closed gate. A replay batch that needs new Source writes still requires admission
 before those writes can advance its checkpoint.
 
-If OpenSearch's original response never reached durable receipt storage, the token still holds the writer.
-Older dispatched rows start in that state after migration. A current hit, absence, refresh, conflict or elapsed
-time supplies neither the original successful response nor proof that delayed mutations have drained. A later
-delete can lose its engine version tombstone, which makes superseding an unproved dispatch unsafe. Reconciliation
-requires the original action identity and its verified successful bulk item or a native handoff proving that the
-original allocation can no longer receive the dispatch. The Subject writer has no producer for that historical
-evidence. The [index erasure protocol](../../../../docs/search-index-erasure-plan.md#physical-replacement-and-capacity)
-specifies the replacement and retirement path when the original response is unavailable. Old UUID, token,
-checkpoint and last-visible state stay intact until authorized native reconciliation.
+When the OpenSearch HTTP request breaker rejects the bulk before its handler starts, the writer retains the
+rejected action with its original intent under the dispatched token. The live relay or an open Subject
+publication pass can claim that rejection once under the original owner, gate and allocation. The claim
+removes the temporary body before external I/O and sends that action and external version through the
+allocation's write alias. Another confirmed rejection restores the action. A successful keyed bulk item
+settles the original enrollment. Publication reads the home again before advancing.
+
+A lost response with no retained item requires an exact search-visible index winner matching the original
+key, physical target, version and body digest. A delete requires a successful native bulk item. Absence,
+an older winner or a generic transport failure leaves custody outstanding because a delayed request can
+outlive an engine delete tombstone. The [index erasure protocol](../../../../docs/search-index-erasure-plan.md#physical-replacement-and-capacity)
+owns replacement and retirement when the original effect cannot be proved.
 
 Native confirmed settlement retains the copy
 locator and visible native receipt; a later pre-dispatch cancellation preserves them. Copy minimization/reopening
