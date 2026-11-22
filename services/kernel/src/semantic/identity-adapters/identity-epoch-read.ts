@@ -689,7 +689,10 @@ export async function readIdentityHome(client: PoolClient, partition: number): P
   return homeFrom(result.rows[0], partition);
 }
 
-async function readIdentityShards(client: PoolClient): Promise<string | null> {
+type ObservedIdentityBasis = { basis: string; structural: string };
+export type IdentityBasisReadOptions = { deadline: number; freshSearch?: boolean };
+
+async function readIdentityShards(client: PoolClient): Promise<ObservedIdentityBasis | null> {
   // The primary key admits exactly shards 0..63. Hash their ordered bytes before crossing the wire.
   const { rows } = await client.query<{ basis: string | null }>(
     `SELECT CASE WHEN count(*)=64 AND bool_and(active_homes=64 AND pending=0)
@@ -697,25 +700,39 @@ async function readIdentityShards(client: PoolClient): Promise<string | null> {
                           string_agg(basis,''::bytea ORDER BY shard)),'hex')
      END AS basis FROM semantic.identity_basis_shard`,
   );
-  return rows[0]?.basis ?? null;
+  const basis = rows[0]?.basis;
+  return basis ? { basis, structural: basis } : null;
+}
+
+async function readFreshSearchShards(client: PoolClient): Promise<ObservedIdentityBasis | null> {
+  const { rows } = await client.query<ObservedIdentityBasis>(
+    `SELECT encode(sha256(convert_to('rezics.identity-basis.v2','UTF8') ||
+                          string_agg(basis,''::bytea ORDER BY shard)),'hex') AS basis,
+            encode(sha256(string_agg(uuid_send(read_lineage)||int8send(structural_revision),
+                                    ''::bytea ORDER BY shard)),'hex') AS structural
+       FROM semantic.identity_basis_shard
+       HAVING count(*)=64 AND bool_and(active_homes=64 AND pending=0)`,
+  );
+  return rows[0] ?? null;
 }
 
 async function readIdentityBasisWith(
   capabilities: NativeIdentityCapabilities,
   pool: Pool,
-  options: { deadline: number },
+  options: IdentityBasisReadOptions,
 ): Promise<BasisRead> {
   const { deadline } = options;
   // Each ordered vector comes from a single statement snapshot. Keep the two observations independent.
   const observe = capabilities.read.withReadStatement ?? capabilities.read.withReadTransaction;
   try {
     requireAccessDeadline(deadline);
-    const first = await withRequestDeadline(deadline, () => observe(pool, readIdentityShards, deadline));
+    const read = options.freshSearch ? readFreshSearchShards : readIdentityShards;
+    const first = await withRequestDeadline(deadline, () => observe(pool, read, deadline));
     requireAccessDeadline(deadline);
-    const second = await withRequestDeadline(deadline, () => observe(pool, readIdentityShards, deadline));
+    const second = await withRequestDeadline(deadline, () => observe(pool, read, deadline));
     requireAccessDeadline(deadline);
-    if (first === null || first !== second) return { state: 'not_ready' };
-    return { state: 'ready', basis: { digest: first } };
+    if (!first || !second || first.structural !== second.structural) return { state: 'not_ready' };
+    return { state: 'ready', basis: { digest: second.basis } };
   } catch (error) {
     // Cleanup can outlast the deadline after the transaction has already selected its failure.
     throwAccessUnavailable(error);
@@ -738,7 +755,7 @@ export function createIdentityReaders(capabilities: NativeIdentityCapabilities):
     ) => readIdentityRatingReviewWith(capabilities, pool, input),
     readIdentityRatingEvidenceInTransaction,
     readIdentityRepairEvidenceInTransaction,
-    readIdentityBasis: (pool: Pool, options: { deadline: number }) =>
+    readIdentityBasis: (pool: Pool, options: IdentityBasisReadOptions) =>
       readIdentityBasisWith(capabilities, pool, options),
     readIdentityHome,
   });
@@ -761,7 +778,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
   return defaultReaders().readIdentityMappings(pool, originals);
 }
 
-export async function readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead> {
+export async function readIdentityBasis(pool: Pool, options: IdentityBasisReadOptions): Promise<BasisRead> {
   return defaultReaders().readIdentityBasis(pool, options);
 }
 

@@ -364,6 +364,15 @@ A read compares two ordered 64-row observations. Each requires every shard, 64 a
 controls per shard and zero pending claims. Missing or changing evidence returns preparing. Existing generic
 cursors restart once at migration to the v2 digest and again when their committed identity meaning changes.
 
+An unbound relevance-ranked bibliographic catalogue first page with a positive exact Type filter may select the second complete v2 digest across committed fresh self births.
+Each of its two independent snapshots also binds the lineage and structural revision of every shard. All
+home topology, group, redirect and pending transitions advance that revision. Within the same transaction,
+the native birth initializer accounts for exactly its own newly inserted self group after recording the
+original, mapping and home gate. A legacy initializer or any additional transition advances the revision.
+Both snapshots must be complete and clean and their structural vectors must match. Continuations and
+previously bound observations continue comparing the full v2 basis. Apply the schema before the new
+reader, and restore the former reader before reverting the schema.
+
 For a public Book TypeList, `public_filter_published_coverage` binds the child read definition to the active
 physical publication. Its coverage generation tracks projection and privacy work. The selected mapping reader
 checks pending claims and terminal closure for the requested originals. A claim on an off-page original can

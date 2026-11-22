@@ -24,7 +24,12 @@ import type {
   ReviewedPersonSource,
 } from './identity-adapters/identity-epoch-contract.ts';
 import type { IdentitySourceConsumerReference } from './identity-source-consumer-custody.ts';
-import type { BasisRead, HomeIdentity, IdentityRepairEvidence } from './identity-adapters/identity-epoch-read.ts';
+import type {
+  BasisRead,
+  HomeIdentity,
+  IdentityBasisReadOptions,
+  IdentityRepairEvidence,
+} from './identity-adapters/identity-epoch-read.ts';
 import type {
   IdentityMapping,
   IdentityRatingNativeEvidence,
@@ -171,7 +176,7 @@ export type IdentityNativeReaders = Readonly<{
     client: NativeIdentityQueryable,
     input: Readonly<{ originals: readonly string[]; commandHome: number }>,
   ): Promise<IdentityRepairEvidence>;
-  readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead>;
+  readIdentityBasis(pool: Pool, options: IdentityBasisReadOptions): Promise<BasisRead>;
   readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
 }>;
 

@@ -237,6 +237,19 @@ END $$;
 
 
 --
+-- Name: advance_identity_structural_revision(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.advance_identity_structural_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.structural_revision := OLD.structural_revision+1;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: append_record_source_set(integer, uuid, integer, jsonb); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3393,6 +3406,11 @@ BEGIN
   INSERT INTO semantic.identity_epoch_original(partition_no,generation,original,terminal,source_partition,source_generation,present)
     VALUES(home,group_generation,subject,subject,home,0,true);
   UPDATE semantic.identity_epoch_dirty d SET captured_revision=d.revision WHERE (d.route,d.original)=(subject_route,subject);
+  -- Only this branch inserted a new self group and all four of its native birth records.
+  -- Its single structural pulse is part of this transaction. Every other pulse remains.
+  UPDATE semantic.identity_basis_shard SET structural_revision=structural_revision-1
+  WHERE shard=home%64 AND xmin::text=pg_current_xact_id()::text AND structural_revision>0;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Missing fresh identity group revision'; END IF;
   status:='created'; RETURN NEXT;
 END $$;
 
@@ -7108,10 +7126,13 @@ CREATE TABLE semantic.identity_basis_shard (
     active_homes integer NOT NULL,
     pending bigint NOT NULL,
     basis bytea NOT NULL,
+    read_lineage uuid DEFAULT gen_random_uuid() NOT NULL,
+    structural_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT identity_basis_shard_active_homes_check CHECK (((active_homes >= 0) AND (active_homes <= 64))),
     CONSTRAINT identity_basis_shard_basis_check CHECK ((octet_length(basis) = 32)),
     CONSTRAINT identity_basis_shard_pending_check CHECK ((pending >= 0)),
-    CONSTRAINT identity_basis_shard_shard_check CHECK (((shard >= 0) AND (shard <= 63)))
+    CONSTRAINT identity_basis_shard_shard_check CHECK (((shard >= 0) AND (shard <= 63))),
+    CONSTRAINT identity_basis_shard_structural_revision_check CHECK ((structural_revision >= 0))
 );
 
 
@@ -15244,6 +15265,15 @@ ALTER TABLE semantic.identity_epoch_group ENABLE ALWAYS TRIGGER identity_basis_g
 CREATE TRIGGER identity_basis_redirect AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_basis_effect();
 
 ALTER TABLE semantic.redirect ENABLE ALWAYS TRIGGER identity_basis_redirect;
+
+
+--
+-- Name: identity_basis_shard identity_basis_structural_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_basis_structural_revision BEFORE UPDATE OF basis, active_homes, pending ON semantic.identity_basis_shard FOR EACH ROW WHEN ((((old.basis IS DISTINCT FROM new.basis) OR (old.active_homes IS DISTINCT FROM new.active_homes)) OR (old.pending IS DISTINCT FROM new.pending))) EXECUTE FUNCTION semantic.advance_identity_structural_revision();
+
+ALTER TABLE semantic.identity_basis_shard ENABLE ALWAYS TRIGGER identity_basis_structural_revision;
 
 
 --

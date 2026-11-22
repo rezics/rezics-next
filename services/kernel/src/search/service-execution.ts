@@ -540,8 +540,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     return (await observation(generation, deadline)).as_of;
   }
 
-  async function executedIdentity(deadline: number): Promise<string> {
-    const identity = await sourceRequest(() => observeSearchIdentityEpoch(pool, deadline));
+  async function executedIdentity(deadline: number, freshSearch = false): Promise<string> {
+    const identity = await sourceRequest(() => observeSearchIdentityEpoch(pool, deadline, freshSearch));
     if (identity.status === 'preparing') throw indexNotReady();
     return identity.digest;
   }
@@ -899,9 +899,15 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         readContext?.bookPage && !text && sort === 'name' && hasPublicBookSearchShape(request)
           ? readContext.bookPage
           : undefined;
+      const freshRankedCatalogue =
+        Boolean(text) &&
+        sort === 'relevance' &&
+        request.cursor === undefined &&
+        !readContext?.savedCollection &&
+        hasPublicBookSearchShape(request);
       const identityEpoch = await (bookPage
         ? (bookPage.identityEpoch ??= executedIdentity(deadline))
-        : executedIdentity(deadline));
+        : executedIdentity(deadline, freshRankedCatalogue));
       const executedRequest = cursorPlanner.bindExecutionRequest(admission, identityEpoch);
       const bindingRequest = executedRequest.bindingRequest;
       const kinds: KindSnapshot | undefined = current

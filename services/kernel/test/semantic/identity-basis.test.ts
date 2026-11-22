@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import { nativeIdentityCapabilities } from '../../src/semantic/identity-adapter-bind.ts';
+import { createIdentityReaders } from '../../src/semantic/identity-adapters/identity-epoch-read.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
+import { newId } from '../../src/route/route.ts';
 import { readIdentityBasis, readIdentityHome } from '../../src/semantic/identity-basis.ts';
 import { readIdentityMappings } from '../../src/semantic/identity-epoch-read.ts';
 import { bindSearchIdentityCursorRequest } from '../../src/search/canonical-keyset-admit.ts';
 import { decodeSearchCursor, encodeSearchCursor } from '../../src/search/cursor.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
-import { home, identityEpochDatabase } from './support/identity-epoch.ts';
+import { digest, home, identityEpochDatabase, release } from './support/identity-epoch.ts';
 import { appendEdge } from './support/identity-terminal-closure.ts';
 
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
@@ -111,11 +115,145 @@ test('fresh shards bind native topology, ignore ordinary positions and invalidat
     expect((await decodeSearchCursor(ring, binding(moved), token)).ok).toBe(false);
     await client.query('DELETE FROM semantic.identity_basis_shard WHERE shard=63');
     expect(await observe(db.pool)).toEqual({ state: 'not_ready' });
+    expect(await readIdentityBasis(db.pool, { deadline: Date.now() + 5000, freshSearch: true })).toEqual({
+      state: 'not_ready',
+    });
   } finally {
     client.release();
     await db.close();
   }
 });
+
+const birthIntervalMigration = new URL(
+  '../../db/semantic/migrations/20261122120000_certify_identity_birth_intervals.sql',
+  import.meta.url,
+);
+
+test('an unbound ranked page accepts only certified fresh self births between independent complete observations', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    const f = await createIdentityMappingFixture({ poolMax: 1, url: db.url });
+    try {
+      async function createBook(label: string) {
+        const key = randomUUID();
+        const route = 0x5210;
+        const created = await createSubject(f.pool, {
+          actor: await f.actor(),
+          target: { route, id: newId(route) },
+          item: { type: 'schema:Book', labels: { en: label } },
+          idempotencyKey: key,
+          digest: digest(key),
+          release,
+          authorization: await f.authorization('subject:create'),
+        });
+        return created.subject.id;
+      }
+      const native = nativeIdentityCapabilities();
+      async function between(freshSearch: boolean, commit: () => Promise<unknown>) {
+        let snapshots = 0;
+        const readers = createIdentityReaders({
+          ...native,
+          read: {
+            ...native.read,
+            async withReadStatement<T>(pool: Pool, read: (c: PoolClient) => Promise<T>, deadline: number) {
+              const result = await native.read.withReadStatement!(pool, read, deadline);
+              if (++snapshots === 1) await commit();
+              return result;
+            },
+          },
+        });
+        const observed = await readers.readIdentityBasis(f.pool, { deadline: Date.now() + 10_000, freshSearch });
+        expect(snapshots).toBe(2);
+        return observed;
+      }
+      const initial = await ready(db.pool);
+      const cursor = await encodeSearchCursor(ring, binding(initial), { generation: 1, after: ['selected'] });
+      expect(await between(false, () => createBook('Strict observation'))).toEqual({ state: 'not_ready' });
+      const original = await createBook('First original');
+      const terminal = await createBook('Second original');
+      const born = await between(true, async () => {
+        await createBook('First overlapping birth');
+        await createBook('Second overlapping birth');
+      });
+      const current = await ready(db.pool);
+      expect(born).toEqual({ state: 'ready', basis: { digest: current } });
+      expect(current).not.toBe(initial);
+      expect((await decodeSearchCursor(ring, binding(current), cursor)).ok).toBe(false);
+      expect(
+        await between(true, async () => {
+          await appendEdge(db, original, terminal);
+          await createBook('Birth alongside redirect on its own shard');
+        }),
+      ).toEqual({ state: 'not_ready' });
+      expect(
+        await between(true, async () => {
+          await db.admin.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=17");
+          await db.admin.query("UPDATE core.partition SET write_state='active' WHERE partition_no=17");
+        }),
+      ).toEqual({ state: 'not_ready' });
+      expect(
+        await between(true, () =>
+          db.admin.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=17"),
+        ),
+      ).toEqual({ state: 'not_ready' });
+      expect(
+        await between(true, () =>
+          db.admin.query("UPDATE core.partition SET write_state='active' WHERE partition_no=17"),
+        ),
+      ).toEqual({ state: 'not_ready' });
+
+      const home = 0x5210 / 16;
+      await db.admin.query(`CREATE FUNCTION semantic.relocate_at_birth_test() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          UPDATE core.partition SET write_state='fenced' WHERE partition_no=NEW.partition_no;
+          UPDATE core.partition SET write_state='active' WHERE partition_no=NEW.partition_no;
+          RETURN NULL;
+        END $$;
+        CREATE TRIGGER relocate_at_birth_test AFTER INSERT ON semantic.identity_epoch_original
+        FOR EACH ROW WHEN (NEW.partition_no=${home}) EXECUTE FUNCTION semantic.relocate_at_birth_test()`);
+      try {
+        expect(
+          await between(true, () => createBook('Birth and competing transition in the same native transaction')),
+        ).toEqual({ state: 'not_ready' });
+      } finally {
+        await db.admin.query(
+          'DROP TRIGGER relocate_at_birth_test ON semantic.identity_epoch_original; DROP FUNCTION semantic.relocate_at_birth_test()',
+        );
+      }
+      // An older initializer still writes and advances v2, without certifying its group as an isolated birth.
+      const previous = (
+        await Bun.file(
+          new URL('../../db/semantic/migrations/20261122033200_initialize_identity_birth.sql', import.meta.url),
+        ).text()
+      ).split('-- migrate:down')[0]!;
+      await db.admin.query(previous.replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION'));
+      expect(await between(true, () => createBook('Native birth from the previous writer'))).toEqual({
+        state: 'not_ready',
+      });
+      const [up, down] = (await Bun.file(birthIntervalMigration).text()).split('-- migrate:down');
+      await db.admin.query(down!);
+      await createBook('Older native owner after rollback');
+      expect(await ready(db.pool)).not.toBe(current);
+      await db.admin.query(up!);
+      expect(
+        await between(true, async () => {
+          // Even a full down/up that preserves the native basis starts a new structural lineage.
+          await db.admin.query(down!);
+          await db.admin.query(up!);
+        }),
+      ).toEqual({ state: 'not_ready' });
+      const pending = await between(true, () => f.admitMerge());
+      expect(pending).toEqual({ state: 'not_ready' });
+      expect(await between(true, () => createBook('Birth while the real merge remains pending'))).toEqual({
+        state: 'not_ready',
+      });
+    } finally {
+      await f.close();
+    }
+  } finally {
+    await db.close();
+  }
+}, 180_000);
 
 test('forward migration captures retained redirects and off-page claims and follows the admitted native mapping writer', async () => {
   const db = await identityEpochDatabase();
@@ -149,6 +287,8 @@ test('forward migration captures retained redirects and off-page claims and foll
       const committed = await ready(db.pool);
       expect(committed).not.toBe(groupBasis);
       expect((await decodeSearchCursor(ring, binding(committed), token)).ok).toBe(false);
+      const [guardUp, guardDown] = (await Bun.file(birthIntervalMigration).text()).split('-- migrate:down');
+      await db.admin.query(guardDown!);
       await db.admin.query(down!);
       const {
         job,
@@ -168,7 +308,7 @@ test('forward migration captures retained redirects and off-page claims and foll
       ).rows;
       expect(expected.some((row) => BigInt(row.pending) > 0n)).toBe(true);
       expect(await f.nativeDirectRedirect(alias)).toBe(target);
-      await db.admin.query(`BEGIN;\n${up}\nCOMMIT;`);
+      await db.admin.query(`BEGIN;\n${up}\n${guardUp}\nCOMMIT;`);
       expect(
         (
           await db.admin.query(

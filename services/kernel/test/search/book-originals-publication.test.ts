@@ -1,4 +1,9 @@
 import { expect, test } from 'bun:test';
+import type { Pool, PoolClient } from 'pg';
+import {
+  bindNativeIdentityCapabilities,
+  nativeIdentityCapabilities,
+} from '../../src/semantic/identity-adapter-bind.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { drainExpiredServingPits } from '../../src/search/public-filter-custody.ts';
 import { subjectConsumer } from '../../src/search/consumer-name.ts';
@@ -251,6 +256,39 @@ test('cold Subject publication discloses the originals and preserves relevance t
       );
     }
     expect(await projectionBuilds()).toEqual(before);
+    // Put an independent native commit between the two and then run the complete public request.
+    const native = nativeIdentityCapabilities();
+    async function searchAcross(change: () => Promise<unknown>) {
+      let observations = 0;
+      bindNativeIdentityCapabilities({
+        ...native,
+        read: {
+          ...native.read,
+          async withReadStatement<T>(pool: Pool, read: (client: PoolClient) => Promise<T>, deadline: number) {
+            const value = await native.read.withReadStatement!(pool, read, deadline);
+            if (read.name === 'readFreshSearchShards' && ++observations === 1) await change();
+            return value;
+          },
+        },
+      });
+      try {
+        const result = await fixture.request('anonymous', 'POST', '/v1/subjects:search', { ...query, limit: 3 });
+        expect(observations).toBe(2);
+        return result;
+      } finally {
+        bindNativeIdentityCapabilities(native);
+      }
+    }
+    const acrossBirth = await searchAcross(() => createSubject('schema:Book', 'Independent original'));
+    expect(acrossBirth.status, JSON.stringify(acrossBirth.body)).toBe(200);
+    expect(acrossBirth.body.subjects).toEqual([...ids].sort().map((id) => expect.objectContaining({ id })));
+    expect(acrossBirth.body.next).toBeNull();
+    const acrossFence = await searchAcross(async () => {
+      await database.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=17");
+      await database.pool.query("UPDATE core.partition SET write_state='active' WHERE partition_no=17");
+    });
+    expect(acrossFence.status).toBe(503);
+    expect(acrossFence.body.code).toBe('index_not_ready');
     console.info('Cold Subject publication', {
       generation: published.generation,
       originals: originals.length,

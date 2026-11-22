@@ -26,8 +26,12 @@ export type SearchIdentityEpoch = Readonly<{ status: 'ready'; digest: string }> 
 const MAPPING_PAGE = 100;
 
 /** One digest for the current published identity meaning, or readiness while an epoch is pending. */
-export async function observeSearchIdentityEpoch(pool: Pool, deadline: number): Promise<SearchIdentityEpoch> {
-  const observed = await readIdentityBasis(pool, { deadline });
+export async function observeSearchIdentityEpoch(
+  pool: Pool,
+  deadline: number,
+  freshSearch = false,
+): Promise<SearchIdentityEpoch> {
+  const observed = await readIdentityBasis(pool, { deadline, freshSearch });
   return observed.state === 'ready' ? { status: 'ready', digest: observed.basis.digest } : { status: 'preparing' };
 }
 
