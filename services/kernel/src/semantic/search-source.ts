@@ -32,7 +32,7 @@ import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
 import { accessCheck, prepareReadDecisions } from '../request/access.ts';
 import { commandTime, DEFAULT_REQUEST_DEADLINE_MS, mintReadTime, type CommandTransaction } from '../command/command.ts';
-import { nativeSourceQuery } from '../database/native-source-query.ts';
+import { nativeSourceQuery, preparedStatementClient } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
@@ -246,11 +246,16 @@ export function subjectSource(
           const position = BigInt(positionRow.position);
           if (pairs.length === 0) return { partition, position, subjects: [] };
 
-          const rows = (await readSubjects.run(client, {
-            partition_no: partition,
-            routes: pairs.map(({ route }) => route),
-            subject_ids: pairs.map(({ id }) => id),
-          })) as SubjectRow[];
+          const rows = (await readSubjects.run(
+            pairs.length === 1
+              ? preparedStatementClient(client, readSubjects['~standard'].query.text, 'semantic_search_one_headers_v1')
+              : client,
+            {
+              partition_no: partition,
+              routes: pairs.map(({ route }) => route),
+              subject_ids: pairs.map(({ id }) => id),
+            },
+          )) as SubjectRow[];
           if (rows.length === 0) return { partition, position, subjects: [] };
 
           const found = new Map(rows.map((row) => [row.id, row]));
@@ -258,17 +263,31 @@ export function subjectSource(
           if (unreadied)
             return { partition, position, subjects: [] as IndexedSubject[], pending: unreadied, rebuild: true };
           const present = rows.map(({ id, route }) => ({ id, route }));
-          const factRows = (await readFacts.run(client, {
-            partition_no: partition,
-            routes: present.map(({ route }) => route),
-            subject_ids: present.map(({ id }) => id),
-          })) as FactRow[];
-          const currentRows = (await readCurrentStatements.run(client, {
-            partition_no: partition,
-            routes: present.map(({ route }) => route),
-            subject_ids: present.map(({ id }) => id),
-            subject_limit: CURRENT_STATEMENT_LIMIT,
-          })) as FactRow[];
+          const factRows = (await readFacts.run(
+            present.length === 1
+              ? preparedStatementClient(client, readFacts['~standard'].query.text, 'semantic_search_one_terms_v1')
+              : client,
+            {
+              partition_no: partition,
+              routes: present.map(({ route }) => route),
+              subject_ids: present.map(({ id }) => id),
+            },
+          )) as FactRow[];
+          const currentRows = (await readCurrentStatements.run(
+            present.length === 1
+              ? preparedStatementClient(
+                  client,
+                  readCurrentStatements['~standard'].query.text,
+                  'semantic_search_one_statements_v1',
+                )
+              : client,
+            {
+              partition_no: partition,
+              routes: present.map(({ route }) => route),
+              subject_ids: present.map(({ id }) => id),
+              subject_limit: CURRENT_STATEMENT_LIMIT,
+            },
+          )) as FactRow[];
           const currentCounts = new Map<string, number>();
           for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
           const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);

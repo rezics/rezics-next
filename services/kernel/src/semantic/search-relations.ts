@@ -33,7 +33,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readFences } from '../content/source-fences.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
-import { nativeSourceQuery } from '../database/native-source-query.ts';
+import { nativeSourceQuery, preparedStatementClient } from '../database/native-source-query.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   MAX_RELATION_FACET_VALUES,
@@ -796,12 +796,17 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           if (requests.length < 1000) requests.push({ route: subject.route, subject_id: subject.id, property });
       }
       if (requests.length) {
-        prepared.rows = (await readBatch.run(client, {
-          partition_no: partition,
-          requests,
-          property_limit: MAX_RELATION_FACET_VALUES,
-          input_limit: 1000,
-        })) as SelectedStatement[];
+        prepared.rows = (await readBatch.run(
+          subjects.length === 1
+            ? preparedStatementClient(client, readBatch['~standard'].query.text, 'semantic_search_one_relations_v1')
+            : client,
+          {
+            partition_no: partition,
+            requests,
+            property_limit: MAX_RELATION_FACET_VALUES,
+            input_limit: 1000,
+          },
+        )) as SelectedStatement[];
         for (const row of prepared.rows)
           if (!prepared.releases.has(row.release))
             prepared.releases.set(row.release, await readRelease(client, row.release));

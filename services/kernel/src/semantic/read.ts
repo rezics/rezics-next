@@ -70,9 +70,14 @@ export function withReadStatement<T>(
           .then(async () => {
             requireAccessDeadline(deadline);
             try {
-              const setting = await nativeSourceQuery(client, readStatementTimeout, {
-                timeout_ms: Math.max(1, Math.floor(deadline - Date.now())),
-              });
+              const setting = await nativeSourceQuery(
+                client,
+                readStatementTimeout,
+                {
+                  timeout_ms: Math.max(1, Math.floor(deadline - Date.now())),
+                },
+                { name: 'semantic_bound_statement_timeout_v1' },
+              );
               if (!setting?.timeout) throw new Error('Missing original statement timeout');
               previous ??= setting.timeout;
             } catch (error) {
@@ -106,7 +111,12 @@ export function withReadStatement<T>(
         if (queued) client.release(true);
         else if (previous !== undefined) {
           try {
-            await nativeSourceQuery(client, restoreStatementTimeout, { timeout: previous });
+            await nativeSourceQuery(
+              client,
+              restoreStatementTimeout,
+              { timeout: previous },
+              { name: 'semantic_restore_statement_timeout_v1' },
+            );
           } catch (error) {
             client.release(true);
             if (succeeded) throw error;

@@ -1714,7 +1714,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // No continuation can escape before this actual retained execution and its
       // durable window. Until then a crashed transfer stays independently reclaimable.
       const saved = await m.sql(
-        `WITH owned AS MATERIALIZED (
+        {
+          name: 'search_complete_first_pit_window_v1',
+          text: `WITH owned AS MATERIALIZED (
            SELECT c.partition_no,c.bootstrap,c.registration FROM search.public_filter_pit_claim c
            WHERE (c.partition_no,c.registration,c.bootstrap)=($1,$2,substring($5::text from 3)::uuid)
              AND c.state='handed' AND c.deadline>$7 FOR UPDATE
@@ -1728,6 +1730,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
            RETURNING c.partition_no,c.bootstrap
          ) DELETE FROM search.public_filter_pit_claim c USING complete w
            WHERE (c.partition_no,c.bootstrap)=(w.partition_no,w.bootstrap) RETURNING c.bootstrap`,
+        },
         [
           work.registration.partition,
           work.registration.id,

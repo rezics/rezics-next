@@ -9,7 +9,7 @@ import { DefinitionInputError, DefinitionNotFoundError } from './contract/defini
 import { freeze } from './core/freeze.ts';
 import releaseExists from './definitions-exists.sql';
 import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
-import { nativeSourceQuery } from '../database/native-source-query.ts';
+import { nativeSourceQuery, preparedStatementClient } from '../database/native-source-query.ts';
 import releaseRead from './definitions-read.sql';
 import releaseBodies from './definitions-read-bodies.sql';
 import releasePointer from './definitions-active.sql';
@@ -38,7 +38,8 @@ export async function readRelease(
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const cached = releases.get(digest);
   if (cached) {
-    const exists = (db: Db) => nativeSourceQuery(db, releaseExists, { route: 0, digest });
+    const exists = (db: Db) =>
+      nativeSourceQuery(db, releaseExists, { route: 0, digest }, { name: 'semantic_release_exists_v1' });
     const found = await (pool instanceof Pool ? withReadStatement(pool, exists) : exists(pool));
     return found ? cached : null;
   }
@@ -87,7 +88,12 @@ export async function readBaseReleases(db: Db, digests: readonly string[]): Prom
 type ActiveRelease = { digest: string; head: number; release: Release };
 
 function activeHead(db: Db, mode?: 'native') {
-  return mode === 'native' ? nativeSourceQuery(db, releasePointer, { route: 0 }) : releasePointer.run(db, { route: 0 });
+  return mode === 'native'
+    ? nativeSourceQuery(db, releasePointer, { route: 0 }, { name: 'semantic_release_active_native_v1' })
+    : releasePointer.run(
+        preparedStatementClient(db, releasePointer['~standard'].query.text, 'semantic_release_active_v1'),
+        { route: 0 },
+      );
 }
 
 // A missing pointer is authoritative. Only a present pointer with an uncached body needs another snapshot.

@@ -10,10 +10,11 @@ export async function nativeSourceQuery<Input, Output>(
   db: Pick<PoolClient, 'query'>,
   query: StandardQueryV1<Input, Output, 'postgres'> & { readonly sql: string },
   input: Input,
-  transport?: 'compiled',
+  transport?: 'compiled' | Readonly<{ name: string }>,
 ): Promise<Output> {
   const statement = query['~standard'].query;
   const result = await db.query<(string | null)[]>({
+    ...(typeof transport === 'object' && { name: transport.name }),
     text: transport === 'compiled' ? statement.text : query.sql,
     values: [...statement.encode(input)],
     rowMode: 'array',

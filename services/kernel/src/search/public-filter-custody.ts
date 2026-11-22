@@ -318,10 +318,11 @@ function failure(error: unknown, meter: CustodyCost): CustodyFailure {
 async function sql(
   db: Queryable,
   meter: Meter,
-  query: string,
+  statement: string | Readonly<{ name: string; text: string }>,
   values: unknown[] = [],
-  native?: Readonly<{ points: number; keys: number; writes: number; name?: string }>,
+  native?: Readonly<{ points: number; keys: number; writes: number }>,
 ): Promise<QueryResult> {
+  const query = typeof statement === 'string' ? statement : statement.text;
   meter.statements++;
   meter.inputKeys += native?.keys ?? values.length;
   if (native) {
@@ -337,7 +338,7 @@ async function sql(
   };
   const dispatch = (client: Queryable) =>
     queryCompletion.run(complete, () =>
-      native?.name ? client.query({ name: native.name, text: query, values }) : client.query(query, values),
+      typeof statement === 'string' ? client.query(query, values) : client.query({ ...statement, values }),
     );
   return db === lifetimes.get(meter)!.pool ? connection(meter, dispatch) : dispatch(db);
 }
@@ -1935,9 +1936,9 @@ export function createPublicFilterCustody(
                 const result = await sql(
                   client,
                   shared,
-                  retainServing,
+                  { name: 'search_retain_serving_pit_v1', text: retainServing },
                   [consumer.physicalTarget, consumer.incarnation, JSON.stringify(items), Date.now()],
-                  { points: 2 + 5 * count, keys: 4 + 12 * count, writes: 0, name: 'search_retain_serving_pit_v1' },
+                  { points: 2 + 5 * count, keys: 4 + 12 * count, writes: 0 },
                 );
                 shared.resultWrites += 3 * (result.rowCount ?? 0);
                 return result;
@@ -2608,7 +2609,9 @@ export function createPublicFilterCustody(
           const result = await sql(
             client,
             meter,
-            `WITH locked AS (
+            {
+              name: readConsumerWork ? 'search_acquire_observation_work_v1' : 'search_acquire_observation_v1',
+              text: `WITH locked AS (
           SELECT o.partition_no,o.observation,${workColumn} AS work FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
@@ -2623,6 +2626,7 @@ export function createPublicFilterCustody(
           FOR UPDATE OF o FOR SHARE OF r,t), enrolled AS (
               INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING observation)
           SELECT l.work FROM enrolled JOIN locked l USING(observation)`,
+            },
             [
               partition(input.snapshot.observation),
               input.snapshot.observation,
@@ -2766,7 +2770,9 @@ export function createPublicFilterCustody(
         const result = await sql(
           pool,
           meter,
-          `WITH locked AS (
+          {
+            name: 'search_retain_successor_pit_v1',
+            text: `WITH locked AS (
           SELECT o.partition_no,o.observation FROM search.public_filter_observation o
           JOIN search.public_filter_reference f USING(partition_no,observation)
           WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state<>'closed'
@@ -2776,6 +2782,7 @@ export function createPublicFilterCustody(
           ON CONFLICT DO NOTHING
         ) UPDATE search.public_filter_observation o SET queried=$8,revision=revision+1
           FROM locked l WHERE (o.partition_no,o.observation)=(l.partition_no,l.observation) RETURNING o.observation`,
+          },
           [
             partition(q.snapshot.observation),
             q.snapshot.observation,
@@ -3083,7 +3090,11 @@ export async function drainExpiredServingPits(
     );
     const closures = await Promise.allSettled(
       physical.rows.map(({ registration, bootstrap }) =>
-        retireServingPitClaim(pool, search, prefix, context, { registration, bootstrap: '0:' + bootstrap, requireDue: true }),
+        retireServingPitClaim(pool, search, prefix, context, {
+          registration,
+          bootstrap: '0:' + bootstrap,
+          requireDue: true,
+        }),
       ),
     );
     if (Date.now() >= context.deadline) return true;

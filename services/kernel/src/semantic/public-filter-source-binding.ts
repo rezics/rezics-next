@@ -684,7 +684,9 @@ export type NativePublicFilterPreparation =
       freshPit?: Readonly<{
         independent?: true;
         transfer?: FreshPitTransfer;
-        unopened(initialWork?: string): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
+        unopened(
+          initialWork?: string,
+        ): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
         adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
       }>;
     })
@@ -958,10 +960,15 @@ export async function readNativePublicFilterSourceDefinition(
   if (!uuid.test(id)) throw new BindingError('definition_missing');
   if (!/^[a-f0-9]{64}$/.test(routeDigest)) throw new TypeError('Invalid Source route digest');
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new RangeError('Invalid Source definition byte bound');
-  const row = await nativeSourceQuery(db, readDefinition, {
-    read_definition: id,
-    max_bytes: maxBytes,
-  });
+  const row = await nativeSourceQuery(
+    db,
+    readDefinition,
+    {
+      read_definition: id,
+      max_bytes: maxBytes,
+    },
+    { name: 'semantic_filter_source_definition_v1' },
+  );
   if (!row) throw new BindingError('definition_missing');
   if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
   const bytes = Number(row.definition_bytes);
@@ -1163,7 +1170,12 @@ export function createNativePublicFilterSourceBinding(
     db: CommandTransaction,
     knownDefinition?: PublicFilterSourceDefinition,
   ) {
-    const row = await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) });
+    const row = await nativeSourceQuery(
+      db,
+      readBootstrap,
+      { bootstrap: nativeId(locator) },
+      { name: 'semantic_filter_bootstrap_v1' },
+    );
     if (!row) throw new BindingError('observation_lost');
     const definition = knownDefinition ?? (await loadDefinition(row.read_definition, db));
     return materializeBootstrap(locator, row, definition);
@@ -3004,8 +3016,9 @@ export function createNativePublicFilterSourceBinding(
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
                   if (independent) {
-                    const opened = await store.query(
-                      `/* semantic.native-keyed:5:12:1 */
+                    const opened = await store.query({
+                      name: 'semantic_open_serving_pit_claim_v1',
+                      text: `/* semantic.native-keyed:5:12:1 */
                        UPDATE search.public_filter_pit_claim c SET state='opening',consumer_work=coalesce($7::text,c.consumer_work)
                        FROM semantic.public_filter_bootstrap b JOIN core.partition p USING(partition_no),
                          search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
@@ -3017,7 +3030,7 @@ export function createNativePublicFilterSourceBinding(
                            OR ($7::text IS NULL AND c.consumer_work IS NOT NULL))
                          AND (r.partition_no,r.id)=(c.partition_no,c.registration) AND r.state='active'
                          AND r.consumer=$5 AND t.incarnation=$6 RETURNING c.bootstrap`,
-                      [
+                      values: [
                         registration.registration.id,
                         id,
                         encode(bootstrap.consumer),
@@ -3026,7 +3039,7 @@ export function createNativePublicFilterSourceBinding(
                         bootstrap.consumer.incarnation,
                         initialWork ?? null,
                       ],
-                    );
+                    });
                     return { unopened: opened.rowCount === 1, cost };
                   }
                   const batch =
