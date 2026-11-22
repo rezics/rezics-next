@@ -1,3 +1,5 @@
+import { useContext } from 'react';
+import { OverviewContext } from './overview';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { subjectHref } from '../../subject/subject-href';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -29,14 +31,6 @@ export function HomeCatalogue({
       isRecord(node) && node.type === 'TypeList' && isRecord(node.props) ? [node.props] : [],
     ) ?? [];
   const messages = subjectPageMessages(locale);
-  const previews = new Map(
-    lists.map(({ id, types }) => [
-      id,
-      page?.reads[String(id)]?.status === 503 && Array.isArray(types)
-        ? localCatalogue?.filter((subject) => types.includes(subject.type))
-        : undefined,
-    ]),
-  );
   const previewLabel =
     locale === 'zh-Hant' ? '本機驗收資料' : locale === 'zh-Hans' ? '本地验收数据' : 'Local acceptance preview';
   const failure =
@@ -46,7 +40,7 @@ export function HomeCatalogue({
       <h2 id="home-catalogue" className="text-xl font-semibold sm:text-2xl">
         {m.home_catalogue({}, o)}
       </h2>
-      {[...previews.values()].some((subjects) => subjects?.length) && (
+      {Boolean(localCatalogue?.length && page && Object.values(page.reads).some(({ status }) => status === 503)) && (
         <p className="text-sm text-muted-foreground">{previewLabel}</p>
       )}
       {page && lists.length ? (
@@ -60,39 +54,9 @@ export function HomeCatalogue({
           listTarget={{ route: '/' }}
           pageTarget={{ route: '/' }}
         >
-          {lists.map((props) => {
-            const candidates = previews.get(props.id);
-            if (!candidates?.length) return <TypeList key={props.id as string} {...props} />;
-            const title = pageText(props.title, locale);
-            return (
-              <section key={props.id as string} data-slot="local-home-catalogue" className="min-w-0 space-y-4">
-                <h3 className="text-lg font-semibold" lang={title.lang}>
-                  {title.text}
-                </h3>
-                <CoverGrid ratio="2:3">
-                  {candidates.map((subject) => (
-                    <CoverCard
-                      key={subject.id}
-                      href={subjectHref({ id: subject.id, label: subject.label.value }, locale).href}
-                      title={subject.label.value}
-                      titleLang={subject.label.language}
-                      cover={{
-                        subject: coverSubject(subject.id, subject.label.value, subject),
-                        cover: coverOf(subject),
-                        src: coverSrc,
-                        labels: {
-                          withheld: messages.coverWithheld,
-                          reveal: messages.coverReveal,
-                          credit: messages.coverCredit,
-                          via: messages.coverVia,
-                        },
-                      }}
-                    />
-                  ))}
-                </CoverGrid>
-              </section>
-            );
-          })}
+          {lists.map((props) => (
+            <HomeCatalogueSlot key={props.id as string} props={props} locale={locale} candidates={localCatalogue} />
+          ))}
         </PageData>
       ) : (
         <div
@@ -115,6 +79,54 @@ export function HomeCatalogue({
       >
         {m.search_heading({}, o)}
       </a>
+    </section>
+  );
+}
+
+function HomeCatalogueSlot({
+  props,
+  locale,
+  candidates,
+}: {
+  props: Record<string, unknown>;
+  locale: string;
+  candidates: LocalHomeSubject[] | undefined;
+}) {
+  const section = useContext(OverviewContext)?.sections.get(String(props.id));
+  const types = props.types;
+  const available =
+    section && !section.ok && section.status === 503 && Array.isArray(types)
+      ? candidates?.filter((subject) => types.includes(subject.type))
+      : undefined;
+  if (!available?.length) return <TypeList {...props} />;
+  const messages = subjectPageMessages(locale);
+  const title = pageText(props.title, locale);
+  return (
+    <section data-slot="local-home-catalogue" className="min-w-0 space-y-4">
+      <h3 className="text-lg font-semibold" lang={title.lang}>
+        {title.text}
+      </h3>
+      <CoverGrid ratio="2:3">
+        {available.map((subject) => (
+          <CoverCard
+            key={subject.id}
+            href={subjectHref({ id: subject.id, label: subject.label.value }, locale).href}
+            title={subject.label.value}
+            titleLang={subject.label.language}
+            cover={{
+              subject: coverSubject(subject.id, subject.label.value, subject),
+              cover: coverOf(subject),
+              src: coverSrc,
+              labels: {
+                withheld: messages.coverWithheld,
+                reveal: messages.coverReveal,
+                credit: messages.coverCredit,
+                via: messages.coverVia,
+              },
+            }}
+          />
+        ))}
+      </CoverGrid>
     </section>
   );
 }
