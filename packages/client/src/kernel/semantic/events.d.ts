@@ -119,6 +119,9 @@ export declare const SEMANTIC_EVENTS: {
     readonly 'com.rezics.semantic.erasure.locator-scheduled.v1': Type.TObject<{
         position: Type.TString;
     }>;
+    readonly "com.rezics.semantic.erasure.locator-admitted.v1": Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly "com.rezics.semantic.erasure.locator-advanced.v1": Type.TObject<{
         position: Type.TString;
     }>;

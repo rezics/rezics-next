@@ -13,7 +13,7 @@ import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure
 import { minimizeAccountErasureZone } from '../zones/account-erasure-zone.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 import { CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION, SEMANTIC_EVENTS } from './events.ts';
-import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
+import { SEMANTIC_LOCATOR_ADMITTED, SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 import type { Effect } from '../events/effects.ts';
 import { recordSemanticSourceDisposition } from './erasure-producer.ts';
 
@@ -932,7 +932,9 @@ async function recordLocatorObligations(
           );
           if (missing.rowCount) throw new TypeError('Missing native Semantic locator admission');
         }
-        return admitted.rowCount ? { value: false, events: event(accountId) } : noEffect(false);
+        return admitted.rowCount
+          ? { value: false, events: [{ type: SEMANTIC_LOCATOR_ADMITTED, subject: accountId, data: { accountId } }] }
+          : noEffect(false);
       }
       // A closed fence admits just the first role. Its late receipt and child minimization
       // must settle before the source cursor can pass this exact locator.

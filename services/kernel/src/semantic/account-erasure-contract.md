@@ -94,6 +94,11 @@ commit together; foreign effect delivery records the account-home inbox and any 
 fence. The local payload commit precedes late resolution. Content's cleanup modules are not Semantic custody
 ports, and the shared-history encoders are not a shared minimizer or a receiving custody receipt.
 
+Copying an open-fence locator page into the account inbox commits one
+`com.rezics.semantic.erasure.locator-admitted.v1` event for the account when the transaction adds obligations.
+Replaying a fully received page reuses those rows. The receiver copies locator keys and leaves canonical Subject
+generations unchanged. Payload minimization continues to publish `com.rezics.semantic.erasure.progress.v1`.
+
 Canonical generation announcements and delivery scheduling continuations only change delivery counters
 and schedule the next receive. The locator effect registers the receiving events and the ordinary
 Semantic source mutations that can commit locators.

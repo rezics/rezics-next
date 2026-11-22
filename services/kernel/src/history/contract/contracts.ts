@@ -373,6 +373,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.semantic.composite.registered.v1': nonPersonal,
   'com.rezics.semantic.erasure.scheduled.v1': personal('subject'),
   'com.rezics.semantic.erasure.locator-scheduled.v1': nonPersonal,
+  'com.rezics.semantic.erasure.locator-admitted.v1': personal('subject'),
   'com.rezics.semantic.erasure.locator-advanced.v1': nonPersonal,
   'com.rezics.semantic.erasure.progress.v1': personal('subject'),
   'com.rezics.semantic.links.changed.v1': personal('subject'),

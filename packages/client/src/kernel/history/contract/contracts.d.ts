@@ -414,6 +414,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         kind: 'non-personal';
         roles: readonly [];
     }>;
+    'com.rezics.semantic.erasure.locator-admitted.v1': EventClassification;
     'com.rezics.semantic.erasure.locator-advanced.v1': Readonly<{
         kind: 'non-personal';
         roles: readonly [];

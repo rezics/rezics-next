@@ -1,3 +1,6 @@
+// The account home has copied an open-fence page of locator obligations.
+export const SEMANTIC_LOCATOR_ADMITTED = 'com.rezics.semantic.erasure.locator-admitted.v1';
+
 // Only the terminal cursor command emits this event. Payload minimization commits separately.
 export const SEMANTIC_LOCATOR_ADVANCED = 'com.rezics.semantic.erasure.locator-advanced.v1';
 

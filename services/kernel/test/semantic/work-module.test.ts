@@ -473,6 +473,10 @@ test('default Semantic composition registers its real locator and bounded local 
   }
   const locator = effects.find((effect) => effect.name === 'semantic_erasure_locator');
   const local = effects.find((effect) => effect.name === 'semantic_erasure_local');
+  const canonical = effects.find((effect) => effect.name === 'semantic_canonical_generation');
+  expect(canonical?.types).toContain('com.rezics.semantic.erasure.progress.v1');
+  expect(canonical?.types).not.toContain('com.rezics.semantic.erasure.locator-admitted.v1');
+  expect(locator?.types).not.toContain('com.rezics.semantic.erasure.locator-admitted.v1');
   expect(locator?.types).toContain('com.rezics.zone.configured.v1');
   expect(locator?.types).toContain('com.rezics.semantic.erasure.locator-scheduled.v1');
   expect(locator?.types).toContain('com.rezics.semantic.canonical-generation.delivered.v1');

@@ -12,8 +12,8 @@ import {
   createSemanticLocatorEffect,
   SEMANTIC_LOCATOR_SCHEDULED,
   SEMANTIC_LOCATOR_ADVANCED,
-  SEMANTIC_ERASURE_PROGRESS,
 } from '../../src/semantic/account-erasure.ts';
+import { SEMANTIC_LOCATOR_ADMITTED } from '../../src/semantic/erasure-locator-receipt.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
 
 let f: AccountErasureFixture;
@@ -120,7 +120,7 @@ test('one public Book command delivers all its open-fence roles once across a lo
        count(*) FILTER (WHERE type=$3 AND partition_no=$5 AND data->>'position'=$6)::int AS done
      FROM core.outbox WHERE partition_no=ANY($7::int[])`,
         [
-          SEMANTIC_ERASURE_PROGRESS,
+          SEMANTIC_LOCATOR_ADMITTED,
           SEMANTIC_LOCATOR_SCHEDULED,
           SEMANTIC_LOCATOR_ADVANCED,
           author.accountId,
