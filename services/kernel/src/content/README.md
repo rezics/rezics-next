@@ -2078,7 +2078,10 @@ without a second public census or eligibility projection. Source tuples use the 
 An original must match the retained `core.outbox` envelope, including data, subject and event index. An unavailable
 or minimized original throws; it does not acknowledge missing work. Source work stores original partition, epoch,
 position, event index, ID and type, plus identity scopes and a versioned continuation. It stores no old review text,
-permission snapshot or author presentation. Every page reads at most 101 dependency identities, delivers at most 100,
+permission snapshot or author presentation. For one dependency gate, the serializable admission command checks
+the exact retained directory key. An empty range records the completed source and its terminal progress in that
+command. A review inserted concurrently also supplies its own thread-created original. A gate with retained
+identities opens the usual work. Every page reads at most 101 dependency identities, delivers at most 100,
 then CASes its source continuation. Receiving commands are grouped by native review partition. Source, receiving
 and continuation transactions release their checkouts between operations, including with a one-connection Pool.
 A crash after any receiver commits repeats those identities before the source cursor moves. Unique original/review

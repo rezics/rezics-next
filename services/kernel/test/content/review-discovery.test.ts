@@ -19,7 +19,7 @@ import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/con
 import { observeSql } from './support/sql-observer.ts';
 import { erasePost, takedown } from '../../src/content/moderation.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
-import { anchorRoute, routeOf, newId, partitionOf } from '../../src/route/route.ts';
+import { routeOf, newId, partitionOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 
 const fixture = await standingFixture();
@@ -31,12 +31,6 @@ const request = () => ({
   deadline: Date.now() + 30_000,
   requestId: Bun.randomUUIDv7(),
 });
-function requestAt(route: number) {
-  for (;;) {
-    const idempotencyKey = Bun.randomUUIDv7();
-    if (anchorRoute(routeKey, idempotencyKey) === route) return { ...request(), idempotencyKey };
-  }
-}
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 
 async function original(
@@ -75,29 +69,25 @@ async function invalidate(outcome: Pick<CommandOutcome<unknown>, 'partition' | '
   throw new Error('Review discovery fixture exceeded its bounded continuation');
 }
 
-async function subjectGate(subject: string, visibility: 'hidden' | 'visible') {
-  return runCommand(
-    fixture.pool,
-    { partition: partitionOf(routeOf(subject)!), deadline: Date.now() + 30_000 },
-    async (tx) => {
-      const changed = (
-        await tx.query(
-          'UPDATE semantic.subject SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2 RETURNING security_revision::integer AS revision',
-          [routeOf(subject), subject, visibility],
-        )
-      ).rows[0]!;
-      return {
-        value: null,
-        events: [
-          {
-            type: 'com.rezics.subject.revised.v1',
-            subject,
-            data: { id: subject, revision: changed.revision, kind: 'identity' },
-          },
-        ],
-      };
-    },
-  );
+async function subjectGate(subject: string, visibility: 'hidden' | 'visible', pool = fixture.pool) {
+  return runCommand(pool, { partition: partitionOf(routeOf(subject)!), deadline: Date.now() + 30_000 }, async (tx) => {
+    const changed = (
+      await tx.query(
+        'UPDATE semantic.subject SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2 RETURNING security_revision::integer AS revision',
+        [routeOf(subject), subject, visibility],
+      )
+    ).rows[0]!;
+    return {
+      value: null,
+      events: [
+        {
+          type: 'com.rezics.subject.revised.v1',
+          subject,
+          data: { id: subject, revision: changed.revision, kind: 'identity' },
+        },
+      ],
+    };
+  });
 }
 
 test('public review discovery refreshes the same thread and omits protected or removed reviews', async () => {
@@ -290,13 +280,13 @@ test('public review discovery refreshes the same thread and omits protected or r
 });
 
 test('coherent review pages restart when a hidden lower key becomes eligible or a dependency changes during hydration', async () => {
-  const author = (await fixture.context()).actor;
+  const author = (await fixture.context(fixture.principal)).actor;
   const board = (
     await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
   ).rows[0]!;
   await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
   const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
-  const create = (subject: string, title: string, route: number) =>
+  const create = (subject: string, title: string) =>
     createThread(
       deps,
       author,
@@ -309,19 +299,31 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
         boardId: board.board_id,
         visibility: 'published',
       },
-      requestAt(route),
+      request(),
     );
-  const partition = 0x63a;
+  const partition = partitionOf(routeOf(author.accountId)!);
   const hiddenSubject = newId(0x6b40);
   const visibleSubject = newId(0x6b41);
+  const upperSubject = newId(0x6b42);
   await fixture.reader.query(
     `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
-     VALUES ($1,$2,'schema:Book',$2,'hidden',1),($3,$4,'schema:Book',$4,'visible',1)`,
-    [routeOf(hiddenSubject), hiddenSubject, routeOf(visibleSubject), visibleSubject],
+     VALUES ($1,$2,'schema:Book',$2,'hidden',1),($3,$4,'schema:Book',$4,'visible',1),
+            ($5,$6,'schema:Book',$6,'visible',1)`,
+    [
+      routeOf(hiddenSubject),
+      hiddenSubject,
+      routeOf(visibleSubject),
+      visibleSubject,
+      routeOf(upperSubject),
+      upperSubject,
+    ],
   );
-  const hidden = await create(hiddenSubject, 'Hidden lower review', partition * 16 + 1);
-  const visible = await create(visibleSubject, 'Visible middle review', partition * 16 + 2);
-  const later = await create(visibleSubject, 'Visible upper review', partition * 16 + 3);
+  const hidden = await create(hiddenSubject, 'Hidden lower review');
+  const visible = await create(visibleSubject, 'Visible middle review');
+  const later = await create(upperSubject, 'Visible upper review');
+  const ordered = [hidden.value.threadId, visible.value.threadId, later.value.threadId];
+  expect(ordered.map((id) => partitionOf(routeOf(id)!))).toEqual([partition, partition, partition]);
+  expect(ordered).toEqual([...ordered].sort());
   for (const outcome of [hidden, visible, later]) await invalidate(outcome, 'com.rezics.content.thread.created.v1');
 
   const source = createReviewDiscoverySource({ ...deps, tokens }, () => ({
@@ -351,13 +353,21 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
   const raceObserver = observeSql(fixture.pool);
   const barrier = raceObserver.hold({ statement: candidateStatement }, 'after');
   const pendingPage = source.pageWithCut!(partition, null, 1);
-  await barrier.entered;
-  const closed = await subjectGate(hiddenSubject, 'hidden');
-  barrier.release();
-  const raced = await pendingPage;
-  expect(raced).toMatchObject({ state: 'changed', missing: 'eligibility-dependency', reviews: [], next: null });
-  await raceObserver.close();
-  await invalidate(closed, 'com.rezics.subject.revised.v1');
+  try {
+    const closed = await (async () => {
+      try {
+        await barrier.entered;
+        return await subjectGate(hiddenSubject, 'hidden', fixture.reader);
+      } finally {
+        barrier.release();
+      }
+    })();
+    const raced = await pendingPage;
+    expect(raced).toMatchObject({ state: 'changed', missing: 'eligibility-dependency', reviews: [], next: null });
+    await invalidate(closed, 'com.rezics.subject.revised.v1');
+  } finally {
+    await raceObserver.close();
+  }
 });
 
 test('a changed Review home leaves the other native empty positions usable', async () => {

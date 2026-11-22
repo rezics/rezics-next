@@ -219,12 +219,39 @@ export async function openReviewDiscoveryWork(pool: Pool, event: CloudEvent): Pr
   if (selected.length === 0) return null;
   const ref = { route: origin.partition * 16, id: origin.id };
   await runCommand(pool, { partition: origin.partition, deadline: Date.now() + 30_000 }, async (tx) => {
-    const inserted = await tx.query(
-      `INSERT INTO content.review_discovery_work(route,id,origin,scopes) VALUES($1,$2,$3::jsonb,$4::jsonb)
-       ON CONFLICT DO NOTHING RETURNING id`,
-      [ref.route, ref.id, JSON.stringify(origin), JSON.stringify(selected)],
+    // A direct thread original can remove a missing document. Source fences have a separate
+    // Semantic cursor. A single dependency gate can finish here when its real directory is empty.
+    const scope = selected.length === 1 ? selected[0] : undefined;
+    const gate = scope && 'id' in scope && scope.kind !== 'thread' ? scope : undefined;
+    const inserted = await tx.query<{ complete: boolean; version: string }>(
+      `WITH opening AS MATERIALIZED (
+         SELECT CASE WHEN $5::text IS NULL THEN false
+           WHEN $5='resource' THEN NOT EXISTS (
+             SELECT 1 FROM content.review_discovery_dependency WHERE gate_key=$6::uuid
+           )
+           ELSE NOT EXISTS (
+             SELECT 1 FROM content.review_discovery_dependency WHERE gate_kind=$5 AND gate_key=$6::uuid
+           ) END AS complete
+       )
+       INSERT INTO content.review_discovery_work(route,id,origin,scopes,scope_no,version,complete)
+       SELECT $1,$2,$3::jsonb,$4::jsonb,CASE WHEN complete THEN 1 ELSE 0 END,
+              CASE WHEN complete THEN 2 ELSE 1 END,complete FROM opening
+       ON CONFLICT DO NOTHING RETURNING complete,version::text`,
+      [ref.route, ref.id, JSON.stringify(origin), JSON.stringify(selected), gate?.kind ?? null, gate?.id ?? null],
     );
-    if (inserted.rowCount === 0) return noEffect(null);
+    const admitted = inserted.rows[0];
+    if (!admitted) return noEffect(null);
+    if (admitted.complete)
+      return {
+        value: null,
+        events: [
+          {
+            type: REVIEW_DISCOVERY_PROGRESS,
+            subject: ref.id,
+            data: { ...ref, version: admitted.version, complete: true },
+          },
+        ],
+      };
     return { value: null, events: [{ type: REVIEW_DISCOVERY_OPENED, subject: ref.id, data: ref }] };
   });
   return ref;

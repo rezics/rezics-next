@@ -2,6 +2,12 @@ import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import accountRead from '../../src/access/account-read.sql';
+import type { CloudEvent } from '../../src/events/log.ts';
+import {
+  openReviewDiscoveryWork,
+  processReviewDiscoveryPage,
+  readReviewDiscoveryProgress,
+} from '../../src/content/review-discovery-lifecycle.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -544,3 +550,113 @@ test('Ratings and reviews: native vote citations remain immutable through review
   expect({ ...unknownRestore.value, request_id: null }).toEqual({ ...denied[2]!.value, request_id: null });
   expect(await snapshot(f, f.author, revokedSubject)).toEqual(afterRevoke);
 });
+
+test('review gate admission records empty source progress and delivers existing and concurrently arriving reviews', async () => {
+  const f = await createReviewLifecycleFixture();
+  const pool = f.system.database.pool;
+  const observer = observeSql(pool);
+  try {
+    async function original(id: string, type: string): Promise<CloudEvent> {
+      const home = partitionOf(routeOf(id)!);
+      const result = await f.admin.query(
+        `SELECT id,subject,data,epoch,position::text,recorded_at FROM core.outbox
+         WHERE partition_no=$1 AND type=$2 AND (data->>'id'=$3 OR data->>'threadId'=$3)`,
+        [home, type, id],
+      );
+      expect(result.rowCount).toBe(1);
+      const row = result.rows[0]!;
+      return {
+        specversion: '1.0',
+        datacontenttype: 'application/json',
+        id: row.id,
+        type,
+        ...(row.subject === null ? {} : { subject: row.subject }),
+        time: row.recorded_at.toISOString(),
+        source: `urn:rezics:log:${home}.${row.epoch}`,
+        sequence: row.position.padStart(19, '0'),
+        data: row.data,
+      };
+    }
+    const birth = (id: string) => original(id, 'com.rezics.subject.created.v1');
+    const source = await birth(await f.subject('Review admission without an existing dependency'));
+    const empty = (await openReviewDiscoveryWork(pool, source))!;
+    expect(await readReviewDiscoveryProgress(pool, empty)).toMatchObject({
+      complete: true,
+      version: '2',
+      continuation: null,
+      origin: { id: source.id, type: source.type },
+    });
+    expect(await openReviewDiscoveryWork(pool, source)).toEqual(empty);
+    expect(await processReviewDiscoveryPage(pool, empty)).toEqual({
+      complete: true,
+      version: '2',
+      examined: 0,
+      delivered: 0,
+    });
+    const messages = await f.admin.query(
+      'SELECT type,data FROM core.outbox WHERE partition_no=$1 AND subject=$2 ORDER BY position,event_seq',
+      [partitionOf(empty.route), empty.id],
+    );
+    expect(messages.rows).toEqual([
+      {
+        type: 'com.rezics.content.review-discovery.progress.v1',
+        data: { ...empty, complete: true, version: '2' },
+      },
+    ]);
+
+    const existing = await f.subject('Review admitted before its Subject event was processed');
+    const published = await createReview(f, f.author, existing, 'Present at admission');
+    const pending = (await openReviewDiscoveryWork(pool, await birth(existing)))!;
+    expect(await readReviewDiscoveryProgress(pool, pending)).toMatchObject({ complete: false, version: '1' });
+    expect(await processReviewDiscoveryPage(pool, pending)).toMatchObject({
+      complete: true,
+      examined: 1,
+      delivered: 1,
+    });
+    expect(
+      (
+        await f.admin.query(
+          'SELECT thread_id FROM content.review_discovery_change WHERE route=$1 AND thread_id=$2 AND origin_id=$3',
+          [routeOf(published.threadId), published.threadId, pending.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+
+    let later = await f.subject('Review racing a Subject gate');
+    const authorHome = partitionOf(routeOf(f.author.accountId)!);
+    if (partitionOf(routeOf(later)!) === authorHome) later = await f.subject('Review racing a cross-home Subject gate');
+    expect(partitionOf(routeOf(later)!)).not.toBe(authorHome);
+    const admission = observer.records.find(({ statement }) =>
+      statement.includes('INSERT INTO content.review_discovery_work'),
+    );
+    if (!admission) throw new Error('Review admission statement was not observed');
+    const barrier = observer.hold({ statement: admission.statement }, 'after');
+    const delayed = openReviewDiscoveryWork(pool, await birth(later));
+    const arriving = await (async () => {
+      try {
+        await barrier.entered;
+        return await createReview(f, f.author, later, 'Committed while the Subject admission was open');
+      } finally {
+        barrier.release();
+        await delayed;
+      }
+    })();
+    const raced = (await delayed)!;
+    expect(await readReviewDiscoveryProgress(pool, raced)).toMatchObject({ complete: true, version: '2' });
+    const post = await original(arriving.threadId, 'com.rezics.content.thread.created.v1');
+    const direct = (await openReviewDiscoveryWork(pool, post))!;
+    expect(await processReviewDiscoveryPage(pool, direct)).toMatchObject({ complete: true, examined: 1, delivered: 1 });
+    expect(await processReviewDiscoveryPage(pool, direct)).toMatchObject({ complete: true, examined: 0, delivered: 0 });
+    expect(
+      (
+        await f.admin.query(
+          'SELECT thread_id FROM content.review_discovery_change WHERE route=$1 AND thread_id=$2 AND origin_id=$3',
+          [routeOf(arriving.threadId), arriving.threadId, post.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+  } finally {
+    await observer.close();
+    await f.close();
+  }
+}, 120_000);
