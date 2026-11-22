@@ -439,6 +439,10 @@ BEGIN
         ON CONFLICT (consumer,shard) DO UPDATE SET positions=EXCLUDED.positions;
       PERFORM search.write_freshness_slot(NEW.consumer,NEW.partition_no,NEW.position);
     END IF;
+    -- A first replay batch can insert a zero checkpoint and advance it in this same
+    -- transaction. Taking the head group on insert would invert the subsequent
+    -- consumer-group then head-group order. The pending point already serves all readers.
+    IF TG_OP = 'INSERT' THEN RETURN NULL; END IF;
     UPDATE search.freshness_positions SET pending=false WHERE consumer='' AND shard=NEW.partition_no AND pending
       RETURNING positions INTO folded;
     IF FOUND THEN

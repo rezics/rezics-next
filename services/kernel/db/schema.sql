@@ -2786,6 +2786,17 @@ CREATE TABLE core.record_history_source_set_copy (
 
 
 --
+-- Name: relay_checkpoint_reset; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.relay_checkpoint_reset (
+    singleton boolean NOT NULL,
+    revision xid8 NOT NULL,
+    CONSTRAINT relay_checkpoint_reset_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: write_basis; Type: TABLE; Schema: editorial; Owner: -
 --
 
@@ -2816,17 +2827,6 @@ END) STORED,
 
 CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
-);
-
-
---
--- Name: relay_checkpoint_reset; Type: TABLE; Schema: core; Owner: -
---
-
-CREATE TABLE core.relay_checkpoint_reset (
-    singleton boolean NOT NULL,
-    revision xid8 NOT NULL,
-    CONSTRAINT relay_checkpoint_reset_singleton_check CHECK (singleton)
 );
 
 
@@ -3279,6 +3279,14 @@ ALTER TABLE ONLY core.record_history_source_set
 
 
 --
+-- Name: relay_checkpoint_reset relay_checkpoint_reset_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.relay_checkpoint_reset
+    ADD CONSTRAINT relay_checkpoint_reset_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: write_basis write_basis_partition_no_position_key; Type: CONSTRAINT; Schema: editorial; Owner: -
 --
 
@@ -3300,14 +3308,6 @@ ALTER TABLE ONLY editorial.write_basis
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
-
-
---
--- Name: relay_checkpoint_reset relay_checkpoint_reset_pkey; Type: CONSTRAINT; Schema: core; Owner: -
---
-
-ALTER TABLE ONLY core.relay_checkpoint_reset
-    ADD CONSTRAINT relay_checkpoint_reset_pkey PRIMARY KEY (singleton);
 
 
 --

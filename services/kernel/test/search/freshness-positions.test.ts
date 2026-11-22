@@ -383,3 +383,60 @@ test('cutover reconciles native checkpoints that replica replay delivered before
     }
   }
 }, 30_000);
+
+test('a newly registered checkpoint leaves the exact head visible until the first advance', async () => {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  const home = 65_536 + crypto.getRandomValues(new Uint16Array(1))[0]!;
+  const consumer = 'search_checkpoint_registration';
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      "INSERT INTO core.partition(partition_no,node,write_state,position) VALUES($1,'freshness-test','fenced',3)",
+      [home],
+    );
+    for (const position of [0, 1]) {
+      await client.query('SAVEPOINT registration');
+      await client.query(
+        'INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES($1,$2,$3,$4)',
+        [home, consumer, position === 0 ? null : 1, position],
+      );
+      const point = async () =>
+        (
+          await client.query(
+            "SELECT pending,(positions->>$1::text)::integer AS head FROM search.freshness_positions WHERE consumer='' AND shard=$1::integer",
+            [home],
+          )
+        ).rows[0];
+      const grouped = async () =>
+        (
+          await client.query(
+            'SELECT consumer,(positions->>$1::text)::integer AS value FROM search.grouped_freshness_positions WHERE shard=$1::integer/64 AND consumer=ANY($2::text[]) ORDER BY consumer',
+            [home, ['', consumer]],
+          )
+        ).rows;
+      const ceiling = position + 1;
+      expect(await point()).toEqual({ pending: true, head: ceiling });
+      expect(await grouped()).toEqual([
+        { consumer: '', value: ceiling },
+        ...(position ? [{ consumer, value: position }] : []),
+      ]);
+      await client.query('UPDATE core.consumer_checkpoint SET epoch=1,position=2 WHERE partition_no=$1 AND consumer=$2', [
+        home,
+        consumer,
+      ]);
+      expect(await point()).toEqual({ pending: false, head: 3 });
+      expect(await grouped()).toEqual([
+        { consumer: '', value: 3 },
+        { consumer, value: 2 },
+      ]);
+      await client.query('ROLLBACK TO registration');
+    }
+  } finally {
+    try {
+      await client.query('ROLLBACK');
+    } finally {
+      await client.end();
+    }
+  }
+});
