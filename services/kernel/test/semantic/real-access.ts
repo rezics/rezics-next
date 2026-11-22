@@ -89,6 +89,35 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   const readChecks: RealAccessCheck[] = [];
   const access = (config: AccessConfig): Access => {
     const real = createAccess({ ...config, auth });
+    // Batch reads resolve the native Access root, including through derived adapters.
+    const prepare = real.prepareReadDecisions?.bind(real);
+    if (prepare) {
+      real.prepareReadDecisions = async (input) => {
+        const prepared = await prepare(input);
+        return Object.freeze({
+          ...prepared,
+          async decide(...args: Parameters<typeof prepared.decide>) {
+            const result = await prepared.decide(...args);
+            const request = args[1];
+            if (request.action.endsWith(':read')) {
+              for (const id of request.ids) {
+                const route = routeOf(id);
+                if (route !== null)
+                  readChecks.push({
+                    persona:
+                      input.actor.kind === 'account'
+                        ? (accountById.get(input.actor.accountId) ?? 'unknown')
+                        : 'anonymous',
+                    action: request.action,
+                    resource: { route, id },
+                  });
+              }
+            }
+            return result;
+          },
+        });
+      };
+    }
     return deriveAccess(real, {
       async authenticate(reference, context) {
         configureTestReceiptKeys(context.pool);
@@ -104,33 +133,6 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
         else checks.push(check);
         return real.authorize(client, actor, action, resource, evidence, time);
       },
-      ...(real.prepareReadDecisions
-        ? {
-            async prepareReadDecisions(input) {
-              const prepared = await real.prepareReadDecisions!(input);
-              return {
-                async decide(client, request, time) {
-                  const result = await prepared.decide(client, request, time);
-                  if (request.action.endsWith(':read')) {
-                    for (const id of request.ids) {
-                      const route = routeOf(id);
-                      if (route === null) continue;
-                      readChecks.push({
-                        persona:
-                          input.actor.kind === 'account'
-                            ? (accountById.get(input.actor.accountId) ?? 'unknown')
-                            : 'anonymous',
-                        action: request.action,
-                        resource: { route, id },
-                      });
-                    }
-                  }
-                  return result;
-                },
-              };
-            },
-          }
-        : {}),
     });
   };
   async function grant(resource: Resource, persona: Persona, action: string): Promise<void> {

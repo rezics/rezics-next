@@ -836,6 +836,7 @@ function subjectRoutes(
           401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
+          500: problemSchema('internal_error'),
           503: problemSchema(
             'semantic_not_ready',
             'overloaded',

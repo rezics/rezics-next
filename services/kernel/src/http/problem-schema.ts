@@ -78,11 +78,28 @@ function extendedSchema<Extensions extends Record<string, TSchema>>(
   );
 }
 
+function internalErrorSchema() {
+  const base = schemaFor(['internal_error'], 500);
+  return t.Object(
+    {
+      ...base.properties,
+      effect_status: t.Union([
+        t.Literal('not_applicable'),
+        t.Literal('not_applied'),
+        t.Literal('applied'),
+        t.Literal('unknown'),
+      ]),
+    },
+    { additionalProperties: false },
+  );
+}
+
 function erasedResultSchema() {
   const base = schemaFor(['command_result_erased'], 410);
   return t.Object({ ...base.properties, effect_status: t.Literal('applied') }, { additionalProperties: false });
 }
 
+export function problemSchema(code: 'internal_error'): ReturnType<typeof internalErrorSchema>;
 export function problemSchema(code: 'command_result_erased'): ReturnType<typeof erasedResultSchema>;
 export function problemSchema<const Codes extends readonly [ProblemCode, ...ProblemCode[]]>(
   ...codes: Codes
@@ -98,6 +115,12 @@ export function problemSchema(...codesAndExtensions: (ProblemCode | Record<strin
   const statuses = new Set(codes.map((code) => PROBLEMS[code].status));
   if (statuses.size !== 1) throw new TypeError('Problem response alternatives must share one status');
   const status = statuses.values().next().value!;
+  if (codes.length === 1 && codes[0] === 'internal_error') {
+    const schema = internalErrorSchema();
+    return typeof last === 'object'
+      ? t.Object({ ...schema.properties, ...extensionMembers(last) }, { additionalProperties: false })
+      : schema;
+  }
   if (codes.length === 1 && codes[0] === 'command_result_erased' && typeof last !== 'object')
     return erasedResultSchema();
   if (codes.length === 1 && codes[0] === 'realm_last_owner') return schemaFor(codes, status);

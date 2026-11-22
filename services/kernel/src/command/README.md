@@ -46,8 +46,10 @@ Owners settle receipt-bearing commands by reading their existing receipt under c
 authorization; receipt-free owners use their existing durable owner result or redrive
 semantics. A pg query timeout and error-release close the client side of an uncertain
 session, but pg exposes no terminal server acknowledgement proving that an in-flight
-`COMMIT` was cancelled before it became durable. This boundary remains an explicit
-runtime acceptance gap.
+`COMMIT` was cancelled before it became durable. The ordinary HTTP response is 500 `internal_error` with
+`effect_status=unknown` and `retryable=false`. Replaying the authorized request with the original
+idempotency key and body recovers its receipt if committed. A native integrity rejection from
+that COMMIT proves rollback and retains `effect_status=not_applied`.
 
 ### Shared-history erasure
 

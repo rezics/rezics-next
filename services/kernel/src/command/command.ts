@@ -466,6 +466,19 @@ export class CommandCommitUncertainError extends Error {
   }
 }
 
+const uncertainCommits = new WeakSet<CommandCommitUncertainError>();
+
+function uncertainCommit(partition: number, cause: unknown): CommandCommitUncertainError {
+  const error = new CommandCommitUncertainError(partition, cause);
+  uncertainCommits.add(error);
+  return error;
+}
+
+/** Only the checkout that dispatched COMMIT can report an unconfirmed outcome. */
+export function isUnconfirmedCommandCommit(error: unknown): error is CommandCommitUncertainError {
+  return error instanceof CommandCommitUncertainError && uncertainCommits.has(error);
+}
+
 export class TooManyEventsError extends Error {
   readonly partition: number;
   readonly count: number;
@@ -800,12 +813,12 @@ async function executeCommand<T>(
           ? withBoundedCommandConnection(pool, deadline, run, {
               deadlineError: () => new CommandUnavailableError('deadline', partition),
               mapError: (error) => {
-                if (!commitPending || error instanceof CommandCommitUncertainError) return error;
+                if (!commitPending || isUnconfirmedCommandCommit(error)) return error;
                 if (commitResponse?.rejected(error)) {
                   commitPending = false;
                   return error;
                 }
-                return new CommandCommitUncertainError(partition, error);
+                return uncertainCommit(partition, error);
               },
               isUncertainWorkError: (error) => error instanceof CommandCommitUncertainError,
               isUncertainSettledQueryError: (error) => error instanceof CommandCommitUncertainError,
@@ -847,10 +860,7 @@ async function executeCommand<T>(
               commitPending = false;
               throw error;
             }
-            if (ordinary)
-              throw error instanceof CommandCommitUncertainError
-                ? error
-                : new CommandCommitUncertainError(partition, error);
+            if (ordinary) throw isUnconfirmedCommandCommit(error) ? error : uncertainCommit(partition, error);
             throw error;
           } finally {
             commitResponse?.stop();

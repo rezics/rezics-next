@@ -20,7 +20,12 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError } from 'elysia';
-import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
+import {
+  CommandResultErasedError,
+  IdempotencyConflictError,
+  isUnconfirmedCommandCommit,
+  TooManyEventsError,
+} from '../command/command.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 import { SubjectProjectionPreparingError } from '../semantic/contract/subject-errors.ts';
@@ -82,13 +87,22 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
 
 function effectStatus(
   method: string,
-  action?: string,
-  code?: ProblemCode,
-): 'not_applicable' | 'not_applied' | 'applied' {
-  if (code === 'command_result_erased') return 'applied';
+  action: string | undefined,
+  code: ProblemCode,
+  error: unknown,
+  applied: boolean,
+): 'not_applicable' | 'not_applied' | 'applied' | 'unknown' {
+  if (code === 'realm_last_owner') return 'not_applied';
+  if (applied || code === 'command_result_erased') return 'applied';
+  if (
+    error instanceof ProblemError &&
+    (error.effectStatus === 'not_applicable' || error.effectStatus === 'not_applied')
+  )
+    return error.effectStatus;
   if (action && (code === 'account_suspended' ? action.endsWith(':read') : /:read(?:_|$)/.test(action)))
     return 'not_applicable';
-  return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) return 'not_applicable';
+  return isUnconfirmedCommandCommit(error) ? 'unknown' : 'not_applied';
 }
 
 function hasInvalidToken(challenge: string): boolean {
@@ -239,13 +253,7 @@ export function problemResponse(
     status: definition.status,
     code,
     retryable: definition.retryable,
-    effect_status: lastOwner
-      ? 'not_applied'
-      : applied || error instanceof CommandResultErasedError
-        ? 'applied'
-        : error instanceof ProblemError && error.effectStatus
-          ? error.effectStatus
-          : effectStatus(context.method, context.action, code),
+    effect_status: effectStatus(context.method, context.action, code, error, applied),
     request_id: context.id,
     ...(lastOwner || detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),

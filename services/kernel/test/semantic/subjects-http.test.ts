@@ -133,6 +133,83 @@ test('a create is 201 with its location and session token, and its key replays i
   }
 });
 
+for (const outcome of ['lost reply', 'native rollback'] as const) {
+  test(`ordinary Subject POST reports a ${outcome} at COMMIT and recovers with the original key`, async () => {
+    const key = randomUUID();
+    const { route } = subjectTarget(routeKey, accounts.writer, key);
+    const post = () => create({ labels: { en: key } }, JSON.stringify(key));
+    const original = () =>
+      admin.query(
+        `SELECT s.subject_id, r.transaction_id FROM semantic.subject s
+        JOIN core.receipt r ON r.partition_no = s.route / 16 AND r.transaction_id = s.recorded_transaction_id
+        WHERE s.route = $1 AND s.canonical_name = $2 AND r.command_kind = 'subject.create'`,
+        [route, key],
+      );
+    let faulted = false;
+    let nativeRejection: unknown;
+    const originals = new Map<pg.PoolClient, pg.PoolClient['query']>();
+    const observe = (client: pg.PoolClient) => {
+      if (originals.has(client)) return;
+      originals.set(client, client.query);
+      const query = client.query.bind(client);
+      let settledSources = false;
+      client.query = new Proxy(query, {
+        apply(target, receiver, args) {
+          const statement = typeof args[0] === 'string' ? args[0] : args[0]?.text;
+          if (statement === 'SET CONSTRAINTS ALL IMMEDIATE') settledSources = true;
+          if (!settledSources || faulted || statement !== 'COMMIT') return Reflect.apply(target, receiver, args);
+          faulted = true;
+          return (async () => {
+            if (outcome === 'native rollback') {
+              // This transaction's COMMIT receives the rejection directly from PostgreSQL.
+              await query('CREATE TEMP TABLE commit_parent (id int PRIMARY KEY) ON COMMIT DROP');
+              await query(
+                'CREATE TEMP TABLE commit_probe (id int CONSTRAINT commit_probe_fk REFERENCES commit_parent DEFERRABLE INITIALLY DEFERRED) ON COMMIT DROP',
+              );
+              await query('SET CONSTRAINTS commit_probe_fk DEFERRED');
+              await query('INSERT INTO commit_probe VALUES (1)');
+              try {
+                return await query('COMMIT');
+              } catch (error) {
+                nativeRejection = error;
+                throw error;
+              }
+            }
+            await query('COMMIT');
+            throw new Error('Lost the committed Subject response');
+          })();
+        },
+      });
+    };
+    pool.on('acquire', observe);
+    try {
+      const first = await post();
+      expect(faulted).toBe(true);
+      if (outcome === 'native rollback') expect(nativeRejection).toMatchObject({ code: '23503', severity: 'ERROR' });
+      expect(first.response.status).toBe(500);
+      const recorded = (await original()).rows;
+      expect(recorded).toHaveLength(outcome === 'lost reply' ? 1 : 0);
+      const recovered = await post();
+      expect(recovered.response.status).toBe(201);
+      const id = recovered.body.subject.id as string;
+      expect(recovered.response.headers.get('location')).toBe(`/v1/subjects/${id}`);
+      const rows = (await original()).rows;
+      expect(rows).toEqual([{ subject_id: id, transaction_id: expect.any(String) }]);
+      if (recorded.length) expect(rows).toEqual(recorded);
+      expect((await post()).body.subject.id).toBe(id);
+      expect((await original()).rows).toEqual(rows);
+      expect(first.body).toMatchObject({
+        code: 'internal_error',
+        retryable: false,
+        effect_status: outcome === 'lost reply' ? 'unknown' : 'not_applied',
+      });
+    } finally {
+      pool.off('acquire', observe);
+      for (const [client, original] of originals) client.query = original;
+    }
+  });
+}
+
 test('a queued creation checks the parent grant again after the competing writer releases its shard', async () => {
   const rawKey = randomUUID();
   const label = rawKey;
@@ -501,7 +578,7 @@ test('the kernel contract documents both subject operations with their actions a
     'x-action': 'subject:create',
     security: [{ bearerAuth: [] }],
   });
-  expect(Object.keys(created.responses!).sort()).toEqual(['201', '400', '401', '403', '422', '503']);
+  expect(Object.keys(created.responses!).sort()).toEqual(['201', '400', '401', '403', '422', '500', '503']);
   expect(created.parameters).toEqual(
     expect.arrayContaining([expect.objectContaining({ in: 'header', name: 'idempotency-key', required: true })]),
   );
@@ -511,5 +588,5 @@ test('the kernel contract documents both subject operations with their actions a
     'x-action': 'subject:read',
     security: [{ bearerAuth: [] }, {}],
   });
-  expect(Object.keys(read.responses!).sort()).toEqual(['200', '308', '401', '404', '503']);
+  expect(Object.keys(read.responses!).sort()).toEqual(['200', '308', '400', '401', '403', '404', '409', '503']);
 });

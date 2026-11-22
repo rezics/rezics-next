@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
+import { CommandCommitUncertainError } from '../../src/command/command.ts';
 import { RealmLastOwnerError } from '../../src/access/realm-ownership.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
@@ -107,4 +108,24 @@ test('generic errors and unavailability never acquire the last-owner discriminat
     expect(body.effect_status).toBe('not_applied');
     expect(body).not.toHaveProperty('detail');
   }
+});
+
+test('only an unconfirmed native COMMIT can publish an unknown ordinary command effect', async () => {
+  const reported = { name: 'CommandCommitUncertainError', effect_status: 'unknown' };
+  for (const error of [
+    reported,
+    Object.assign(new Error('Remote failure'), reported),
+    new CommandCommitUncertainError(0, new Error('Unverified worker report')),
+    Object.assign(new ProblemError('internal_error', { extensions: { effect_status: 'unknown' } }), {
+      effectStatus: 'unknown',
+    }),
+  ]) {
+    const response = problemResponse(error, { method: 'POST', id: 'unconfirmed-commit' });
+    const body = await response.json();
+    expect(response.status).toBe(500);
+    expect(body.effect_status).toBe('not_applied');
+    expect(Value.Check(problemSchema('internal_error'), { ...body, effect_status: 'unknown' })).toBe(true);
+  }
+  const denied = await problemResponse(new ProblemError('forbidden'), { method: 'POST', id: 'denied' }).json();
+  expect(Value.Check(problemSchema('forbidden'), { ...denied, effect_status: 'unknown' })).toBe(false);
 });
