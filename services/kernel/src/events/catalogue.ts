@@ -8,6 +8,7 @@ import { COMMERCE_EVENTS } from '../commerce/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { contentDeclaredEvents } from '../content/declared-catalogue.ts';
 import { LIBRARY_EVENTS } from '../library/events.ts';
+import { launcherEvents } from '../launcher/events.ts';
 import { RATING_EVENTS } from '../rating/events.ts';
 import { SEMANTIC_EVENTS } from '../semantic/events.ts';
 import { SEARCH_IDENTITY_EVENTS } from '../search/identity-epoch-participant-events.ts';
@@ -36,6 +37,7 @@ function productEventTypes() {
         ...COMMUNITY_EVENTS(),
         ...contentDeclaredEvents(),
         ...LIBRARY_EVENTS,
+        ...launcherEvents(),
         ...RATING_EVENTS(),
         ...SEMANTIC_EVENTS,
         ...SEARCH_IDENTITY_EVENTS,

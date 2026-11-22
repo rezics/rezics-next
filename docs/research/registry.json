@@ -2009,6 +2009,20 @@
       "researcher": "codex",
       "state": "adopted",
       "decision": "docs/economy.md"
+    },
+    {
+      "path": "docs/research/launcher-overlay-codex.md",
+      "topic": "launcher-overlay",
+      "researcher": "codex",
+      "state": "adopted",
+      "decision": "docs/launcher.md"
+    },
+    {
+      "path": "docs/research/minecraft-launcher-maturity-codex.md",
+      "topic": "minecraft-launcher-maturity",
+      "researcher": "codex",
+      "state": "adopted",
+      "decision": "docs/launcher.md#minecraft-maturity"
     }
   ]
 }

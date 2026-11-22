@@ -324,6 +324,8 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.content.thread.created.v1': personal('actor', 'author'),
   'com.rezics.definitions.activated.v1': nonPersonal,
   'com.rezics.definitions.published.v1': nonPersonal,
+  'com.rezics.launcher.release.published.v1': nonPersonal,
+  'com.rezics.launcher.release.withdrawn.v1': nonPersonal,
   'com.rezics.library.bulk.confirmed.v1': personal('owner'),
   'com.rezics.library.anilist.changed.v1': personal('subject'),
   'com.rezics.library.bulk.changed.v1': personal('owner'),

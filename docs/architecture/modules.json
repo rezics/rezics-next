@@ -1049,10 +1049,12 @@
         "services/kernel/src/request/**",
         "services/kernel/src/database/**",
         "services/kernel/src/imports/**",
+        "services/kernel/src/launcher/**",
         "services/kernel/src/route/**",
         "services/kernel/src/clock.ts",
         "services/kernel/src/memoized.ts",
         "services/kernel/db/migrations/**",
+        "services/kernel/db/launcher/**",
         "services/kernel/db/schema.sql"
       ],
       "excludes": [
@@ -1169,6 +1171,7 @@
         "services/kernel/src/request/**",
         "services/kernel/src/database/**",
         "services/kernel/src/imports/**",
+        "services/kernel/src/launcher/**",
         "services/kernel/src/route/**",
         "services/kernel/src/clock.ts"
       ]

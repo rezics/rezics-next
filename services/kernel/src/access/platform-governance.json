@@ -23,6 +23,8 @@
     "media:import_from_url",
     "definitions:publish",
     "definitions:activate",
+    "launcher:publish",
+    "launcher:withdraw",
     "presentation:publish",
     "presentation:activate",
     "context:create",

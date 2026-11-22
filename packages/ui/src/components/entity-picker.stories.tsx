@@ -146,11 +146,13 @@ export const SlowSearch: Story = {
 };
 
 const options = () => screen.findAllByRole('option');
-const enabled = async (name: RegExp | string) => {
-  const option = await screen.findByRole('option', { name });
-  await waitFor(() => expect(option).not.toHaveAttribute('aria-disabled', 'true'));
-  return option;
-};
+const enabled = (name: RegExp | string) =>
+  waitFor(() => {
+    const option = screen.getByRole('option', { name });
+    expect(option).toBeVisible();
+    expect(option).not.toHaveAttribute('aria-disabled', 'true');
+    return option;
+  });
 
 const typed = fn();
 const highlightedIndex = () =>
@@ -196,6 +198,29 @@ export const SearchAsYouType: Story = {
     await expect(option.querySelector('picture img')).not.toBeNull();
     await expect(await options()).toHaveLength(3);
     await expect(screen.queryByRole('option', { name: /Thursday/ })).toBeNull();
+  },
+};
+
+const suggested = fn();
+export const SearchSuggestedTitle: Story = {
+  args: {
+    suggestedSearch: { query: 'Three Days', label: 'Search detected title' },
+    search: fakeSearch({ spy: suggested }),
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', { name: 'Subject' });
+    await expect(input).toHaveValue('');
+    await expect(suggested).not.toHaveBeenCalled();
+    canvas.getByRole('button', { name: 'Search detected title' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await enabled(/Three Days of Happiness/)).toBeVisible();
+    await expect(input).toHaveFocus();
+    await expect(input).toHaveValue('Three Days');
+    await expect(suggested).toHaveBeenCalledTimes(1);
+    await expect(suggested).toHaveBeenCalledWith('Three Days', expect.any(AbortSignal));
+    await choose(/Three Days of Happiness/);
+    await expect(input).toHaveValue('Three Days of Happiness');
   },
 };
 
@@ -248,7 +273,9 @@ export const SelectSeveral: Story = {
     await expect(list).toHaveTextContent('The Three-Body Problem');
     await expect(list).toHaveTextContent('Three Days of Happiness');
     await expect(list.querySelectorAll('picture img')).toHaveLength(2);
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove The Three-Body Problem' }));
+    const remove = canvas.getByRole('button', { name: 'Remove The Three-Body Problem' });
+    await expect(remove.tabIndex).toBe(0);
+    await userEvent.click(remove);
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1));
     await expect(args.onValueChange).toHaveBeenLastCalledWith([expect.objectContaining({ typeLabel: 'Light novel' })]);
   },
@@ -467,6 +494,7 @@ function ConnectedJourneyHarness() {
           src={coverSrc}
           value={value}
           multiple={multiple}
+          preserveSelectionOnSearch
           disabled={disabled}
           debounce={250}
           onValueChange={choose}

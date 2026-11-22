@@ -1,0 +1,24 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -70 +70 @@
+-var import_undici = require("undici");
++var import_undici = require("undici/index.js");
+@@ -144 +144 @@
+-var import_undici2 = require("undici");
++var import_undici2 = require("undici/index.js");
+@@ -248 +248 @@
+-var import_undici3 = require("undici");
++var import_undici3 = require("undici/index.js");
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -26 +26 @@
+-import { Agent, interceptors } from "undici";
++import { Agent, interceptors } from "undici/index.js";
+@@ -100 +100 @@
+-import { errors } from "undici";
++import { errors } from "undici/index.js";
+@@ -204 +204 @@
+-import { errors as errors2, stream } from "undici";
++import { errors as errors2, stream } from "undici/index.js";

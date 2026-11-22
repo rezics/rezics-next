@@ -17,6 +17,7 @@ These tracked definitions follow [public scope](../scope.md), which controls whi
 - [Web and Auth interfaces](web.md)
 - [Complete editor product](editor.md) — shared editor, reading, preferences and host integration
 - [Performance](performance.md)
+- [Mature desktop Launcher](launcher.md)
 
 The resident allocates these outcomes under [phase ownership](../development/delivery.md#implementation-and-acceptance).
 Domain names identify contracts, not managers. Separate documents do not create another manager or control-plane Goal.

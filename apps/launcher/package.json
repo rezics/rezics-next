@@ -1,0 +1,39 @@
+{
+  "name": "@rezics/launcher",
+  "version": "0.1.0",
+  "description": "Desktop game launcher for REZICS",
+  "productName": "REZICS Launcher",
+  "private": true,
+  "type": "module",
+  "main": ".temp/app/main.mjs",
+  "exports": {
+    "./host": "./src/main/host.ts"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "host": "bun scripts/host.ts",
+    "dev": "bun run build --debug && electron .",
+    "package:windows": "bun run build && bun scripts/package-windows.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "check": "oxfmt --check . && bun run typecheck && bun run test"
+  },
+  "devDependencies": {
+    "@base-ui/react": "1.9.0",
+    "@fontsource-variable/manrope": "5.3.0",
+    "@rezics/launcher-contract": "workspace:*",
+    "@rezics/launcher-core": "workspace:*",
+    "@rezics/ui": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
+    "lucide-react": "1.66.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5"
+  }
+}

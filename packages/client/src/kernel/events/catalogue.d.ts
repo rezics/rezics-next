@@ -1452,6 +1452,14 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly 'com.rezics.launcher.release.published.v1': Type.TObject<{
+        packageId: Type.TString;
+        releaseId: Type.TString;
+    }>;
+    readonly 'com.rezics.launcher.release.withdrawn.v1': Type.TObject<{
+        packageId: Type.TString;
+        releaseId: Type.TString;
+    }>;
     readonly 'com.rezics.rating.source_classification.changed.v1': Type.TObject<{
         subjectId: Type.TString;
         associationKey: Type.TString;

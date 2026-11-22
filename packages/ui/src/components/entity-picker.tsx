@@ -1,5 +1,6 @@
 'use client';
 
+import type { ComboboxRootActions } from '@base-ui/react/combobox';
 import { XIcon } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -40,8 +41,12 @@ export interface EntityPickerProps {
   /** The accessible name of the search box. */
   label: string;
   placeholder?: string;
+  /** Configures an optional query action. Omit its query until a suggestion is available. */
+  suggestedSearch?: { query?: string | undefined; label: string };
   /** Allows several subjects; each stays listed below the search box until removed. */
   multiple?: boolean;
+  /** Keeps a single selection while searching for another. The caller supplies an explicit remove action. */
+  preserveSelectionOnSearch?: boolean;
   value?: readonly EntityPickerSubject[];
   defaultValue?: readonly EntityPickerSubject[];
   onValueChange?: (value: EntityPickerSubject[]) => void;
@@ -116,7 +121,9 @@ export function EntityPicker({
   src,
   label,
   placeholder,
+  suggestedSearch,
   multiple = false,
+  preserveSelectionOnSearch = false,
   value: controlled,
   defaultValue,
   onValueChange,
@@ -130,6 +137,8 @@ export function EntityPicker({
   const selectedKey = selectionKey(selected);
   const selectedTitle = selected[0]?.title ?? '';
   const isDisabled = !!disabled;
+  const [open, setOpen] = useState(false);
+  const popup = useRef<ComboboxRootActions>(null);
   const [text, setText] = useState(() => (multiple ? '' : (selected[0]?.title ?? '')));
   const [results, setResults] = useState<Results>({
     phase: 'idle',
@@ -141,6 +150,7 @@ export function EntityPicker({
   const pending = useRef<SearchInvocation | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  const preserveClosingDraft = useRef(false);
   const boundary = useRef({ multiple, disabled: isDisabled, selectionKey: selectedKey });
   const searchRef = useRef(search);
   searchRef.current = search;
@@ -178,10 +188,17 @@ export function EntityPicker({
         selectionKey: multiple ? '' : selectedKey,
       });
     }
-    if (modeChanged || (!multiple && selectionChanged)) setText(multiple ? '' : selectedTitle);
+    if (modeChanged || (!multiple && selectionChanged)) {
+      preserveClosingDraft.current = false;
+      setText(multiple ? '' : selectedTitle);
+    }
+    if (disabledChanged && isDisabled && open) {
+      preserveClosingDraft.current = true;
+      popup.current?.close();
+    }
 
     boundary.current = { multiple, disabled: isDisabled, selectionKey: selectedKey };
-  }, [cancel, isDisabled, multiple, selectedKey, selectedTitle]);
+  }, [cancel, isDisabled, multiple, open, selectedKey, selectedTitle]);
 
   const run = (typed: string, wait: number) => {
     cancel();
@@ -275,6 +292,7 @@ export function EntityPicker({
           : currentResults.items.length === 0
             ? t.empty.replace('{query}', currentResults.query)
             : null;
+  const suggestedQuery = suggestedSearch?.query?.trim();
 
   return (
     <div data-slot="entity-picker" className={cn('grid min-w-0 gap-3', className)}>
@@ -283,9 +301,19 @@ export function EntityPicker({
         filter={null}
         multiple={multiple}
         disabled={isDisabled}
+        actionsRef={popup}
+        {...(suggestedSearch && { open: open && !isDisabled })}
+        onOpenChange={(next) => {
+          if (next) preserveClosingDraft.current = false;
+          setOpen(next);
+        }}
         value={multiple ? selected : singleValue}
-        onValueChange={(next: EntityPickerSubject | EntityPickerSubject[] | null) => {
+        onValueChange={(next: EntityPickerSubject | EntityPickerSubject[] | null, details) => {
           if (isDisabled) return;
+          if (preserveSelectionOnSearch && !multiple && next === null) {
+            details.cancel();
+            return;
+          }
           const value = next === null ? [] : Array.isArray(next) ? next : [next];
           const selectedIds = new Set(selected.map((subject) => subject.id));
           const additions = value.filter((subject) => !selectedIds.has(subject.id));
@@ -299,6 +327,12 @@ export function EntityPicker({
         }}
         inputValue={inputText}
         onInputValueChange={(typed, details) => {
+          if (details.reason === 'input-change' && !isDisabled) preserveClosingDraft.current = false;
+          // An exit animation can finish after the parent has already re-enabled the picker.
+          if (isDisabled || preserveClosingDraft.current) {
+            details.cancel();
+            return;
+          }
           // Choosing an item writes its title into the box (or clears the box); neither is a new search.
           if (details.reason === 'item-press' || details.isItemPress) {
             if (!multiple) {
@@ -308,7 +342,6 @@ export function EntityPicker({
             }
             return;
           }
-          if (isDisabled) return;
           setText(typed);
           if (details.reason === 'input-change' || details.reason === 'input-clear') {
             run(typed, debounce);
@@ -398,6 +431,25 @@ export function EntityPicker({
           </div>
         </ComboboxContent>
       </Combobox>
+      {suggestedSearch && suggestedQuery && !selected.length && suggestedQuery !== inputText.trim() && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="justify-self-start"
+          disabled={isDisabled}
+          tabIndex={open ? -1 : undefined}
+          onClick={() => {
+            preserveClosingDraft.current = false;
+            inputRef.current?.focus();
+            setText(suggestedQuery);
+            run(suggestedQuery, 0);
+            setOpen(true);
+          }}
+        >
+          {suggestedSearch.label}
+        </Button>
+      )}
       {multiple ? (
         // Keep selection changes in a live region that stays available while Base UI scopes access to the popup.
         <div aria-live="polite" className={selected.length === 0 ? 'sr-only' : undefined}>

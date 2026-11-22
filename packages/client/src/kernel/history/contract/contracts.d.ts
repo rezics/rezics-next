@@ -322,6 +322,14 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         kind: 'non-personal';
         roles: readonly [];
     }>;
+    'com.rezics.launcher.release.published.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
+    'com.rezics.launcher.release.withdrawn.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
     'com.rezics.library.bulk.confirmed.v1': EventClassification;
     'com.rezics.library.anilist.changed.v1': EventClassification;
     'com.rezics.library.bulk.changed.v1': EventClassification;

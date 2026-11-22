@@ -8,6 +8,7 @@ const stories = ['src/components/entity-picker.stories.tsx'];
 const typing = [
   'Connected Selection Lifetime: passed',
   'Search As You Type: passed',
+  'Search Suggested Title: passed',
   'Select Several: passed',
   'Select With Keyboard: passed',
   'Stale Search Is Cancelled: passed',
@@ -59,7 +60,7 @@ async function runStories(): Promise<string[]> {
 }
 
 test('the entity picker searches as the person types, shows each subject with its cover, type and year, and selects with the keyboard', async () => {
-  expect(await outcomes()).toEqual([...states, ...layouts, ...typing].sort());
+  expect(await outcomes()).toEqual([...states, ...layouts, ...typing, lifetime].sort());
 }, 300_000);
 
 test('the entity picker says when nothing matches and when the search failed, and never shows an id', async () => {

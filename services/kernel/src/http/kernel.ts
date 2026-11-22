@@ -150,6 +150,7 @@ import {
 import { createSubjectPageFeed, type SubjectPageFeed } from '../semantic/subject-page-feed.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
+import { launcherDistributionRoutes } from '../launcher/routes.ts';
 import { actionCatalogue, bindKernelActionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
 import { historyExecutionPort } from '../history/application/index.ts';
@@ -1097,6 +1098,11 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     mountedViewerResources.set(type, resource);
   }
   viewerResources = mountedViewerResources;
+  launcherDistributionRoutes(zones as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    clock,
+    tokens,
+  });
   for (const module of dependencies.modules ?? []) module(zones as unknown as ReturnType<typeof createApp>);
   viewerActionsRoutes(zones as unknown as ReturnType<typeof createApp>, {
     pool: dependencies.pool,
@@ -1193,6 +1199,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
 };
 
 type KernelComposition = ZoneComposition &
+  ReturnType<typeof launcherDistributionRoutes> &
   ReturnType<typeof recentSearchRoutes> &
   ReturnType<typeof viewerActionsRoutes> &
   RatingHttpApp &

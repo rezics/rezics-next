@@ -1,0 +1,26 @@
+{
+  "name": "@rezics/overlay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:ui": "vite build",
+    "build": "bun run build:ui && bun tools/build-native.ts",
+    "check": "bun run typecheck && cargo fmt --check && cargo test --locked",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rezics/launcher-contract": "workspace:*",
+    "@rezics/ui": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.1.0-beta",
+    "vite": "8.3.5"
+  }
+}

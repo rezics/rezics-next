@@ -215,6 +215,7 @@ export { readItemDetails, readItemTypes, readSubjectPageStates } from './public-
 export type { ItemTypeDetails, SubjectPageState } from './public-subject-facts.ts';
 export {
   createSubjectReadingApplication,
+  readSubjectPublicStates,
   type SubjectReadingApplication,
   type SubjectReadingPageAnswer,
   type SubjectReadingPageRequest,
