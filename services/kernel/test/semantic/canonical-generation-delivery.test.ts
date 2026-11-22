@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
+import { withQueryAccounting } from '../../src/database/pool.ts';
 import type { Effect, NativeEffect } from '../../src/events/effects.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { rebuildRealmRankCanonicalOrder } from '../../src/rating/realm-rank-convergence.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   CANONICAL_GENERATION_PAGE_SIZE,
+  createCanonicalGenerationWakeEffect,
   deliverCanonicalGenerationEvent,
   readCanonicalGenerationDeliveryPage,
   resumeCanonicalGenerationDelivery,
@@ -16,6 +19,7 @@ import {
   CANONICAL_GENERATION_DELIVERED,
   CANONICAL_GENERATION_REBUILD_CONTINUED,
 } from '../../src/semantic/events.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
@@ -71,6 +75,94 @@ test('overlapping canonical wakes announce a home once and startup can recover a
     await resumeCanonicalGenerationDelivery(pool, request);
     expect(await notices()).toEqual([...pending.homes, ...pending.homes]);
   } finally {
+    await f.close();
+  }
+});
+
+test('a Book wake arriving after an inventory snapshot gets a new scan and can retry a failed scan', async () => {
+  const f = await fixture({ isolated: true });
+  const firstRead = Promise.withResolvers<void>();
+  const releaseRead = Promise.withResolvers<void>();
+  try {
+    const pool = f.db.openPool({ max: 6 });
+    const effect = createCanonicalGenerationWakeEffect(pool);
+    const bookKey = (partition: number) => {
+      let key = randomUUID();
+      while (partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, key).route) !== partition)
+        key = randomUUID();
+      return key;
+    };
+    const createWake = async (partition: number, key: string) => {
+      const subject = await f.create('schema:Book', {}, key);
+      const events: CloudEvent[] = [];
+      const result = await projectBatch(pool, {
+        consumer: 'canonical_book_wake_test',
+        partition,
+        apply: async (envelopes) => {
+          events.push(...envelopes.flatMap((envelope) => envelope.events));
+        },
+      });
+      expect(result.status).toBe('read');
+      const event = events.find((entry) => entry.subject === subject && entry.type === 'com.rezics.subject.created.v1');
+      if (!event) throw new Error('Missing native Book creation event');
+      return event;
+    };
+    // Announce both initial homes. Only a new Book can return either one to the inventory.
+    await resumeCanonicalGenerationDelivery(pool, { after: null, limit: 2, unannouncedOnly: true });
+    const first = await createWake(0, bookKey(0));
+    const laterKey = bookKey(1);
+    let scans = 0;
+    const watch = (run: () => Promise<void>) =>
+      withQueryAccounting(
+        {
+          connection: (dispatch) => dispatch(),
+          async query(sql, _operands, dispatch) {
+            const rows = await dispatch();
+            if (sql.includes('AND canonical_announcement_pending')) {
+              if (++scans === 1) {
+                firstRead.resolve();
+                await releaseRead.promise;
+              } else if (scans === 2) {
+                throw new Error('Inventory result unavailable');
+              }
+            }
+            return rows;
+          },
+        },
+        run,
+      );
+    const original = watch(() => effect.run(first));
+    await Promise.race([
+      firstRead.promise,
+      original.then(() => {
+        throw new Error('Inventory was not observed');
+      }),
+    ]);
+    const later = await createWake(1, laterKey);
+    const queued = watch(() => effect.run(later));
+    const replay = watch(() => effect.run(later));
+    const results = Promise.allSettled([original, queued, replay]);
+    releaseRead.resolve();
+    expect(await results).toEqual([
+      { status: 'fulfilled', value: undefined },
+      { status: 'rejected', reason: new Error('Inventory result unavailable') },
+      { status: 'rejected', reason: new Error('Inventory result unavailable') },
+    ]);
+    expect(scans).toBe(2);
+    const home = () =>
+      readCanonicalGenerationDeliveryPage(pool, { after: 0, limit: 1, unannouncedOnly: true }, readContext());
+    expect((await home()).homes[0]?.partition).toBe(1);
+    await watch(() => effect.run(later));
+    expect(scans).toBe(3);
+    expect((await home()).homes[0]?.partition).not.toBe(1);
+    const announced = await f.db.admin.query(
+      `SELECT count(*)::int AS n FROM core.outbox o JOIN semantic.partition_subjects s USING(partition_no)
+       WHERE o.partition_no=1 AND o.type=$1 AND o.data->>'generation'=s.canonical_generation::text`,
+      [CANONICAL_GENERATION_COMMITTED],
+    );
+    expect(announced.rows[0]?.n).toBe(1);
+  } finally {
+    releaseRead.resolve();
     await f.close();
   }
 });

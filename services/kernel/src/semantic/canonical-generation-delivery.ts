@@ -236,6 +236,24 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
     'com.rezics.subject.visibility_changed.v1',
     'com.rezics.subject.statement_visibility_changed.v1',
   ];
+  let tail = Promise.resolve();
+  let pending: Promise<void> | undefined;
+  function requestScan(): Promise<void> {
+    // Only arrivals before this inventory starts may share its result. A later arrival
+    // takes the next turn so its committed home can be seen by a new snapshot.
+    if (pending) return pending;
+    pending = tail.then(() => {
+      pending = undefined;
+      return resumeCanonicalGenerationDelivery(pool, {
+        after: null,
+        limit: CANONICAL_GENERATION_PAGE_SIZE,
+        unannouncedOnly: true,
+      });
+    });
+    // Each SDK step receives its own scan's failure. The next turn can still run.
+    tail = pending.catch(() => {});
+    return pending;
+  }
   return {
     name: 'semantic_canonical_generation',
     types,
@@ -249,11 +267,7 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
         await resumeCanonicalGenerationDelivery(pool, event.data as CanonicalGenerationPageRequest);
       } else {
         if (!types.includes(event.type)) throw new TypeError('Unexpected canonical generation wake');
-        await resumeCanonicalGenerationDelivery(pool, {
-          after: null,
-          limit: CANONICAL_GENERATION_PAGE_SIZE,
-          unannouncedOnly: true,
-        });
+        await requestScan();
       }
     },
   };
