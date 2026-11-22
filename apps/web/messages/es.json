@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "La información del contexto no está disponible. Vuelve a comprobarlo.",
   "ctxw_unknown": "Se desconoce el resultado. Reintenta la misma solicitud sin cambios o consulta el estado actual.",
   "ctxw_views": "Vistas de contextos",
+  "curation_access_heading": "Se necesita permiso",
+  "curation_access_message": "Esta cuenta no tiene acceso al editor de presentación.",
   "curation_active": "Perfil guardado en la última inspección",
   "curation_actual_head": "Versión guardada en la inspección: {head}. Perfil: {digest}",
   "curation_add": "Añadir plantilla",

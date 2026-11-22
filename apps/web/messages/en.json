@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "Context information is unavailable. Check again.",
   "ctxw_unknown": "The outcome is unknown. Retry the same request unchanged, or check the current state.",
   "ctxw_views": "Context views",
+  "curation_access_heading": "Permission required",
+  "curation_access_message": "This account cannot open the presentation editor.",
   "curation_active": "Saved profile at last inspection",
   "curation_actual_head": "Saved version at inspection: {head}. Profile: {digest}",
   "curation_add": "Add template",

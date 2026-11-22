@@ -56,6 +56,7 @@ export function ProviderQueue({
   initialChoice,
   initialReturn,
   onReviewCandidate,
+  personReviewHref,
   canWrite = true,
   current = providerAlwaysCurrent,
 }: {
@@ -65,6 +66,7 @@ export function ProviderQueue({
   initialScope?: QueueScope;
   initialChoice?: ProviderContextChoice;
   initialReturn?: ProviderQueueReturnVisit | undefined;
+  personReviewHref?: string;
   onReviewCandidate?: ((visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void) | undefined;
   canWrite?: boolean;
   current?: () => boolean;
@@ -133,8 +135,18 @@ export function ProviderQueue({
   const loadedCurrent = useMemo(() => () => visit.live() && active.current === load?.id, [visit, load?.id]);
   return (
     <section className="mx-auto w-full max-w-4xl flex flex-col gap-6 px-4 py-8 sm:px-6">
-      <h1 className="text-3xl font-semibold tracking-tight text-balance">{m.prq_title()}</h1>
-      <p className="max-w-prose text-muted-foreground">{m.prq_help()}</p>
+      <header className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-balance">{m.prq_title()}</h1>
+        <p className="max-w-prose text-muted-foreground">{m.prq_help()}</p>
+        {personReviewHref && (
+          <a
+            href={personReviewHref}
+            className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
+          >
+            {m.person_review_title({}, { locale })}
+          </a>
+        )}
+      </header>
       <form
         onSubmit={(event) => {
           event.preventDefault();

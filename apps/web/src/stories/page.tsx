@@ -13,6 +13,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { StoryObj } from '@storybook/react-vite';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
+import { sessionQuery } from '../session/query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import '../../.storybook/route-root';
@@ -150,6 +151,7 @@ export type PageStoryContext = { router: AnyRouter; queryClient: QueryClient };
 /** Each story enters the generated application route tree at its localized public URL. */
 export function PageStory({
   visitor,
+  accountId,
   path,
   credentialMode = anonymousReadMode,
   ratings,
@@ -161,6 +163,7 @@ export function PageStory({
   onReady,
 }: {
   visitor: 'Signed In' | 'Signed Out';
+  accountId?: string | undefined;
   path: string;
   credentialMode?: ReadCredentialMode;
   ratings?: Ratings | RatingSources;
@@ -175,15 +178,15 @@ export function PageStory({
   const entry = localizedEntry(path);
   const locale = getLocale();
   const source = useMemo(
-    () => ({ entry, locale, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture }),
-    [entry, locale, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture],
+    () => ({ entry, locale, visitor, accountId, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture }),
+    [entry, locale, visitor, accountId, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture],
   );
   const [visit, setVisit] = useState<{ source: typeof source; router: AnyRouter; queryClient: QueryClient }>();
   const [limitation, setLimitation] = useState<string>();
 
   useLayoutEffect(() => {
-    const { entry, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture } = source;
-    setStoryRequestContext({ visitor, url: entry });
+    const { entry, visitor, accountId, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture } = source;
+    setStoryRequestContext({ visitor, accountId, url: entry });
     selectRatingsFixture(ratingsFixture);
     selectHomeFeedStory(homeFeedFixture, deLocalizeUrl(new URL(entry, 'http://rezics.local')).pathname === '/');
     resetLabelAssignmentStory();
@@ -206,13 +209,22 @@ export function PageStory({
       router,
       document,
       deLocalizeUrl,
-      onLocation: (url) => setStoryRequestContext({ visitor, url }),
+      onLocation: (url) => setStoryRequestContext({ visitor, accountId, url }),
       onLimitation: setLimitation,
       previewNewTabs,
     });
-    setVisit({ source, router, queryClient });
-    void router.load();
+    let active = true;
+    const mount = () => {
+      if (!active) return;
+      setVisit({ source, router, queryClient });
+      void router.load();
+    };
+    // A session-bound visit captures its reader as the loader starts. Resolve the recorded
+    // session first, matching navigation from an already signed-in application shell.
+    if (credentialMode === 'session') void queryClient.ensureQueryData(sessionQuery).then(mount, mount);
+    else mount();
     return () => {
+      active = false;
       unbind();
       for (const match of router.state.matches) match.abortController.abort();
       router.clearCache();
@@ -394,7 +406,7 @@ function offerReady(recording: typeof offerRecording, available: boolean) {
     const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
     const subjectLabels = subjectRecording.subject.labels as Record<string, string>;
     await view.findByRole('heading', { level: 1, name: subjectLabels[getLocale()] ?? subjectLabels.en! });
-    await view.findByText(title, { exact: false });
+    await view.findByText(title, { exact: false, selector: 'header p' });
     await view.findByText(
       new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(unitAmountMinor / 10 ** (digits ?? 2)),
     );
@@ -493,7 +505,7 @@ export async function searchReady(context: { canvasElement: HTMLElement }) {
   const label = searchLabel(searchRecording);
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
   await expect(context.canvasElement.querySelectorAll('input[role="combobox"][name="q"]')).toHaveLength(1);
-  await expect(view.getByLabelText(m.search_sort_label())).toHaveValue('relevance');
+  await expect(view.getByLabelText(m.search_sort_label())).toHaveValue('');
   await listItemWithLink(view, label);
 }
 

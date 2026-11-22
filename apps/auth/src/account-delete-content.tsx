@@ -643,24 +643,19 @@ export function DeleteAccountContent({
 
   if (loadState === 'signed-out')
     return page(
-      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity returnRef={safeExit} heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           {historyPanel()}
           {recoveryPanel()}
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
-          <p>
-            <a ref={safeExit} href="/security">
-              {m.auth_account_operation_return()}
-            </a>
-          </p>
         </div>
       </AuthPage>,
     );
 
   if (loadState === 'failure')
     return page(
-      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity returnRef={safeExit} heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           {historyPanel()}
           {recoveryPanel()}
@@ -671,50 +666,36 @@ export function DeleteAccountContent({
             </Button>
           ) : null}
           <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
-          <p>
-            <a ref={safeExit} href="/security">
-              {m.auth_account_operation_return()}
-            </a>
-          </p>
         </div>
       </AuthPage>,
     );
 
   if (loadState === 'loading')
     return page(
-      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity returnRef={safeExit} heading={m.auth_account_delete_heading()}>
         {historyPanel()}
         {recoveryPanel()}
         <p role="status">{m.auth_inventory_loading()}</p>
         <a href="/login?return_to=%2Faccount%2Fdelete">{m.auth_security_sign_in()}</a>
-        <p>
-          <a ref={safeExit} href="/security">
-            {m.auth_account_operation_return()}
-          </a>
-        </p>
       </AuthPage>,
     );
 
   if (deleted)
     return page(
-      <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
+      <AuthPage returnToSecurity returnRef={safeExit} heading={m.auth_account_delete_heading()}>
         {historyPanel()}
         <Alert role="status" className="mt-8">
           <AlertDescription>
             <p>{m.auth_account_delete_success()}</p>
           </AlertDescription>
         </Alert>
-        <p>
-          <a ref={safeExit} href="/security">
-            {m.auth_account_operation_return()}
-          </a>
-        </p>
       </AuthPage>,
     );
 
   return page(
     <AuthPage
       returnToSecurity
+      returnRef={safeExit}
       heading={m.auth_account_delete_heading()}
       identity={
         advice?.kind === 'review' ? (
@@ -734,11 +715,7 @@ export function DeleteAccountContent({
     >
       {historyPanel()}
       {recoveryPanel()}
-      <p>
-        <a ref={safeExit} href="/security">
-          {m.auth_account_operation_return()}
-        </a>
-      </p>
+
       <div ref={privateReview} hidden={privateRetired} data-account-delete-private-review>
         <div className="auth-account-operation-copy">
           <p>{m.auth_account_delete_description()}</p>

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import definitions from '../../../../packages/definitions/release/rezics.json';
-import { OverviewContext, type OverviewValue } from '../features/pages/overview';
+import { OverviewContext } from '../features/pages/overview';
+import { characterStoryOverview } from './character-story-overview';
 import { SubjectConnections } from '../features/pages/subject-connections-view';
 import type { ConnectionRead } from '../features/pages/subject-connections-window';
 import { identityProperty } from '../features/catalogue/character-relationships/reading';
@@ -139,18 +140,17 @@ function Visit({ state, locale }: Props) {
       },
     } as unknown as Awaited<ReturnType<ConnectionRead>>;
   };
-  const value = {
+  const value = characterStoryOverview({
     subject: source,
     subjectLabel: 'Mina',
     locale,
     link: PlainLink,
     reader: { spoilerLevel: 0, suitability: 'show' },
-    labels: { spoilerHide: 'Hide', cover: {} },
+    labels: { spoilerHide: 'Hide' },
     unlabelled: 'Unlabelled',
     spoilerShow: 'Reveal',
     relations: {},
-    sections: {},
-  } as unknown as OverviewValue;
+  });
   return (
     <main className="mx-auto max-w-5xl bg-background p-4 text-foreground">
       <h1 className="mb-6 text-3xl font-semibold">Mina</h1>

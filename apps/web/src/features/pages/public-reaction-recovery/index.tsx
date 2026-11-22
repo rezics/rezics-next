@@ -42,7 +42,7 @@ export function PublicReactionRecovery({
       aria-label={labels.group}
       aria-busy={pending}
       tabIndex={-1}
-      className="min-w-0 flex-1 sm:flex-none"
+      className={available ? 'min-w-0 max-w-full flex-auto' : 'min-w-0 max-w-full basis-full'}
     >
       {available ? (
         children

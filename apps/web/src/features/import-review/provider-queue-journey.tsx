@@ -171,15 +171,9 @@ export function ProviderQueueJourney({
     );
   return (
     <>
-      <ProviderPersonReview
-        key={`persons:${admission.id}:${visit.id}`}
-        transport={bound.persons}
-        current={visit.live}
-        canWrite={!!admission.csrfToken}
-        locale={getLocale()}
-      />
       <ProviderQueue
         key={`${admission.id}:${visit.id}`}
+        personReviewHref="#provider-person-review"
         transport={bound.transport}
         contexts={bound.contexts}
         current={visit.live}
@@ -189,6 +183,15 @@ export function ProviderQueueJourney({
           return visit.live() ? !!saveProviderQueueReturn(source, admission, state) : false;
         }}
       />
+      <div id="provider-person-review" tabIndex={-1} className="scroll-mt-20">
+        <ProviderPersonReview
+          key={`persons:${admission.id}:${visit.id}`}
+          transport={bound.persons}
+          current={visit.live}
+          canWrite={!!admission.csrfToken}
+          locale={getLocale()}
+        />
+      </div>
     </>
   );
 }

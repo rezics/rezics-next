@@ -58,7 +58,6 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
       {card.description ? (
         <p className="max-w-3xl whitespace-pre-wrap leading-relaxed text-muted-foreground">{card.description}</p>
       ) : null}
-      <CollectionPresentationSummary kind={kind} dynamic={card.membershipKind === 'dynamic'} locale={locale} />
       {card.preview.state === 'available' ? (
         <div className="space-y-2 rounded-lg bg-muted/40 p-3">
           <p className="text-sm font-medium">{m.discovery_collection_preview({}, options)}</p>
@@ -101,6 +100,12 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
               : m.discovery_collection_preview_unavailable({}, options)}
         </p>
       )}
+      <details className="min-w-0 border-t border-border/60">
+        <summary className="min-h-10 cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+          {m.library_collection_details({}, options)}
+        </summary>
+        <CollectionPresentationSummary kind={kind} dynamic={card.membershipKind === 'dynamic'} locale={locale} />
+      </details>
     </article>
   );
 }

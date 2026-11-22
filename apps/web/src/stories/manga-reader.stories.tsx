@@ -129,6 +129,13 @@ const meta = {
   title: 'Subjects/Manga/Manga Reading',
   id: 'pages-subjects-manga-reading',
   component: MangaReader,
+  decorators: [
+    (Story) => (
+      <WorkReadingBinding>
+        <Story />
+      </WorkReadingBinding>
+    ),
+  ],
   parameters: {
     docs: {
       description: {
@@ -205,9 +212,7 @@ export const ExactVolumeWithParentEditionAndPartialDate: Story = {
   render: (args: ComponentProps<typeof MangaReader>) => (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Publication date: {dateText('2024-04', 'en')}</p>
-      <WorkReadingBinding>
-        <MangaReader {...args} />
-      </WorkReadingBinding>
+      <MangaReader {...args} />
     </div>
   ),
 };

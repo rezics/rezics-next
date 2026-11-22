@@ -38,13 +38,15 @@ export function OrganizationMembershipRoster({
     onNavigate ??
     ((direction: RosterDirection, cursor?: string) => onReload(direction === 'next' ? cursor : undefined));
   return (
-    <section aria-labelledby="organization-members-heading" className="space-y-5">
+    <section aria-labelledby="organization-members-heading" className="mt-5 grid min-w-0 gap-5">
       <div>
         <h2 ref={heading} tabIndex={-1} id="organization-members-heading" className="text-lg font-semibold">
           {m.auth_members_holders()}
         </h2>
-        <p className="break-all">{page.organizationId}</p>
-        <p>{page.viewer.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
+        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{page.organizationId}</p>
+        <p className="mt-2 text-sm font-medium">
+          {page.viewer.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}
+        </p>
       </div>
       {page.viewer.role === 'member' ? (
         page.viewer.leave === 'allowed' ? (
@@ -67,8 +69,12 @@ export function OrganizationMembershipRoster({
         </div>
       ) : (
         <>
-          <p>{m.auth_members_page_count({ count: members.holders.length })}</p>
-          <p>{members.next ? m.auth_members_more_offered() : m.auth_members_no_more_offered()}</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-3 text-sm">
+            <p className="font-semibold">{m.auth_members_page_count({ count: members.holders.length })}</p>
+            <p className="text-muted-foreground">
+              {members.next ? m.auth_members_more_offered() : m.auth_members_no_more_offered()}
+            </p>
+          </div>
           <ul ref={rows} className="divide-y" aria-label={m.auth_members_holders()}>
             {members.holders.map((holder) => {
               const displayName = holder.account?.displayName?.trim();
@@ -76,15 +82,20 @@ export function OrganizationMembershipRoster({
               const change = holder.actions.changeRole;
               const remove = holder.actions.remove;
               return (
-                <li key={holder.accountId} className="space-y-2 py-4">
+                <li
+                  key={holder.accountId}
+                  className="grid min-w-0 items-start gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+                >
                   <div>
-                    <p className="font-medium">
+                    <p className="text-base font-semibold">
                       {displayName || (handle ? `@${handle}` : m.auth_members_identity_unavailable())}
                     </p>
                     {displayName && handle ? <p className="text-sm text-muted-foreground">@{handle}</p> : null}
-                    <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
+                    <p className="mt-2 inline-flex rounded-md bg-muted px-2 py-0.5 text-xs font-semibold">
+                      {holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}
+                    </p>
                     <details
-                      className="mt-1 text-sm"
+                      className="mt-2 text-sm"
                       onToggle={(event) => {
                         const details = event.currentTarget;
                         if (!details.open && details.contains(document.activeElement) && details.isConnected)
@@ -164,7 +175,11 @@ export function OrganizationMembershipRoster({
                         )}
                       </div>
                       {change === 'last-owner' || remove === 'last-owner' ? (
-                        <p id={`member-last-owner-${holder.accountId}`} role="status">
+                        <p
+                          id={`member-last-owner-${holder.accountId}`}
+                          role="status"
+                          className="text-sm leading-relaxed text-muted-foreground"
+                        >
                           {m.auth_members_last_owner()}
                         </p>
                       ) : null}

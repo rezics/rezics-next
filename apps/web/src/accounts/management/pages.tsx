@@ -28,7 +28,7 @@ const actionClass = cn(
 const actionGroupClass = 'flex flex-wrap gap-2';
 const rowClass =
   'flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between';
-const rowIdentityClass = 'min-w-0 space-y-1';
+const rowIdentityClass = 'flex min-w-0 flex-col items-start gap-1';
 const rowTitleClass = 'break-words font-semibold';
 const badgeClass = 'h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start';
 const retryClass = 'h-auto max-w-full whitespace-normal wrap-anywhere text-start min-h-7';
@@ -90,7 +90,7 @@ function Failure({ page, retry }: { page: Exclude<Page<unknown>, { state: 'ready
 }
 function IdentityLink({ account, management = true }: { account: Identity | null; management?: boolean }) {
   return account ? (
-    <div className="min-w-0 space-y-1 rounded-xl border bg-muted/40 p-4 sm:p-5">
+    <div className="flex min-w-0 flex-col items-start gap-1 rounded-lg border bg-muted/30 px-4 py-3">
       {management || account.handle ? (
         <a
           className={`${linkClass} break-words text-base font-semibold sm:text-lg`}

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import { PageStory, pageReady } from './page';
+import { PageStory, PatternStory, pageReady } from './page';
 import { interfaceCursors, interfaceRealmTitle } from '../kernel/fake/realm-home-interface';
 import { MyRealmsPageView } from '../community/my-realms-page';
 import type {
@@ -108,6 +108,11 @@ const meta = {
     },
   },
   args: { page: { signedIn: true, realms: [member], next: null } },
+  render: (args) => (
+    <PatternStory visitor="Signed In" path="/realms">
+      <MyRealmsPageView {...args} />
+    </PatternStory>
+  ),
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: m.realms_heading() })).toBeVisible();
@@ -151,7 +156,11 @@ export const SelectedLeavePending: Story = {
 };
 
 export const UncertainExactRetry: Story = {
-  render: (args) => <IllustrativeReview controller={args.currentController!} />,
+  render: (args) => (
+    <PatternStory visitor="Signed In" path="/realms">
+      <IllustrativeReview controller={args.currentController!} />
+    </PatternStory>
+  ),
   args: {
     page: illustrativePage,
     currentController: reviewController('uncertain'),

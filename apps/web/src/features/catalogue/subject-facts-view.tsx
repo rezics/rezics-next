@@ -805,6 +805,7 @@ function SubjectFactsLive({
   const label = pageText(subject?.labels, locale).text || m.subject_value_unlabelled({}, o);
   const href = profile?.publicHref ?? (subject ? subjectHref({ id: subject.id, label }, locale).href : '');
   const groups = current ? factGroups(current) : { text: [], time: [], quantity: [] };
+  const sectionId = useId();
   const editorHref = profile ? (profile.editorHref ?? `${href}/${profile.path}`) : undefined;
   if (profile && current) {
     const scope = new Set(profile.properties(current));
@@ -941,6 +942,7 @@ function SubjectFactsLive({
     }
   }
   const groupLabels = { text: m.facts_text({}, o), time: m.facts_dates({}, o), quantity: m.facts_quantities({}, o) };
+  const sections = (Object.keys(groups) as (keyof typeof groups)[]).filter((group) => groups[group].length > 0);
   if (!visible || !workspace.active()) return null;
   return (
     <article
@@ -1002,23 +1004,28 @@ function SubjectFactsLive({
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
       {current && (
         <>
-          <nav
-            aria-label={m.facts_other_editors({}, o)}
-            className="flex min-w-0 flex-wrap gap-3 [&_a]:h-auto [&_a]:min-h-7 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words"
-          >
-            <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
-              {m.catalogue_terms_title({}, o)}
-            </a>
-            <a className={buttonVariants({ variant: 'outline' })} href={`${href}/relation-edit`}>
-              {m.relation_title({}, o)}
-            </a>
-            {current.release.types[subject!.type]?.properties.some(
-              (id) => current.release.properties[id]?.datatype === 'document',
-            ) && <AuthoredFieldEntry id={subject!.id} title={label} locale={locale} />}
-            <a className={buttonVariants({ variant: 'ghost' })} href={href}>
-              {m.candidate_view_public({}, o)}
-            </a>
-          </nav>
+          <details className="border-y border-border/70">
+            <summary className="min-h-10 cursor-pointer content-center py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+              {m.facts_other_editors({}, o)}
+            </summary>
+            <nav
+              aria-label={m.facts_other_editors({}, o)}
+              className="flex min-w-0 flex-wrap gap-2 pb-3 [&_a]:h-auto [&_a]:min-h-10 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words"
+            >
+              <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
+                {m.catalogue_terms_title({}, o)}
+              </a>
+              <a className={buttonVariants({ variant: 'outline' })} href={`${href}/relation-edit`}>
+                {m.relation_title({}, o)}
+              </a>
+              {current.release.types[subject!.type]?.properties.some(
+                (id) => current.release.properties[id]?.datatype === 'document',
+              ) && <AuthoredFieldEntry id={subject!.id} title={label} locale={locale} />}
+              <a className={buttonVariants({ variant: 'ghost' })} href={href}>
+                {m.candidate_view_public({}, o)}
+              </a>
+            </nav>
+          </details>
           {profile && !Object.values(groups).some((properties) => properties.length) && <p>{profile.empty}</p>}
           {!profile && (
             <>{!Object.values(groups).some((properties) => properties.length) && <p>{m.facts_empty({}, o)}</p>}</>
@@ -1043,77 +1050,92 @@ function SubjectFactsLive({
               />
             ))}
             <fieldset disabled={staleDraft} className="space-y-6">
-              {Object.entries(groups)
-                .filter(([, properties]) => properties.length)
-                .map(([group, properties]) => (
-                  <section key={group} className="space-y-4">
-                    <ContentItemHeading level={2} className="text-xl font-semibold">
-                      {groupLabels[group as keyof typeof groupLabels]}
-                    </ContentItemHeading>
-                    {properties.map((property) => (
-                      <FactField
-                        key={property}
-                        property={property}
-                        read={current}
-                        locale={locale}
-                        href={href}
-                        editorHref={editorHref}
-                        busy={busy}
-                        inspectionAvailability={inspectionAvailability}
-                        canStage={drafts.length < factLimit}
-                        draft={drafts.find((draft) => draft.property === property)}
-                        onChange={change}
-                        onDiscard={discard}
-                        reviewHref={profile?.reviewHref}
-                        onReview={(address) => {
-                          if (lifetime.active()) {
-                            profile?.onReviewIntent?.();
-                            setReviewing(address);
-                          }
-                        }}
-                        onReuse={(index) => {
-                          if (!lifetime.active() || !editable()) return;
-                          const draft = drafts.find((item) => item.property === property);
-                          const group = draft?.statement.references[index];
-                          if (!draft || !group) return;
-                          const source = {
-                            holder: factHolder(draft),
-                            property: draft.property,
-                            groupIndex: index,
-                            snapshot: cloneReferenceGroup(group),
-                          };
-                          setReuse({
-                            source,
-                            selected: [],
-                            capture: captureReuse(source, drafts),
-                            applied: [],
-                            refused: [],
-                            trigger:
-                              document.activeElement instanceof HTMLButtonElement ? document.activeElement : null,
-                          });
-                        }}
-                        focusReference={
-                          focusCopy && drafts.find((item) => item.property === property)
-                            ? factHolder(drafts.find((item) => item.property === property)!) === focusCopy.holder
-                              ? focusCopy
-                              : undefined
-                            : undefined
+              {sections.length > 1 && (
+                <nav aria-label={m.thread_inspect_sections({}, o)} className="flex flex-wrap gap-x-4 gap-y-1">
+                  {sections.map((group) => (
+                    <a
+                      key={group}
+                      href={`#${sectionId}-${group}`}
+                      className="inline-flex min-h-10 items-center text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {groupLabels[group]}
+                    </a>
+                  ))}
+                </nav>
+              )}
+              {sections.map((group) => (
+                <section key={group} className="space-y-4">
+                  <ContentItemHeading
+                    id={`${sectionId}-${group}`}
+                    tabIndex={-1}
+                    level={2}
+                    className="scroll-mt-[calc(var(--shell-header-height,4rem)+1rem)] border-b border-border pb-2 text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {groupLabels[group]}
+                  </ContentItemHeading>
+                  {groups[group].map((property) => (
+                    <FactField
+                      key={property}
+                      property={property}
+                      read={current}
+                      locale={locale}
+                      href={href}
+                      editorHref={editorHref}
+                      busy={busy}
+                      inspectionAvailability={inspectionAvailability}
+                      canStage={drafts.length < factLimit}
+                      draft={drafts.find((draft) => draft.property === property)}
+                      onChange={change}
+                      onDiscard={discard}
+                      reviewHref={profile?.reviewHref}
+                      onReview={(address) => {
+                        if (lifetime.active()) {
+                          profile?.onReviewIntent?.();
+                          setReviewing(address);
                         }
-                        onStage={(source) => {
-                          if (!lifetime.active()) return;
-                          const draft = stageFact(current, property, source);
-                          if (draft)
-                            draftLabels.current.set(
-                              property,
-                              pageText(current.release.properties[property]!.labels, locale),
-                            );
-                          if (draft)
-                            setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
-                        }}
-                      />
-                    ))}
-                  </section>
-                ))}
+                      }}
+                      onReuse={(index) => {
+                        if (!lifetime.active() || !editable()) return;
+                        const draft = drafts.find((item) => item.property === property);
+                        const group = draft?.statement.references[index];
+                        if (!draft || !group) return;
+                        const source = {
+                          holder: factHolder(draft),
+                          property: draft.property,
+                          groupIndex: index,
+                          snapshot: cloneReferenceGroup(group),
+                        };
+                        setReuse({
+                          source,
+                          selected: [],
+                          capture: captureReuse(source, drafts),
+                          applied: [],
+                          refused: [],
+                          trigger: document.activeElement instanceof HTMLButtonElement ? document.activeElement : null,
+                        });
+                      }}
+                      focusReference={
+                        focusCopy && drafts.find((item) => item.property === property)
+                          ? factHolder(drafts.find((item) => item.property === property)!) === focusCopy.holder
+                            ? focusCopy
+                            : undefined
+                          : undefined
+                      }
+                      onStage={(source) => {
+                        if (!lifetime.active()) return;
+                        const draft = stageFact(current, property, source);
+                        if (draft)
+                          draftLabels.current.set(
+                            property,
+                            pageText(current.release.properties[property]!.labels, locale),
+                          );
+                        if (draft)
+                          setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
+                      }}
+                    />
+                  ))}
+                </section>
+              ))}
               {changedReview.status !== 'closed' && (
                 <FactsChangedReview
                   items={projectChangedSet(drafts)}

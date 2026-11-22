@@ -84,6 +84,8 @@ export interface ContentItemProps extends Omit<HTMLAttributes<HTMLLIElement>, 't
   preview?: ReactNode;
   state?: ReactNode;
   actions?: ReactNode;
+  /** Keep expansive controls below the reading column at every container width. */
+  railPlacement?: 'responsive' | 'below';
   trailing?: ReactNode;
   forceOverlay?: boolean;
 }
@@ -106,6 +108,7 @@ export function ContentItem({
   preview,
   state,
   actions,
+  railPlacement = 'responsive',
   trailing,
   forceOverlay = false,
   className,
@@ -140,6 +143,7 @@ export function ContentItem({
         className={cn(
           'min-w-0 flex-1 wrap-anywhere',
           hasRail &&
+            railPlacement === 'responsive' &&
             '@min-[40rem]/content-item:grid @min-[40rem]/content-item:grid-cols-[minmax(0,1fr)_fit-content(40%)] @min-[40rem]/content-item:items-start @min-[40rem]/content-item:gap-x-4',
         )}
       >
@@ -185,7 +189,13 @@ export function ContentItem({
           )}
         </div>
         {hasRail && (
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 @min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end [&>*]:max-w-full">
+          <div
+            className={cn(
+              'mt-3 flex min-w-0 flex-wrap items-center gap-2 [&>*]:max-w-full',
+              railPlacement === 'responsive' &&
+                '@min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end',
+            )}
+          >
             {hasSlot(state) && (
               <ListRowControl
                 data-content-item-slot="state"

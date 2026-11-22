@@ -1,5 +1,5 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -38,6 +38,26 @@ import type {
 } from './types';
 
 type PageAddress = Omit<QuestionManagementAddress, 'realmId'>;
+
+function QuestionManagementNotice({
+  message,
+  role = 'status',
+  children,
+}: {
+  message: string;
+  role?: 'status' | 'alert';
+  children?: ReactNode;
+}) {
+  return (
+    <section className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6">
+      <h1 className="text-2xl font-semibold">{m.realm_question_management_link()}</h1>
+      <p role={role} className="max-w-prose text-muted-foreground">
+        {message}
+      </p>
+      {children}
+    </section>
+  );
+}
 
 type QuestionVisitLease = {
   active: boolean;
@@ -1336,41 +1356,37 @@ export function QuestionManagementPage({
 
   const reportDirty = useCallback((value: boolean) => setDirty(value), []);
 
-  if (!address || initial.state === 'invalid-address') return <p role="alert">{m.home_questions_invalid()}</p>;
+  if (!address || initial.state === 'invalid-address')
+    return <QuestionManagementNotice role="alert" message={m.home_questions_invalid()} />;
   if (session.state === 'signed-out' || read?.state === 'signed-out' || initial.state === 'signed-out')
-    return <p role="status">{m.own_classifications_signed_out()}</p>;
+    return <QuestionManagementNotice message={m.own_classifications_signed_out()} />;
   if (session.state === 'unknown' || sessionObservation.state === 'unknown')
-    return <p role="status">{m.home_questions_loading()}</p>;
-  if (!isVisitAdmitted()) return <p role="status">{m.own_classifications_stale()}</p>;
+    return <QuestionManagementNotice message={m.home_questions_loading()} />;
+  if (!isVisitAdmitted()) return <QuestionManagementNotice message={m.own_classifications_stale()} />;
   const keepDuringRequiredInspection = requiresFreshInspection && read?.state === 'ready';
   if (sessionCurrent === null || (busy && !keepDuringRequiredInspection) || (initial.state === 'preparing' && !read))
-    return <p role="status">{m.home_questions_loading()}</p>;
+    return <QuestionManagementNotice message={m.home_questions_loading()} />;
   if (sessionCurrent === false || read?.state === 'retired')
-    return <p role="status">{m.own_classifications_stale()}</p>;
+    return <QuestionManagementNotice message={m.own_classifications_stale()} />;
   if (initial.state === 'unavailable' || !read || read.state !== 'ready') {
     const staleCursor = read?.state === 'stale-cursor';
     const denied = read?.state === 'denied';
     return (
-      <section className="space-y-3" aria-live="polite">
-        <p role="status">
-          {staleCursor
-            ? m.home_questions_restart()
-            : denied
-              ? m.home_questions_denied()
-              : m.home_questions_unavailable()}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {staleCursor ? (
-            <Button type="button" variant="outline" onClick={restart}>
-              {m.home_questions_restart_action()}
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}>
-              {m.home_questions_retry()}
-            </Button>
-          )}
-        </div>
-      </section>
+      <QuestionManagementNotice
+        message={
+          staleCursor ? m.home_questions_restart() : denied ? m.home_questions_denied() : m.home_questions_unavailable()
+        }
+      >
+        {staleCursor ? (
+          <Button type="button" variant="outline" onClick={restart}>
+            {m.home_questions_restart_action()}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}>
+            {m.home_questions_retry()}
+          </Button>
+        )}
+      </QuestionManagementNotice>
     );
   }
 

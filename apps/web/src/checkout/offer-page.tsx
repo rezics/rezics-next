@@ -9,6 +9,7 @@ import { SubjectCover } from './subject-cover';
 import { BenefitDetails } from './benefit-details';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { isMoneyUnit } from './money-schema';
+import { formatMinorAmount } from './money';
 import { createOfferRequest, type AcquisitionProblem } from './offer-recovery';
 import { OfferPurchaseWorkspace } from './offer-purchase-workspace';
 
@@ -51,6 +52,8 @@ function OfferPurchase({
       : 'ready';
   const [existing, setExisting] = useState<AcquisitionProblem | null>(null);
   const [fullTitlesOpen, setFullTitlesOpen] = useState(false);
+  const price =
+    formatMinorAmount(getLocale(), offer.currency, offer.unitAmountMinor, offer.moneyUnit, 'summary') ?? offer.price;
   const termsKnown =
     isMoneyUnit(offer.moneyUnit) && offer.taxBehavior === 'exclusive' && offer.benefit?.kind === 'mapped';
   const canStart =
@@ -154,12 +157,24 @@ function OfferPurchase({
       priceDecision={
         <div className="space-y-5" data-slot="offer-decision">
           <p className="space-y-2">
-            <span className="block font-serif text-4xl text-foreground tabular-nums">{offer.price}</span>
+            <span
+              className={`block break-words font-serif text-foreground tabular-nums ${price.length > 24 ? 'text-lg' : 'text-4xl'}`}
+            >
+              {price}
+            </span>
             <span className="block text-sm text-muted-foreground">
               {offer.currency.toUpperCase()} ·{' '}
               {offer.taxBehavior === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
             </span>
           </p>
+          {price !== offer.price && (
+            <details className="text-sm text-muted-foreground">
+              <summary className="cursor-pointer rounded-sm py-1 focus-visible:outline-2 focus-visible:outline-ring">
+                {m.subject_choice_money_references()}
+              </summary>
+              <p className="break-words py-2">{offer.price}</p>
+            </details>
+          )}
           <div className="space-y-4 border-t pt-4">
             <p className="text-sm text-muted-foreground">
               {m.offer_terms_revision({ revision: String(offer.revision) })}

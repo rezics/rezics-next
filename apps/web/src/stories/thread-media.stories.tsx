@@ -19,7 +19,8 @@ import { PageHeading } from '../shell/page-heading';
 import { ThreadReading, type ThreadReadingPage } from '../threads/thread-reading';
 import { ThreadReadingHeader, ThreadReadingPost } from '../routes/threads/$id_.$slug';
 import { loadThreadPageWithAuthors } from '../identity/page-loaders';
-import type { ThreadPost } from '../threads/thread-page';
+import { authoredReadingPage } from '../kernel/fake/thread-reading-page';
+import type { ReadingPage, ThreadPost } from '../threads/thread-page';
 import type { DocumentImagePresentation } from '../threads/document-media';
 import { AppShell } from '../shell/shell';
 import { PendingPage } from '../shell/pending';
@@ -28,7 +29,6 @@ import { m } from '../paraglide/messages.js';
 import { threadHref } from '../threads/thread-href';
 import recordedThread from '../kernel/recorded/thread.json';
 import recordedPosts from '../kernel/recorded/thread-posts.json';
-import recordedAccounts from '../kernel/recorded/accounts.json';
 import recordedSubject from '../kernel/recorded/subject.json';
 
 type State = 'available' | 'unavailable' | 'overflow';
@@ -84,14 +84,28 @@ async function examplePage(state: State): Promise<ThreadReadingPage> {
     fetch: Object.assign(
       async (input: RequestInfo | URL) => {
         const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
-        if (path === '/v1/media/presentations')
-          return state === 'unavailable' ? new Response(null, { status: 503 }) : Response.json({ images: [image] });
-        if (path.endsWith('/posts'))
-          return Response.json({ posts: state === 'overflow' ? [post, overflowReply] : [post], next: null });
-        if (path.includes('/boards/')) return new Response(null, { status: 404 });
-        if (path === '/v1/accounts') return Response.json(recordedAccounts);
-        if (path === `/v1/threads/${recordedThread.thread.id}`)
-          return Response.json({ thread: { ...recordedThread.thread, firstPost: post } });
+        if (path === `/v1/threads/${recordedThread.thread.id}/reading-page`) {
+          const thread = { ...recordedThread.thread, firstPost: post } as ReadingPage['thread'];
+          const authors = accounts.accounts
+            .filter((author) => author.id === post.authorId && author.state === 'active')
+            .map(({ id, displayName, handle }) => ({ id, displayName, handle, avatar: null }));
+          const page = authoredReadingPage(thread, state === 'overflow' ? [overflowReply] : [], authors);
+          const documents =
+            state === 'available'
+              ? [
+                  {
+                    postId: post.id,
+                    threadId: post.threadId,
+                    revisionId: post.revisionId,
+                    sha256: post.sha256,
+                    state: 'available' as const,
+                    images: [{ state: 'available' as const, id: image.id, presentation: image }],
+                  },
+                ]
+              : [];
+          return Response.json({ ...page, documentMedia: { state, documents } });
+        }
+        if (path.includes('/boards/') || path.includes('/subjects/')) return new Response(null, { status: 404 });
         throw new Error(`Unexpected thread media example read: ${path}`);
       },
       { preconnect() {} },
@@ -152,16 +166,18 @@ export const Available: Story = {
 export const Unavailable: Story = {
   loaders: [async () => ({ page: await examplePage('unavailable') })],
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByRole('img', { name: alt })).toHaveTextContent(
-      m.content_edition_image_unavailable(),
-    );
+    await expect(
+      within(canvasElement).getByRole('img', { name: `${m.content_edition_image_unavailable()}: ${alt}` }),
+    ).toHaveTextContent(m.content_edition_image_unavailable());
     await expect(canvasElement.querySelector('picture')).toBeNull();
   },
 };
 export const Overflow: Story = {
   loaders: [async () => ({ page: await examplePage('overflow') })],
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getAllByRole('img', { name: alt })).toHaveLength(33);
+    await expect(
+      within(canvasElement).getAllByRole('img', { name: `${m.content_edition_image_unavailable()}: ${alt}` }),
+    ).toHaveLength(33);
     await expect(canvasElement.querySelector('picture')).toBeNull();
   },
 };
@@ -172,7 +188,7 @@ export const ImageFailure: Story = {
     const picture = await canvas.findByRole('img', { name: alt });
     picture.dispatchEvent(new Event('error'));
     await waitFor(() =>
-      expect(canvas.getByRole('img', { name: alt })).toHaveTextContent(m.content_edition_image_unavailable()),
+      expect(canvas.getByRole('img', { name: `${m.content_edition_image_unavailable()}: ${alt}` })).toBeVisible(),
     );
     await expect(canvas.getByText(image.credit!.rightsHolder, { exact: false })).toBeVisible();
     await expect(canvasElement.querySelector('picture')).toBeNull();

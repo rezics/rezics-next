@@ -124,45 +124,51 @@ function subjectReactionFallback(
       exact: new Intl.NumberFormat(locale).format(count),
     };
   };
+  const controls = subjectReactionControls.map(([kind, Icon, label]) => {
+    const count = format(kind);
+    const accessibleCount = count.visible === count.exact ? count.visible : `${count.visible} (${count.exact})`;
+    const name = `${label()} ${accessibleCount}`;
+    const pressed = viewerKnown ? selected === kind : undefined;
+    const content = (
+      <>
+        <Icon aria-hidden />
+        <span aria-hidden className="tabular-nums">
+          {count.visible}
+        </span>
+      </>
+    );
+    return signedIn || !href || !signInAllowed ? (
+      <Button
+        key={kind}
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        aria-label={name}
+        {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      >
+        {content}
+      </Button>
+    ) : (
+      <a key={kind} href={signIn} className={buttonVariants({ variant: 'outline', size: 'sm' })} aria-label={name}>
+        {content}
+      </a>
+    );
+  });
+  const unavailable = !knownValues && !viewerKnown && !signInAllowed;
   return (
     <div role="group" aria-label={m.reaction_reactions({}, options)} data-slot="subject-reaction-unavailable">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {subjectReactionControls.map(([kind, Icon, label]) => {
-          const count = format(kind);
-          const accessibleCount = count.visible === count.exact ? count.visible : `${count.visible} (${count.exact})`;
-          const name = `${label()} ${accessibleCount}`;
-          const pressed = viewerKnown ? selected === kind : undefined;
-          const content = (
-            <>
-              <Icon aria-hidden />
-              <span aria-hidden className="tabular-nums">
-                {count.visible}
-              </span>
-            </>
-          );
-          return signedIn || !href || !signInAllowed ? (
-            <Button
-              key={kind}
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled
-              aria-label={name}
-              {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
-            >
-              {content}
-            </Button>
-          ) : (
-            <a
-              key={kind}
-              href={signIn}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-              aria-label={name}
-            >
-              {content}
-            </a>
-          );
-        })}
+        {unavailable ? (
+          <details>
+            <summary className="cursor-pointer rounded-sm py-1 text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              {m.reaction_reactions({}, options)} · {m.feed_action_unavailable({}, options)}
+            </summary>
+            <div className="flex flex-wrap items-center gap-1 py-1">{controls}</div>
+          </details>
+        ) : (
+          controls
+        )}
         {onRetry ? (
           <Button
             type="button"

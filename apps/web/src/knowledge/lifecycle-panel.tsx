@@ -56,9 +56,7 @@ export function KnowledgeLifecyclePanel({
       : trashed
         ? m.knowledge_lifecycle_trashed({}, options)
         : m.knowledge_lifecycle_heading({}, options)
-    : readState === 'preparing'
-      ? m.knowledge_lifecycle_loading({}, options)
-      : (failure ?? m.knowledge_lifecycle_unavailable({}, options));
+    : m.knowledge_lifecycle_heading({}, options);
   const resultState = ['pending', 'acknowledged', 'conflict', 'not-found'].includes(commandState)
     ? commandState
     : controller.unresolved

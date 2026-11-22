@@ -81,8 +81,11 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
 
   const [inspectCancelled, setInspectCancelled] = useState(false);
   const stageFocus = useRef<HTMLDivElement>(null);
+  const previousStage = useRef(snap.stage);
   useEffect(() => {
-    if (snap.stage !== 'cleanup') stageFocus.current?.focus({ preventScroll: true });
+    if (snap.stage !== previousStage.current && snap.stage !== 'cleanup')
+      stageFocus.current?.focus({ preventScroll: true });
+    previousStage.current = snap.stage;
   }, [snap.stage]);
   const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending;
   const reviewedRows = snap.meta.filter((row) => row.reviewId);

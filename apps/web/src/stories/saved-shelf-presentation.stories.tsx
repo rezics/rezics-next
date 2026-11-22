@@ -1,3 +1,4 @@
+import { PatternStory } from './page';
 import { useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -29,6 +30,13 @@ const initialShelf: ShelfPreferences = {
 };
 
 const meta = {
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path="/library">
+        <Story />
+      </PatternStory>
+    ),
+  ],
   title: 'Library/Saved Queries/Saved Shelf Presentation',
   id: 'patterns-library-saved-shelf-presentation',
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress'] },

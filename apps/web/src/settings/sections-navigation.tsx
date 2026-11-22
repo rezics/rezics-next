@@ -1,7 +1,7 @@
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { ChevronDown } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
-import type { MouseEvent } from 'react';
 import type { SettingsOperationAdmission } from './ports/shell';
 
 export type SettingsSection = {
@@ -56,7 +56,7 @@ export function settingsSections({
   ];
 }
 
-/** A bounded anchor grid uses the existing section hashes for focused destinations. */
+/** Keep every section reachable before hydration and retain native section hash links. */
 export function SectionsNavigation({
   sections,
   admission = 'unknown',
@@ -68,20 +68,54 @@ export function SectionsNavigation({
   selected?: SettingsSection['id'];
   onSelect?: (id: SettingsSection['id'], event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const [hydrated, setHydrated] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+  useEffect(() => setHydrated(true), []);
+  useEffect(() => setExpanded(false), [selected]);
+  const current = sections.find((section) => section.id === selected);
   return (
     <nav aria-label={m.settings_sections_label()} className="min-w-0 lg:sticky lg:top-6 lg:self-start">
-      <p className="mb-3 font-medium lg:sr-only">{m.settings_sections_label()}</p>
-      <ul className="grid grid-cols-2 gap-2 text-sm lg:block lg:space-y-2 lg:border-l lg:border-border lg:pl-4">
+      <p className={cn('mb-2 text-sm font-medium text-muted-foreground', hydrated && 'hidden lg:block')}>
+        {m.settings_sections_label()}
+      </p>
+      {hydrated ? (
+        <button
+          ref={trigger}
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          onClick={() => setExpanded((value) => !value)}
+          className="flex min-h-11 w-full items-center gap-3 rounded-md border border-border bg-background px-3 py-2 text-start focus-visible:outline-2 focus-visible:outline-ring lg:hidden"
+        >
+          <span className="text-sm text-muted-foreground">{m.settings_sections_label()}</span>
+          <span className="ms-auto min-w-0 wrap-anywhere text-sm font-semibold">{current?.label}</span>
+          <ChevronDown aria-hidden="true" size={16} className={cn('shrink-0', expanded && 'rotate-180')} />
+        </button>
+      ) : null}
+      <ul
+        id={listId}
+        className={cn(
+          'mt-1 grid-cols-2 gap-1 text-sm lg:block lg:space-y-1',
+          hydrated && !expanded ? 'hidden' : 'grid',
+        )}
+      >
         {sections.map((section) => (
           <li key={section.id} className="min-w-0">
             <a
               href={`#${section.id}`}
               aria-current={selected === section.id ? 'location' : undefined}
-              onClick={(event) => onSelect?.(section.id, event)}
+              onClick={(event) => {
+                onSelect?.(section.id, event);
+                if (event.defaultPrevented && expanded && section.id === selected) {
+                  setExpanded(false);
+                  trigger.current?.focus();
+                }
+              }}
               className={cn(
-                buttonVariants({ variant: 'outline', size: 'sm' }),
-                'h-auto min-h-6 w-full min-w-0 flex-col items-start justify-center gap-1 whitespace-normal break-words text-start font-normal text-muted-foreground',
-                'aria-[current=location]:border-primary aria-[current=location]:bg-muted aria-[current=location]:font-semibold aria-[current=location]:text-primary',
+                'flex min-h-10 min-w-0 flex-col justify-center gap-0.5 rounded-md border-s-2 border-transparent px-3 py-2 text-start text-muted-foreground wrap-anywhere hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring',
+                'aria-[current=location]:border-primary aria-[current=location]:bg-muted aria-[current=location]:font-semibold aria-[current=location]:text-foreground',
               )}
             >
               <span>{section.label}</span>

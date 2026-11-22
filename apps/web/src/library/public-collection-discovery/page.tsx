@@ -174,7 +174,11 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
     state.status === 'ready' ? (
       <>
         {state.collections.length > 0 ? (
-          <ul role="list" data-slot="public-collection-discovery-results" className="space-y-3">
+          <ul
+            role="list"
+            data-slot="public-collection-discovery-results"
+            className="grid min-w-0 items-start gap-4 xl:grid-cols-2"
+          >
             {state.collections.map((collection) => (
               <li key={collection.id} className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6">
                 {renderCollection(collection, locale)}

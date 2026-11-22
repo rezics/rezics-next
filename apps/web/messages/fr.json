@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "Les informations du contexte sont indisponibles. Vérifiez à nouveau.",
   "ctxw_unknown": "Le résultat est inconnu. Réessayez la même demande sans la modifier, ou vérifiez l’état actuel.",
   "ctxw_views": "Vues des contextes",
+  "curation_access_heading": "Autorisation requise",
+  "curation_access_message": "Ce compte n’a pas accès à l’éditeur de présentation.",
   "curation_active": "Profil enregistré lors de la dernière inspection",
   "curation_actual_head": "Version enregistrée lors de l’inspection : {head}. Profil : {digest}",
   "curation_add": "Ajouter un modèle",

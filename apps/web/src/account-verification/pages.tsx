@@ -1,5 +1,8 @@
 import { useRef, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react';
+import { ChevronLeft } from 'lucide-react';
+import { PageHeading } from '../shell/page-heading';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import {
   ContentSection,
   ContentSectionBody,
@@ -29,11 +32,17 @@ export const reviewHref = () => `/${getLocale()}/review/account-verifications`;
 
 function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-      <VerificationLink className={linkClass} href={`/${getLocale()}/accounts`}>
-        {m.av_accounts()}
-      </VerificationLink>
-      <h1 className="text-3xl font-semibold tracking-tight text-balance">{title}</h1>
+    <section className="mx-auto w-full max-w-4xl min-w-0 space-y-5 pb-8 wrap-anywhere">
+      <header className="space-y-1 border-b border-border pb-4">
+        <VerificationLink
+          className={`${linkClass} inline-flex min-h-10 items-center gap-1 text-sm`}
+          href={`/${getLocale()}/accounts`}
+        >
+          <ChevronLeft aria-hidden="true" size={16} />
+          {m.av_accounts()}
+        </VerificationLink>
+        <PageHeading>{title}</PageHeading>
+      </header>
       {children}
     </section>
   );
@@ -99,10 +108,10 @@ function requestState(request: AgentVerificationRequest) {
   }[request.state]();
 }
 
-function Evidence({ request }: { request: AgentVerificationRequest }) {
+function Evidence({ request, showState = true }: { request: AgentVerificationRequest; showState?: boolean }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium">{requestState(request)}</p>
+      {showState && <p className="text-sm font-medium">{requestState(request)}</p>}
       <p className="max-w-prose leading-7 whitespace-pre-wrap break-words">{request.statement}</p>
       {request.links.length ? (
         <ul className="list-disc space-y-2 pl-5" aria-label={m.av_proof_links()}>
@@ -309,7 +318,7 @@ function ReviewPageViewContent({
                       {page.value.requests.map(({ request, account, subject }) => (
                         <ContentSection key={request.id}>
                           <ContentSectionHeader>
-                            <ContentSectionTitle>
+                            <ContentSectionTitle className="flex flex-wrap items-baseline justify-between gap-2">
                               {account ? (
                                 <h2 className="text-xl">
                                   <AccountReference account={account} />
@@ -317,14 +326,18 @@ function ReviewPageViewContent({
                               ) : (
                                 <AccountReference account={null} />
                               )}
+                              <Badge variant="secondary">{requestState(request)}</Badge>
                             </ContentSectionTitle>
                             {subject ? (
-                              <VerificationLink
-                                className={linkClass}
-                                href={subjectHref({ id: subject.id, label: subject.name }, getLocale()).href}
-                              >
-                                {subject.name}
-                              </VerificationLink>
+                              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                <span className="text-xs text-muted-foreground">{m.av_requested_subject()}</span>
+                                <VerificationLink
+                                  className={linkClass}
+                                  href={subjectHref({ id: subject.id, label: subject.name }, getLocale()).href}
+                                >
+                                  {subject.name}
+                                </VerificationLink>
+                              </div>
                             ) : (
                               <Tombstone shape="row" labels={{ unavailable: m.av_subject_unavailable() }} />
                             )}
@@ -337,7 +350,7 @@ function ReviewPageViewContent({
                               <summary className="cursor-pointer py-2 font-medium text-primary">
                                 {m.av_evidence()}
                               </summary>
-                              <Evidence request={request} />
+                              <Evidence request={request} showState={false} />
                               {request.state === 'pending' && actions.length > 0 && (
                                 <OperationForm
                                   key={`${viewerId}:${request.id}:${actions.join(',')}`}

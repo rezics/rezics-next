@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -25,9 +26,10 @@ type Props = {
   onRetry: () => void;
 };
 
-const actionClassName = 'h-auto min-h-7 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
 const compactActionClassName =
-  'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
 
 /** Shared directory region for the route and its Patterns/Pages stories. Listing never grants creation. */
 export function BoardDirectory({ request, contribution, result, previous, onNavigate, onRetry }: Props) {
@@ -78,12 +80,23 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
     previous.target === request.cursor &&
     sameBoardContribution(previous.contribution, contribution);
   const next = result.state === 'ready' && result.next !== request.cursor ? result.next : null;
+  const subjectContext = contribution ? m.board_directory_subject({ title: contribution.subjectTitle }) : undefined;
   return (
     <article className="min-w-0 w-full max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="min-w-0 space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{m.board_directory_global()}</p>
         <PageHeading>{m.board_directory_heading()}</PageHeading>
-        {contribution ? <p>{m.board_directory_subject({ title: contribution.subjectTitle })}</p> : null}
+        {subjectContext &&
+          (subjectContext.length > 120 ? (
+            <details key={subjectContext} className="group max-w-prose border-s-2 border-border ps-3">
+              <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2 rounded-sm py-1 text-sm leading-relaxed text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                <span className="line-clamp-2 group-open:line-clamp-none">{subjectContext}</span>
+                <ChevronDown aria-hidden="true" className="mt-1 size-4 shrink-0 group-open:rotate-180" />
+              </summary>
+            </details>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground">{subjectContext}</p>
+          ))}
       </header>
       <nav aria-label={m.board_directory_purpose()} className="flex flex-wrap items-center gap-2">
         {(['discussion', 'reviews'] as const).map((purpose) => {

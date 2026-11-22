@@ -518,13 +518,13 @@ export function screenshotFilename(job: Job): string {
   return `${job.id}.${job.locale}.${job.theme}${width}.png`;
 }
 
-function serve(directory: string): TemporarySite {
+export function serveStorybook(directory: string, port = 0): TemporarySite {
   let accepting = true;
   let activeRequests = 0;
   const idleWaiters: (() => void)[] = [];
   const server = Bun.serve({
     hostname: '127.0.0.1',
-    port: 0,
+    port,
     async fetch(request) {
       if (!accepting) return new Response(null, { status: 503 });
       activeRequests += 1;
@@ -1185,7 +1185,7 @@ function screenshotCommand(argv: readonly string[], relativeOut: string | undefi
 }
 
 const productionRuntime: ScreenshotRuntime = {
-  serve,
+  serve: serveStorybook,
   launch: () => chromium.launch(),
   async readStories(directory) {
     const indexFile = Bun.file(join(directory, 'index.json'));

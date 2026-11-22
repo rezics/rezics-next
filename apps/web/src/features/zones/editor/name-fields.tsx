@@ -64,7 +64,7 @@ export function ZoneNameFields({
       </p>
       <p className="text-sm text-muted-foreground">{m.zone_name_fallback({}, options)}</p>
       {!primaryLanguage ? <p className="text-sm text-muted-foreground">{m.zone_name_legacy({}, options)}</p> : null}
-      <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
+      <div className="grid min-w-0 gap-4 rounded-lg border border-border bg-background p-4 sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)]">
         <Field data-invalid={!!descriptions?.['zone-primary-language']}>
           <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
           <SharedSelect.Select
@@ -80,7 +80,7 @@ export function ZoneNameFields({
               id="zone-primary-language"
               aria-invalid={!!descriptions?.['zone-primary-language']}
               aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
-              className="w-full"
+              className="min-h-11 w-full"
             >
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
@@ -99,6 +99,7 @@ export function ZoneNameFields({
           <FieldLabel htmlFor={`zone-label-${primary}`}>{m.zone_name_primary({}, options)}</FieldLabel>
           <Input
             id={`zone-label-${primary}`}
+            className="min-h-11 text-base sm:text-sm"
             lang={primary}
             value={labels[primary] ?? ''}
             required
@@ -110,13 +111,16 @@ export function ZoneNameFields({
         </Field>
       </div>
       <details ref={translations} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
-        <summary className="cursor-pointer break-words font-medium">{m.zone_name_translations({}, options)}</summary>
+        <summary className="min-h-10 cursor-pointer content-center break-words font-medium focus-visible:outline-2 focus-visible:outline-ring">
+          {m.zone_name_translations({}, options)}
+        </summary>
         <p className="text-sm text-muted-foreground">{m.zone_name_translation_help({}, options)}</p>
         {UI_LOCALES.filter((language) => language !== primary && Object.hasOwn(labels, language)).map((language) => (
           <Field key={language} data-invalid={invalid(language)}>
             <FieldLabel htmlFor={`zone-label-${language}`}>{languageName(language)}</FieldLabel>
             <Input
               id={`zone-label-${language}`}
+              className="min-h-11 text-base sm:text-sm"
               lang={language}
               value={labels[language] ?? ''}
               aria-invalid={invalid(language)}

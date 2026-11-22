@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react';
 import { createPurchaseReaderOrigin, purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { Exposure } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -350,15 +351,26 @@ function OrderLifetime({
       primary={
         <>
           <div className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6">
-            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-              <SubjectCover data={order.subject} size="sm" priority />
-              <div className="min-w-0 space-y-4">
-                <p className="min-w-0 break-words text-lg font-medium">{order.subject.subject.title}</p>
+            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 sm:gap-5">
+              <SubjectCover data={order.subject} size="xs" priority />
+              <div className="min-w-0 space-y-2">
+                {order.subject.subject.title.length > 140 ? (
+                  <details className="group">
+                    <summary className="flex cursor-pointer items-start gap-2 rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+                      <span className="line-clamp-3 min-w-0 break-words group-open:line-clamp-none">
+                        {order.subject.subject.title}
+                      </span>
+                      <ChevronDown aria-hidden="true" className="mt-1 size-4 shrink-0 group-open:rotate-180" />
+                    </summary>
+                  </details>
+                ) : (
+                  <p className="min-w-0 break-words text-lg font-medium">{order.subject.subject.title}</p>
+                )}
                 {order.settlement === 'paid' && (
-                  <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2">
+                  <dl className="min-w-0 text-sm">
                     <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
                     <dd className="min-w-0 break-words">
-                      <time>
+                      <time dateTime={order.createdAt}>
                         {new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(
                           new Date(order.createdAt),
                         )}
@@ -366,34 +378,36 @@ function OrderLifetime({
                     </dd>
                   </dl>
                 )}
-                {order.settlement === 'paid' && (
-                  <h2 id="receipt-heading" className="text-xl font-semibold">
-                    {m.order_receipt()}
-                  </h2>
-                )}
-                <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2 [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
-                  <dt className="text-muted-foreground">{m.order_currency()}</dt>
-                  <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
-                  <dt className="text-muted-foreground">
-                    {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
-                  </dt>
-                  <dd>{price || m.statements_amount_unavailable()}</dd>
-                  {order.settlement === 'paid' && (
-                    <>
-                      <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
-                      <dd>{total || m.order_paid_total_unavailable()}</dd>
-                      <dt className="text-muted-foreground">{m.order_presentment_total()}</dt>
-                      <dd>
-                        {customerTotal && presentment
-                          ? `${customerTotal} ${presentment.currency.toUpperCase()}`
-                          : m.order_presentment_unavailable()}
-                      </dd>
-                      <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
-                      <dd>{tax || m.order_tax_unavailable()}</dd>
-                    </>
-                  )}
-                </dl>
               </div>
+            </div>
+            <div className="min-w-0 space-y-4 border-t pt-4">
+              {order.settlement === 'paid' && (
+                <h2 id="receipt-heading" className="text-xl font-semibold">
+                  {m.order_receipt()}
+                </h2>
+              )}
+              <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2 [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
+                <dt className="text-muted-foreground">{m.order_currency()}</dt>
+                <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
+                <dt className="text-muted-foreground">
+                  {money?.taxBehavior === 'exclusive' ? m.order_recorded_price_exclusive() : m.order_recorded_price()}
+                </dt>
+                <dd>{price || m.statements_amount_unavailable()}</dd>
+                {order.settlement === 'paid' && (
+                  <>
+                    <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
+                    <dd>{total || m.order_paid_total_unavailable()}</dd>
+                    <dt className="text-muted-foreground">{m.order_presentment_total()}</dt>
+                    <dd>
+                      {customerTotal && presentment
+                        ? `${customerTotal} ${presentment.currency.toUpperCase()}`
+                        : m.order_presentment_unavailable()}
+                    </dd>
+                    <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
+                    <dd>{tax || m.order_tax_unavailable()}</dd>
+                  </>
+                )}
+              </dl>
             </div>
           </div>
           {confirming && (

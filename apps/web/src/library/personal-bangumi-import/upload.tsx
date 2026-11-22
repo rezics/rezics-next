@@ -1,6 +1,6 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useId, useRef, useState } from 'react';
-import { ImportDetails } from '../personal-list-import/presentation';
+import { ImportDetails, ImportFileInput } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { BANGUMI_FORMAT, BANGUMI_ROWS, BANGUMI_UPLOAD_BYTES } from './contract';
 import { BangumiAction } from './controls';
@@ -73,15 +73,14 @@ export function BangumiUploadForm({
         <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_bangumi_file_label()}
         </FieldLabel>
-        <Input
+        <ImportFileInput
           ref={input}
           id={inputId}
-          type="file"
+
           onChange={edit}
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}
-          className="w-full max-w-full file:me-3"
         />
       </Field>
       <BangumiAction type="submit" disabled={busy || disabled} aria-busy={busy}>

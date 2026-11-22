@@ -1,6 +1,7 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
@@ -27,83 +28,84 @@ export function ManualModerationScope({
   };
   const control = 'h-auto min-h-7 w-full max-w-full whitespace-normal break-words';
   return (
-    <section aria-labelledby={`${id}-heading`} className="min-w-0 space-y-4">
-      <div className="space-y-2">
-        <h2 id={`${id}-heading`} className="text-lg font-semibold">
-          {m.moderation_manual_heading()}
-        </h2>
+    <details className="group min-w-0">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm text-base font-semibold focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        {m.moderation_manual_heading()}
+        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-open:rotate-180" />
+      </summary>
+      <div className="space-y-4 pt-2">
         <p id={`${id}-hint`} className="text-sm leading-relaxed text-muted-foreground">
           {m.moderation_manual_hint()}
         </p>
-      </div>
-      <form
-        className="grid min-w-0 gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const boardId = board.trim();
-          if (current() && boardId) onSearch(workbenchSearch({ ...discovery, board: boardId, queue }));
-        }}
-      >
-        <div className="min-w-0 space-y-1">
-          <label htmlFor={`${id}-board`} className="block text-sm">
-            {m.moderation_manual_board()}
-          </label>
-          <Input
-            id={`${id}-board`}
-            name="board"
-            required
-            maxLength={128}
-            value={board}
-            onChange={(event) => setBoard(event.target.value)}
-            aria-describedby={`${id}-hint`}
-            className="min-w-0 w-full max-w-full"
-            autoCapitalize="none"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-        <Field className="min-w-0 space-y-1">
-          <FieldLabel htmlFor={`${id}-queue`} className="block text-sm">
-            {m.moderation_workbench_heading()}
-          </FieldLabel>
-          <Select
-            items={[
-              { value: 'reports', label: m.moderation_workbench_queue_reports() },
-              { value: 'appeals', label: m.moderation_workbench_queue_appeals() },
-              { value: 'resolved', label: m.moderation_workbench_queue_resolved() },
-            ]}
-            name="queue"
-            value={queue}
-            onValueChange={(value) => setQueue(value!)}
-          >
-            <SelectTrigger id={`${id}-queue`} className="w-full min-w-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="reports">{m.moderation_workbench_queue_reports()}</SelectItem>
-                <SelectItem value="appeals">{m.moderation_workbench_queue_appeals()}</SelectItem>
-                <SelectItem value="resolved">{m.moderation_workbench_queue_resolved()}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Button type="submit" className={control}>
-          {m.moderation_manual_open()}
-        </Button>
-      </form>
-      <div className="border-t pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          className={control}
-          onClick={() => {
-            if (current()) onSearch(workbenchSearch({ ...discovery, scope: 'catalogue', queue: 'reports' }));
+        <form
+          className="grid min-w-0 gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const boardId = board.trim();
+            if (current() && boardId) onSearch(workbenchSearch({ ...discovery, board: boardId, queue }));
           }}
         >
-          {m.moderation_manual_catalogue()}
-        </Button>
+          <div className="min-w-0 space-y-1">
+            <label htmlFor={`${id}-board`} className="block text-sm">
+              {m.moderation_manual_board()}
+            </label>
+            <Input
+              id={`${id}-board`}
+              name="board"
+              required
+              maxLength={128}
+              value={board}
+              onChange={(event) => setBoard(event.target.value)}
+              aria-describedby={`${id}-hint`}
+              className="min-w-0 w-full max-w-full"
+              autoCapitalize="none"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <Field className="min-w-0 space-y-1">
+            <FieldLabel htmlFor={`${id}-queue`} className="block text-sm">
+              {m.moderation_workbench_heading()}
+            </FieldLabel>
+            <Select
+              items={[
+                { value: 'reports', label: m.moderation_workbench_queue_reports() },
+                { value: 'appeals', label: m.moderation_workbench_queue_appeals() },
+                { value: 'resolved', label: m.moderation_workbench_queue_resolved() },
+              ]}
+              name="queue"
+              value={queue}
+              onValueChange={(value) => setQueue(value!)}
+            >
+              <SelectTrigger id={`${id}-queue`} className="w-full min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="reports">{m.moderation_workbench_queue_reports()}</SelectItem>
+                  <SelectItem value="appeals">{m.moderation_workbench_queue_appeals()}</SelectItem>
+                  <SelectItem value="resolved">{m.moderation_workbench_queue_resolved()}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button type="submit" className={control}>
+            {m.moderation_manual_open()}
+          </Button>
+        </form>
+        <div className="border-t pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            onClick={() => {
+              if (current()) onSearch(workbenchSearch({ ...discovery, scope: 'catalogue', queue: 'reports' }));
+            }}
+          >
+            {m.moderation_manual_catalogue()}
+          </Button>
+        </div>
       </div>
-    </section>
+    </details>
   );
 }

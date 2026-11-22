@@ -1,5 +1,5 @@
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import { requestForStory } from './react-start';
+import { requestForStory, storyAccountId } from './react-start';
 import { storyKernelOrigin as kernelOrigin } from './kernel-origin';
 const runtime = globalThis as typeof globalThis & { __rezicsStoryFetchInstalled?: boolean };
 
@@ -37,17 +37,17 @@ if (typeof window !== 'undefined' && !runtime.__rezicsStoryFetchInstalled) {
 }
 
 const session = {
-  signedIn: async () => ({ signedIn: true, subject: 'story-viewer', csrfToken: 'story-csrf-token' }),
+  signedIn: async () => ({ signedIn: true, subject: storyAccountId(), csrfToken: 'story-csrf-token' }),
   credentialIfFresh: async () => ({
     status: 'active' as const,
     accessToken: 'recorded-story-token',
-    subject: 'story-viewer',
+    subject: storyAccountId(),
     csrfToken: 'story-csrf-token',
   }),
   credential: async () => ({
     status: 'active' as const,
     accessToken: 'recorded-story-token',
-    subject: 'story-viewer',
+    subject: storyAccountId(),
     csrfToken: 'story-csrf-token',
   }),
 };

@@ -29,7 +29,13 @@ const displayCurrencies = new Set([
 ]);
 
 /** Exact signed recorded money. Intl chooses symbols, grouping and digits, never the unit or divisor. */
-export function formatMinorAmount(locale: string, currency: string, minor: number, unit?: unknown): string | null {
+export function formatMinorAmount(
+  locale: string,
+  currency: string,
+  minor: number,
+  unit?: unknown,
+  presentation: 'evidence' | 'summary' = 'evidence',
+): string | null {
   if (!Number.isSafeInteger(minor) || typeof currency !== 'string' || !/^[a-z]{3}$/i.test(currency)) return null;
   const messageOptions = { locale: locale as never };
   const code = currency.toUpperCase();
@@ -67,6 +73,7 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
       .formatToParts(signedWhole)
       .map((part) => (part.type === 'fraction' ? localizedFraction : part.value))
       .join('');
+    if (presentation === 'summary') return display;
     return m.money_formatted_recorded_minor(
       {
         display,

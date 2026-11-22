@@ -5,6 +5,8 @@ import { InboxAmbientProvider } from '../inbox/adapters/ambient-view.tsx';
 import { SettingsAmbientProvider } from '../settings/adapters/ambient-view.tsx';
 import { createPerformanceAmbient } from '../session/performance-ambient';
 import { RecentSearchBinding } from '../session/recent-search-binding';
+import { libraryApplication } from '../session/library-application';
+import { LibraryApplicationContext } from '../library/application';
 import { PageVisitBinding } from '../subject/page-visit-binding';
 
 function StoryQueryClient({ children }: { children: ReactNode }) {
@@ -19,7 +21,9 @@ function StoryPerformanceAmbient({ children }: { children: ReactNode }) {
     <SettingsAmbientProvider ambient={ambient.settings}>
       <InboxAmbientProvider ambient={ambient.inbox}>
         <RecentSearchBinding>
-          <PageVisitBinding>{children}</PageVisitBinding>
+          <LibraryApplicationContext value={libraryApplication}>
+            <PageVisitBinding>{children}</PageVisitBinding>
+          </LibraryApplicationContext>
         </RecentSearchBinding>
       </InboxAmbientProvider>
     </SettingsAmbientProvider>

@@ -21,22 +21,22 @@ export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[
     credit: m.thread_cover_credit(),
     via: m.thread_cover_via(),
   };
-  return (
-    <ul aria-label={m.thread_subjects_heading()} className="min-w-0 max-w-full">
+  const list = (
+    <ul aria-label={m.thread_subjects_heading()} className="grid min-w-0 max-w-full gap-x-4 sm:grid-cols-2">
       {titled.map((subject) => (
         <ContentItem
           key={subject.id}
           title={subject.title}
           href={subject.href.href}
           headingLevel={2}
-          className="min-h-14 max-w-full [overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:line-clamp-none"
+          className="min-h-14 max-w-full items-center py-2 sm:py-2 [overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:line-clamp-none"
           visual={
             <Cover
               cover={subject.cover}
               decorative
               labels={labels}
               ratio={ratio}
-              size="sm"
+              size="xs"
               src={coverSrc}
               subject={subject}
             />
@@ -44,5 +44,15 @@ export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[
         />
       ))}
     </ul>
+  );
+  return titled.length <= 4 ? (
+    list
+  ) : (
+    <details className="min-w-0 rounded-lg border border-border px-3">
+      <summary className="cursor-pointer py-3 text-sm font-medium focus-visible:outline-ring">
+        {m.thread_subjects_heading()} ({titled.length})
+      </summary>
+      {list}
+    </details>
   );
 }

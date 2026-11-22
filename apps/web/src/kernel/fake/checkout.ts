@@ -2,6 +2,8 @@ import type { FakeRoute } from '../fake-modules.ts';
 import type { KernelRecording } from '../fake.ts';
 import { fixedEditionTerms, mappedEntitlement } from './entitlements';
 import pending from '../recorded/order-pending.json';
+import paid from '../recorded/order-paid.json';
+import failed from '../recorded/order-failed.json';
 import type { AcquisitionProblem } from '../../checkout/offer-recovery';
 import type { OrderMoney } from '../../checkout/order';
 
@@ -55,6 +57,11 @@ export function setMappedCheckoutStory(enabled: boolean) {
   mapped = enabled;
 }
 
+export function prepareMappedOffer() {
+  setMappedCheckoutStory(true);
+  return () => setMappedCheckoutStory(false);
+}
+
 const offerId = /^\/v1\/offers\/([^/]+)$/;
 const orderId = /^\/v1\/orders\/([^/]+)$/;
 
@@ -80,6 +87,26 @@ function localizedSubject(
 
 /** Story offers receive the same localized subject label as the subject read for this demo subject. */
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: /^\/v1\/orders$/,
+    story: ({ request }) => {
+      if (!receiptMoney || !request.headers.has('authorization')) return;
+      if (new URL(request.url).searchParams.has('cursor')) return { status: 409, code: 'stale_cursor' };
+      return {
+        status: 200,
+        orders: [failed, paid, pending].map(({ order }) => ({
+          ...order,
+          ...receiptStoryMoney,
+          offerRevision: 1,
+          contentEdition: null,
+          recordedCharge: order.settlement === 'paid' ? receiptStoryMoney.recordedCharge : null,
+          amountTaxMinor: order.settlement === 'paid' ? receiptStoryMoney.amountTaxMinor : null,
+        })),
+        next: null,
+      };
+    },
+  },
   {
     method: 'GET',
     path: offerId,

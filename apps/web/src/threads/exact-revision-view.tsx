@@ -56,20 +56,13 @@ export function ExactRevisionView({
             className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           />
         ) : fallbackHref ? (
-          <div className="min-w-0 space-y-2">
-            <p className="text-sm text-muted-foreground">{m.revision_return_unavailable()}</p>
-            <a
-              href={fallbackHref}
-              className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.exact_revision_back()}
-            </a>
-          </div>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.revision_return_unavailable()}
-          </p>
-        )}
+          <a
+            href={fallbackHref}
+            className="inline-flex max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.exact_revision_back()}
+          </a>
+        ) : null}
         <PageHeading>{m.exact_revision_heading()}</PageHeading>
         <p className="text-sm text-muted-foreground">{m.exact_revision_read_only()}</p>
       </header>
@@ -154,6 +147,11 @@ export function ExactRevisionView({
           </Collapsible>
         </section>
       ) : null}
+      {!historyReturn && (
+        <p role="status" className="border-t pt-3 text-sm text-muted-foreground">
+          {m.revision_return_unavailable()}
+        </p>
+      )}
     </ContentItemFrame>
   );
 }

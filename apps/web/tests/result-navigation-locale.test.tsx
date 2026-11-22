@@ -42,7 +42,7 @@ test('search controls use their supplied locale for interface copy and preserve 
     expect(sortHtml).toContain(m.rating_public_ordering({}, messageLocale));
     expect(sortHtml).toContain(m.search_sort_submit_button({}, messageLocale));
     expect(sortHtml).toContain('action="/zh-Hant/search"');
-    expect(sortHtml).toContain(`for="${sortHtml.match(/<select id="([^"]+)"/)![1]}"`);
+    expect(sortHtml).toContain(`for="${sortHtml.match(/<select\b[^>]*\bid="([^"]+)"/)![1]}"`);
     expect(
       [...sortHtml.matchAll(/<input\b([^>]*type="hidden"[^>]*)>/g)].map(([, attrs]) => [
         attrs!.match(/\bname="([^"]+)"/)![1],
@@ -72,11 +72,14 @@ test('search controls use their supplied locale for interface copy and preserve 
       }),
     );
     expect(navigationHtml).toContain(`aria-label="${m.search_result_kinds({}, messageLocale)}"`);
-    expect(navigationHtml).toContain(
-      `<span lang="${locale}">${m.search_kind_navigation_all({}, messageLocale)}</span>`,
+    const localizedLabels = [...navigationHtml.matchAll(/<span\b[^>]*\blang="([^"]+)"[^>]*>([^<]*)<\/span>/g)].map(
+      ([, language, label]) => [language, label],
     );
-    expect(navigationHtml).toContain('<span lang="en">Book</span>');
-    expect(navigationHtml).toContain('<span lang="en">Manga</span>');
+    expect(localizedLabels).toEqual([
+      [locale, m.search_kind_navigation_all({}, messageLocale)],
+      ['en', 'Book'],
+      ['en', 'Manga'],
+    ]);
     expect(navigationHtml).toContain(m.search_kind_navigation_selected({ kinds: 'Book, Manga' }, messageLocale));
     expect(navigationHtml).toContain(m.search_kind_navigation_more({}, messageLocale));
     expect(

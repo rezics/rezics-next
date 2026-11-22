@@ -83,8 +83,8 @@ const appearances = () => [
 const series = subject(anime.id, 'schema:TVSeries', anime.label, [
   ...productionCredits(),
   ...appearances(),
-  animeStatement('schema:datePublished', date('2023-01-01', 9)),
-  animeStatement('schema:startDate', date('2023-04-01', 10)),
+  animeStatement('schema:datePublished', date('2023-00-00', 9)),
+  animeStatement('schema:startDate', date('2023-04-00', 10)),
   animeStatement('schema:endDate', date('2025-09-27')),
   animeStatement('schema:inLanguage', 'ja'),
   animeStatement('schema:numberOfEpisodes', quantity(28)),
@@ -117,7 +117,7 @@ series.sourceRecords = [
 ];
 
 const seasonSpecs = [
-  ['Season One · The Hill of Small Lights', '1', '2023-04-01', 10, 22],
+  ['Season One · The Hill of Small Lights', '1', '2023-04-00', 10, 22],
   ['Season Two · Letters Across the Sky', '2', '2025-07-05', 11, 6],
   ['Season Three · An Unwritten Sky', '3', null, null, null],
 ] as const;
@@ -193,7 +193,7 @@ export const animeEpisodes = episodeTitles.map((title, index) => {
 });
 const special = subject(animeSpecial.id, 'schema:Movie', animeSpecial.label, [
   animeStatement('rezics:sideStoryOf', anime.id),
-  animeStatement('schema:datePublished', date('2024-08-01', 10)),
+  animeStatement('schema:datePublished', date('2024-08-00', 10)),
   animeStatement('schema:inLanguage', 'ja'),
   ...productionCredits(),
 ]);

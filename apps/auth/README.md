@@ -1418,8 +1418,9 @@ See [Recovery](#recovery) for shared advice and bounds.
 
 ## Screenshots
 
-Run `bun run screenshots` to capture all eight page states in the eight launch locales and both themes. Desktop images
-use a 1280×900 viewport; login also has one 390×844 light-theme phone image per locale. Pass `--out <directory>` to choose a temporary output directory inside the worktree.
+Run `bun run screenshots` to capture ten page states in the eight launch locales, in light and dark modes, at
+1280×900 and 390×844. The sign-in, credential-refusal and signup captures use a signed-out visitor. Other states
+use the fixture reader. Pass `--out <directory>` to choose a temporary output directory inside the worktree.
 
 ## Development
 

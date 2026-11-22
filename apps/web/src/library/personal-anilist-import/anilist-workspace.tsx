@@ -23,8 +23,8 @@ export function AniListWorkspace({
   children: ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
-      <header className="space-y-5 rounded-xl border bg-card p-4 sm:p-6">
+    <main className="mx-auto w-full min-w-0 max-w-4xl space-y-5 px-4 py-5 sm:py-6">
+      <header className="min-w-0 space-y-4">
         <PageHeading>{m.library_anilist_title()}</PageHeading>
         <div ref={focusRef} tabIndex={-1} className="space-y-1 focus-visible:outline-2 focus-visible:outline-ring">
           <ImportJourney stage={stage} />

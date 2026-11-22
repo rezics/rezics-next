@@ -37,6 +37,7 @@ export function homeFeedItemPresentation(
       ? feedConversationActivity(summary)
       : null;
   const kind = feedCardKind(item);
+  const visual = FeedCardVisual({ item, title, href, locale });
   const parentContext = 'parentContext' in summary ? summary.parentContext : undefined;
   const parent = parentContext?.kind === 'reply' ? parentContext.parent : undefined;
   const parentKey = [
@@ -54,8 +55,14 @@ export function homeFeedItemPresentation(
     ...(href === undefined ? {} : { href }),
     title,
     ...('label' in summary && summary.label?.language ? { titleLang: summary.label.language } : {}),
-    className: '[overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:break-words',
-    visual: FeedCardVisual({ item, title, href, locale }),
+    railPlacement: 'below',
+    className: cn(
+      '[overflow-wrap:anywhere] py-4 sm:py-5 [&_[data-content-item-slot=title]]:text-xl [&_[data-content-item-slot=title]]:leading-tight',
+      'sm:[&_[data-content-item-slot=title]]:text-2xl',
+      visual &&
+        'max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-y-2 max-sm:[&>div:last-child]:contents max-sm:[&>div:last-child>div+div]:col-span-full max-sm:[&>div:last-child>div+div]:mt-0',
+    ),
+    visual,
     context: <FeedCardContext item={item} kind={kind} locale={locale} />,
     metadata: (
       <>

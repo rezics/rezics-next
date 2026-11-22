@@ -1,3 +1,4 @@
+import { LibraryPageStatus } from './page-status';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from './application';
@@ -53,18 +54,29 @@ export function LoansCurrent({
   if (allowed) shown.current = origin.id;
   if (!subject || (!allowed && shown.current !== origin.id))
     return (
-      <p role="status">
-        {session.state === 'signed-out'
-          ? m.library_sign_in()
-          : !allowed
-            ? m.library_sort_denied()
-            : m.library_sort_preparing()}
-      </p>
+      <LibraryPageStatus locale={locale} title={m.library_loans_heading()}>
+        <p role="status">
+          {session.state === 'signed-out'
+            ? m.library_sign_in()
+            : !allowed
+              ? m.library_sort_denied()
+              : m.library_sort_preparing()}
+        </p>
+      </LibraryPageStatus>
     );
-  if (address.issue) return <p role="alert">{m.library_loans_invalid()}</p>;
+  if (address.issue)
+    return (
+      <LibraryPageStatus locale={locale} title={m.library_loans_heading()}>
+        <p role="alert">{m.library_loans_invalid()}</p>
+      </LibraryPageStatus>
+    );
   return (
     <>
-      {!allowed ? <p role="status">{m.library_sort_preparing()}</p> : null}
+      {!allowed ? (
+        <LibraryPageStatus locale={locale} title={m.library_loans_heading()}>
+          <p role="status">{m.library_sort_preparing()}</p>
+        </LibraryPageStatus>
+      ) : null}
       <div hidden={!allowed}>
         <CurrentLoansRead
           key={origin.id}
@@ -146,7 +158,7 @@ function CurrentLoansRead({
   const operand: LoansOrigin | undefined = guard ? { isCurrent: guard.isCurrent, headers: guard.headers } : undefined;
   if (!page || (hydrated && !guard))
     return (
-      <div>
+      <LibraryPageStatus locale={address.locale} title={m.library_loans_heading()}>
         <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
         {hydrated && !query.isFetching ? (
           <Button
@@ -160,7 +172,7 @@ function CurrentLoansRead({
             {m.subject_view_retry()}
           </Button>
         ) : null}
-      </div>
+      </LibraryPageStatus>
     );
   return (
     <LoansPage

@@ -156,17 +156,16 @@ export function AccountProfileView({
   if (page.state !== 'ready')
     return (
       <Alert>
-        <AlertTitle>{m.account_profile_title()}</AlertTitle>
+        <AlertTitle>
+          {page.state === 'denied'
+            ? m.account_profile_denied()
+            : page.state === 'missing'
+              ? m.account_profile_missing()
+              : page.state === 'signed-out'
+                ? m.account_profile_signed_out()
+                : m.account_profile_unavailable()}
+        </AlertTitle>
         <AlertDescription>
-          <p role="alert">
-            {page.state === 'denied'
-              ? m.account_profile_denied()
-              : page.state === 'missing'
-                ? m.account_profile_missing()
-                : page.state === 'signed-out'
-                  ? m.account_profile_signed_out()
-                  : m.account_profile_unavailable()}
-          </p>
           {state.attempt ? (
             <ProfileFeedback
               editor={editor}
@@ -183,6 +182,7 @@ export function AccountProfileView({
               ) : null}
               <Button
                 variant="outline"
+                className="h-auto min-h-11 max-w-full justify-self-start whitespace-normal"
                 disabled={state.phase === 'reloading' || readWaiting}
                 onClick={() => void editor.reload()}
               >

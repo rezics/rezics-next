@@ -45,31 +45,28 @@ export function OfferPurchaseWorkspace({
       className="mx-auto max-w-6xl min-w-0 space-y-6 text-foreground sm:space-y-8"
       data-idempotency-key={idempotencyKey}
     >
-      <div className="grid min-w-0 grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)] lg:gap-12">
-        <div className="min-w-0 space-y-7 sm:space-y-9">
-          <div className="min-w-0 space-y-3">
-            {productIdentity}
-            <Button
-              type="button"
-              variant="link"
-              className="h-auto px-0 text-sm"
-              aria-haspopup="dialog"
-              aria-expanded={fullTitlesOpen}
-              aria-controls={panelId}
-              onClick={(event) => {
-                openerRef.current = event.currentTarget;
-                onFullTitlesOpenChange(true);
-              }}
-            >
-              {m.offer_full_titles()}
-            </Button>
-          </div>
-          <div className="min-w-0">{benefitReview}</div>
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)] lg:gap-x-12 lg:gap-y-9">
+        <div className="min-w-0 space-y-3">
+          {productIdentity}
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto px-0 text-sm"
+            aria-haspopup="dialog"
+            aria-expanded={fullTitlesOpen}
+            aria-controls={panelId}
+            onClick={(event) => {
+              openerRef.current = event.currentTarget;
+              onFullTitlesOpenChange(true);
+            }}
+          >
+            {m.offer_full_titles()}
+          </Button>
         </div>
 
         <section
           aria-labelledby={`${panelId}-price`}
-          className="min-w-0 space-y-5 rounded-xl border bg-card p-5 shadow-sm sm:p-7"
+          className="min-w-0 space-y-5 rounded-xl border bg-card p-5 shadow-sm sm:p-7 lg:col-start-2 lg:row-span-2 lg:row-start-1"
         >
           <h2
             id={`${panelId}-price`}
@@ -81,6 +78,7 @@ export function OfferPurchaseWorkspace({
           </h2>
           {priceDecision}
         </section>
+        {benefitReview && <div className="min-w-0 lg:col-start-1">{benefitReview}</div>}
       </div>
 
       <dialog

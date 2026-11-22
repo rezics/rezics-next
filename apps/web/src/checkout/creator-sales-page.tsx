@@ -101,7 +101,9 @@ export function CreatorSalesPage({
           {m.creator_offers_heading()}
         </a>
       </nav>
-      <p className="max-w-prose text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
+      {page.kind !== 'ready' && (
+        <p className="max-w-prose text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
+      )}
     </>
   );
   const browsing =
@@ -213,6 +215,7 @@ export function CreatorSalesPage({
       <details className="min-w-0 rounded-xl border p-4 sm:p-5">
         <summary className="cursor-pointer font-medium">{m.creator_review_page_context()}</summary>
         <div className="min-w-0 space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
           <p className="text-sm text-muted-foreground">{m.creator_review_page_context_hint()}</p>
           <dl className="min-w-0 space-y-4 text-sm">
             <div className="space-y-1">

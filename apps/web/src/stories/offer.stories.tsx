@@ -10,14 +10,9 @@ import {
   offerDelistedReady,
   offerPageReady,
 } from './page';
-import { acquisitionProblems, setMappedCheckoutStory } from '../kernel/fake/checkout';
+import { acquisitionProblems, prepareMappedOffer } from '../kernel/fake/checkout';
 import { localizeHref } from '../paraglide/runtime.js';
 import longOffer from '../kernel/recorded/offer-cjk.json';
-
-function currentMappedOffer() {
-  setMappedCheckoutStory(true);
-  return () => setMappedCheckoutStory(false);
-}
 
 const meta = {
   title: 'Commerce/Offers/Offer',
@@ -38,17 +33,18 @@ export const SignedOut: Story = {
 };
 export const LongCjkTitle: Story = {
   name: 'Long CJK Title',
-  beforeEach: currentMappedOffer,
+  beforeEach: prepareMappedOffer,
   play: async (context) => {
     await offerCjkReady(context);
     const view = within(await within(context.canvasElement).findByRole('main'));
-    const summary = view.getByText(m.offer_full_titles());
-    summary.focus();
+    const opener = view.getByRole('button', { name: m.offer_full_titles() });
+    opener.focus();
     await userEvent.keyboard('{Enter}');
-    const titles = summary.closest('details')!;
-    await expect(await within(titles).findByText(longOffer.offer.title, { exact: false })).toBeVisible();
+    const titles = await view.findByRole('dialog', { name: m.offer_full_titles() });
+    await expect(within(titles).getByText(longOffer.offer.title, { exact: false })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(opener).toHaveFocus());
     await expect(view.getByRole('button', { name: m.offer_buy() })).toBeEnabled();
-    await userEvent.keyboard('{Enter}');
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths['offer-cjk']} />,
 };
@@ -86,7 +82,7 @@ export const ExposureClosed: Story = exposureStory(pagePaths.offer, true);
 
 export const TermsChanged: Story = {
   name: 'Terms changed after review',
-  beforeEach: currentMappedOffer,
+  beforeEach: prepareMappedOffer,
   play: async ({ canvasElement }) => {
     const originalFetch = window.fetch;
     let starts = 0;
@@ -117,10 +113,7 @@ export const TermsChanged: Story = {
 
 export const MappedFixedEdition: Story = {
   name: 'Buyer, fixed edition promise',
-  beforeEach() {
-    setMappedCheckoutStory(true);
-    return () => setMappedCheckoutStory(false);
-  },
+  beforeEach: prepareMappedOffer,
   render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -140,7 +133,7 @@ export const MappedFixedEdition: Story = {
 
 function recoveryStory(problem: (typeof acquisitionProblems)[keyof typeof acquisitionProblems]): Story {
   return {
-    beforeEach: currentMappedOffer,
+    beforeEach: prepareMappedOffer,
     render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
     async play({ canvasElement, step }) {
       const originalFetch = window.fetch;

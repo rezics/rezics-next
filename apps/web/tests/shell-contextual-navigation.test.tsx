@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
-import { act, createContext, StrictMode, useContext } from 'react';
+import { act, createContext, StrictMode, useContext, useState } from 'react';
 import { Window } from 'happy-dom';
 import type { Root } from 'react-dom/client';
 
@@ -37,7 +37,13 @@ afterAll(async () => {
   await window.happyDOM.close();
 });
 
-type State = { label: string; admitted: boolean; surface: 'desktop' | 'phone' | 'closed'; parent: boolean };
+type State = {
+  label: string;
+  admitted: boolean;
+  surface: 'desktop' | 'phone' | 'closed';
+  parent: boolean;
+  documentContents?: boolean;
+};
 const initial: State = { label: 'Current draft', admitted: true, surface: 'desktop', parent: false };
 const State = createContext(initial);
 const ReaderLabel = createContext('Missing reader context');
@@ -45,14 +51,16 @@ function Contents() {
   return <a href="#chapter">{useContext(ReaderLabel)}</a>;
 }
 function Workspace() {
-  const { label, admitted } = useContext(State);
+  const { label, admitted, documentContents } = useContext(State);
+  const [outlet, setOutlet] = useState<HTMLDivElement | null>(null);
   return (
     <ReaderLabel value={`${label} chapter`}>
       {admitted && (
-        <ShellContextNavigation label={label}>
+        <ShellContextNavigation label={label} documentOutlet={documentContents ? outlet : null}>
           <Contents />
         </ShellContextNavigation>
       )}
+      {documentContents && <div data-document-contents ref={setOutlet} />}
       <textarea aria-label="Editor" defaultValue="Unsaved draft" />
     </ReaderLabel>
   );
@@ -179,4 +187,17 @@ test('nested route ownership survives effect replay and host changes without rem
   expect(region()?.textContent).toBe('Parent workspaceParent chapter');
   await render({ parent: false });
   expect(region()).toBeNull();
+});
+
+test('a contents page exposes one outline in the document with the phone menu closed, then returns it to the shell', async () => {
+  const { render } = await mount();
+  await render({ surface: 'closed', documentContents: true });
+  const link = document.querySelector('[data-document-contents] a');
+  expect(link?.textContent).toBe('Current draft chapter');
+  await render({ surface: 'phone', documentContents: true });
+  expect(document.querySelector('[data-document-contents] a')).toBe(link);
+  expect(document.querySelector('nav a')).toBeNull();
+  await render({ surface: 'phone', documentContents: false });
+  expect(region()?.querySelector('a')?.textContent).toBe('Current draft chapter');
+  expect(document.querySelectorAll('a[href="#chapter"]')).toHaveLength(1);
 });

@@ -97,7 +97,9 @@ function Visits({ session = 'signed-in' }: { session?: 'signed-in' | 'signed-out
     <main className="mx-auto min-w-0 max-w-5xl space-y-6 p-4">
       {[0, 1].map((index) => (
         <section key={index} data-visit={index} dir={index === 0 ? 'rtl' : 'ltr'} className="min-w-0 space-y-3">
-          <h2 className="font-semibold">{index === 0 ? subject.subject.labels.en : longBoard}</h2>
+          <h2 className="font-semibold [overflow-wrap:anywhere]">
+            {index === 0 ? subject.subject.labels.en : longBoard}
+          </h2>
           <WriteReviewAction
             subjectId={subject.subject.id}
             subjectTitle={index === 0 ? subject.subject.labels.en : longBoard}

@@ -253,6 +253,30 @@ async function mountCurrent(page: RulePage) {
 }
 
 describe('Private rule editor data and asynchronous work stay with the originating current viewer and Collection', () => {
+  test('a withdrawn form keeps its feature heading without disclosing editable fields or links', async () => {
+    const pages: Extract<RulePage, { state: 'new' | 'ready' }>[] = [
+      ready(),
+      { state: 'new', viewerId: 'alice', intent: crypto.randomUUID(), choices: unavailableRuleChoices() },
+    ];
+    for (const page of pages) {
+      const ui = await mount({
+        page,
+        collectionId: page.state === 'ready' ? page.id : null,
+        isCurrent: () => false,
+        isOwnerCurrent: () => true,
+      });
+      try {
+        expect(ui.host.querySelector('h1')?.textContent).toBe(
+          page.state === 'new' ? m.library_rule_new() : m.library_rule_edit(),
+        );
+        expect(ui.host.querySelector('[role="alert"]')?.textContent).toContain(m.library_rule_denied());
+        expect(ui.host.querySelector('form, input, a')).toBeNull();
+      } finally {
+        await ui.close();
+      }
+    }
+  });
+
   test('a foreign or retired page stays private; old save success and finally cannot navigate or unlock the replacement viewer', async () => {
     const old = deferred<CollectionWriteResult>();
     const current = deferred<CollectionWriteResult>();

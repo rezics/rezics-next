@@ -7,7 +7,6 @@ import paid from '../src/kernel/recorded/order-paid.json';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
-// UNRUN: composed assertions over the actual shared UI; native/browser/visual acceptance remains deferred.
 test('Orders use shared items with captured historical money and distinct settlement and entitlement meanings', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -87,16 +86,18 @@ test('Orders use shared items with captured historical money and distinct settle
     }
 
     const zeroPrice = rows[0]!.querySelector('[data-content-item-slot="trailing"] p')!;
-    expect(zeroPrice.firstChild?.textContent).toBe(
+    expect(zeroPrice.querySelector('strong')?.textContent).toBe(
       new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(0),
     );
-    expect(zeroPrice.querySelector('span')?.textContent).toBe(`USD · ${m.commerce_before_tax()}`);
+    expect(zeroPrice.lastElementChild?.textContent).toBe(`USD · ${m.commerce_before_tax()}`);
     const unknownPrice = rows[1]!.querySelector('[data-content-item-slot="trailing"] p')!;
-    expect(unknownPrice.firstChild?.textContent).toBe(m.statements_amount_unavailable());
-    expect(unknownPrice.querySelector('span')?.textContent).toBe(`JPY · ${m.commerce_tax_unknown()}`);
+    expect(unknownPrice.querySelector('strong')?.textContent).toBe(
+      m.money_raw_minor_unknown_unit({ amount: '123456', currency: 'JPY' }, { locale }),
+    );
+    expect(unknownPrice.lastElementChild?.textContent).toBe(`JPY · ${m.commerce_tax_unknown()}`);
 
     const continuation = window.document.querySelector(`nav[aria-label="${m.orders_pagination()}"] a`)!;
-    expect(continuation.textContent).toBe(m.orders_next());
+    expect(continuation.textContent).toBe(m.buyer_history_next());
     expect(continuation.getAttribute('href')).toBe(`/${locale}/orders?cursor=${encodeURIComponent(cursor)}`);
     expect(new URL(continuation.getAttribute('href')!, window.location.href).searchParams.get('cursor')).toBe(cursor);
   } finally {

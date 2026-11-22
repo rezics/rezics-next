@@ -41,7 +41,7 @@ export function SubjectOfferRows({
             onClick={(event) => {
               if (!reading.current()) event.preventDefault();
             }}
-            className="p-3 [&_h3]:break-words [&_h3]:[overflow-wrap:anywhere]"
+            className="p-3 [&_h3]:line-clamp-3 [&_h3]:break-words [&_h3]:[overflow-wrap:anywhere]"
             metadata={
               <div className="min-w-0 space-y-2">
                 <p className="text-sm tabular-nums">

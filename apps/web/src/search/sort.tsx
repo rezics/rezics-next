@@ -4,7 +4,7 @@ import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { RatingPopulationControl } from './rating-population-control';
 import type { RealmRatingPopulationOption, RealmRatingReadiness } from './rating-population';
 import { changeRatingOrder } from './rating-order-state';
@@ -53,6 +53,7 @@ export function SearchSort({
   formAction?: string | undefined;
 }) {
   const sortId = useId();
+  const populationHelpId = useId();
   const messageLocale = { locale: locale as never };
   const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
   return (
@@ -71,7 +72,7 @@ export function SearchSort({
       ])}
       method="get"
       action={action.pathname}
-      className="grid w-full min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
+      className="grid w-full min-w-0 grid-cols-2 items-start gap-2 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
     >
       {[...action.searchParams].map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
@@ -80,24 +81,20 @@ export function SearchSort({
         <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
           {m.search_sort_label({}, messageLocale)}
         </FieldLabel>
-        <Select
+        <NativeSelect
+          id={sortId}
           name={disabled ? undefined : 'sort'}
           disabled={disabled}
-          defaultValue={(sort === 'rating' ? 'rating' : '') === '' ? null : sort === 'rating' ? 'rating' : ''}
+          className="w-full"
+          defaultValue={sort === 'rating' ? 'rating' : ''}
         >
-          <SelectTrigger id={sortId} className="w-full min-w-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value={null}>{m.search_sort_relevance({}, messageLocale)}</SelectItem>
-              <SelectItem value="rating">{m.search_sort_rating({}, messageLocale)}</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          <NativeSelectOption value="">{m.search_sort_relevance({}, messageLocale)}</NativeSelectOption>
+          <NativeSelectOption value="rating">{m.search_sort_rating({}, messageLocale)}</NativeSelectOption>
+        </NativeSelect>
       </Field>
       <RatingPopulationControl
         locale={locale}
+        helpId={populationHelpId}
         populations={ratingPopulations}
         selectedPopulationId={ratingPopulation}
         readiness={ratingReadiness}
@@ -136,14 +133,22 @@ export function SearchSort({
           <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
         )),
       )}
-      <Button type="submit" variant="outline" disabled={disabled} className="justify-self-end sm:mt-6">
+      <Button
+        type="submit"
+        variant="outline"
+        disabled={disabled}
+        className="col-start-2 row-start-2 justify-self-end sm:col-start-3 sm:row-start-1 sm:mt-6"
+      >
         {m.search_sort_submit_button({}, messageLocale)}
       </Button>
-      <details className="order-last min-w-0 text-sm text-muted-foreground sm:col-span-3">
+      <details className="min-w-0 self-center text-sm text-muted-foreground open:col-span-2 sm:col-span-3">
         <summary className="cursor-pointer content-center rounded-sm px-1 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
           {m.search_reader_rating_help_title({}, messageLocale)}
         </summary>
-        <p className="mt-1 px-2 text-muted-foreground">
+        <p id={populationHelpId} className="mt-2 max-w-prose px-2">
+          {m.search_population_help({}, messageLocale)}
+        </p>
+        <p className="mt-1 max-w-prose px-2 text-muted-foreground">
           {ratingPopulation
             ? m.search_population_order_help({}, messageLocale)
             : m.rating_public_ordering({}, messageLocale)}

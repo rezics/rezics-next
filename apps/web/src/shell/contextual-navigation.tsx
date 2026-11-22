@@ -83,6 +83,8 @@ export function ShellContextNavigationOutlet() {
 }
 
 export type ShellContextNavigationProps = {
+  /** When the destination itself is the contents page, show its single navigation in the document. */
+  documentOutlet?: HTMLElement | null | undefined;
   label: string;
   children: ReactNode;
 };
@@ -158,7 +160,7 @@ export function useShellContextNavigationSelection(lifetime?: object) {
  * Declare navigation next to the reading/editing canvas, inside its existing reader and data providers.
  * The portal retains that React ancestry and disappears with the consumer's admission or lifetime.
  */
-export function ShellContextNavigation({ label, children }: ShellContextNavigationProps) {
+export function ShellContextNavigation({ label, children, documentOutlet }: ShellContextNavigationProps) {
   const context = useContext(ContextNavigation);
   if (!context)
     return (
@@ -167,7 +169,7 @@ export function ShellContextNavigation({ label, children }: ShellContextNavigati
       </ContextNavigationRegion>
     );
   return (
-    <HostedContextNavigation context={context} label={label}>
+    <HostedContextNavigation context={context} label={label} documentOutlet={documentOutlet}>
       {children}
     </HostedContextNavigation>
   );
@@ -175,6 +177,7 @@ export function ShellContextNavigation({ label, children }: ShellContextNavigati
 
 function HostedContextNavigation({
   context,
+  documentOutlet,
   label,
   children,
 }: ShellContextNavigationProps & { context: ContextNavigation }) {
@@ -186,8 +189,12 @@ function HostedContextNavigation({
     return register({ identity, scope, depth });
   }, [register, identity, scope, depth]);
 
-  if (!context.target || context.active !== identity) return null;
-  return createPortal(<ContextNavigationRegion label={label}>{children}</ContextNavigationRegion>, context.target);
+  const target = documentOutlet ?? context.target;
+  if (!target || context.active !== identity) return null;
+  return createPortal(
+    documentOutlet ? children : <ContextNavigationRegion label={label}>{children}</ContextNavigationRegion>,
+    target,
+  );
 }
 
 function ContextNavigationRegion({

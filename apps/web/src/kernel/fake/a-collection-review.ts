@@ -112,6 +112,39 @@ function collectionRows(kind: keyof typeof collectionReviewIds, locale: string) 
   return kind === 'books' ? bookReviewMembers(locale) : kind === 'empty' ? [] : mediaReviewMembers(locale);
 }
 
+function reviewCollection(kind: keyof typeof collectionReviewIds, all: ReturnType<typeof collectionRows>) {
+  const id = collectionReviewIds[kind];
+  const owner = kind === 'owner';
+  return {
+    ...collectionRecording.collection,
+    id,
+    curatorAccountId: owner ? storyViewerId : reviewId(700),
+    curator: owner
+      ? { id: storyViewerId, handle: 'mira', displayName: 'Mira Okabe' }
+      : { id: reviewId(700), handle: 'harbour-library', displayName: 'Harbour Library' },
+    title:
+      kind === 'books'
+        ? 'Stories for a slower afternoon'
+        : kind === 'empty'
+          ? 'The next coastal journey'
+          : 'Across the harbour: books, games and animation',
+    description:
+      kind === 'books'
+        ? 'Eight stories about finding a place in the world. Read in the curator’s order, or refine the supplied author, genre and publication facts.'
+        : kind === 'empty'
+          ? 'A new collection, ready for its first discovery.'
+          : 'Different ways into one imagined coastline. Novels sit beside games and animation; each keeps its own identity, date and curator note.',
+    visibility: 'public',
+    revision: 1,
+    memberCount: all.length,
+    presentationKind: kind === 'books' ? 'schema:Book' : null,
+    presentationKindSource: kind === 'books' ? 'owner' : 'mixed',
+    cover: all[0]?.subject?.cover ?? null,
+    coverSource: all.length ? 'member' : 'none',
+    updatedAt: reviewDate,
+  } as const;
+}
+
 const collectionAnswer: NonNullable<FakeRoute['story']> = ({ request, match }) => {
   const id = match?.[1];
   const kind = id && collectionKinds.get(id);
@@ -119,40 +152,7 @@ const collectionAnswer: NonNullable<FakeRoute['story']> = ({ request, match }) =
   const url = new URL(request.url);
   const locale = localeOf(request);
   const all = collectionRows(kind, locale);
-  if (!match?.[2]) {
-    const owner = kind === 'owner';
-    return {
-      status: 200,
-      collection: {
-        ...collectionRecording.collection,
-        id,
-        curatorAccountId: owner ? storyViewerId : 'collection-review-curator',
-        curator: owner
-          ? { id: storyViewerId, handle: 'mira', displayName: 'Mira Okabe' }
-          : { id: 'collection-review-curator', handle: 'harbour-library', displayName: 'Harbour Library' },
-        title:
-          kind === 'books'
-            ? 'Stories for a slower afternoon'
-            : kind === 'empty'
-              ? 'The next coastal journey'
-              : 'Across the harbour: books, games and animation',
-        description:
-          kind === 'books'
-            ? 'Eight stories about finding a place in the world. Read in the curator’s order, or refine the supplied author, genre and publication facts.'
-            : kind === 'empty'
-              ? 'A new collection, ready for its first discovery.'
-              : 'Different ways into one imagined coastline. Novels sit beside games and animation; each keeps its own identity, date and curator note.',
-        visibility: 'public',
-        revision: 1,
-        memberCount: all.length,
-        presentationKind: kind === 'books' ? 'schema:Book' : null,
-        presentationKindSource: kind === 'books' ? 'owner' : 'mixed',
-        cover: all[0]?.subject?.cover ?? null,
-        coverSource: all.length ? 'member' : 'none',
-        updatedAt: reviewDate,
-      },
-    };
-  }
+  if (!match?.[2]) return { status: 200, collection: reviewCollection(kind, all) };
   const cursor = url.searchParams.get('cursor');
   if (cursor !== null && ![collectionReviewCursor, collectionReviewLastCursor].includes(cursor))
     return { status: 409, code: 'stale_cursor' };
@@ -187,6 +187,7 @@ function rating(entry: ReviewItem) {
   };
 }
 type SearchInput = {
+  collectionDirectory?: { presentationKind?: string; curator?: string; subject?: string; order: 'recent' | 'popular' };
   representation?: string;
   text?: string;
   filter?: DiscoveryFilterDocument;
@@ -211,10 +212,83 @@ function searchEntries(input: SearchInput) {
   if (input.sort === 'rating') entries.sort((a, b) => rating(b).score - rating(a).score || a.id.localeCompare(b.id));
   return entries;
 }
+function directoryAnswer(input: SearchInput) {
+  const selection = input.collectionDirectory!;
+  if (input.cursor) return { status: 409, code: 'stale_cursor' };
+  const kinds =
+    selection.order === 'popular' ? (['media', 'books', 'empty'] as const) : (['books', 'media', 'empty'] as const);
+  const hits: DiscoveryHit[] = [];
+  for (const kind of kinds) {
+    const members = collectionRows(kind, input.languages?.[0] ?? 'en');
+    const item = reviewCollection(kind, members);
+    if (
+      (selection.presentationKind && selection.presentationKind !== (item.presentationKind ?? 'mixed')) ||
+      (selection.curator && selection.curator !== item.curatorAccountId) ||
+      (selection.subject && !members.some((member) => member.subject?.id === selection.subject))
+    )
+      continue;
+    const preview = members.slice(0, 3).flatMap(({ id, subject }) =>
+      subject
+        ? [
+            {
+              id,
+              subject: {
+                id: subject.id,
+                type: subject.type,
+                types: subject.types,
+                label: typeof subject.label === 'string' ? { value: subject.label, language: 'en' } : subject.label,
+              },
+            },
+          ]
+        : [],
+    );
+    const card = {
+      kind: 'collection' as const,
+      id: item.id,
+      destination: collectionReviewPath(kind),
+      title: item.title,
+      description: item.description,
+      visibility: 'public' as const,
+      revision: item.revision,
+      sourceGeneration: '1',
+      presentationKind: item.presentationKind,
+      presentationKindSource: item.presentationKindSource,
+      cover: item.cover,
+      coverSource: item.coverSource,
+      curator: {
+        state: 'available' as const,
+        id: item.curatorAccountId,
+        label: item.curator.displayName,
+        destination: null,
+      },
+      membershipKind: 'curated' as const,
+      memberCount: members.length,
+      orderEpoch: 1,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      preview: preview.length
+        ? { state: 'available' as const, members: preview, partial: false, truncated: members.length > preview.length }
+        : { state: 'empty' as const },
+    };
+    hits.push({
+      key: { owner: 'library', kind: 'collection', route: 0, id: item.id },
+      matchEvidence: { state: 'unsupported' },
+      summary: { kind: 'collection', value: { id: item.id, title: item.title, description: item.description, card } },
+    });
+  }
+  return {
+    status: 200,
+    hits,
+    kinds: { values: [{ id: 'collection', labels: { en: 'Collections' }, icon: 'collection' }], next: null },
+    next: null,
+    as_of: reviewDate,
+  };
+}
 const searchAnswer: NonNullable<FakeRoute['story']> = async ({ request }) => {
-  if (!activeBookList) return;
   const input = (await request.json()) as SearchInput;
   if (input.representation !== 'discovery-v1') return;
+  if (input.collectionDirectory) return directoryAnswer(input);
+  if (!activeBookList) return;
   if (activeBookList === 'unavailable' && firstFailure(`search:${JSON.stringify(input)}`))
     return { status: 503, code: 'dependency_unavailable' };
   if (input.cursor && ![bookReviewCursor, collectionReviewLastCursor].includes(input.cursor))

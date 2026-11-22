@@ -1,4 +1,4 @@
-import { ImportDetails } from '../personal-list-import/presentation';
+import { ImportDetails, ImportFileInput } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -43,14 +43,13 @@ export function MalUploadForm({
         <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_mal_file_label()}
         </FieldLabel>
-        <Input
+        <ImportFileInput
           ref={input}
           id={inputId}
-          type="file"
+
           accept=".xml,text/xml,application/xml"
           aria-describedby={helpId}
           disabled={busy || disabled}
-          className="w-full max-w-full file:me-3"
         />
       </Field>
       <MalAction type="submit" disabled={busy || disabled} aria-busy={busy}>

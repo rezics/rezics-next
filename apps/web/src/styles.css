@@ -24,6 +24,46 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   text-decoration-line: underline;
 }
 
+/* Show the current destination even when the rail is collapsed or labels wrap. */
+:is([data-phone-navigation], [data-slot='sidebar-menu']) [aria-current='page'] {
+  background: color-mix(in srgb, var(--brand) 9%, var(--background));
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+[data-slot='sidebar-menu'] [aria-current='page'] {
+  border-inline-start: 3px solid var(--brand);
+}
+
+[data-phone-navigation] [aria-current='page']::before {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: calc(50% - 0.625rem);
+  inline-size: 1.25rem;
+  block-size: 2px;
+  border-radius: 1rem;
+  background: var(--brand);
+  content: '';
+}
+
+/* Inputs remain readable without iOS zoom. Use real hit areas so adjacent actions cannot overlap. */
+@media (pointer: coarse) {
+  main
+    :is(
+      input:not([type]),
+      input:is([type='text'], [type='search'], [type='email'], [type='url'], [type='number'], [type='password']),
+      textarea
+    ) {
+    font-size: max(1rem, 16px);
+  }
+
+  main
+    :is([data-slot='button'], [data-slot='select-trigger'], [data-slot='input']):not([type='checkbox'], [type='radio']),
+  [data-phone-navigation] :is(a, button) {
+    min-block-size: 2.75rem;
+  }
+}
+
 /* Keep fixed selection surfaces clear of the phone bar before hydration measures it. */
 [data-phone-navigation-clearance] {
   --bottom-nav-height: calc(5rem + env(safe-area-inset-bottom, 0px));

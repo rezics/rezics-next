@@ -68,9 +68,9 @@ export const History: Story = {
   render: () => <Example history />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const history = within(await canvas.findByRole('region', { name: m.search_recent() }));
+    const history = within(await canvas.findByRole('region', { name: m.search_history() }));
     const clear = await history.findByRole('button', { name: m.search_history_clear() });
-    await expect(history.getByRole('heading', { name: m.search_history() })).toBeVisible();
+    await expect(history.getByRole('heading', { name: m.search_history(), level: 1 })).toBeVisible();
     await expect(history.getByText('Kokoro', { exact: true })).toBeVisible();
     await expect(clear).toBeVisible();
     await expect(clear).toBeEnabled();

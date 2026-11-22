@@ -278,15 +278,13 @@ function StudioAccountVisit({
 
   return (
     <>
-      {!visit.active || !source || !accountId ? <StudioPreparing /> : null}
-      {loaded?.state === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
+      {!visit.active || !source || !accountId || !loaded || loaded.state === 'loading' ? <StudioPreparing /> : null}
       {loaded?.state === 'failed' ? (
-        <section className="studio-stack" role="alert">
-          <p>{loaded.message}</p>
+        <StudioMessage message={loaded.message}>
           <Button type="button" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
             {m.own_drafts_retry({}, { locale })}
           </Button>
-        </section>
+        </StudioMessage>
       ) : null}
       {loaded?.state === 'ready' ? (
         <>

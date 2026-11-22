@@ -74,7 +74,10 @@ export function bindPreviewNavigation({
       anchor.relList.contains('external')
     )
       return;
-    const url = destination(anchor.getAttribute('href')!);
+    const href = anchor.getAttribute('href')!;
+    // The browser moves focus and scrolls same-document fragments to their target in the iframe.
+    if (href.startsWith('#')) return;
+    const url = destination(href);
     if (!url) return;
     event.preventDefault();
     visit(url);

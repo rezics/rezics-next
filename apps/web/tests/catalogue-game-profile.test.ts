@@ -20,7 +20,11 @@ test('Game and visual-novel work editor uses actual released metadata native wri
     expect(result).toEqual({
       ok: true,
       id: gameId,
-      reader: { state: 'ready', href: `/en/subjects/${gameId}/the-lantern-game` },
+      reader: {
+        state: 'ready',
+        href: `/en/subjects/${gameId}/the-lantern-game`,
+        identity: { id: gameId, type, label: 'The Lantern Game' },
+      },
     });
     expect(fixture.calls.find((call) => call.method === 'POST')).toMatchObject({
       path: '/v1/subjects',

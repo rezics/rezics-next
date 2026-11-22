@@ -21,13 +21,15 @@ test('the visible shared Search input consumes its real recent section and navig
     false,
     now,
   );
+  const presentation = { entries: recent.entries, status: 'local' as const, onRemove() {} };
+  const recentSection = createElement(RecentHistoryView, presentation);
   const markup = renderToStaticMarkup(
     createElement(HeaderSearchView, {
       id: 'shared-search',
       state: reduceHeaderSearchState(initialHeaderSearchState(), { type: 'open-phone' }),
       locale: 'en',
       region: null,
-      recent: createElement(RecentHistoryView, { entries: recent.entries, status: 'local', onRemove() {} }),
+      recent: recentSection,
     }),
   );
   expect(markup.match(/role="combobox"/g)).toHaveLength(1);
@@ -35,7 +37,11 @@ test('the visible shared Search input consumes its real recent section and navig
   expect(markup).toContain('/en/search?q=A%20book%20%26%20its%20author');
   expect(markup).toContain('/en/search/history');
   expect(markup).toContain(m.search_history_remove({ name: 'A book &amp; its author' }));
-  expect(markup).not.toContain('Trending');
+  const section = renderToStaticMarkup(recentSection);
+  expect(section).not.toContain('Trending');
+  expect(section).toContain('<h2');
+  const history = renderToStaticMarkup(createElement(RecentHistoryView, { ...presentation, history: true }));
+  expect(history).toContain('<h1');
 });
 test('local first history is bounded, expires and never uploads anonymous history into an account queue', () => {
   let anonymous = emptyRecent();

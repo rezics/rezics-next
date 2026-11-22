@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
 import release from '../../../../packages/definitions/release/rezics.json';
-import { OverviewContext, type OverviewValue } from '../features/pages/overview';
+import { OverviewContext } from '../features/pages/overview';
+import { characterStoryOverview } from './character-story-overview';
 import { SubjectConnections } from '../features/pages/subject-connections-view';
 import type { ConnectionRead } from '../features/pages/subject-connections-window';
 import { qualifiedRelationsPage } from '../kernel/fake/qualified-relations';
@@ -93,18 +94,17 @@ function DirectedVisit({ state, locale, inverse }: Props) {
                   },
                 },
         };
-  const value = {
+  const value = characterStoryOverview({
     subject: source,
     subjectLabel: '原作ビジュアルノベル／原作視覺小說',
     locale,
     link: PlainLink,
     reader: { spoilerLevel: 0, suitability: 'show' },
-    labels: { spoilerHide: 'Hide', cover: {} },
+    labels: { spoilerHide: 'Hide' },
     unlabelled: 'Unlabelled',
     spoilerShow: 'Reveal',
     relations: {},
-    sections: {},
-  } as unknown as OverviewValue;
+  });
   return (
     <main className="mx-auto max-w-5xl p-4 text-foreground bg-background">
       <h1 className="mb-6 text-3xl font-semibold">原作ビジュアルノベル／原作視覺小說</h1>

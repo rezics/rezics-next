@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "Kontextinformationen sind nicht verfügbar. Prüfen Sie erneut.",
   "ctxw_unknown": "Das Ergebnis ist unbekannt. Wiederholen Sie dieselbe Anfrage unverändert, oder prüfen Sie den aktuellen Zustand.",
   "ctxw_views": "Kontextansichten",
+  "curation_access_heading": "Berechtigung erforderlich",
+  "curation_access_message": "Dieses Konto hat keinen Zugriff auf den Präsentationseditor.",
   "curation_active": "Gespeichertes Profil bei letzter Prüfung",
   "curation_actual_head": "Gespeicherte Version bei der Prüfung: {head}. Profil: {digest}",
   "curation_add": "Vorlage hinzufügen",

@@ -13,6 +13,7 @@ import { pickText } from '@rezics/composition';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
+import { LibraryPageStatus } from './page-status';
 import type { RuleChoicePage, RuleChoices, RuleMeaning, RulePage } from './collection-rule-read';
 import type { RuleWrite } from './collection-rule-actions';
 import type { SavedQuerySource } from './saved-query-editor/selection';
@@ -451,12 +452,14 @@ function RuleLifetime({
       {...actions}
     />
   ) : (
-    <div role="alert">
-      <p>{current.state === 'unavailable' ? m.library_rule_unavailable() : m.library_rule_denied()}</p>
-      <Button type="button" disabled={!authorized || work.pending} onClick={() => void retry()}>
-        {m.library_follow_retry()}
-      </Button>
-    </div>
+    <LibraryPageStatus title={collectionId ? m.library_rule_edit() : m.library_rule_new()}>
+      <div role="alert" className="space-y-3">
+        <p>{current.state === 'unavailable' ? m.library_rule_unavailable() : m.library_rule_denied()}</p>
+        <Button type="button" disabled={!authorized || work.pending} onClick={() => void retry()}>
+          {m.library_follow_retry()}
+        </Button>
+      </div>
+    </LibraryPageStatus>
   );
 }
 
@@ -780,12 +783,14 @@ function RuleForm({
   // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
   if (!isCurrent())
     return (
-      <div role="alert">
-        <p>{m.library_rule_denied()}</p>
-        <Button type="button" disabled={!ownerCurrent() || pending} onClick={() => void refresh()}>
-          {m.library_collection_reload()}
-        </Button>
-      </div>
+      <LibraryPageStatus title={base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}>
+        <div role="alert" className="space-y-3">
+          <p>{m.library_rule_denied()}</p>
+          <Button type="button" disabled={!ownerCurrent() || pending} onClick={() => void refresh()}>
+            {m.library_collection_reload()}
+          </Button>
+        </div>
+      </LibraryPageStatus>
     );
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">

@@ -110,7 +110,43 @@ function ExposureView({
             {m.exposure_groups()}
           </h2>
           <p className="text-muted-foreground">{m.exposure_current_page()}</p>
-          <div className="space-y-2 rounded-lg border p-4">
+          {offered.length === 0 && <p>{m.exposure_actions_unavailable()}</p>}
+          {page.current.exposureGroups.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
+          {page.current.exposureGroups[0] ? (
+            <p className="text-sm text-muted-foreground wrap-anywhere">
+              {m.exposure_observed_at()}{' '}
+              <time dateTime={page.current.exposureGroups[0].at}>{page.current.exposureGroups[0].at}</time>
+            </p>
+          ) : null}
+          <ul className="divide-y divide-border border-y border-border">
+            {page.current.exposureGroups.map(({ group, open }) => (
+              <li key={group} className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-3">
+                <div className="min-w-0 space-y-1">
+                  <h3 className="font-semibold wrap-anywhere">{group}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {open ? m.exposure_state_open() : m.exposure_state_closed()}
+                  </p>
+                </div>
+                {offered.length ? (
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    {offered.map((action) => (
+                      <Button
+                        key={action}
+                        variant="outline"
+                        className="h-auto min-h-10 max-w-full whitespace-normal"
+                        disabled={busy || !canReview}
+                        aria-label={m.exposure_action_group({ action: actionLabel(action), group })}
+                        onClick={() => onReview(group, action)}
+                      >
+                        {actionLabel(action)}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <div className="max-w-prose space-y-1">
             <a
               className="inline-flex items-center text-primary underline-offset-4 hover:underline"
               href={`/${getLocale()}/access/00000000-0000-8000-8000-000000000000`}
@@ -119,49 +155,11 @@ function ExposureView({
             </a>
             <p className="text-sm text-muted-foreground">{m.exposure_grants_help()}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {page.current.next && (
-              <Button variant="outline" disabled={busy} onClick={onNextPage}>
-                {m.exposure_next_page()}
-              </Button>
-            )}
-          </div>
-          {offered.length === 0 && <p>{m.exposure_actions_unavailable()}</p>}
-          {page.current.exposureGroups.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
-          {rows.map(({ group, open, at }) => (
-            <ContentSection key={group}>
-              <ContentSectionHeader>
-                <ContentSectionTitle className="break-all">{group}</ContentSectionTitle>
-              </ContentSectionHeader>
-              <ContentSectionBody className="space-y-4">
-                <p>
-                  {open === undefined
-                    ? m.exposure_unknown()
-                    : open
-                      ? m.exposure_state_open()
-                      : m.exposure_state_closed()}
-                </p>
-                {at && (
-                  <p>
-                    {m.exposure_observed_at()} <time dateTime={at}>{at}</time>
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-3">
-                  {offered.map((action) => (
-                    <Button
-                      key={action}
-                      variant="outline"
-                      disabled={busy || !canReview}
-                      aria-label={m.exposure_action_group({ action: actionLabel(action), group })}
-                      onClick={() => onReview(group, action)}
-                    >
-                      {actionLabel(action)}
-                    </Button>
-                  ))}
-                </div>
-              </ContentSectionBody>
-            </ContentSection>
-          ))}
+          {page.current.next && (
+            <Button variant="outline" disabled={busy} onClick={onNextPage}>
+              {m.exposure_next_page()}
+            </Button>
+          )}
         </section>
       )}
       {intent && (

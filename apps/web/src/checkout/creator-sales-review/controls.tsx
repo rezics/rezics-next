@@ -27,179 +27,186 @@ type Props = {
 export function CreatorSalesReviewControls({ review, criteria, visible, change, reset, current }: Props) {
   const filtered = reviewIsFiltered(criteria);
   return (
-    <section aria-labelledby="creator-sales-review-heading" className="min-w-0 space-y-4 rounded-xl border p-4 sm:p-5">
-      <div className="space-y-2">
-        <h2 id="creator-sales-review-heading" tabIndex={-1} className="text-lg font-semibold">
-          {m.creator_review_heading()}
-        </h2>
-        <p id="creator-sales-review-scope" className="max-w-prose text-sm text-muted-foreground">
-          {m.creator_review_scope()}
-        </p>
-      </div>
-      <fieldset disabled={!current} aria-describedby="creator-sales-review-scope" className="min-w-0 space-y-4">
-        <legend className="sr-only">{m.creator_review_filters()}</legend>
-        <Field className="min-w-0 space-y-2">
-          <FieldLabel htmlFor="creator-sales-review-text">{m.creator_review_search()}</FieldLabel>
-          <Input
-            id="creator-sales-review-text"
-            type="search"
-            autoComplete="off"
-            maxLength={CREATOR_SALE_SEARCH_LIMIT}
-            value={criteria.text}
-            onChange={(event) => change({ ...criteria, text: event.currentTarget.value })}
-            className={fieldClass}
-            aria-describedby="creator-sales-review-search-hint"
-          />
-          <p id="creator-sales-review-search-hint" className="text-sm text-muted-foreground">
-            {m.creator_review_search_hint()}
-          </p>
-        </Field>
-        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <Field className="min-w-0 space-y-2">
-            <FieldLabel htmlFor="creator-sales-review-work" className="block text-sm font-medium">
-              {m.creator_sale_work_reference()}
-            </FieldLabel>
-            <Select
-              disabled={!current}
-              items={[
-                { value: '', label: m.creator_review_all_works() },
-                ...review.works.map((work) => ({ value: work.id, label: `${work.id} (${work.count})` })),
-              ]}
-              value={criteria.work}
-              onValueChange={(value) => change({ ...criteria, work: value! })}
-            >
-              <SelectTrigger id="creator-sales-review-work" className={fieldClass}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="">{m.creator_review_all_works()}</SelectItem>
-                  {review.works.map((work) => (
-                    <SelectItem key={work.id} value={work.id}>
-                      {work.id} ({work.count})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="min-w-0 space-y-2">
-            <FieldLabel htmlFor="creator-sales-review-offer" className="block text-sm font-medium">
-              {m.creator_sale_offer_reference()}
-            </FieldLabel>
-            <Select
-              disabled={!current}
-              items={[
-                { value: '', label: m.creator_review_all_offers() },
-                ...review.offers.map((offer) => ({ value: offer.id, label: `${offer.id} (${offer.count})` })),
-              ]}
-              value={criteria.offer}
-              onValueChange={(value) => change({ ...criteria, offer: value! })}
-            >
-              <SelectTrigger
-                id="creator-sales-review-offer"
-                className={fieldClass}
-                aria-describedby="creator-sales-review-offer-hint"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="">{m.creator_review_all_offers()}</SelectItem>
-                  {review.offers.map((offer) => (
-                    <SelectItem key={offer.id} value={offer.id}>
-                      {offer.id} ({offer.count})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <p id="creator-sales-review-offer-hint" className="text-sm text-muted-foreground">
-              {m.creator_review_offer_hint()}
-            </p>
-          </Field>
-        </div>
-        <Field className="space-y-2">
-          <FieldLabel htmlFor="creator-sales-review-settlement" className="block text-sm font-medium">
-            {m.creator_sale_settlement()}
-          </FieldLabel>
-          <Select
-            disabled={!current}
-            items={[
-              { value: 'all', label: m.creator_review_all_settlements() },
-              ...settlementStates.map((value) => ({
-                value,
-                label: `${creatorSaleSettlementLabel(value)} (${review.settlements[value]})`,
-              })),
-            ]}
-            value={criteria.settlement}
-            onValueChange={(value) => {
-              const settlement = value === 'all' ? 'all' : settlementStates.find((state) => state === value);
-              if (settlement) change({ ...criteria, settlement });
-            }}
+    <section aria-label={m.creator_review_heading()} className="min-w-0">
+      <details className="rounded-lg border bg-card">
+        <summary className="min-h-11 cursor-pointer rounded-lg px-4 py-3 text-sm font-semibold marker:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.creator_review_filters()}
+          <span
+            className="ms-3 inline-block text-xs font-normal text-muted-foreground"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
           >
-            <SelectTrigger id="creator-sales-review-settlement" className={fieldClass}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{m.creator_review_all_settlements()}</SelectItem>
-                {settlementStates.map((state) => (
-                  <SelectItem key={state} value={state}>
-                    {creatorSaleSettlementLabel(state)} ({review.settlements[state]})
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-      </fieldset>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="outline"
-          className="h-auto min-h-7 whitespace-normal"
-          disabled={!filtered || !current}
-          onClick={reset}
-        >
-          {m.creator_review_reset()}
-        </Button>
-        <p role="status" aria-live="polite" aria-atomic="true" className="text-sm">
-          {m.creator_review_count({ visible, received: review.sales.length })}
-        </p>
-      </div>
-      {filtered && (
-        <div className="min-w-0 space-y-3 border-t pt-4">
-          <h3 className="text-sm font-medium">{m.creator_review_active_filters()}</h3>
-          <dl className="min-w-0 space-y-3 text-sm">
-            {criteria.text.trim() && (
-              <div className="min-w-0 space-y-1">
-                <dt className="text-muted-foreground">{m.creator_review_search()}</dt>
-                <dd className="select-text whitespace-pre-wrap [overflow-wrap:anywhere]">{criteria.text}</dd>
-              </div>
-            )}
-            {criteria.work && (
-              <div className="min-w-0 space-y-1">
-                <dt className="text-muted-foreground">{m.creator_sale_work_reference()}</dt>
-                <dd className="select-text font-mono [overflow-wrap:anywhere]">{criteria.work}</dd>
-              </div>
-            )}
-            {criteria.offer && (
-              <div className="min-w-0 space-y-1">
-                <dt className="text-muted-foreground">{m.creator_sale_offer_reference()}</dt>
-                <dd className="select-text font-mono [overflow-wrap:anywhere]">{criteria.offer}</dd>
-              </div>
-            )}
-            {criteria.settlement !== 'all' && (
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">{m.creator_sale_settlement()}</dt>
-                <dd>{creatorSaleSettlementLabel(criteria.settlement)}</dd>
-              </div>
-            )}
-          </dl>
-          <p className="text-sm text-muted-foreground">{m.creator_review_filters_together()}</p>
+            {m.creator_review_count({ visible, received: review.sales.length })}
+          </span>
+        </summary>
+        <div className="min-w-0 space-y-4 border-t p-4 sm:p-5">
+          <p id="creator-sales-review-scope" className="max-w-prose text-sm text-muted-foreground">
+            {m.creator_review_scope()}
+          </p>
+          <fieldset disabled={!current} aria-describedby="creator-sales-review-scope" className="min-w-0 space-y-4">
+            <legend className="sr-only">{m.creator_review_filters()}</legend>
+            <Field className="min-w-0 space-y-2">
+              <FieldLabel htmlFor="creator-sales-review-text">{m.creator_review_search()}</FieldLabel>
+              <Input
+                id="creator-sales-review-text"
+                type="search"
+                autoComplete="off"
+                maxLength={CREATOR_SALE_SEARCH_LIMIT}
+                value={criteria.text}
+                onChange={(event) => change({ ...criteria, text: event.currentTarget.value })}
+                className={fieldClass}
+                aria-describedby="creator-sales-review-search-hint"
+              />
+              <p id="creator-sales-review-search-hint" className="text-sm text-muted-foreground">
+                {m.creator_review_search_hint()}
+              </p>
+            </Field>
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <Field className="min-w-0 space-y-2">
+                <FieldLabel htmlFor="creator-sales-review-work" className="block text-sm font-medium">
+                  {m.creator_sale_work_reference()}
+                </FieldLabel>
+                <Select
+                  disabled={!current}
+                  items={[
+                    { value: '', label: m.creator_review_all_works() },
+                    ...review.works.map((work) => ({ value: work.id, label: `${work.id} (${work.count})` })),
+                  ]}
+                  value={criteria.work}
+                  onValueChange={(value) => change({ ...criteria, work: value! })}
+                >
+                  <SelectTrigger id="creator-sales-review-work" className={fieldClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="">{m.creator_review_all_works()}</SelectItem>
+                      {review.works.map((work) => (
+                        <SelectItem key={work.id} value={work.id}>
+                          {work.id} ({work.count})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="min-w-0 space-y-2">
+                <FieldLabel htmlFor="creator-sales-review-offer" className="block text-sm font-medium">
+                  {m.creator_sale_offer_reference()}
+                </FieldLabel>
+                <Select
+                  disabled={!current}
+                  items={[
+                    { value: '', label: m.creator_review_all_offers() },
+                    ...review.offers.map((offer) => ({ value: offer.id, label: `${offer.id} (${offer.count})` })),
+                  ]}
+                  value={criteria.offer}
+                  onValueChange={(value) => change({ ...criteria, offer: value! })}
+                >
+                  <SelectTrigger
+                    id="creator-sales-review-offer"
+                    className={fieldClass}
+                    aria-describedby="creator-sales-review-offer-hint"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="">{m.creator_review_all_offers()}</SelectItem>
+                      {review.offers.map((offer) => (
+                        <SelectItem key={offer.id} value={offer.id}>
+                          {offer.id} ({offer.count})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p id="creator-sales-review-offer-hint" className="text-sm text-muted-foreground">
+                  {m.creator_review_offer_hint()}
+                </p>
+              </Field>
+            </div>
+            <Field className="space-y-2">
+              <FieldLabel htmlFor="creator-sales-review-settlement" className="block text-sm font-medium">
+                {m.creator_sale_settlement()}
+              </FieldLabel>
+              <Select
+                disabled={!current}
+                items={[
+                  { value: 'all', label: m.creator_review_all_settlements() },
+                  ...settlementStates.map((value) => ({
+                    value,
+                    label: `${creatorSaleSettlementLabel(value)} (${review.settlements[value]})`,
+                  })),
+                ]}
+                value={criteria.settlement}
+                onValueChange={(value) => {
+                  const settlement = value === 'all' ? 'all' : settlementStates.find((state) => state === value);
+                  if (settlement) change({ ...criteria, settlement });
+                }}
+              >
+                <SelectTrigger id="creator-sales-review-settlement" className={fieldClass}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">{m.creator_review_all_settlements()}</SelectItem>
+                    {settlementStates.map((state) => (
+                      <SelectItem key={state} value={state}>
+                        {creatorSaleSettlementLabel(state)} ({review.settlements[state]})
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </fieldset>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              className="h-auto min-h-7 whitespace-normal"
+              disabled={!filtered || !current}
+              onClick={reset}
+            >
+              {m.creator_review_reset()}
+            </Button>
+          </div>
+          {filtered && (
+            <div className="min-w-0 space-y-3 border-t pt-4">
+              <h3 className="text-sm font-medium">{m.creator_review_active_filters()}</h3>
+              <dl className="min-w-0 space-y-3 text-sm">
+                {criteria.text.trim() && (
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">{m.creator_review_search()}</dt>
+                    <dd className="select-text whitespace-pre-wrap [overflow-wrap:anywhere]">{criteria.text}</dd>
+                  </div>
+                )}
+                {criteria.work && (
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">{m.creator_sale_work_reference()}</dt>
+                    <dd className="select-text font-mono [overflow-wrap:anywhere]">{criteria.work}</dd>
+                  </div>
+                )}
+                {criteria.offer && (
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">{m.creator_sale_offer_reference()}</dt>
+                    <dd className="select-text font-mono [overflow-wrap:anywhere]">{criteria.offer}</dd>
+                  </div>
+                )}
+                {criteria.settlement !== 'all' && (
+                  <div className="space-y-1">
+                    <dt className="text-muted-foreground">{m.creator_sale_settlement()}</dt>
+                    <dd>{creatorSaleSettlementLabel(criteria.settlement)}</dd>
+                  </div>
+                )}
+              </dl>
+              <p className="text-sm text-muted-foreground">{m.creator_review_filters_together()}</p>
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">{m.creator_review_count_hint()}</p>
         </div>
-      )}
-      <p className="text-sm text-muted-foreground">{m.creator_review_count_hint()}</p>
+      </details>
     </section>
   );
 }

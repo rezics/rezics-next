@@ -4,6 +4,7 @@ import { ChevronRight, Search, X } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
+import { PageHeading } from '../shell/page-heading';
 import { useCallback, useState } from 'react';
 import type { RecentHistory, RecentHistoryOwner, RecentEntry as HistoryEntry } from './recent-history';
 import { useRecentHistory, useRecentSearches } from './recent-history-hook';
@@ -249,11 +250,15 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
     <section
       ref={focus.regionRef}
       tabIndex={-1}
-      className="space-y-2 px-3 py-3"
+      className={history ? 'min-w-0 space-y-4' : 'space-y-2 px-3 py-3'}
       aria-label={history ? m.search_history() : m.search_recent()}
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">{history ? m.search_history() : m.search_recent()}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {history ? (
+          <PageHeading>{m.search_history()}</PageHeading>
+        ) : (
+          <h2 className="text-sm font-semibold">{m.search_recent()}</h2>
+        )}
         {history ? (
           <Button
             type="button"
@@ -277,8 +282,8 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
       </div>
       {status === 'loading' && <p role="status">{m.header_search_loading()}</p>}
       {(status === 'unavailable' || status === 'conflict') && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {status === 'conflict' ? m.search_history_conflict() : m.search_history_offline()}
+        <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>{status === 'conflict' ? m.search_history_conflict() : m.search_history_offline()}</span>
           {onReload && (
             <Button
               ref={retry.reloadRef}

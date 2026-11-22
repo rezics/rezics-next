@@ -25,13 +25,15 @@ body {
 }
 
 .auth-header {
+  background: var(--card);
   border-bottom: 1px solid var(--border);
 }
 
 .auth-header-inner {
   display: flex;
   align-items: center;
-  width: min(100% - 2rem, 72rem);
+  width: min(100% - 2.5rem, 72rem);
+  min-height: 3.75rem;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
@@ -40,6 +42,8 @@ body {
 }
 
 .auth-locale-choice {
+  width: auto;
+  margin-inline-start: auto;
   flex-direction: row;
   display: flex;
   align-items: center;
@@ -62,6 +66,7 @@ body {
 }
 
 .auth-locale-choice [data-slot='select-trigger'] {
+  min-height: 2.75rem;
   max-width: 13rem;
 }
 
@@ -80,6 +85,7 @@ body {
 .auth-brand {
   display: inline-flex;
   align-items: center;
+  min-height: 2.75rem;
   gap: 0.65rem;
   color: var(--foreground);
   font-size: 0.875rem;
@@ -104,21 +110,16 @@ body {
 .auth-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  min-height: calc(100vh - 3rem);
-  min-height: calc(100svh - 3rem);
-  place-items: center;
-  padding: 1.5rem 1rem;
-  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  justify-items: center;
+  align-items: start;
+  padding: 1.75rem 1.25rem;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
 }
 
 .auth-card {
-  display: block;
-  overflow: visible;
   min-width: 0;
-  max-width: 100%;
-  width: min(100%, 34rem);
-  padding: 1.5rem 1.25rem;
-  text-align: center;
+  width: min(100%, 36rem);
+  text-align: start;
   overflow-wrap: anywhere;
 }
 
@@ -200,6 +201,14 @@ body {
   text-underline-offset: 0.2em;
 }
 
+.auth-operation-exit a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  font-weight: 600;
+}
+
 .auth-operation-exit a:focus-visible,
 .auth-members-back:focus-visible,
 .auth-account-operation-requirements a:focus-visible {
@@ -219,7 +228,7 @@ body {
 }
 
 .auth-card:has(.auth-security-page) {
-  width: min(100%, 42rem);
+  width: min(100%, 54rem);
 }
 
 .auth-security-page {
@@ -283,7 +292,7 @@ body {
 }
 
 .auth-card:has(.auth-account-home) {
-  width: min(100%, 42rem);
+  width: min(100%, 54rem);
 }
 
 .auth-card:has(.auth-account-home) h1 {
@@ -399,7 +408,8 @@ body {
   display: grid;
   gap: 0.5rem;
   margin: 0;
-  padding-inline-start: 1.5rem;
+  list-style: disc;
+  padding-inline-start: 1.4rem;
   color: var(--muted-foreground);
 }
 
@@ -427,10 +437,10 @@ body {
 .auth-card h1 {
   margin: 0;
   color: var(--foreground);
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
+  font-size: clamp(1.75rem, 1.5rem + 1vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
   overflow-wrap: anywhere;
 }
 
@@ -456,7 +466,7 @@ body {
 .auth-route-failure nav {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.5rem 1.25rem;
 }
 
@@ -483,7 +493,7 @@ body {
 .auth-login-links {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.75rem 1.5rem;
   margin-top: 1.5rem;
   font-size: 0.875rem;
@@ -515,8 +525,64 @@ body {
   text-underline-offset: 0.2em;
 }
 
+.auth-card :is([data-slot='input'], [data-slot='input-group'], [data-slot='select-trigger'], [data-slot='button']) {
+  min-height: 2.75rem;
+}
+
+.auth-card :is([data-slot='input'], [data-slot='input-group-control']) {
+  font-size: 1rem;
+}
+
+.auth-card [data-slot='input-group-addon'] {
+  padding-block: 0;
+}
+
+.auth-card [data-slot='input-group-addon'] button {
+  min-width: 2.75rem;
+}
+
+.auth-card :is([data-slot='button'], [data-slot='field-label']) {
+  font-size: 0.875rem;
+}
+
+.auth-card [data-slot='button'] {
+  padding-block: 0.5rem;
+}
+
+.auth-card [data-slot='button'] > span:has(> svg) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.auth-card > a[href] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  margin-block-start: 0.5rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-card nav a {
+  align-content: center;
+  min-height: 2.75rem;
+}
+
 @media (min-width: 640px) {
+  .auth-shell {
+    background: color-mix(in oklab, var(--muted) 45%, var(--background));
+  }
+
+  .auth-main {
+    padding: clamp(2rem, 5vw, 4rem) 2rem;
+  }
+
   .auth-card {
-    padding: 2rem 1.5rem;
+    padding: 2.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--card);
   }
 }

@@ -18,6 +18,29 @@ Both previews leave the initial viewport unset so Storybook opens at its respons
 manual choices; do not initialize an unregistered `responsive` option, which the installed Storybook resolves through
 its first available device before clearing it. Normal story opening must not traverse phone sizes.
 
+## Complex data review
+
+Run `go-task visual-review` from the repository root to open the three production views with repeatable local sample
+data. The same stories also appear in the full catalogue. Use the viewport, locale and theme controls on each scene.
+
+| Scene | What to try |
+| --- | --- |
+| [Mixed Home feed](http://127.0.0.1:6006/?path=/story/pages-discovery-home-filter-context--mixed-reading) | Scan the mixed entries and change the feed selection. |
+| [Illustrated catalogue](http://127.0.0.1:6006/?path=/story/patterns-search-work-context--illustrated-catalogue) | Compare similar works, then open one work’s context to inspect its credits. |
+| [Monthly reading comparison](http://127.0.0.1:6006/?path=/story/pages-library-reading-insights--monthly-comparison) | Compare the months and open the exact counts for the selected year. |
+
+Run `go-task visual-review:gallery` to build and browse a snapshot of the full catalogue with local records
+and illustrative states. The command prints a loopback URL. Choose another port with
+`go-task visual-review:gallery -- --port 6010`. For live component edits, run `go-task visual-review:all`.
+
+In **Site Shell → Navigation → Route Review**, enter an application path in Controls and choose a visitor.
+For example, open `/orders` signed in to compare three payment states and follow an order to its receipt.
+A direct iframe link can also provide the URL-encoded application path in the `entry` query parameter.
+A route with no matching record shows its normal unavailable or empty state.
+
+The connected views consume fixtures locally. Follow-up destinations and account writes use their normal product routes
+in the application.
+
 ## Sidebar organization
 
 Use the Web product areas to browse a page or workflow. Use the composed **UI Library** to browse a reusable

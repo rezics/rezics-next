@@ -190,10 +190,10 @@ export function KnowledgeDocumentPage({
 
   return (
     <article
-      className="mx-auto w-full min-w-0 max-w-3xl space-y-8 px-4 py-8 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-12"
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-6 px-4 py-5 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
       aria-busy={preparing}
     >
-      <header className="space-y-4 border-b border-border pb-6">
+      <header className="space-y-2 border-b border-border pb-5">
         <p className="text-sm font-medium text-muted-foreground">
           {exact ? m.knowledge_exact_kind() : m.knowledge_live_kind()}
         </p>

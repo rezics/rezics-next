@@ -451,7 +451,11 @@ test('committing directory filters replaces the cursor and sends the complete se
       subject: '00000002-0000-7000-8000-000000000002',
       order: 'popular',
     });
-    const form = view.host.querySelector<HTMLFormElement>('[data-slot="public-collection-discovery-filters"]')!;
+    const panel = view.host.querySelector<HTMLDetailsElement>('[data-slot="public-collection-discovery-refine-region"]')!;
+    expect(panel.open).toBe(false);
+    await act(async () => panel.querySelector('summary')!.click());
+    expect(panel.open).toBe(true);
+    const form = panel.querySelector<HTMLFormElement>('[data-slot="public-collection-discovery-filters"]')!;
     (form.elements.namedItem('presentationKind') as HTMLInputElement).value = 'schema:Book';
     (form.elements.namedItem('curator') as HTMLInputElement).value = '00000003-0000-7000-8000-000000000003';
     (form.elements.namedItem('subject') as HTMLInputElement).value = '00000004-0000-7000-8000-000000000004';

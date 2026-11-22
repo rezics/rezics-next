@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { ArrowUpRight, BookCopy, BookOpen, LibraryBig } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -9,10 +10,19 @@ import { PageHeading } from '../../shell/page-heading';
 import { bookDiscoveryHref, type BookCatalogueChoice } from './model';
 import { BookShelfLink, bookLinkClass } from './shelf-link';
 
-const choiceLabel = (choice: BookCatalogueChoice) => choice.label || choice.type;
+const bookKinds = {
+  'schema:Book': { label: m.work_franchise_kind_book, Icon: BookOpen },
+  'schema:BookSeries': { label: m.work_franchise_kind_book_series, Icon: LibraryBig },
+  'bf:Instance': { label: m.library_copy_edition, Icon: BookCopy },
+};
+
+function choiceLabel(choice: BookCatalogueChoice, locale: string) {
+  if (choice.label && choice.label !== choice.type) return choice.label;
+  return bookKinds[choice.type].label({}, { locale: locale as never });
+}
 
 const browseClass = cn(
-  buttonVariants({ variant: 'default' }),
+  buttonVariants({ variant: 'outline' }),
   'h-auto min-h-7 max-w-full shrink justify-center whitespace-normal [overflow-wrap:anywhere]',
 );
 
@@ -28,20 +38,20 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
       target="_blank"
       rel="noopener"
       data-slot="book-catalogue-search"
-      className="flex min-w-0 flex-wrap items-end gap-3"
+      className="flex min-w-0 flex-col flex-wrap gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-end"
     >
-      <Field className="min-w-0 flex-1 basis-64">
+      <Field className="min-w-0 sm:flex-1 sm:basis-60">
         <FieldLabel htmlFor={queryId}>{m.search_heading({}, options)}</FieldLabel>
         <Input id={queryId} name="q" type="search" />
       </Field>
-      <Field className="min-w-0 basis-52">
+      <Field className="min-w-0 sm:basis-44">
         <FieldLabel htmlFor={typeId}>{m.books_catalogue_kind({}, options)}</FieldLabel>
         <Select
           name="type"
           defaultValue={choices[0]!.type}
           items={choices.map((choice) => ({
             value: choice.type,
-            label: <span lang={choice.language ?? undefined}>{choiceLabel(choice)}</span>,
+            label: <span lang={choice.language ?? undefined}>{choiceLabel(choice, locale)}</span>,
           }))}
         >
           <SelectTrigger id={typeId} className="w-full">
@@ -51,7 +61,7 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
             <SelectGroup>
               {choices.map((choice) => (
                 <SelectItem key={choice.type} value={choice.type}>
-                  <span lang={choice.language ?? undefined}>{choiceLabel(choice)}</span>
+                  <span lang={choice.language ?? undefined}>{choiceLabel(choice, locale)}</span>
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -68,12 +78,16 @@ function BookSearch({ locale, choices }: { locale: string; choices: readonly Boo
 
 function TypeRow({ locale, choice }: { locale: string; choice: BookCatalogueChoice }) {
   const options = { locale: locale as never };
-  const title = choiceLabel(choice);
+  const title = choiceLabel(choice, locale);
+  const { Icon } = bookKinds[choice.type];
   return (
     <li
-      className="grid min-w-0 grid-cols-1 items-start gap-3 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-6"
+      className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4"
       data-book-type={choice.type}
     >
+      <span className="row-span-2 grid size-10 place-items-center rounded-lg bg-muted text-muted-foreground sm:row-span-1">
+        <Icon className="size-5" strokeWidth={1.6} aria-hidden="true" />
+      </span>
       <div className="min-w-0 space-y-1">
         <h2
           className="text-lg font-semibold tracking-tight [overflow-wrap:anywhere]"
@@ -99,8 +113,13 @@ function TypeRow({ locale, choice }: { locale: string; choice: BookCatalogueChoi
         )}
       </div>
       {choice.state === 'ready' ? (
-        <a className={browseClass} href={bookDiscoveryHref(locale, choice.type)} target="_blank" rel="noopener">
-          {m.books_catalogue_browse({}, options)}
+        <a
+          className={cn(browseClass, 'col-start-2 justify-self-start sm:col-start-3')}
+          href={bookDiscoveryHref(locale, choice.type)}
+          target="_blank"
+          rel="noopener"
+        >
+          {m.books_catalogue_browse({}, options)} <ArrowUpRight aria-hidden="true" />
           <span className="sr-only"> — {m.books_catalogue_new_tab({}, options)}</span>
         </a>
       ) : null}
@@ -112,12 +131,15 @@ export function BookCataloguePage({ locale, choices }: { locale: string; choices
   const options = { locale: locale as never };
   const ready = choices.filter((choice) => choice.state === 'ready');
   return (
-    <section className="mx-auto max-w-3xl space-y-8" data-slot="book-catalogue">
+    <section className="mx-auto min-w-0 max-w-3xl space-y-5" data-slot="book-catalogue">
       <header className="space-y-3">
         <PageHeading>{m.books_catalogue_title({}, options)}</PageHeading>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          {m.books_catalogue_intro({}, options)}
+        </p>
       </header>
       {ready.length > 0 && <BookSearch key={ready.map(({ type }) => type).join('|')} locale={locale} choices={ready} />}
-      <ul className="min-w-0 divide-y" data-slot="book-catalogue-types">
+      <ul className="min-w-0 divide-y border-y" data-slot="book-catalogue-types">
         {choices.map((choice) => (
           <TypeRow key={choice.type} locale={locale} choice={choice} />
         ))}
@@ -127,14 +149,14 @@ export function BookCataloguePage({ locale, choices }: { locale: string; choices
           {m.books_catalogue_retry({}, options)}
         </a>
       )}
-      <div className="space-y-3 border-t pt-8" data-slot="book-catalogue-personal">
+      <div className="space-y-3 pt-1" data-slot="book-catalogue-personal">
         <ul className="flex min-w-0 flex-col">
           {ready.map((choice) => (
             <li key={choice.type} className="min-w-0">
               <BookShelfLink
                 locale={locale}
                 type={choice.type}
-                label={choiceLabel(choice)}
+                label={choiceLabel(choice, locale)}
                 language={choice.language ?? null}
               />
             </li>

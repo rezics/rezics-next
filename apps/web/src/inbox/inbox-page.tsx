@@ -136,7 +136,7 @@ export function InboxRows({
     <>
       <ol
         aria-label={m.inbox_heading()}
-        className="mt-6 space-y-3"
+        className="mt-4 divide-y divide-border border-y border-border"
         onClickCapture={(event: MouseEvent<HTMLOListElement>) => {
           const native = event.nativeEvent;
           if (
@@ -200,7 +200,7 @@ export function InboxRows({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere"
+                    className="h-auto min-h-10 max-w-full whitespace-normal wrap-anywhere"
                     data-inbox-notice-action="true"
                     disabled={
                       pendingNoticeId === item.id || loading || noticeWaiting || noticeRetryBlocked || !onRetrySeen
@@ -256,11 +256,11 @@ export function InboxRows({
               data-unread={item.unread}
               data-kind={item.reportId ? 'report_outcome' : item.kind}
               data-actor-id={actor.actorId ?? undefined}
-              className="min-w-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <article
-                className={`grid min-w-0 gap-4 rounded-xl border p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)] sm:gap-6 sm:p-5 ${
-                  item.unread ? 'border-s-4 border-s-primary bg-muted/30' : 'border-border bg-card'
+                className={`grid min-w-0 gap-2 border-s-2 px-3 py-4 sm:grid-cols-[minmax(0,1fr)_fit-content(13rem)] sm:gap-5 sm:px-4 ${
+                  item.unread ? 'border-s-primary bg-muted/25' : 'border-transparent'
                 }`}
               >
                 <div className="min-w-0 wrap-anywhere">
@@ -294,7 +294,7 @@ export function InboxRows({
                   </div>
                   <h2
                     data-content-item-slot="title"
-                    className="mt-3 max-w-prose wrap-anywhere text-lg leading-snug font-semibold sm:text-xl"
+                    className="mt-1.5 max-w-prose wrap-anywhere text-lg leading-snug font-semibold sm:text-xl"
                   >
                     {href ? (
                       <a
@@ -317,13 +317,16 @@ export function InboxRows({
                     </div>
                   ) : null}
                   {context ? (
-                    <div data-content-item-slot="context" className="mt-4 max-w-prose border-s-2 border-border ps-3">
+                    <div
+                      data-content-item-slot="context"
+                      className="mt-2 flex max-w-prose flex-wrap items-baseline gap-x-2 text-sm"
+                    >
                       <p className="text-xs font-medium text-muted-foreground">{m.inbox_notice_context()}</p>
-                      <p className="mt-1 wrap-anywhere text-sm leading-relaxed">{context}</p>
+                      <p className="wrap-anywhere leading-relaxed">{context}</p>
                     </div>
                   ) : null}
                 </div>
-                <div className="flex min-w-0 flex-col items-start gap-3 border-t border-border pt-3 sm:items-end sm:border-t-0 sm:pt-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:flex-col sm:items-end">
                   <div data-content-item-slot="state" className="min-w-0 max-w-full">
                     <Badge
                       role={confirmedNoticeId === item.id ? 'status' : undefined}
@@ -1332,7 +1335,7 @@ export function ViewerInboxPage({
   );
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl pb-8">
       <header className="min-w-0 border-b border-border pb-5">
         <h1 id={boundaryId} ref={boundary} tabIndex={-1} className="font-display text-3xl font-semibold tracking-tight">
           {m.inbox_heading()}
@@ -1390,15 +1393,19 @@ export function ViewerInboxPage({
       ) : (
         <>
           {readable ? (
-            <section aria-label={m.inbox_triage_scope()} className="mt-5 rounded-xl border border-border p-3 sm:p-4">
+            <section aria-label={m.inbox_triage_scope()} className="mt-4 min-w-0">
               <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-2">
-                  <div role="group" aria-label={m.inbox_triage_filter_group()} className="flex min-w-0 flex-wrap gap-2">
+                  <div
+                    role="group"
+                    aria-label={m.inbox_triage_filter_group()}
+                    className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1"
+                  >
                     <Button
                       type="button"
                       variant="outline"
                       aria-pressed={selection === 'all'}
-                      className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
+                      className="h-auto min-h-10 min-w-0 max-w-full whitespace-normal border-transparent bg-transparent text-muted-foreground shadow-none aria-pressed:border-border aria-pressed:bg-background aria-pressed:font-semibold aria-pressed:text-foreground"
                       onClick={() => chooseSelection('all')}
                     >
                       {m.inbox_triage_filter_all()}
@@ -1407,7 +1414,7 @@ export function ViewerInboxPage({
                       type="button"
                       variant="outline"
                       aria-pressed={selection === 'unread'}
-                      className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
+                      className="h-auto min-h-10 min-w-0 max-w-full whitespace-normal border-transparent bg-transparent text-muted-foreground shadow-none aria-pressed:border-border aria-pressed:bg-background aria-pressed:font-semibold aria-pressed:text-foreground"
                       onClick={() => chooseSelection('unread')}
                     >
                       {m.inbox_triage_filter_unread()}

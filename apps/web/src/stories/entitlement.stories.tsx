@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import {
   activeEntitlement,
   mappedEntitlement,
+  revokedEntitlement,
   fixedEditionTerms,
   setEntitlementStoryMode,
   type EntitlementStoryMode,
@@ -12,6 +13,7 @@ import {
   resetEntitlementReaderUnavailable,
   setEntitlementReaderUnavailableEditionId,
 } from '../kernel/fake/entitlement-reader-unavailable';
+import { EntitlementPage } from '../checkout/entitlement-page';
 import { benefitReaderHref, capturedBenefit } from '../checkout/benefit';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -196,5 +198,21 @@ export const ReaderUnavailable: Story = {
     await expect(canvas.queryByRole('heading', { level: 1, name: m.entitlements_detail_heading() })).toBeNull();
     await expect(canvas.queryByRole('link', { name: m.order_receipt() })).toBeNull();
     await expect(canvasElement.querySelector('[data-slot="document-body"]')).toBeNull();
+  },
+};
+
+export const RevokedFixedEdition: Story = {
+  render: () => (
+    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
+      <EntitlementPage
+        page={{ kind: 'ready', data: { ...revokedEntitlement, contentEdition: fixedEditionTerms } }}
+        locale={getLocale()}
+      />
+    </main>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.entitlements_revoked())).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
   },
 };

@@ -17,7 +17,7 @@ const meta = {
   id: 'patterns-library-entry-removal-journey',
   parameters: {
     layout: 'fullscreen',
-    admitted: ['personal_library', 'library_entry.restore'],
+    admitted: ['personal_library', 'library_entry.delete', 'library_entry.restore'],
     docs: {
       description: {
         component:

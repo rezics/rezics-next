@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { fromPlainText } from '@rezics/document';
 import { KnowledgeReferenceAuthoring } from '../knowledge/reference-authoring';
-import { KnowledgeReferenceList } from '../knowledge/reference-view';
+import { KnowledgeReferenceBody, KnowledgeReferenceList } from '../knowledge/reference-view';
 import { writeReference, type ReferenceDraft } from '../knowledge/reference-model';
 import { getLocale } from '../paraglide/runtime.js';
 import { referenceCopy } from '../knowledge/reference-copy';
 import { knowledgeDocumentId, knowledgeRevisionId, knowledgeViewports } from './knowledge-document-fixtures';
 
-export function illustrativeProblem(): ReferenceDraft {
+function illustrativeProblem(): ReferenceDraft {
   const body = fromPlainText(
     'Problem: prove that a convergent sequence is bounded. State the theorem and definition used.',
     'blocks',
@@ -74,6 +74,19 @@ const meta = {
 } satisfies Meta<typeof Authoring>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+export const IllustrativeProblem: Story = {
+  render: () => {
+    const draft = illustrativeProblem();
+    return (
+      <KnowledgeReferenceBody
+        document={draft.body}
+        references={draft.references}
+        locale={getLocale()}
+        inspectable={false}
+      />
+    );
+  },
+};
 export const ReferenceAuthoring: Story = {
   render: () => <Authoring />,
   play: async ({ canvasElement }) => {

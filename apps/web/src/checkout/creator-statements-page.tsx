@@ -24,15 +24,17 @@ export function StatementAmount({
   currency,
   locale,
   moneyUnit,
+  presentation,
 }: {
   value: number;
   currency: string;
   locale: string;
   moneyUnit?: unknown;
+  presentation?: 'evidence' | 'summary';
 }) {
   return (
     <span className="tabular-nums">
-      {formatMinorAmount(locale, currency, value, moneyUnit) ?? m.statements_amount_unavailable()}
+      {formatMinorAmount(locale, currency, value, moneyUnit, presentation) ?? m.statements_amount_unavailable()}
     </span>
   );
 }

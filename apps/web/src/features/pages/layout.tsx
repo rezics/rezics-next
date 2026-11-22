@@ -1,6 +1,7 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
+import { cn } from '@rezics/ui/utils';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
 import { puckSlotHasContent, SlotContent } from './render';
@@ -225,7 +226,10 @@ function LinkGrid(props: Record<string, unknown>) {
             <a
               href={href}
               lang={label.lang}
-              className={`${buttonVariants({ variant: 'outline' })} h-auto min-h-7 w-full max-w-full whitespace-normal text-center`}
+              className={cn(
+                buttonVariants({ variant: 'outline' }),
+                'h-auto min-h-7 w-full max-w-full whitespace-normal text-center',
+              )}
             >
               <span className="min-w-0 wrap-anywhere">{label.text}</span>
             </a>

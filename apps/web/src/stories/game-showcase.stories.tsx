@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import accounts from '../kernel/recorded/accounts.json';
 import { game, gameSparse, gameReleases, gameSummary } from '../kernel/fixtures/game-showcase';
 import { selectGameShowcase, type GameShowcaseState } from '../kernel/fake/game-showcase';
 import { getLocale } from '../paraglide/runtime.js';
@@ -16,6 +17,8 @@ function GameShowcase({ state = 'rich', entry = 'work' }: { state?: GameShowcase
     <PageStory
       key={`${state}:${entry}:${locale}`}
       visitor="Signed In"
+      accountId={accounts.accounts[0]!.id}
+      credentialMode="session"
       previewNewTabs
       path={entry === 'release' ? subjectUrlForView(address, 'release') : address.href}
       ratingsFixture={state === 'sparse' ? 'subject-ratings-empty' : 'subject-ratings-global'}

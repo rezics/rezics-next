@@ -1,7 +1,7 @@
 import { chooseSelectValue, expectSelectValue } from './select-option';
 import { mixedResultKindNavigation } from './search.stories';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import {
@@ -179,38 +179,28 @@ export const MoreKindMetadata: Story = {
   },
 };
 
-/** Client navigation evidence from the existing fixture transport, not native rating-sort proof. */
+/** A native GET applies the proposed order. Editing the selector leaves the current hit window available. */
 export const SortNavigation: Story = {
   render: () => <PageStory visitor="Signed Out" path="/search?q=Mira%20continued&cursor=old-sort-hits%2B%2F%3D" />,
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await canvas.findByText('Mira Reading Room');
-    await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(3);
-
-    await chooseSelectValue(canvas.getByLabelText(m.search_sort_label()), 'rating');
-    // The actual loader receives a fresh traversal and returns the fixture's first page.
-    await waitFor(async () => {
-      await expectSelectValue(canvas.getByLabelText(m.search_sort_label()), 'rating');
-      await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(1);
-    });
-    const more = await canvas.findByRole('link', { name: m.search_more() });
-    const ratingUrl = new URL(more.getAttribute('href')!, 'http://rezics.local');
-    await expect(ratingUrl.pathname).toBe(`/${getLocale()}/search`);
-    await expect(ratingUrl.searchParams.get('q')).toBe('Mira continued');
-    await expect(ratingUrl.searchParams.get('sort')).toBe('rating');
-    await expect(ratingUrl.searchParams.get('cursor')).toBe('opaque-hits-page+/=');
-
-    await chooseSelectValue(canvas.getByLabelText(m.search_sort_label()), 'relevance');
-    await waitFor(async () => {
-      await expectSelectValue(canvas.getByLabelText(m.search_sort_label()), 'relevance');
-    });
-    const relevanceUrl = new URL(
-      canvas.getByRole('link', { name: m.search_more() }).getAttribute('href')!,
-      'http://rezics.local',
-    );
-    await expect(relevanceUrl.searchParams.get('q')).toBe('Mira continued');
-    await expect(relevanceUrl.searchParams.has('sort')).toBe(false);
-    await expect(canvas.getByRole('heading', { level: 1, name: m.search_heading() })).toBeVisible();
+    const order = canvas.getByLabelText(m.search_sort_label());
+    const form = order.closest('form')!;
+    const rows = () => context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li');
+    await expect(rows()).toHaveLength(3);
+    await chooseSelectValue(order, 'rating');
+    await expectSelectValue(order, 'rating');
+    await expect(rows()).toHaveLength(3);
+    const submitted = new FormData(form);
+    await expect(submitted.get('q')).toBe('Mira continued');
+    await expect(submitted.get('sort')).toBe('rating');
+    await expect(submitted.has('cursor')).toBe(false);
+    await expect(form.method).toBe('get');
+    await expect(within(form).getByRole('button', { name: m.search_sort_submit_button() })).toBeEnabled();
+    await chooseSelectValue(order, '');
+    await expectSelectValue(order, '');
+    await expect(new FormData(form).get('sort')).toBe('');
   },
 };

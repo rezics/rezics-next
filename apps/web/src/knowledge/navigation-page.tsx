@@ -57,7 +57,7 @@ function NavigationFrame({
   const options = { locale: locale as never };
   return (
     <div
-      className="mx-auto w-full min-w-0 max-w-6xl space-y-8 px-4 py-6 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere] sm:px-6 sm:py-8"
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-5 pb-8 text-foreground selection:bg-primary/20 [overflow-wrap:anywhere]"
       data-private-knowledge-navigation
     >
       <header className="min-w-0 space-y-3">

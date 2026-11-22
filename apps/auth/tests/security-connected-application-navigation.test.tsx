@@ -177,6 +177,7 @@ test('current reload keeps accepted history and backward navigation uses exact c
   const middle = consent('middle', 'Middle observation', ['profile:write']);
   await mount(sourceFor((cursor) => (cursor === undefined ? ready([first], nextCursor) : ready([middle]))));
 
+  expect(consentSection()?.contains(document.activeElement)).toBe(false);
   await flush(() => click(m.auth_inventory_next()));
   await waitText('Middle observation');
   expect(document.activeElement?.id).toBe('inventory-consents-heading');

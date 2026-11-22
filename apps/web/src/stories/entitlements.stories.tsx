@@ -3,6 +3,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { EntitlementsPage } from '../checkout/entitlements-page';
 import {
   activeEntitlement,
+  fixedEditionTerms,
+  revokedEntitlement,
   setEntitlementStoryMode,
   type EntitlementStoryMode,
   type MappedEntitlementStoryMode,
@@ -10,6 +12,7 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageStory } from './page';
+import recordedReceipt from '../kernel/recorded/order-paid.json';
 
 const meta = {
   title: 'Commerce/Entitlements/Entitlements',
@@ -133,5 +136,56 @@ export const MappedFixedEdition: Story = {
       canvas.getByRole('link', { name: m.entitlements_open({ title: 'The Little Prince' }) }),
     ).toHaveAttribute('href', `/${getLocale()}/entitlements/${activeEntitlement.id}`);
     await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+  },
+};
+
+export const MixedAccessRecords: Story = {
+  render: () => {
+    const titles = [
+      ['en', 'Atlas of the Night Sky: annotated plates and field observations, 1932–1958'],
+      ['ja', '雪国の余白　限定復刻版'],
+      ['ar', 'رسائل من المرفأ القديم'],
+      ['fr', 'Les cartes marines et leurs lecteurs'],
+      ['en', 'Weather Journals, Volume II: a critical edition with commentary and parallel translations'],
+    ] as const;
+    const rows = titles.map(([language, value], index) => {
+      const id = (group: number) => `019a2100-0000-7000-8000-${String(group * 100 + index).padStart(12, '0')}`;
+      return {
+        ...(index === 1 ? revokedEntitlement : activeEntitlement),
+        id: id(1),
+        offerId: id(2),
+        orderId: id(3),
+        targetSubjectId: id(4),
+        contentEdition:
+          index === 0
+            ? null
+            : {
+                ...fixedEditionTerms,
+                targetSubjectId: id(4),
+                benefit: {
+                  ...fixedEditionTerms.benefit,
+                  resource: { ...fixedEditionTerms.benefit.resource, id: id(5) },
+                  version: { ...fixedEditionTerms.benefit.version, revisionId: id(6) },
+                },
+              },
+        grantedAt: `2026-10-${27 - index}T11:30:00Z`,
+        summary: index === 3 ? null : { ...recordedReceipt.order.subject, id: id(4), label: { language, value } },
+      };
+    });
+    return (
+      <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
+        <EntitlementsPage
+          page={{ kind: 'ready', data: { entitlements: rows, next: 'access-history-next' } }}
+          locale={getLocale()}
+        />
+      </main>
+    );
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('listitem')).toHaveLength(5);
+    await expect(canvas.getByText(m.entitlements_revoked())).toBeVisible();
+    await expect(canvas.getByText(m.entitlements_hidden_subject())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.buyer_history_next() })).toBeVisible();
   },
 };

@@ -546,7 +546,7 @@ export function CreatorOffersPage({
                           page.offers.some((current) => current.id === offer.id && current.state === 'active')
                             ? { href: `/${locale}/offers/${offer.id}` }
                             : {})}
-                          className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
+                          className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:line-clamp-3 [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
                           metadata={
                             <div className="min-w-0 space-y-2">
                               <p className="font-serif text-lg tabular-nums">

@@ -34,6 +34,7 @@ import { conceptPublicReturnHref, mangaObservedOrigin } from './subject-page-com
 import type { AuthoredPublicOrigin } from './semantic-render-port';
 import { VIEWS, type View } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
+import { ChevronDown, Compass } from 'lucide-react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { Cover, type CoverLabels, type CoverRatio } from '@rezics/ui/cover';
@@ -274,32 +275,44 @@ export function SubjectFrame({
           <WorkPartsEntry id={frame.id} label={title} locale={locale} context={observedContext} realm={realm} />
         )}
       </header>
-      <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
-      <SubjectKnowledgeSlot
-        subjectId={frame.id}
-        locale={locale}
-        visitHref={`${location.pathname}${location.searchStr}${location.hash}`}
-      />
-      <SubjectExploreSlot
-        subjectId={frame.id}
-        subjectType={frame.type}
-        label={title}
-        locale={locale}
-        context={observedContext}
-        realm={realm}
-        returnTo={returnTo}
-        publicReturnHref={conceptReturnHref}
-        musicReturnTo={location.publicHref}
-      />
-      <ReleaseFidelitySlot
-        subjectId={frame.id}
-        subjectType={frame.type}
-        label={title}
-        locale={locale}
-        context={observedContext}
-        returnHref={releaseOrigin}
-      />
-      <CatalogueFileSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <details className="group/explore min-w-0 border-y border-border/70">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 py-2 text-sm font-medium marker:content-none focus-visible:outline-2 focus-visible:outline-ring">
+          <Compass aria-hidden="true" className="size-4 text-muted-foreground" />
+          {m.literary_reader_explore({}, { locale: locale as never })}
+          <ChevronDown
+            aria-hidden="true"
+            className="ms-auto size-4 text-muted-foreground group-open/explore:rotate-180"
+          />
+        </summary>
+        <div className="grid min-w-0 gap-4 border-t border-border/60 py-4">
+          <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+          <SubjectKnowledgeSlot
+            subjectId={frame.id}
+            locale={locale}
+            visitHref={`${location.pathname}${location.searchStr}${location.hash}`}
+          />
+          <SubjectExploreSlot
+            subjectId={frame.id}
+            subjectType={frame.type}
+            label={title}
+            locale={locale}
+            context={observedContext}
+            realm={realm}
+            returnTo={returnTo}
+            publicReturnHref={conceptReturnHref}
+            musicReturnTo={location.publicHref}
+          />
+          <ReleaseFidelitySlot
+            subjectId={frame.id}
+            subjectType={frame.type}
+            label={title}
+            locale={locale}
+            context={observedContext}
+            returnHref={releaseOrigin}
+          />
+          <CatalogueFileSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+        </div>
+      </details>
       {library ? (
         <div
           data-slot="subject-library"

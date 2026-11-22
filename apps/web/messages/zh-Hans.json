@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "语境信息不可用。请再查看。",
   "ctxw_unknown": "结果未知。请原样重试同一请求，或查看当前状态。",
   "ctxw_views": "语境视图",
+  "curation_access_heading": "需要访问权限",
+  "curation_access_message": "此账号无法打开展示编辑器。",
   "curation_active": "上次检查时的保存配置",
   "curation_actual_head": "检查时的已保存版本：{head}。配置：{digest}",
   "curation_add": "添加模板",

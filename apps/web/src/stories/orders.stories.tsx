@@ -144,7 +144,14 @@ export const UnknownSettlementAndMoney: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.orders_status_unknown(), { exact: true })).toBeVisible();
-    await expect(canvas.getByText(m.statements_amount_unavailable())).toBeVisible();
+    await expect(
+      canvas.getByText(
+        m.money_raw_minor_unknown_unit({
+          amount: String(order.unitAmountMinor),
+          currency: order.currency.toUpperCase(),
+        }),
+      ),
+    ).toBeVisible();
     await expect(canvas.getByText(m.orders_entitlement_pending())).toBeVisible();
   },
 };

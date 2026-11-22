@@ -2,8 +2,7 @@ import { expect, test } from 'bun:test';
 import { act, createElement, Fragment } from 'react';
 import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import * as v from 'valibot';
-import { searchParams } from '../src/search/search-params';
+import { searchLoaderDeps } from '../src/search/search-params';
 import { SearchSort, searchSortHref } from '../src/search/sort';
 import { m } from '../src/paraglide/messages.js';
 
@@ -35,7 +34,7 @@ test('native sort submission uses a supported value and independently labeled se
   expect(sorts[0]![2]).toMatch(/<option\b[^>]*value="" selected=""/);
   expect(sorts[1]![2]).toMatch(/<option\b[^>]*value="rating" selected=""/);
   expect(html).toContain('type="submit"');
-  expect(v.parse(searchParams, { sort: '' }).sort).toBeUndefined();
+  expect(searchLoaderDeps({ sort: '' }).sort).toBeUndefined();
 });
 
 test('disabled sorting cannot submit a new order', () => {

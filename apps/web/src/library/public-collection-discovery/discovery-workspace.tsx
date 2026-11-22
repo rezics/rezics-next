@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from 'react';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
@@ -17,7 +18,7 @@ export function PublicCollectionDiscoveryWorkspace({
 }: {
   locale: string;
   selection: PublicCollectionDirectorySelection;
-  headingRef?: Ref<HTMLHeadingElement>;
+  headingRef?: Ref<HTMLHeadingElement> | undefined;
   results: ReactNode;
   refinement: ReactNode;
 }) {
@@ -31,57 +32,48 @@ export function PublicCollectionDiscoveryWorkspace({
           </PageHeading>
           <p className="max-w-3xl text-muted-foreground">{m.collection_discovery_intro({}, options)}</p>
         </div>
+      </header>
+      <details className="group border-y border-border" data-slot="public-collection-discovery-refine-region">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+          <SlidersHorizontal aria-hidden="true" className="size-4 text-muted-foreground" />
+          {m.collection_filters({}, options)}
+          <span className="ms-auto min-w-0 text-end font-normal text-muted-foreground">
+            {selection.order === 'popular'
+              ? m.collection_discovery_order_popular({}, options)
+              : m.collection_discovery_order_recent({}, options)}
+          </span>
+          <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-open:rotate-180" />
+        </summary>
+        <div className="min-w-0 max-w-3xl border-t border-border/60 py-4">{refinement}</div>
+      </details>
+      {selection.presentationKind || selection.curator || selection.subject ? (
         <dl
           data-slot="public-collection-discovery-applied-context"
-          className="grid min-w-0 gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm"
         >
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              {m.collection_discovery_kind_label({}, options)}
-            </dt>
-            <dd className="break-all text-sm font-medium">
-              {selection.presentationKind ?? m.collection_discovery_kind_placeholder({}, options)}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              {m.collection_discovery_order_label({}, options)}
-            </dt>
-            <dd className="text-sm font-medium">
-              {selection.order === 'popular'
-                ? m.collection_discovery_order_popular({}, options)
-                : m.collection_discovery_order_recent({}, options)}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              {m.collection_discovery_curator_label({}, options)}
-            </dt>
-            <dd className="break-all font-mono text-sm">{selection.curator ?? '—'}</dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              {m.collection_discovery_subject_label({}, options)}
-            </dt>
-            <dd className="break-all font-mono text-sm">{selection.subject ?? '—'}</dd>
-          </div>
+          {[
+            [m.collection_discovery_kind_label({}, options), selection.presentationKind],
+            [m.collection_discovery_curator_label({}, options), selection.curator],
+            [m.collection_discovery_subject_label({}, options), selection.subject],
+          ].map(([label, value]) =>
+            value ? (
+              <div key={label} className="min-w-0">
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="font-medium">
+                  <bdi>{value}</bdi>
+                </dd>
+              </div>
+            ) : null,
+          )}
         </dl>
-      </header>
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <section
-          aria-label={m.collection_discovery_heading({}, options)}
-          data-slot="public-collection-discovery-result-region"
-          className="min-w-0 space-y-5"
-        >
-          {results}
-        </section>
-        <div
-          data-slot="public-collection-discovery-refine-region"
-          className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5"
-        >
-          {refinement}
-        </div>
-      </div>
+      ) : null}
+      <section
+        aria-label={m.collection_discovery_heading({}, options)}
+        data-slot="public-collection-discovery-result-region"
+        className="min-w-0 space-y-5"
+      >
+        {results}
+      </section>
     </main>
   );
 }

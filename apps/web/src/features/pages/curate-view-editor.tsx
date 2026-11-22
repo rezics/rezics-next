@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
-import { ErrorPage } from '../../shell/shell';
+import { RouteState } from '../../shell/route-state';
 import {
   addCompanionView,
   overviewOf,
@@ -196,8 +196,20 @@ async function readCurationOpening(
   return { ...active, advice: unavailableCurationAdvice() };
 }
 
+function CurationAccessNotice({ locale }: { locale: string }) {
+  const options = presentationMessageOptions(locale);
+  return (
+    <RouteState
+      kind="closed"
+      {...options}
+      heading={m.curation_access_heading({}, options)}
+      message={m.curation_access_message({}, options)}
+    />
+  );
+}
+
 function failureView(failure: CurationReadFailure, locale: string) {
-  if (failure.reason === 'forbidden') return <ErrorPage />;
+  if (failure.reason === 'forbidden') return <CurationAccessNotice locale={locale} />;
   return (
     <div className="space-y-4">
       <CurationFailureNotice failure={failure} locale={locale} />
@@ -849,7 +861,7 @@ function AdmittedPresentationViewEditor({
     return (
       <>
         {navigationGuard}
-        <ErrorPage />
+        <CurationAccessNotice locale={locale} />
       </>
     );
 

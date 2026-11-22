@@ -1,3 +1,4 @@
+import { LibraryPageStatus } from './page-status';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useRouter } from '@tanstack/react-router';
@@ -165,13 +166,25 @@ export function LabelsCurrent({
         />
       );
     if (session.state === 'signed-out') return <LabelsPageView page={signedOutPage} locale={locale} />;
-    return <p role="status">{m.library_labels_unavailable()}</p>;
+    return (
+      <LibraryPageStatus locale={locale} title={m.library_labels_heading()}>
+        <p role="status">{m.library_labels_unavailable()}</p>
+      </LibraryPageStatus>
+    );
   }
   if (!allowed && shown.current !== origin.id)
-    return <p role="status">{admitted ? m.library_subject_label_closed() : m.library_labels_unavailable()}</p>;
+    return (
+      <LibraryPageStatus locale={locale} title={m.library_labels_heading()}>
+        <p role="status">{admitted ? m.library_subject_label_closed() : m.library_labels_unavailable()}</p>
+      </LibraryPageStatus>
+    );
   return (
     <>
-      {!allowed ? <p role="status">{m.library_labels_unavailable()}</p> : null}
+      {!allowed ? (
+        <LibraryPageStatus locale={locale} title={m.library_labels_heading()}>
+          <p role="status">{m.library_labels_unavailable()}</p>
+        </LibraryPageStatus>
+      ) : null}
       <div hidden={!allowed}>
         <LabelsRead
           key={origin.id}
@@ -385,14 +398,14 @@ function LabelsRead({
   };
   if (!page || (hydrated && !guard && (!page.state || page.state === 'loaded')))
     return (
-      <div>
+      <LibraryPageStatus locale={address.locale} title={m.library_labels_heading()}>
         <p role="status">{m.library_labels_unavailable()}</p>
         {hydrated && !query.isFetching ? (
           <Button type="button" variant="outline" size="sm" onClick={retryCurrent}>
             {m.subject_view_retry()}
           </Button>
         ) : null}
-      </div>
+      </LibraryPageStatus>
     );
   return (
     <LabelsPageView

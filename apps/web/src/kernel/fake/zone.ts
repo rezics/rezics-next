@@ -18,7 +18,9 @@ import {
   staticZoneOwnerFake as staticOwnerHome,
 } from '../../zones/static-fakes';
 import recordedSubject from '../recorded/subject.json';
-import subjectPage from '../recorded/zone-subject-page.json';
+import kokoroPage from '../recorded/zone-subject-page.json';
+import littlePrincePage from '../recorded/subject-page.json';
+import littlePrincePageZhHans from '../recorded/subject-page-zh-Hans.json';
 import subjectReactions from '../recorded/subject-reactions.json';
 
 const zoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
@@ -51,6 +53,12 @@ type ZoneTarget = { route: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function memberPage(subject: unknown, languages: unknown) {
+  if (subject === kokoroPage.subject) return kokoroPage;
+  if (subject === littlePrincePage.subject)
+    return Array.isArray(languages) && languages[0] === 'zh-Hans' ? littlePrincePageZhHans : littlePrincePage;
 }
 
 function admittedZoneSubject(home: KernelRecording, subject: string): boolean {
@@ -216,12 +224,12 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
       }),
       match,
     );
-    if (!home || home.status !== 200 || !('zone' in home) || !admittedZoneSubject(home, target.subject))
+    const page = memberPage(target.subject, requestedLanguages);
+    if (!page || !home || home.status !== 200 || !('zone' in home) || !admittedZoneSubject(home, target.subject))
       return problem(404, { 'cache-control': 'no-store' });
     return {
-      ...subjectPage,
+      ...page,
       status: 200,
-      subject: target.subject,
       views: ['overview', 'details'],
       zone: home.zone,
     };
@@ -318,20 +326,20 @@ async function response(request: Request, match: RegExpExecArray | null): Promis
 }
 
 async function subjectPageResponse(request: Request): Promise<KernelRecording | undefined> {
-  let target: unknown;
+  let body: unknown;
   try {
-    const body = await request.json();
-    target = isRecord(body) ? body.target : undefined;
+    body = await request.json();
   } catch {
     return undefined;
   }
-  if (!isRecord(target)) return undefined;
-  if (target.subject !== subjectId && target.subject !== recordedSubjectId) return undefined;
+  if (!isRecord(body) || !isRecord(body.target)) return undefined;
+  const target = body.target;
+  const page = memberPage(target.subject, body.languages);
+  if (!page) return undefined;
   if (target.view !== undefined && target.view !== 'overview' && target.view !== 'details') return undefined;
   return {
-    ...subjectPage,
+    ...page,
     status: 200,
-    subject: target.subject,
     views: ['overview', 'details'],
   };
 }

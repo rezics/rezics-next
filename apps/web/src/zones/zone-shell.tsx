@@ -1,4 +1,5 @@
 import type { CompositionDocument, View } from '@rezics/composition';
+import { ArrowLeft } from 'lucide-react';
 import { useLocation, useRouter, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -52,7 +53,7 @@ function navigationHref(zone: ZonePublic, locale: string, route: string): string
 export function ZoneShell({
   zone,
   locale,
-  route = '',
+  route,
   returnTo,
   children,
 }: {
@@ -65,38 +66,40 @@ export function ZoneShell({
   const label = zoneLabel(zone, locale);
   return (
     <div data-zone-shell className="flex min-w-0 flex-col gap-6">
-      <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        {label ? (
-          <p lang={label.lang} className="min-w-0 break-words font-sans text-xl font-semibold tracking-tight">
-            {label.text}
-          </p>
-        ) : (
-          <span />
-        )}
-        {zone.navigation.length > 0 && (
-          <nav aria-label={m.zone_navigation()} className="flex flex-wrap gap-x-5 gap-y-2">
-            {zone.navigation.map(({ route: destination }) => (
-              <a
-                key={destination}
-                href={navigationHref(zone, locale, destination)}
-                aria-current={destination === route ? 'page' : undefined}
-                className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              >
-                {zoneRouteHeading(destination, locale)}
-              </a>
-            ))}
-          </nav>
-        )}
-      </header>
-      {returnTo ? (
-        <p>
-          <a
-            href={returnTo.href}
-            className="inline-flex items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            {returnTo.label}
-          </a>
-        </p>
+      {returnTo || (route && label) || zone.navigation.length > 0 ? (
+        <header className="flex min-w-0 flex-col border-b border-border/70 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-5">
+          {returnTo ? (
+            <a
+              href={returnTo.href}
+              className="inline-flex min-h-11 max-w-full items-center gap-2 py-2 text-sm font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{returnTo.label}</span>
+            </a>
+          ) : route && label ? (
+            <a
+              href={navigationHref(zone, locale, '')}
+              lang={label.lang}
+              className="inline-flex min-h-11 min-w-0 items-center py-2 text-base font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {label.text}
+            </a>
+          ) : null}
+          {zone.navigation.length > 0 && (
+            <nav aria-label={m.zone_navigation()} className="flex min-w-0 flex-wrap gap-x-1">
+              {zone.navigation.map(({ route: destination }) => (
+                <a
+                  key={destination}
+                  href={navigationHref(zone, locale, destination)}
+                  aria-current={destination === route ? 'page' : undefined}
+                  className="inline-flex min-h-11 max-w-full items-center border-b-2 border-transparent px-2 py-1 text-sm font-medium text-muted-foreground [overflow-wrap:anywhere] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring aria-[current=page]:border-primary aria-[current=page]:text-foreground"
+                >
+                  {zoneRouteHeading(destination, locale)}
+                </a>
+              ))}
+            </nav>
+          )}
+        </header>
       ) : null}
       <div className="min-w-0">{children}</div>
     </div>

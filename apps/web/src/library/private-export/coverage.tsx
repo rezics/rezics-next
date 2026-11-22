@@ -25,20 +25,24 @@ export function ExportCoverage({
         <p className="text-sm">{m.library_export_privacy()}</p>
         <p className="text-sm text-muted-foreground">{m.library_export_version({ version: EXPORT_VERSION })}</p>
       </div>
-      <div className="space-y-2 rounded-lg border p-4">
-        <h3 className="font-semibold">{m.library_export_omissions_heading()}</h3>
-        <p>{m.library_export_full_false()}</p>
-        <p>{m.library_export_excluded()}</p>
-        <p>{m.library_export_no_finance()}</p>
-        <p className="text-sm">{m.library_export_no_reimport()}</p>
-      </div>
-      <div className="space-y-3">
-        <p className="text-sm">{m.library_export_expiry({ minutes: EXPORT_TTL_MINUTES })}</p>
-        {previousDisposition ? <p>{m.library_export_restart_help()}</p> : null}
+      <div className="flex flex-wrap items-center gap-3 border-y border-border py-4">
         <ExportAction type="button" disabled={busy || locked} onClick={onCapture}>
           {busy ? m.library_export_capturing() : m.library_export_capture()}
         </ExportAction>
+        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">
+          {m.library_export_expiry({ minutes: EXPORT_TTL_MINUTES })}
+        </p>
+        {previousDisposition ? <p className="basis-full">{m.library_export_restart_help()}</p> : null}
       </div>
+      <section className="space-y-2">
+        <h3 className="font-semibold">{m.library_export_omissions_heading()}</h3>
+        <div className="max-w-prose space-y-2 text-sm text-muted-foreground">
+          <p>{m.library_export_full_false()}</p>
+          <p>{m.library_export_excluded()}</p>
+          <p>{m.library_export_no_finance()}</p>
+          <p>{m.library_export_no_reimport()}</p>
+        </div>
+      </section>
       <details className="rounded-lg border">
         <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_sections_heading()}</summary>
         <div className="space-y-4 px-4 pb-4">

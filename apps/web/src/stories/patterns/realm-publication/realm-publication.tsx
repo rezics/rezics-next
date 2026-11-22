@@ -7,12 +7,14 @@ import { getLocale } from '../../../paraglide/runtime.js';
 import { m } from '../../../paraglide/messages.js';
 import { PatternStory } from '../../page';
 
+export const publicationSpaceAddress = 'readers-realm';
+
 function Shelf({ unavailable, frozen }: { unavailable: boolean; frozen: boolean }) {
   const [page, setPage] = useState<SpacePageData | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    void readSpacePage({ data: { address: 'atlas-member', credentialMode: 'session' } }).then(
+    void readSpacePage({ data: { address: publicationSpaceAddress, credentialMode: 'session' } }).then(
       (value) => {
         if (active) setPage(value);
       },
@@ -24,7 +26,7 @@ function Shelf({ unavailable, frozen }: { unavailable: boolean; frozen: boolean 
       active = false;
     };
   }, []);
-  if (failed) return <p role="status">{m.realm_shelf_unavailable()}</p>;
+  if (failed || (page && !page.realm)) return <p role="status">{m.realm_shelf_unavailable()}</p>;
   if (!page?.realm) return null;
   return (
     <div className="space-y-10">
@@ -43,7 +45,7 @@ function Shelf({ unavailable, frozen }: { unavailable: boolean; frozen: boolean 
   );
 }
 
-/** Recorded native shelf responses; only Search failure is constructed. No permission or success is invented. */
+/** Mount the same illustrative Realm home and shelf reads as the routed community preview. */
 export function RealmPublicationExample({
   unavailable = false,
   frozen = false,
@@ -52,7 +54,7 @@ export function RealmPublicationExample({
   frozen?: boolean;
 }) {
   return (
-    <PatternStory visitor="Signed In" path="/spaces/atlas-member">
+    <PatternStory visitor="Signed In" path={`/spaces/${publicationSpaceAddress}`}>
       <Shelf unavailable={unavailable} frozen={frozen} />
     </PatternStory>
   );

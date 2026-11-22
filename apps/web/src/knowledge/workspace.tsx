@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 
 export const knowledgeControl =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start leading-snug [overflow-wrap:anywhere]';
+  'h-auto min-h-10 max-w-full whitespace-normal break-words text-start leading-snug [overflow-wrap:anywhere]';
 export const knowledgeLink =
   'inline-flex max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 export const knowledgeSummary =
-  'cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'min-h-11 cursor-pointer content-center rounded-sm py-2 text-sm font-medium marker:text-muted-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** Disclosure changes presentation only. Children keep their visit-owned state while collapsed. */
 export function KnowledgeDetails({ label, children }: { label: string; children: ReactNode }) {

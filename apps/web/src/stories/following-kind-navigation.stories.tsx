@@ -1,7 +1,15 @@
+import { PatternStory } from './page';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { MineFollowingPageView } from '../library/mine-following-page';
 
 const meta = {
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path="/library/following">
+        <Story />
+      </PatternStory>
+    ),
+  ],
   title: 'Library/Following/Following Kind Navigation',
   id: 'pages-library-following-kind-navigation',
   component: MineFollowingPageView,

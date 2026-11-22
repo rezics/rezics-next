@@ -36,7 +36,7 @@ export function AuthNotice({ children, className, ...props }: ComponentPropsWith
     <div
       {...props}
       className={cn(
-        'relative grid w-full min-w-0 gap-0.5 rounded-lg border bg-card px-2 py-1.5 text-left text-xs/relaxed text-card-foreground [overflow-wrap:anywhere] [&_p]:m-0',
+        'relative grid w-full min-w-0 gap-0.5 rounded-lg border bg-card px-2 py-1.5 text-left text-sm/relaxed text-card-foreground empty:sr-only [overflow-wrap:anywhere] [&_p]:m-0',
         className,
       )}
     >

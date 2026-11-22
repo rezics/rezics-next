@@ -1,4 +1,4 @@
-import { ImportDetails } from '../personal-list-import/presentation';
+import { ImportDetails, ImportFileInput } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -117,15 +117,14 @@ export function AniListUploadForm({
         <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_anilist_file_label()}
         </FieldLabel>
-        <Input
+        <ImportFileInput
           ref={input}
           id={inputId}
-          type="file"
+
           onChange={edit}
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}
-          className="w-full max-w-full file:me-3"
         />
       </Field>
       <AniListAction type="submit" disabled={busy || disabled} aria-busy={busy}>

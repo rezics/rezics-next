@@ -8,10 +8,10 @@ import { withSubjectVisitReturn } from './subject-visit-navigation';
 
 export type ViewTabLabels = { views: string; names: Record<View, string> };
 
-const barClass = 'sticky top-16 z-30 min-w-0 border-b border-border/60 bg-background/90 backdrop-blur';
+const barClass = 'sticky top-[var(--shell-header-height,4rem)] z-30 min-w-0 border-b border-border bg-background';
 // The inactive color is the muted foreground: the 60% foreground the component defaults to does not clear 4.5:1.
 const triggerClass =
-  'flex flex-none items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring data-active:border-primary data-active:text-foreground';
+  'flex min-h-10 flex-none items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring data-active:border-primary data-active:text-foreground';
 
 /**
  * The views a subject page offers, as links styled as tabs. The bar stays in view under the top bar, scrolls
@@ -37,8 +37,14 @@ export function ViewTabs({
 }) {
   const bar = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const current = bar.current?.querySelector<HTMLElement>('[data-active]');
-    current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    const rail = bar.current;
+    const current = rail?.querySelector<HTMLElement>('[data-active]');
+    if (!rail || !current) return;
+    const track = rail.getBoundingClientRect();
+    const item = current.getBoundingClientRect();
+    if (item.left < track.left || item.right > track.right) {
+      rail.scrollBy?.({ left: item.left - track.left - (track.width - item.width) / 2 });
+    }
   }, [active]);
   return (
     <nav aria-label={labels.views} data-slot="view-tabs" className={barClass}>
@@ -59,7 +65,10 @@ export function ViewTabs({
               >
                 {labels.names[view]}
                 {count && (
-                  <span data-slot="count" className="text-xs tabular-nums">
+                  <span
+                    data-slot="count"
+                    className="rounded-sm bg-muted px-1.5 py-0.5 text-xs leading-none tabular-nums"
+                  >
                     {formatCount(count, locale)}
                   </span>
                 )}

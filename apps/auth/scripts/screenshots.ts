@@ -53,7 +53,7 @@ type Viewport = (typeof viewports)[number];
 export type CaptureTarget = {
   state: (typeof states)[number];
   route: string;
-  persona: 'fresh reader session';
+  persona: 'signed-out visitor' | 'fresh reader session';
   locale: Locale;
   theme: Theme;
   viewport: Viewport;
@@ -257,7 +257,7 @@ async function waitForCaptureReady(owner: CaptureLifetime, page: Page): Promise<
   );
 }
 
-async function createContext(owner: CaptureLifetime, browser: Browser, origin: string, locale: string) {
+async function createContext(owner: CaptureLifetime, browser: Browser, locale: string) {
   const context = await owner.own(
     'browser context',
     () =>
@@ -269,9 +269,6 @@ async function createContext(owner: CaptureLifetime, browser: Browser, origin: s
         javaScriptEnabled: true,
       }),
     (context) => context.close(),
-  );
-  await owner.step('context cookies', () =>
-    context.value.addCookies([{ name: 'auth_session', value: authSession, url: origin }]),
   );
   return context;
 }
@@ -328,7 +325,10 @@ export function captureMatrix(): CaptureTarget[] {
         states.map((state) => ({
           state,
           route: pathFor(state),
-          persona: 'fresh reader session' as const,
+          persona:
+            state === 'login' || state === 'login-error' || state === 'signup'
+              ? ('signed-out visitor' as const)
+              : ('fresh reader session' as const),
           locale,
           theme,
           viewport,
@@ -425,7 +425,12 @@ export const captureDependencies: CaptureDependencies = {
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { ...process.env, AUTH_ORIGIN: authOrigin, CI: '1' },
+      env: {
+        ...process.env,
+        AUTH_ORIGIN: authOrigin,
+        AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+        CI: '1',
+      },
     }),
   fetch: (url, signal) => fetch(url, { signal }),
   launch: () => chromium.launch(),
@@ -459,10 +464,20 @@ export async function runCapture(
     const targets = captureMatrix();
     const captures: CaptureRecord[] = [];
     for (const locale of locales) {
-      const context = await createContext(owner, browser.value, site.origin, locale);
+      const context = await createContext(owner, browser.value, locale);
       try {
-        for (const target of targets.filter((candidate) => candidate.locale === locale))
+        let persona: CaptureTarget['persona'] = 'signed-out visitor';
+        for (const target of targets.filter((candidate) => candidate.locale === locale)) {
+          if (persona !== target.persona) {
+            await owner.step('context cookies', () =>
+              target.persona === 'signed-out visitor'
+                ? context.value.clearCookies({ name: 'auth_session' })
+                : context.value.addCookies([{ name: 'auth_session', value: authSession, url: site.origin }]),
+            );
+            persona = target.persona;
+          }
           captures.push(await capture(owner, context.value, site.origin, target, join(output, target.imagePath)));
+        }
       } finally {
         await context.close();
       }

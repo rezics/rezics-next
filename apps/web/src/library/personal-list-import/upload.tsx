@@ -2,7 +2,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { VndbAction } from './controls';
-import { Input } from '@rezics/ui/shadcn/input';
+import { ImportFileInput } from './presentation';
 
 export function VndbUploadForm({
   busy,
@@ -64,15 +64,14 @@ export function VndbUploadForm({
         <FieldLabel htmlFor={inputId} className="items-center">
           {m.library_vndb_file_label()}
         </FieldLabel>
-        <Input
+        <ImportFileInput
           ref={input}
           id={inputId}
-          type="file"
+
           onChange={edit}
           accept="application/xml,text/xml,.xml"
           aria-describedby={helpId}
           disabled={busy || disabled}
-          className="w-full max-w-full file:me-3"
         />
       </Field>
       <VndbAction type="submit" disabled={busy || disabled} aria-busy={busy}>

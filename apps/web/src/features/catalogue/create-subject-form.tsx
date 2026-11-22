@@ -934,9 +934,16 @@ function CreateSubjectFormLive({
                 <fieldset
                   key={index}
                   disabled={draftDisabled || !typeEditable}
-                  className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+                  className="grid min-w-0 gap-x-6 gap-y-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] sm:p-5"
                 >
-                  <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
+                  <legend className="max-w-full px-1 text-base font-semibold">
+                    {m.catalogue_create_terms({}, options)}
+                    {row.language.trim() && (
+                      <bdi className="ms-2 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
+                        {row.language}
+                      </bdi>
+                    )}
+                  </legend>
                   {(['label', 'language', 'description', 'aliases'] as const).map((field) => {
                     const id = `create-${field}-${index}`;
                     const describedBy =
@@ -952,11 +959,16 @@ function CreateSubjectFormLive({
                             ? m.catalogue_create_description({}, options)
                             : m.catalogue_create_aliases({}, options);
                     return (
-                      <Field key={field} data-invalid={invalid(id) || undefined}>
+                      <Field
+                        key={field}
+                        className={field === 'description' || field === 'aliases' ? 'min-w-0 sm:col-span-2' : 'min-w-0'}
+                        data-invalid={invalid(id) || undefined}
+                      >
                         <FieldLabel htmlFor={id}>{label}</FieldLabel>
                         {field === 'aliases' ? (
                           <Textarea
                             id={id}
+                            className="min-h-10 text-base sm:text-sm"
                             value={row[field]}
                             rows={3}
                             aria-invalid={invalid(id)}
@@ -966,6 +978,7 @@ function CreateSubjectFormLive({
                         ) : (
                           <Input
                             id={id}
+                            className="min-h-10 text-base sm:text-sm"
                             value={row[field]}
                             maxLength={field === 'language' ? 64 : 250}
                             required={field === 'language' || field === 'label'}
@@ -1006,6 +1019,7 @@ function CreateSubjectFormLive({
                     <Button
                       type="button"
                       variant="ghost"
+                      className="min-h-10 justify-self-start sm:col-span-2"
                       onClick={() => {
                         writeRows(rowsRef.current.filter((_, at) => at !== index));
                         setFailure(undefined);

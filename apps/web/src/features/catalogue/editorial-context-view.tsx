@@ -28,7 +28,7 @@ import { admits, lifecycleOperation } from '../contexts/model';
 import type { Actions, Result } from '../contexts/model';
 import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './context-settings-view';
 
-const actionControlClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
+const actionControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
 export const EditorialContextWorkspace = catalogueEditor(EditorialContextWorkspaceLive);
@@ -71,7 +71,6 @@ function EditorialContextWorkspaceLive({
   const session = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
   const creationRead = useRef(0);
-  const settingsSource = useRef<EditorialTransport['settings'] | undefined>(undefined);
   const active = reading?.ok ? (reading.context ?? undefined) : undefined;
   const nativeLifecycle = reading?.ok ? reading.lifecycle : null;
   const displayedContext = active ?? (nativeLifecycle?.state === 'deleted' ? nativeLifecycle : undefined);
@@ -144,12 +143,11 @@ function EditorialContextWorkspaceLive({
   }, [id, transport]);
   useEffect(() => {
     const source = transport.settings;
-    if (!source || settingsSource.current === source) return;
-    settingsSource.current = source;
+    if (!source || !lifetime.active()) return;
     let cancelled = false;
     setInventory({ kind: 'loading' });
-    void source
-      .choices(session.current)
+    void Promise.resolve()
+      .then(() => source.choices(session.current))
       .then((latest) => {
         if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
       })
@@ -162,11 +160,12 @@ function EditorialContextWorkspaceLive({
   }, [transport.settings, lifetime]);
   useEffect(() => {
     const digest = active?.settings?.release;
-    if (!transport.settings || !digest) return;
+    const source = transport.settings;
+    if (!source || !digest || !lifetime.active()) return;
     let cancelled = false;
     setCaptured({ kind: 'loading' });
-    void transport.settings
-      .captured(digest, session.current)
+    void Promise.resolve()
+      .then(() => source.captured(digest, session.current))
       .then((latest) => {
         if (!cancelled && mounted.current && lifetime.active()) setCaptured(latest);
       })
@@ -448,9 +447,10 @@ function EditorialContextWorkspaceLive({
                   setChanged(false);
                 }}
                 onReload={() => {
-                  if (!transport.settings) return;
-                  void transport.settings
-                    .choices(session.current)
+                  const source = transport.settings;
+                  if (!source || !lifetime.active()) return;
+                  void Promise.resolve()
+                    .then(() => source.choices(session.current))
                     .then((latest) => {
                       if (mounted.current && lifetime.active()) setInventory(latest);
                     })

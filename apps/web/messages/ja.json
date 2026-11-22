@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "コンテキスト情報は利用できません。もう一度確認してください。",
   "ctxw_unknown": "結果は不明です。同じリクエストを変更せずに再試行するか、現在の状態を確認してください。",
   "ctxw_views": "コンテキスト表示",
+  "curation_access_heading": "権限が必要です",
+  "curation_access_message": "このアカウントでは表示設定エディターを開けません。",
   "curation_active": "前回確認した保存済みプロファイル",
   "curation_actual_head": "確認時に保存されていたバージョン: {head}。プロファイル: {digest}",
   "curation_add": "テンプレートを追加",

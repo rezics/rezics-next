@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { View } from '@rezics/composition';
+import accounts from '../kernel/recorded/accounts.json';
 import {
   book,
   bookContents,
@@ -52,6 +53,8 @@ function BookStory({
       previewNewTabs
       prepareFixture={prepareFixture}
       visitor={member ? 'Signed In' : 'Signed Out'}
+      accountId={member ? accounts.accounts[0]!.id : undefined}
+      credentialMode={member ? 'session' : 'anonymous'}
       path={`${subjectViewHref(localized, locale, view)}${realm ? `?realm=${bookRealm}` : ''}`}
       ratingsFixture={state === 'sparse' ? 'subject-ratings-empty' : 'subject-ratings-global'}
     />

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { View } from '@rezics/composition';
+import accounts from '../kernel/recorded/accounts.json';
 import {
   anime,
   animeEpisodes,
@@ -88,6 +89,8 @@ function AnimeStory({
       key={`${locale}:${member}:${entry}:${view}:${scenario}:${realm}`}
       previewNewTabs
       visitor={member ? 'Signed In' : 'Signed Out'}
+      accountId={member ? accounts.accounts[0]!.id : undefined}
+      credentialMode={member ? 'session' : 'anonymous'}
       path={entryPath(entry, locale, view, realm)}
       ratingsFixture={entry === 'sparse-season' ? 'subject-ratings-empty' : 'subject-ratings-global'}
     />

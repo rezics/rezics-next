@@ -514,14 +514,14 @@ function PrivatePageFrame({
   const options = localeOptions(locale);
   return (
     <div
-      className="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
+      className="mx-auto w-full min-w-0 max-w-3xl pb-8 text-foreground [overflow-wrap:anywhere]"
       data-private-knowledge-visit
     >
       <header
         ref={lifecycleHeadingRef}
         tabIndex={lifecycleHeadingRef ? -1 : undefined}
         aria-label={lifecycleHeadingRef ? title : undefined}
-        className="mb-8 min-w-0 space-y-3 border-b border-border pb-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="mb-5 min-w-0 space-y-2 border-b border-border pb-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <p className="text-xs font-medium tracking-wide text-muted-foreground">
           {m.knowledge_workspace_only_you({}, options)}

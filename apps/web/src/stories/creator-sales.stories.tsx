@@ -48,7 +48,8 @@ export const History: Story = {
   play: async ({ canvasElement }) => {
     const view = await salesMain(canvasElement);
     await expect(view.getByRole('heading', { level: 1, name: m.creator_sales_heading() })).toBeVisible();
-    await expect(view.getByText(m.creator_sales_paid(), { exact: true })).toBeVisible();
+    const sale = within(view.getByRole('list', { name: m.creator_review_rows() }).querySelector('li')!);
+    await expect(sale.getByText(m.creator_sales_paid(), { exact: true })).toBeVisible();
     await expect(view.getByRole('link', { name: m.statements_heading() })).toHaveAttribute(
       'href',
       `/${getLocale()}/creator/statements`,

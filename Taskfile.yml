@@ -63,6 +63,25 @@ tasks:
     desc: Start local operator Storybook (pass --ui or --port after --)
     cmds: ['bun run --cwd apps/web storybook --operator {{.CLI_ARGS}}']
 
+  visual-review:
+    desc: Browse the mixed feed, search results and reading insights with complex local sample data
+    env: { STORYBOOK_VISUAL_REVIEW: '1' }
+    cmds:
+      - bun run --cwd apps/web storybook --operator --initial-path '/?path=/story/patterns-search-work-context--illustrated-catalogue' {{.CLI_ARGS}}
+
+  visual-review:all:
+    desc: Browse every application story with recorded and illustrative data
+    env: { STORYBOOK_VISUAL_REVIEW: 'all' }
+    cmds: ['bun run --cwd apps/web storybook --operator {{.CLI_ARGS}}']
+
+  visual-review:gallery:
+    desc: Build and browse a stable snapshot of the full visual catalogue (pass --port after --)
+    dir: apps/web
+    env: { STORYBOOK_VISUAL_REVIEW: 'all' }
+    cmds:
+      - node node_modules/.bin/storybook build --quiet --output-dir ../../.temp/visual-review/site
+      - bun scripts/serve-visual-review.ts {{.CLI_ARGS}}
+
   storybook:build:
     desc: Build static Web and UI Storybooks (STORYBOOK_OUTPUT_DIR selects output)
     cmds: ['bun run --cwd apps/web storybook:build --operator']

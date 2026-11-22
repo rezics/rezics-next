@@ -19,21 +19,25 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
   return (
     <ul
       aria-label={m.creator_review_rows()}
-      className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground sm:p-5"
+      className="divide-y divide-border rounded-lg border bg-card text-card-foreground"
     >
       {sales.map((sale) => {
         const selected = reading.comparisonIds.includes(sale.orderId);
         return (
-          <ListRow key={sale.orderId} data-settlement={sale.settlement} className="min-w-0 space-y-3 p-3">
+          <ListRow
+            key={sale.orderId}
+            data-settlement={sale.settlement}
+            className="min-w-0 space-y-3 rounded-none border-0 bg-transparent px-4 py-4 sm:px-5"
+          >
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-              <h3
+              <h2
                 id={`sale-title-${sale.orderId}`}
-                className="min-w-0 whitespace-pre-wrap break-words font-medium [overflow-wrap:anywhere]"
+                className="min-w-0 line-clamp-3 whitespace-pre-wrap break-words font-medium [overflow-wrap:anywhere]"
               >
                 {sale.title}
-              </h3>
-              <p className="shrink-0 font-serif text-lg tabular-nums">
-                {formatMinorAmount(locale, sale.currency, sale.unitAmountMinor, sale.moneyUnit) ??
+              </h2>
+              <p className="min-w-0 break-words font-serif text-lg tabular-nums">
+                {formatMinorAmount(locale, sale.currency, sale.unitAmountMinor, sale.moneyUnit, 'summary') ??
                   m.statements_amount_unavailable()}{' '}
                 <span className="text-sm">{sale.currency.toUpperCase()}</span>
               </p>
@@ -54,10 +58,6 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
                   }).format(new Date(sale.createdAt))}
                 </time>
               </dd>
-              <dt className="text-muted-foreground">{m.creator_sales_reference()}</dt>
-              <dd className="min-w-0 select-text font-mono [overflow-wrap:anywhere]">{sale.orderId}</dd>
-              <dt className="text-muted-foreground">{m.creator_sale_offer_reference()}</dt>
-              <dd className="min-w-0 select-text font-mono [overflow-wrap:anywhere]">{sale.offerId}</dd>
             </dl>
             <div className="flex flex-wrap items-center gap-3">
               <Button

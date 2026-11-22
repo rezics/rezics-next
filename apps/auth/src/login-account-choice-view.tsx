@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { AuthButton as Button } from './button';
 import { ErrorAlert } from './alert';
 import { AuthActions, AuthNotice, AuthTaskSection } from './auth-task-view';
@@ -8,6 +8,7 @@ import { loginCanContinue, type LoginAccountChoice } from './login-account-choic
 /** The real route and its mounted stories share the same private account presentation. */
 export function LoginAccountChoiceView({
   choice,
+  children,
   pending,
   passkeyPending,
   onContinue,
@@ -16,6 +17,7 @@ export function LoginAccountChoiceView({
   allowContinue = true,
 }: {
   choice: LoginAccountChoice;
+  children?: ReactNode;
   pending: boolean;
   passkeyPending: boolean;
   onContinue: () => void;
@@ -27,6 +29,7 @@ export function LoginAccountChoiceView({
   const uncertain = choice.kind === 'ready' ? choice.uncertain : choice.review.uncertain;
   useLayoutEffect(() => {
     if (
+      status.current?.textContent &&
       choice.kind !== 'loading' &&
       (choice.kind !== 'ready' || choice.observation !== 'initial' || choice.mode === 'credentials')
     )
@@ -80,6 +83,7 @@ export function LoginAccountChoiceView({
           ) : null}
         </AuthActions>
       )}
+      {children}
       {choice.kind !== 'loading' && choice.kind !== 'unavailable' ? (
         <Button type="button" variant="ghost" disabled={pending} onClick={onReview}>
           {m.auth_login_review_session()}

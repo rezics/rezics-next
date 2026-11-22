@@ -56,6 +56,8 @@ const width = 'mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywher
 const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex max-w-full items-center underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const directoryViewLink =
+  'inline-flex min-h-10 items-center rounded-md border border-transparent px-3 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=page]:border-border aria-[current=page]:bg-background aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
 const options = (locale: string) => ({ locale: locale as never });
 function failureText(kind: Failure['kind'], locale: string) {
   const o = options(locale);
@@ -303,59 +305,79 @@ export function ContextDirectoryView({
         : m.ctxw_empty_help({}, o);
   return (
     <article className={width} aria-busy={!data}>
-      <header className="space-y-3">
-        <PageHeading ref={heading} tabIndex={-1}>
-          {m.ctxw_title({}, o)}
-        </PageHeading>
-        <p className="max-w-prose text-muted-foreground">{m.ctxw_intro({}, o)}</p>
-        {canCreate ? (
-          <a className={cn(buttonVariants(), actionClassName)} href={`${directoryHref(locale)}/new`}>
-            {m.ctxw_create({}, o)}
-          </a>
-        ) : (
-          <Button className={actionClassName} disabled>
-            {m.ctxw_create({}, o)}
-          </Button>
-        )}
-        <Permission actions={data?.creation ?? null} locale={locale} />
-        {!data ||
-        (data.creation.kind !== 'ready' && data.creation.kind !== 'denied' && data.creation.kind !== 'signed-out') ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={actionClassName}
-            onClick={() => void reload().catch(() => {})}
-          >
-            {m.ctxw_reread({}, o)}
-          </Button>
-        ) : null}
+      <header className="grid gap-3 border-b border-border pb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="space-y-2">
+          <PageHeading ref={heading} tabIndex={-1}>
+            {m.ctxw_title({}, o)}
+          </PageHeading>
+          <p className="max-w-prose text-muted-foreground">{m.ctxw_intro({}, o)}</p>
+        </div>
+        <div className="grid justify-items-start gap-2 sm:max-w-64">
+          {canCreate ? (
+            <a className={cn(buttonVariants(), actionClassName, 'min-h-10')} href={`${directoryHref(locale)}/new`}>
+              {m.ctxw_create({}, o)}
+            </a>
+          ) : (
+            <Button className={cn(actionClassName, 'min-h-10')} disabled>
+              {m.ctxw_create({}, o)}
+            </Button>
+          )}
+          {!canCreate ? <Permission actions={data?.creation ?? null} locale={locale} /> : null}
+          {!data ||
+          (data.creation.kind !== 'ready' && data.creation.kind !== 'denied' && data.creation.kind !== 'signed-out') ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClassName}
+              onClick={() => void reload().catch(() => {})}
+            >
+              {m.ctxw_reread({}, o)}
+            </Button>
+          ) : null}
+        </div>
       </header>
-      <nav aria-label={m.ctxw_views({}, o)} className="flex flex-wrap gap-4">
-        <a
-          className={linkClassName}
-          aria-current={!input.deleted ? 'page' : undefined}
-          href={directoryHref(locale, { query: input.query })}
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+        <nav
+          aria-label={m.ctxw_views({}, o)}
+          className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1"
         >
-          {m.ctxw_active({}, o)}
-        </a>
-        <a
-          className={linkClassName}
-          aria-current={input.deleted ? 'page' : undefined}
-          href={directoryHref(locale, { query: input.query, deleted: true })}
+          <a
+            className={directoryViewLink}
+            aria-current={!input.deleted ? 'page' : undefined}
+            href={directoryHref(locale, { query: input.query })}
+          >
+            {m.ctxw_active({}, o)}
+          </a>
+          <a
+            className={directoryViewLink}
+            aria-current={input.deleted ? 'page' : undefined}
+            href={directoryHref(locale, { query: input.query, deleted: true })}
+          >
+            {m.ctxw_deleted({}, o)}
+          </a>
+        </nav>
+        <form
+          action={directoryHref(locale)}
+          method="get"
+          className="flex w-full min-w-0 max-w-lg flex-wrap items-end gap-2 sm:flex-1"
         >
-          {m.ctxw_deleted({}, o)}
-        </a>
-      </nav>
-      <form action={directoryHref(locale)} method="get" className="flex flex-wrap items-end gap-3">
-        <Field className="min-w-0 flex-1 basis-48">
-          <FieldLabel htmlFor={searchId}>{m.ctxw_search({}, o)}</FieldLabel>
-          <Input id={searchId} name="query" type="search" maxLength={256} defaultValue={input.query ?? ''} />
-        </Field>
-        {input.deleted ? <input type="hidden" name="deleted" value="true" /> : null}
-        <Button className={actionClassName} type="submit" variant="outline">
-          {m.ctxw_search_action({}, o)}
-        </Button>
-      </form>
+          <Field className="min-w-0 flex-1 basis-36">
+            <FieldLabel htmlFor={searchId}>{m.ctxw_search({}, o)}</FieldLabel>
+            <Input
+              id={searchId}
+              name="query"
+              type="search"
+              className="min-h-10"
+              maxLength={256}
+              defaultValue={input.query ?? ''}
+            />
+          </Field>
+          {input.deleted ? <input type="hidden" name="deleted" value="true" /> : null}
+          <Button className={cn(actionClassName, 'min-h-10')} type="submit" variant="outline">
+            {m.ctxw_search_action({}, o)}
+          </Button>
+        </form>
+      </div>
       {!page ? (
         <p role="status">{m.ctxw_loading({}, o)}</p>
       ) : page.kind !== 'ready' ? (
@@ -382,7 +404,7 @@ export function ContextDirectoryView({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ul aria-label={m.ctxw_title({}, o)}>
+        <ul aria-label={m.ctxw_title({}, o)} className="divide-y divide-border border-y border-border">
           {page.value.contexts.map((entry) => {
             const title = pickText(entry.labels, locale);
             return (

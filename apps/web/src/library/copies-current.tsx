@@ -1,3 +1,4 @@
+import { LibraryPageStatus } from './page-status';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -83,19 +84,25 @@ export function CopiesCurrent({
     return <SessionRecoveryPage pathname={`/${locale}/library/copies`} locale={locale} />;
   if (!subject || (!allowed && shown.current !== origin.id))
     return (
-      <p role="status">
-        {session.state === 'signed-out'
-          ? m.library_sign_in()
-          : !allowed
-            ? m.library_sort_denied()
-            : m.library_sort_preparing()}
-      </p>
+      <LibraryPageStatus locale={locale} title={m.library_copy_heading()}>
+        <p role="status">
+          {session.state === 'signed-out'
+            ? m.library_sign_in()
+            : !allowed
+              ? m.library_sort_denied()
+              : m.library_sort_preparing()}
+        </p>
+      </LibraryPageStatus>
     );
   if (address.issue)
     return <CopiesAddressRecovery key={origin.id} address={address} current={() => origin.isCurrent()} />;
   return (
     <>
-      {!allowed ? <p role="status">{m.library_sort_preparing()}</p> : null}
+      {!allowed ? (
+        <LibraryPageStatus locale={locale} title={m.library_copy_heading()}>
+          <p role="status">{m.library_sort_preparing()}</p>
+        </LibraryPageStatus>
+      ) : null}
       <div hidden={!allowed}>
         <CurrentCopiesRead
           key={origin.id}
@@ -232,7 +239,7 @@ function CurrentCopiesRead({
   // Server HTML keeps the existing no-JS form; browser authority comes only from the cache guard.
   if (!page || (hydrated && !guard))
     return (
-      <div>
+      <LibraryPageStatus locale={address.locale} title={m.library_copy_heading()}>
         <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
         {hydrated && !query.isFetching ? (
           <Button
@@ -246,7 +253,7 @@ function CurrentCopiesRead({
             {windows.pending ? m.library_window_retry() : m.subject_view_retry()}
           </Button>
         ) : null}
-      </div>
+      </LibraryPageStatus>
     );
   return (
     <CopiesPage

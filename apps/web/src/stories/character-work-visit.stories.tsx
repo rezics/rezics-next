@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import release from '../../../../packages/definitions/release/rezics.json';
-import { OverviewContext, type OverviewValue } from '../features/pages/overview';
+import { OverviewContext } from '../features/pages/overview';
+import { characterStoryOverview } from './character-story-overview';
 import { SubjectConnections } from '../features/pages/subject-connections-view';
 import type { ConnectionRead } from '../features/pages/subject-connections-window';
 import { qualifiedRelationsPage } from '../kernel/fake/qualified-relations';
@@ -133,18 +134,17 @@ function CharacterVisit({
       sections: address.only ? { [address.only]: allSections[address.only] } : allSections,
     };
   };
-  const value = {
+  const value = characterStoryOverview({
     subject: id(1),
     subjectLabel: '長い名前の登場人物／角色的長名字',
     locale,
     link: PlainLink,
     reader: { spoilerLevel: 0, suitability: 'show' },
-    labels: { cover: {}, spoilerHide: 'Hide' },
+    labels: { spoilerHide: 'Hide' },
     unlabelled: 'Unlabelled',
     spoilerShow: 'Reveal',
     relations: {},
-    sections: {},
-  } as unknown as OverviewValue;
+  });
   return (
     <main className="mx-auto max-w-5xl space-y-6 bg-background p-4 text-foreground">
       <h1 className="text-3xl font-semibold">{value.subjectLabel}</h1>

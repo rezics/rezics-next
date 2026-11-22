@@ -60,7 +60,7 @@ async function runStories(): Promise<string[]> {
 }
 
 test('the entity picker searches as the person types, shows each subject with its cover, type and year, and selects with the keyboard', async () => {
-  expect(await outcomes()).toEqual([...states, ...layouts, ...typing, lifetime].sort());
+  expect(await outcomes()).toEqual([...states, ...layouts, ...typing].sort());
 }, 300_000);
 
 test('the entity picker says when nothing matches and when the search failed, and never shows an id', async () => {

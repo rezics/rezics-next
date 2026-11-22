@@ -44,6 +44,7 @@ type JourneyProps = {
   direct?: 'first' | 'night';
   checkpoint?: CheckpointState;
   startAtRoot?: boolean;
+  replaceAdmission?: boolean;
 };
 
 function IllustrativeCheckpoint({
@@ -175,6 +176,7 @@ function BookJourney({
   direct = 'first',
   checkpoint = 'none',
   startAtRoot = false,
+  replaceAdmission = false,
 }: JourneyProps) {
   const [runtime] = useState(() => {
     const book = createIllustrativeHostedBook(state, true);
@@ -272,6 +274,11 @@ function BookJourney({
             ) : (
               <p role="status">{m.book_reader_loading()}</p>
             )}
+            {replaceAdmission && (
+              <Button variant="outline" onClick={() => runtime.book.replace()}>
+                Replace publication / target / viewer admission
+              </Button>
+            )}
           </div>
         </AppShell>
       </QueryClientProvider>
@@ -358,7 +365,7 @@ export const FailedPageRecovery: Story = { args: { state: 'failed-page' }, play:
 export const MovedOccurrence: Story = { args: { state: 'moved', chapter: true } };
 export const UnavailableNavigation: Story = { args: { state: 'unavailable-navigation', chapter: true } };
 export const RetiredReading: Story = {
-  args: { chapter: true },
+  args: { chapter: true, replaceAdmission: true },
   play: async ({ canvasElement, parameters }) => {
     if (!parameters.readerJourney) return;
     const canvas = within(canvasElement);

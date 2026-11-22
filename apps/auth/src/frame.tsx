@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import type { ReactNode, Ref } from 'react';
 import { m } from './paraglide/messages.js';
 import { LocaleChoice } from './locale-choice-view';
@@ -25,6 +26,7 @@ export function AuthPage({
   heading,
   children,
   returnToSecurity = false,
+  returnRef,
   identity,
   headingRef,
   headingTabIndex,
@@ -32,6 +34,7 @@ export function AuthPage({
   heading: string;
   children?: ReactNode;
   returnToSecurity?: boolean;
+  returnRef?: Ref<HTMLAnchorElement>;
   identity?: ReactNode;
   headingRef?: Ref<HTMLHeadingElement>;
   headingTabIndex?: number;
@@ -50,7 +53,8 @@ export function AuthPage({
         {identity}
         {returnToSecurity ? (
           <nav className="auth-operation-exit" aria-label={m.auth_security_heading()}>
-            <a className="pointer-coarse:hitbox-y-2" href="/security">
+            <a ref={returnRef} className="pointer-coarse:hitbox-y-2" href="/security">
+              <ArrowLeft aria-hidden="true" size={16} />
               {m.auth_account_operation_return()}
             </a>
             <p>{m.auth_account_operation_leave_notice()}</p>

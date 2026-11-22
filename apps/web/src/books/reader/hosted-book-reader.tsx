@@ -1,5 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, List, Pin, PinOff } from 'lucide-react';
 import {
   Component,
@@ -195,6 +196,7 @@ function BookReaderView({
     () => ({ current: focusOwner === undefined ? null : { owner: focusOwner } }),
     [reader],
   );
+  const [contentsOutlet, setContentsOutlet] = useState<HTMLDivElement | null>(null);
   const [pinNavigation, setPinNavigation] = useState(true);
   const display = useBookDisplay();
   const page = state.page;
@@ -287,7 +289,7 @@ function BookReaderView({
     const variant = extra?.selected ? 'secondary' : appearance === 'control' ? 'outline' : 'ghost';
     const className = `${control} ${
       appearance === 'breadcrumb'
-        ? 'min-h-6 min-w-0 shrink justify-start font-normal text-muted-foreground'
+        ? 'min-h-6 min-w-0 shrink justify-start font-normal text-muted-foreground [&_bdi]:min-w-0 [&_bdi]:wrap-anywhere'
         : appearance === 'row'
           ? 'w-full justify-between gap-3 font-normal'
           : appearance === 'step'
@@ -303,11 +305,7 @@ function BookReaderView({
       <a
         href={href}
         ref={ref}
-        className={buttonVariants({
-          variant,
-          size: appearance === 'breadcrumb' ? 'sm' : 'default',
-          className,
-        })}
+        className={cn(buttonVariants({ variant, size: appearance === 'breadcrumb' ? 'sm' : 'default' }), className)}
         aria-current={extra?.selected ? 'location' : undefined}
         onClick={(event) => {
           if (
@@ -421,7 +419,10 @@ function BookReaderView({
   const rootPage = page?.kind === 'contents' && page.address.parentOccurrenceId === null;
   return (
     <>
-      <ShellContextNavigation label={labels.contents}>
+      <ShellContextNavigation
+        label={labels.contents}
+        documentOutlet={page?.kind === 'contents' ? contentsOutlet : null}
+      >
         <BookOutlineView
           reader={reader}
           locale={locale}
@@ -454,7 +455,7 @@ function BookReaderView({
           ) : null
         }
         contents={
-          page && rootContents ? (
+          page && rootContents && !rootPage ? (
             <nav aria-label={m.book_reader_context({}, options)} className="-mx-1.5">
               <ol className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
                 <li className="min-w-0 max-w-full">
@@ -475,7 +476,7 @@ function BookReaderView({
         }
         controls={
           page?.kind === 'chapter' ? (
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-1">
               <Button
                 className={`${control} gap-2 px-2`}
                 variant="ghost"
@@ -526,16 +527,18 @@ function BookReaderView({
                 {m.book_reader_language_location_unavailable({}, options)}
               </p>
             )}
-            <BookDisplaySettings {...display} locale={locale} />
-            {languageSource && (
-              <BookLanguageControls
-                source={languageSource}
-                page={page}
-                current={isPageCurrent}
-                navigate={changeLanguage}
-                locale={locale}
-              />
-            )}
+            <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:grid-cols-2">
+              <BookDisplaySettings {...display} locale={locale} />
+              {languageSource && (
+                <BookLanguageControls
+                  source={languageSource}
+                  page={page}
+                  current={isPageCurrent}
+                  navigate={changeLanguage}
+                  locale={locale}
+                />
+              )}
+            </div>
             <article
               ref={article}
               data-size={display.display.size}
@@ -580,7 +583,7 @@ function BookReaderView({
             ) : null}
             <nav
               aria-label={m.book_reader_navigation({}, options)}
-              className={`${pinNavigation ? 'sticky bottom-0 z-10' : ''} grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] pt-2 [overflow-wrap:anywhere]`}
+              className={`${pinNavigation ? 'sticky bottom-[var(--bottom-nav-height,0px)] z-10' : ''} grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] pt-2 [overflow-wrap:anywhere]`}
             >
               {step(page.previous, false)}
               <Button
@@ -594,7 +597,10 @@ function BookReaderView({
             </nav>
           </>
         ) : page?.kind === 'contents' ? (
-          <Contents page={page} locale={locale} destination={destination} />
+          <>
+            <Contents page={page} locale={locale} destination={destination} />
+            <div ref={setContentsOutlet} className="min-w-0 empty:hidden" />
+          </>
         ) : (
           <div className="grid justify-items-start gap-4 border-y py-6">
             {state.address.kind === 'contents' && state.state !== 'retired' ? (

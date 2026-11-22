@@ -50,58 +50,15 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
         );
       }
       if (path === '/v1/definitionTypes') {
-        const locale = (new URL(request.url).searchParams.get('locale') ?? 'en') as GuideLocale;
-        const search = new URL(request.url).searchParams;
-        const prefix = search.get('query') ?? '';
-        const offset = Number(search.get('cursor') ?? 0);
-        const all = Object.entries(scenario === 'empty' ? {} : activeRelease.types)
-          .map(([typeId, definition]) => {
-            const label = definitionText(definition.labels, locale);
-            const description = definitionText(definition.descriptions, locale);
-            return {
-              typeId,
-              releaseDigest: scenario === 'invalid' ? 'wrong-release' : definitions.digest,
-              label: label.text || typeId,
-              language: label.lang,
-              parents: [],
-              description: description.text || null,
-              descriptionLanguage: description.lang,
-            };
-          })
-          .sort((left, right) =>
-            left.label === right.label
-              ? left.typeId < right.typeId
-                ? -1
-                : left.typeId > right.typeId
-                  ? 1
-                  : 0
-              : left.label < right.label
-                ? -1
-                : 1,
-          )
-          .filter((entry) => entry.label.startsWith(prefix));
-        const limit = Number(search.get('limit') ?? 20);
-        const types = all.slice(offset, offset + limit);
-        return Response.json({ types, next: offset + limit < all.length ? String(offset + limit) : null });
+        return Response.json(recordedTypeDirectory(new URL(request.url), scenario));
       }
       if (path.startsWith('/v1/definitionTypes/')) {
-        const typeId = path.slice('/v1/definitionTypes/'.length);
-        const definition = activeRelease.types[typeId];
-        if (!definition) return Response.json({ code: 'not_found' }, { status: 404 });
-        const locale = (new URL(request.url).searchParams.get('locale') ?? 'en') as GuideLocale;
-        const label = definitionText(definition.labels, locale);
-        const description = definitionText(definition.descriptions, locale);
-        return Response.json({
-          typeId,
-          releaseDigest: scenario === 'invalid' ? 'wrong-release' : definitions.digest,
-          label: label.text || typeId,
-          language: label.lang,
-          parents: [],
-          description: description.text || null,
-          descriptionLanguage: description.lang,
-          definition,
-          properties: Object.fromEntries(definition.properties.map((id) => [id, activeRelease.properties[id]])),
-        });
+        const result = recordedTypeDescriptor(
+          path.slice('/v1/definitionTypes/'.length),
+          new URL(request.url),
+          scenario === 'invalid' ? 'wrong-release' : definitions.digest,
+        );
+        return Response.json(result, { status: result.status });
       }
       return Response.json({ code: 'not_found' }, { status: 404 });
     }) as typeof fetch,
@@ -126,4 +83,71 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
   return { client, transport, address, calls };
 }
 
-export const routes: FakeRoute[] = [];
+function recordedTypeDirectory(url: URL, scenario: GuideScenario = 'active') {
+  const locale = (url.searchParams.get('locale') ?? 'en') as GuideLocale;
+  const search = url.searchParams;
+  const prefix = search.get('query') ?? '';
+  const offset = Number(search.get('cursor') ?? 0);
+  const all = Object.entries(scenario === 'empty' ? {} : activeRelease.types)
+    .map(([typeId, definition]) => {
+      const label = definitionText(definition.labels, locale);
+      const description = definitionText(definition.descriptions, locale);
+      return {
+        typeId,
+        releaseDigest: scenario === 'invalid' ? 'wrong-release' : definitions.digest,
+        label: label.text || typeId,
+        language: label.lang,
+        parents: [],
+        description: description.text || null,
+        descriptionLanguage: description.lang,
+      };
+    })
+    .sort((left, right) =>
+      left.label === right.label
+        ? left.typeId < right.typeId
+          ? -1
+          : left.typeId > right.typeId
+            ? 1
+            : 0
+        : left.label < right.label
+          ? -1
+          : 1,
+    )
+    .filter((entry) => entry.label.startsWith(prefix));
+  const limit = Number(search.get('limit') ?? 20);
+  const types = all.slice(offset, offset + limit);
+  return { status: 200, types, next: offset + limit < all.length ? String(offset + limit) : null };
+}
+
+function recordedTypeDescriptor(typeId: string, url: URL, releaseDigest = definitions.digest) {
+  const locale = url.searchParams.get('locale') ?? 'en';
+  const definition = activeRelease.types[typeId];
+  if (!definition) return { status: 404, code: 'not_found' };
+  const label = definitionText(definition.labels, locale);
+  const description = definitionText(definition.descriptions, locale);
+  return {
+    status: 200,
+    typeId,
+    releaseDigest,
+    label: label.text || typeId,
+    language: label.lang,
+    parents: [],
+    description: description.text || null,
+    descriptionLanguage: description.lang,
+    definition,
+    properties: Object.fromEntries(definition.properties.map((id) => [id, activeRelease.properties[id]])),
+  };
+}
+
+export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: /^\/v1\/definitionTypes$/,
+    story: ({ request }) => recordedTypeDirectory(new URL(request.url)),
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/definitionTypes\/([^/]+)$/,
+    story: ({ match, request }) => recordedTypeDescriptor(decodeURIComponent(match![1]!), new URL(request.url)),
+  },
+];

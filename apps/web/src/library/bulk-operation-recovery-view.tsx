@@ -8,6 +8,8 @@ import {
   type LibraryBulkOutcome,
 } from './bulk-operation-recovery';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { LibraryPageStatus } from './page-status';
 
 type Props = {
   focusOwner?: string;
@@ -135,19 +137,19 @@ export function LibraryBulkOperationRecoveryView({
     else focus.current.retire();
     run();
   }
-  if (!authorized) return <p role="status">{m.library_bulk_recovery_forbidden()}</p>;
-  if (read.state === 'available' && read.operation.id !== addressOperationId)
-    return <p role="status">{m.library_bulk_recovery_unavailable()}</p>;
-  if (read.state !== 'available' && read.operationId !== addressOperationId)
-    return <p role="status">{m.library_bulk_recovery_unavailable()}</p>;
-  if (read.state !== 'available')
+  const matchesAddress = (read.state === 'available' ? read.operation.id : read.operationId) === addressOperationId;
+  if (!authorized || !matchesAddress || read.state !== 'available') {
+    const message = !authorized
+      ? m.library_bulk_recovery_forbidden()
+      : matchesAddress && read.state !== 'available'
+        ? unavailableLabel(read.state)
+        : m.library_bulk_recovery_unavailable();
     return (
-      <section aria-live="polite">
-        <p role="status">{unavailableLabel(read.state)}</p>
-        {read.state === 'unavailable' ? (
+      <LibraryPageStatus title={m.library_bulk_recovery_heading()} locale={getLocale()}>
+        <p role="status">{message}</p>
+        {authorized && matchesAddress && read.state === 'unavailable' ? (
           <Button
             variant="outline"
-            size="sm"
             type="button"
             disabled={busy}
             onClick={() => (readFailed && readRetry ? readRetry() : readAgain(addressOperationId))}
@@ -155,8 +157,9 @@ export function LibraryBulkOperationRecoveryView({
             {m.library_bulk_recovery_read_again()}
           </Button>
         ) : null}
-      </section>
+      </LibraryPageStatus>
     );
+  }
 
   const operation = read.operation;
   return (

@@ -326,10 +326,10 @@ const list: FakeRoute = {
           retryable: true,
           request_id: 'story-inbox-count-observation',
         };
-      return fixture === 'many'
+      return fixture === 'many' || fixture === 'mixed'
         ? {
             status: 200,
-            count: 100,
+            count: fixture === 'mixed' ? fixtureRows.mixed.filter((item) => item.unread).length : 100,
             capped: false,
             basis: 'current-visible-unread',
             witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },

@@ -118,3 +118,25 @@ test('a stale continuation restarts under current authority without the expired 
   expect(sent).toEqual([`/v1/zones/${zoneId}:readPage?cursor=expired-token`, `/v1/zones/${zoneId}:readPage`]);
   expect(outcome).toEqual({ kind: 'page', page });
 });
+
+test('Zone member pages retain the exact recorded subject and related facts across both views', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { default: kokoro } = await import('../src/kernel/recorded/zone-subject-page.json');
+  const { default: littlePrince } = await import('../src/kernel/recorded/subject-page.json');
+  const { default: littlePrinceZhHans } = await import('../src/kernel/recorded/subject-page-zh-Hans.json');
+  const read = createStoryRecordedKernelFetch();
+  for (const [page, language] of [[kokoro, 'en'], [littlePrince, 'en'], [littlePrinceZhHans, 'zh-Hans']] as const) {
+    for (const view of ['overview', 'details']) {
+      const response = await read(`http://kernel.local/v1/zones/${zoneId}:readPage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: { subject: page.subject, view }, languages: [language] }),
+      });
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.subject).toBe(page.subject);
+      expect(result.reads).toEqual(page.reads);
+      expect(result.views).toEqual(['overview', 'details']);
+    }
+  }
+});

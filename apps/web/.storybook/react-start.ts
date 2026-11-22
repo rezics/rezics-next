@@ -1,5 +1,5 @@
 type Visitor = 'Signed In' | 'Signed Out';
-type StoryContext = { visitor: Visitor; url: string };
+type StoryContext = { visitor: Visitor; url: string; accountId?: string | undefined };
 
 type StoryGlobals = typeof globalThis & { __rezicsStoryContext?: StoryContext };
 
@@ -7,9 +7,40 @@ export function setStoryRequestContext(context: StoryContext): void {
   (globalThis as StoryGlobals).__rezicsStoryContext = context;
 }
 
+export function storyAccountId(): string {
+  return (globalThis as StoryGlobals).__rezicsStoryContext?.accountId ?? 'story-viewer';
+}
+
+// A browser drops Cookie when constructing a Request. Only local server-function requests
+// carry this metadata. Explicitly built network requests still use the native constructor.
+const storyRequest = Symbol.for('rezics.storybook.server-request');
+const copyAdapter = Symbol.for('rezics.storybook.request-copy-adapter');
+type StoryRequest = Request & { [storyRequest]?: true };
+
+function supportServerRequestCopies() {
+  if (typeof window === 'undefined') return;
+  const NativeRequest = globalThis.Request;
+  if (Reflect.get(NativeRequest, copyAdapter)) return;
+  const Adapter = new Proxy(NativeRequest, {
+    construct(target, args, newTarget) {
+      const copy = Reflect.construct(target, args, newTarget) as Request;
+      const source: StoryRequest | undefined = args[0];
+      if (source?.[storyRequest] && args[1] === undefined) {
+        return withStoryHeaders(copy, new Headers(source.headers), source.headers.get('cookie'));
+      }
+      return copy;
+    },
+    get(target, key, receiver) {
+      return key === copyAdapter ? true : Reflect.get(target, key, receiver);
+    },
+  });
+  globalThis.Request = Adapter;
+}
+
 function withStoryHeaders(request: Request, headers: Headers, cookie: string | null): Request {
   // Browser Request guards strip Cookie. Keep this server-only observation local,
   // including when a reader clones the request for a fresh session preparation.
+  Object.defineProperty(request, storyRequest, { value: true });
   const getHeader = headers.get.bind(headers);
   Object.defineProperty(headers, 'get', {
     value: (name: string) => (name.toLowerCase() === 'cookie' ? cookie : getHeader(name)),
@@ -23,6 +54,7 @@ function withStoryHeaders(request: Request, headers: Headers, cookie: string | n
 }
 
 export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): Request {
+  supportServerRequestCopies();
   const storyContext = (globalThis as StoryGlobals).__rezicsStoryContext;
   const page = new URL(storyContext?.url ?? window.location.href, window.location.origin);
   const target = input instanceof Request ? input : new URL(input === undefined ? page.href : String(input), page);

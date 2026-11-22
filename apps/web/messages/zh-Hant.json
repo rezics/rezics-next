@@ -2494,6 +2494,8 @@
   "ctxw_unavailable": "語境資訊無法取得。請再檢查一次。",
   "ctxw_unknown": "結果不明。請原樣重試相同的請求，或查看目前狀態。",
   "ctxw_views": "語境檢視",
+  "curation_access_heading": "需要存取權限",
+  "curation_access_message": "此帳號無法開啟展示編輯器。",
   "curation_active": "上次檢查時的已儲存設定檔",
   "curation_actual_head": "檢查時的已儲存版本：{head}。設定檔：{digest}",
   "curation_add": "新增範本",

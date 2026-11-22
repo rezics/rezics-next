@@ -188,6 +188,10 @@ function fixture(
       maxContexts = Math.max(maxContexts, activeContexts);
       const contextId = ++serial;
       return {
+        async clearCookies(filter: unknown) {
+          cookies.push(filter);
+          await stage('cookies');
+        },
         async addCookies(value: unknown) {
           cookies.push(value);
           await stage('cookies');
@@ -350,7 +354,7 @@ test('full capture matrix, output identity, manifest, cookies and readiness use 
   expect(manifest.captures[0]).toMatchObject({
     state: 'login',
     route: '/login',
-    persona: 'fresh reader session',
+    persona: 'signed-out visitor',
     locale: 'en',
     theme: 'light',
     viewport: { name: 'desktop1280', width: 1280, height: 900 },
@@ -373,7 +377,11 @@ test('full capture matrix, output identity, manifest, cookies and readiness use 
     })),
   );
   expect(f.cookies).toEqual(
-    locales.map(() => [{ name: 'auth_session', value: 'auth-screenshot-session', url: 'http://127.0.0.1:4200' }]),
+    locales.flatMap(() => {
+      const reader = [{ name: 'auth_session', value: 'auth-screenshot-session', url: 'http://127.0.0.1:4200' }];
+      const visitor = { name: 'auth_session' };
+      return [reader, visitor, reader, visitor, reader, visitor, reader];
+    }),
   );
   for (const [index, capture] of f.captures.entries()) {
     const target = matrix[index]!;
@@ -398,9 +406,9 @@ for (const fail of ['context', 'cookies', 'goto', 'hydration', 'fonts'] as const
     await settle(result, f.timers);
     expect(errors(result.error)).toContain(f.operationError);
     expect((result.error as AggregateError).errors[0]).toBe(f.operationError);
-    expect(f.events.filter((event) => event.startsWith('context.close:'))).toHaveLength(fail === 'cookies' ? 2 : 1);
+    expect(f.events.filter((event) => event.startsWith('context.close:'))).toHaveLength(1);
     expect(f.events.filter((event) => event.startsWith('page.close:'))).toHaveLength(
-      fail === 'cookies' || fail === 'context' ? 40 : 1,
+      fail === 'context' ? 40 : fail === 'cookies' ? 10 : 1,
     );
     expect(f.events).toContain('browser.close');
     expect(f.events).toContain('fake.stop');
