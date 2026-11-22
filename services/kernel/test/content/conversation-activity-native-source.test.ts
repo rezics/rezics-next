@@ -31,11 +31,36 @@ test.serial(
       const created = await world.thread(boardId, world.start, threadHome);
       const thread = created.thread;
       const partition = partitionOf(routeOf(thread.id)!);
-      const emptyHome = (partition + 1) % 4096;
+      let emptyHome = (partition + 1) % 4096;
+      while (actorHomes.includes(emptyHome) || emptyHome === boardHome) emptyHome = (emptyHome + 1) % 4096;
       const due = () => pendingConversationActivityHomes(world.pool, [emptyHome, partition], Date.now() + 30_000);
       expect(await due()).toContain(emptyHome);
       await repairConversationActivityPage(world.pool, emptyHome, Date.now() + 30_000);
       expect(await due()).not.toContain(emptyHome);
+      const frontierVersion = async () =>
+        (
+          await world.pool.query(
+            'SELECT xmin::text,xmax::text,ctid::text FROM content.conversation_activity_repair_frontier WHERE partition_no=$1',
+            [emptyHome],
+          )
+        ).rows;
+      const initial = await frontierVersion();
+      expect(initial).toHaveLength(1);
+      const idle = await Promise.all(
+        Array.from({ length: 8 }, () => repairConversationActivityPage(world.pool, emptyHome, Date.now() + 30_000)),
+      );
+      expect(idle).toEqual(
+        Array(8).fill({
+          partition: emptyHome,
+          kind: 'idle',
+          scannedThreads: 0,
+          repairedPosts: 0,
+          completedThreads: 0,
+          sourceComplete: true,
+          more: false,
+        }),
+      );
+      expect(await frontierVersion()).toEqual(initial);
       runtime = await startRankingWorker(world, [partition]);
       await runtime.consume(created.envelopes);
       const source = async () =>
@@ -150,6 +175,21 @@ test.serial(
       expect(batch[0]!.coverage).toBe('unproven');
       expect(batch[0]!.contributions).toEqual(full);
 
+      // Start a fresh worker with the completed home and the new command waiting in its real log.
+      await runtime.stop();
+      runtime = undefined;
+      const late = await world.thread(boardId, plus(world.start, 4), emptyHome);
+      runtime = await startRankingWorker(world, [partition, emptyHome]);
+      await runtime.consume(late.envelopes);
+      for (let page = 0; page < 3; page++) {
+        await repairConversationActivityPage(world.pool, emptyHome, Date.now() + 30_000);
+        if ((await activity.select([late.thread.id], Date.now() + 30_000))[0]?.status === 'current') break;
+      }
+      expect((await activity.select([late.thread.id], Date.now() + 30_000))[0]).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 0 },
+      });
+
       await world.grant(boardId, world.base.governance, ['moderation:takedown']);
       const moderated = await world.capture(boardHome, () =>
         world.command(
@@ -164,7 +204,12 @@ test.serial(
       expect((await activity.confirm([populated], Date.now() + 30_000))[0]!.status).toBe('withheld');
       expect(await repairConversationActivityPage(world.pool, boardHome, Date.now() + 30_000)).toMatchObject({
         kind: 'board',
-        scannedThreads: 1,
+        scannedThreads: 2,
+      });
+      expect(await due()).toContain(emptyHome);
+      expect(await repairConversationActivityPage(world.pool, emptyHome, Date.now() + 30_000)).toMatchObject({
+        kind: 'thread',
+        completedThreads: 1,
       });
       expect((await activity.select([thread.id], Date.now() + 30_000))[0]).toMatchObject({
         status: 'withheld',

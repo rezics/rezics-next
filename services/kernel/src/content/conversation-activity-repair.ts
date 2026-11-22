@@ -103,9 +103,12 @@ export async function pendingConversationActivityHomes(
   )
     throw new RangeError('Invalid conversation activity home window');
   if (!homes.length) return [];
-  const { rows } = await withBoundedReadConnection(pool, deadline, (client) =>
-    client.query<{ home: number }>(
-      `SELECT h.home
+  return withBoundedReadConnection(pool, deadline, (client) => readPendingHomes(client, homes));
+}
+
+async function readPendingHomes(client: AccessClient, homes: readonly number[]): Promise<number[]> {
+  const { rows } = await client.query<{ home: number }>(
+    `SELECT h.home
        FROM unnest($1::integer[]) WITH ORDINALITY AS h(home,n)
        LEFT JOIN core.partition p ON p.partition_no=h.home
        LEFT JOIN content.conversation_activity_repair_frontier f ON f.partition_no=h.home
@@ -118,8 +121,7 @@ export async function pendingConversationActivityHomes(
                        AND e.route BETWEEN h.home*16 AND h.home*16+15
                      ORDER BY e.route,e.thread_id LIMIT 1) IS TRUE
       ORDER BY h.n`,
-      [homes],
-    ),
+    [homes],
   );
   return rows.map((row) => row.home);
 }
@@ -136,9 +138,21 @@ export async function repairConversationActivityPage(
 ): Promise<ConversationActivityRepairPage> {
   if (!Number.isInteger(partitionNo) || partitionNo < 0 || partitionNo >= PARTITIONS)
     throw new RangeError('Invalid conversation activity partition');
+  const idle: ConversationActivityRepairPage = {
+    partition: partitionNo,
+    kind: 'idle',
+    scannedThreads: 0,
+    repairedPosts: 0,
+    completedThreads: 0,
+    sourceComplete: true,
+    more: false,
+  };
   return within(deadline, () =>
     withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
+      // One snapshot can establish that the census, board and opening sources are all idle.
+      // A selected or historical page rechecks work under the original transaction and locks.
+      if (!(await readPendingHomes(client, [partitionNo])).length) return idle;
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       try {
         const partition = await readPartition(client, partitionNo);
@@ -167,15 +181,7 @@ export async function repairConversationActivityPage(
         const thread = await nextOpening(client, partitionNo);
         if (!thread) {
           await client.query('COMMIT');
-          return {
-            partition: partitionNo,
-            kind: 'idle',
-            scannedThreads: 0,
-            repairedPosts: 0,
-            completedThreads: 0,
-            sourceComplete: true,
-            more: false,
-          };
+          return idle;
         }
         const repaired = await repairThreadPage(client, partitionNo, partition.epoch, partition.position, thread);
         await client.query('COMMIT');
