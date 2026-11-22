@@ -70,8 +70,9 @@ async function readResponse(
     if (length !== null && /^\d+$/.test(length) && Number(length) > limit) throw new SearchUnavailableError();
 
     // A single native chunk already contains the complete small response. Fragmented bodies
-    // share one bounded destination, regardless of their chunk count or advertised length.
+    // grow one destination as bytes arrive. The wire length never authorizes a larger allocation.
     let bytes: Uint8Array | undefined;
+    let storage: ArrayBuffer | undefined;
     let used = 0;
     while (true) {
       const { value, done } = await reader.read();
@@ -80,10 +81,16 @@ async function readResponse(
       if (value.byteLength === 0) continue;
       if (!bytes) bytes = value;
       else {
-        if (used === bytes.byteLength) {
-          const buffer = new Uint8Array(limit);
-          buffer.set(bytes);
-          bytes = buffer;
+        const needed = used + value.byteLength;
+        if (needed > bytes.byteLength) {
+          const capacity = Math.min(limit, Math.max(needed, 2 * used));
+          if (storage) storage.resize(capacity);
+          else {
+            storage = new ArrayBuffer(capacity, { maxByteLength: limit });
+            const target = new Uint8Array(storage);
+            target.set(bytes);
+            bytes = target;
+          }
         }
         bytes.set(value, used);
       }
