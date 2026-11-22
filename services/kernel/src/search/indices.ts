@@ -1,7 +1,13 @@
 import discovery from '../../db/search/indices/discovery.json';
 import subjects from '../../db/search/indices/subjects.json';
 import { isDeepStrictEqual } from 'node:util';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
+import {
+  INDEX_UUID_QUERY,
+  OpenSearchError,
+  SearchUnavailableError,
+  type OpenSearch,
+  type SearchRequestWork,
+} from './opensearch.ts';
 import {
   discoveryIndexDefinition as nativeDiscoveryDefinition,
   hasDiscoveryDocumentFormat,
@@ -124,7 +130,10 @@ export function discoveryAlias(prefix: string): string {
 }
 
 export async function discoveryIndexUuid(search: OpenSearch, index: string, work?: SearchRequestWork): Promise<string> {
-  const response = await search.request<unknown>('GET', `/${index}/_settings`, undefined, work ? { work } : undefined);
+  const response = await search.request<unknown>('GET', `/${index}/_settings`, undefined, {
+    query: INDEX_UUID_QUERY,
+    ...(work && { work }),
+  });
   const entry = record(response.body) ? response.body[index] : undefined;
   const settings = record(entry) ? entry.settings : undefined;
   const native = record(settings) ? settings.index : undefined;
@@ -142,7 +151,9 @@ export async function readDiscoveryPhysicalIdentity(
 ): Promise<DiscoveryPhysicalIdentity | null> {
   let response: { status: number; body: unknown };
   try {
-    response = await search.request<unknown>('GET', `/${index}`);
+    response = await search.request<unknown>('GET', `/${index}`, undefined, {
+      query: { filter_path: '*.settings.index.uuid,*.mappings._meta.incarnation,error,status' },
+    });
   } catch (error) {
     if (error instanceof OpenSearchError && error.status === 404) return null;
     throw error;
@@ -385,13 +396,16 @@ export async function markSubjectCalendarReady(
   return incarnation;
 }
 
-async function readSubjectIndexSettings(search: OpenSearch, prefix: string, generation: number) {
+async function readSubjectIndexSettings(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  query: { filter_path: string },
+) {
   const index = subjectIndexName(prefix, generation);
   let response: { status: number; body: unknown };
   try {
-    response = await search.request('GET', `/${index}/_settings`, undefined, {
-      query: { filter_path: '*.settings.index.uuid,*.settings.index.sort,error,status' },
-    });
+    response = await search.request('GET', `/${index}/_settings`, undefined, { query });
   } catch (error) {
     if (error instanceof OpenSearchError)
       throw new SearchUnavailableError('Subject generation incarnation is unavailable', { cause: error });
@@ -407,12 +421,14 @@ async function readSubjectIndexSettings(search: OpenSearch, prefix: string, gene
 
 /** Read the UUID of one immutable physical generation, never through its mutable alias. */
 export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, generation: number): Promise<string> {
-  return (await readSubjectIndexSettings(search, prefix, generation)).uuid;
+  return (await readSubjectIndexSettings(search, prefix, generation, INDEX_UUID_QUERY)).uuid;
 }
 
 /** Historical generations retain their own layout until a new generation is published. */
 export async function hasSubjectNameOrder(search: OpenSearch, prefix: string, generation: number): Promise<boolean> {
-  const { sort } = await readSubjectIndexSettings(search, prefix, generation);
+  const { sort } = await readSubjectIndexSettings(search, prefix, generation, {
+    filter_path: '*.settings.index.uuid,*.settings.index.sort,error,status',
+  });
   return (
     record(sort) &&
     isDeepStrictEqual(sort.field, ['name_sort', 'id']) &&

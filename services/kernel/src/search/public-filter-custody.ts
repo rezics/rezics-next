@@ -48,7 +48,7 @@ import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
-import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { INDEX_UUID_QUERY, createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
 import type { PublicFilterCost } from '../semantic/index.ts';
 import { assertRetainedPitDeletion } from './erasure-pit.ts';
 import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/index.ts';
@@ -384,14 +384,16 @@ async function engine<T>(
   method: Parameters<OpenSearch['request']>[0],
   path: string,
   body?: unknown,
-  onDispatch?: () => void,
+  options?: { onDispatch?: () => void; query?: Record<string, string> },
 ) {
   check(context);
   meter.engineRequests++;
   meter.bytes += Buffer.byteLength(path) + treeByteLength(body);
+  if (options?.query) meter.bytes += 1 + Buffer.byteLength(new URLSearchParams(options.query).toString());
   if (path.endsWith('/_search')) meter.engineSearches++;
-  onDispatch?.();
+  options?.onDispatch?.();
   const response = await search.request<T>(method, path, body, {
+    ...(options?.query && { query: options.query }),
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
   meter.bytes += treeByteLength(response.body);
@@ -412,6 +414,8 @@ async function native(
     context,
     'GET',
     `/${target}/_settings`,
+    undefined,
+    { query: INDEX_UUID_QUERY },
   );
   if (Object.keys(metadata).length !== 1 || !metadata[target]?.settings.index.uuid)
     throw new Failure('binding_mismatch');
@@ -1908,8 +1912,10 @@ export function createPublicFilterCustody(
             'POST',
             `/${consumer.physicalTarget}/_search/point_in_time?keep_alive=${input.keepAliveMs}ms`,
             undefined,
-            () => {
-              dispatched = true;
+            {
+              onDispatch: () => {
+                dispatched = true;
+              },
             },
           );
         } catch (error) {

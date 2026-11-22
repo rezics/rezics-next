@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { INDEX_UUID_QUERY } from './opensearch.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import type { PublicFilterNativeSource } from '../semantic/index.ts';
@@ -159,7 +160,7 @@ export async function createPublicSuggestionOperations(
               'GET',
               `/${config.physicalTarget}/_settings`,
               undefined,
-              { timeoutMs: Math.max(1, context.deadline - Date.now()) },
+              { timeoutMs: Math.max(1, context.deadline - Date.now()), query: INDEX_UUID_QUERY },
             );
             add({ ...emptyCost(), engineSearches: 1 });
             return (

@@ -1,6 +1,9 @@
 import { SearchUnavailableError } from './operation-outcomes.ts';
 export { SearchUnavailableError } from './operation-outcomes.ts';
 
+// Exact physical reads only. Inventory and alias readers must retain every returned index key.
+export const INDEX_UUID_QUERY = Object.freeze({ filter_path: '*.settings.index.uuid,error,status' });
+
 export type SearchQuery = Record<string, string | number | boolean>;
 
 /** Internal physical byte reservation and absolute caller deadline. The meter returns no verdict. */

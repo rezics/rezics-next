@@ -1,4 +1,4 @@
-import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { INDEX_UUID_QUERY, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -8,7 +8,7 @@ function record(value: unknown): value is Record<string, unknown> {
 export async function readIdentityIndexIncarnation(search: OpenSearch, index: string): Promise<string> {
   if (/^[a-z0-9][a-z0-9-]{0,127}subjects-g[1-9][0-9]*$/.exec(index)?.[0] !== index)
     throw new TypeError('Identity writer requires a physical subject index');
-  const response = await search.request('GET', `/${index}/_settings`);
+  const response = await search.request('GET', `/${index}/_settings`, undefined, { query: INDEX_UUID_QUERY });
   const unavailable = () => new SearchUnavailableError('Native subject index incarnation is unavailable');
   if (response.status !== 200 || !record(response.body) || Object.keys(response.body).length !== 1) throw unavailable();
   const target = response.body[index];
@@ -30,7 +30,9 @@ export async function readSearchWriterPhysicalTarget(
 > {
   if (/^[a-z0-9][a-z0-9-]{0,127}subjects-g[1-9][0-9]*$/.exec(index)?.[0] !== index)
     throw new TypeError('Identity writer requires a physical subject index');
-  const response = await search.request('GET', `/${index}`);
+  const response = await search.request('GET', `/${index}`, undefined, {
+    query: { filter_path: '*.settings.index.uuid,*.aliases,error,status' },
+  });
   const fail = () => new SearchUnavailableError('Native Search writer allocation is unavailable');
   if (response.status !== 200 || !record(response.body) || Object.keys(response.body).length !== 1) throw fail();
   const target = response.body[index];

@@ -52,7 +52,7 @@ import { hasPublicBookSearchShape } from './request.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
-import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { INDEX_UUID_QUERY, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { admitSearchPayload, requireSearchOverflow } from './query-payload.ts';
 import { SCOPE_HIT_TEMPLATE } from './query-templates.ts';
 import { type SearchPlan, type SearchResult } from './query.ts';
@@ -294,6 +294,7 @@ export async function readPublicFilterConsumerIncarnation(
       throw new TypeError('Invalid physical discovery index');
   } else targetParts(physicalTarget);
   const { status, body } = await search.request<unknown>('GET', `/${physicalTarget}/_settings`, undefined, {
+    query: INDEX_UUID_QUERY,
     timeoutMs: remaining(context),
   });
   const malformed = () => new SearchUnavailableError('Native consumer index settings are missing or malformed');
@@ -1581,7 +1582,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     )
       throw new ConsumerFailure('dependency_unavailable');
     const mapping = await m.native.request<unknown>('GET', `/${target}/_mapping`);
-    const settings = await m.native.request<unknown>('GET', `/${target}/_settings`);
+    const settings = await m.native.request<unknown>('GET', `/${target}/_settings`, undefined, {
+      query: INDEX_UUID_QUERY,
+    });
     if (
       mapping.status !== 200 ||
       !record(mapping.body) ||
@@ -1619,6 +1622,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const response = await m.native.request<Record<string, { settings?: { index?: { uuid?: string } } }>>(
       'GET',
       `/${target}/_settings`,
+      undefined,
+      { query: INDEX_UUID_QUERY },
     );
     if (
       response.status !== 200 ||

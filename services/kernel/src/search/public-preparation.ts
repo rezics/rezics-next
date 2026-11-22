@@ -8,7 +8,7 @@ import type { PublicFilterConsumerJob, PublicFilterConsumerUnavailable } from '.
 import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
-import { SearchUnavailableError } from './opensearch.ts';
+import { INDEX_UUID_QUERY, SearchUnavailableError } from './opensearch.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { DiscoveryTarget } from './account-discovery.ts';
 import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
@@ -48,7 +48,7 @@ async function indexUuid(search: OpenSearch, index: string, signal?: AbortSignal
     'GET',
     `/${index}/_settings`,
     undefined,
-    signal ? { signal } : undefined,
+    { ...(signal && { signal }), query: INDEX_UUID_QUERY },
   );
   const uuid = body[index]?.settings?.index?.uuid;
   if (status !== 200 || Object.keys(body).length !== 1 || typeof uuid !== 'string' || !uuid)

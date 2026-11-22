@@ -19,7 +19,7 @@ import type { SubjectErasureSourceRecord, SubjectErasureSource } from '../semant
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/index.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { INDEX_UUID_QUERY, createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { physicalSubjectGenerationsFromSettings } from './generation-inventory.ts';
 import { stepRetainedTargetErasure } from './public-filter-custody.ts';
 import type { SearchWriterPublicationGuard, SearchWriterPublicationFence } from './writer-guard.ts';
@@ -738,7 +738,7 @@ async function advanceSearchErasure(
     return search.request(method, path, body, query ? { query } : undefined);
   }
   async function exact(target: PublicFilterConsumer) {
-    const response = await engine('GET', `/${target.physicalTarget}/_settings`);
+    const response = await engine('GET', `/${target.physicalTarget}/_settings`, undefined, INDEX_UUID_QUERY);
     const item = object(response.body) ? response.body[target.physicalTarget] : null;
     const settings = object(item) ? item.settings : null;
     const native = object(settings) ? settings.index : null;

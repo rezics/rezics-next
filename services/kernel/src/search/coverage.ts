@@ -7,7 +7,7 @@ import { readIdentityBasis } from '../semantic/identity-basis.ts';
 import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
 import * as codec from './coverage-store-codec.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from './indices.ts';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { INDEX_UUID_QUERY, OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { subjectConsumer } from './consumer-name.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 
@@ -100,6 +100,8 @@ async function physicalUuid(search: OpenSearch, index: string): Promise<string> 
   const { status, body } = await search.request<Record<string, { settings?: { index?: { uuid?: string } } }>>(
     'GET',
     `/${index}/_settings`,
+    undefined,
+    { query: INDEX_UUID_QUERY },
   );
   const uuid = body[index]?.settings?.index?.uuid;
   if (status !== 200 || Object.keys(body).length !== 1 || typeof uuid !== 'string' || !uuid)
