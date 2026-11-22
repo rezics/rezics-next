@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { currentCommand, noEffect, runCommand } from '../../src/command/command.ts';
-import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
+import { enrollRevisionErasureSource, recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
 import { acknowledgeSearchErasure } from '../../src/search/erasure.ts';
 import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
 import type { HistoryBarrier } from '../../src/history/contract/registry.ts';
@@ -220,6 +220,30 @@ test('a new Book and its replay retain each native record role and just one orig
     expect(replay.status).toBe(201);
     expect(replay.body.subject).toEqual(created.body.subject);
     expect((await inventory()).rows).toEqual(original.rows);
+
+    const route = routeOf(id)!;
+    const partition = partitionOf(route);
+    const aborted = new Error('Rollback after checking stale revision enrollment');
+    await expect(
+      runCommand(
+        f.db.pool,
+        {
+          partition,
+          basis: { actorAccountId: actor.accountId, clientId: 'native-revision-source-test', requestedBy: null },
+        },
+        async (tx, { transactionId }) => {
+          expect(await enrollRevisionErasureSource(tx, route, id, 1)).toBe(false);
+          const result = await tx.query(
+            `SELECT nullif(current_setting('semantic.erasure_native_transaction',true),'') IS NOT NULL AS origin,
+                  EXISTS(SELECT FROM semantic.erasure_source_role WHERE partition_no=$1 AND transaction_id=$2) AS role,
+                  EXISTS(SELECT FROM semantic.erasure_source_commit WHERE partition_no=$1 AND transaction_id=$2) AS fence`,
+            [partition, transactionId],
+          );
+          expect(result.rows).toEqual([{ origin: false, role: false, fence: false }]);
+          throw aborted;
+        },
+      ),
+    ).rejects.toBe(aborted);
   }
   expect((await revisionRoles()).rows).toHaveLength(2);
 }, 90_000);

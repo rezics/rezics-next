@@ -4,6 +4,10 @@ import { identityJobPartition, type IdentityJobRef } from './identity-adapters/i
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 
+const sourceRoleInsert = 'INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)';
+const sourceCommitInsert = `INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
+     SELECT partition_no,$2,epoch,position+1 FROM core.partition WHERE partition_no=$1 AND write_state='active'`;
+
 /** Explicit account input of a native platform producer, in the producer's own home/transaction.
  * No account registry or business payload is copied. Deferred source hooks attach exact record ordinals.
  */
@@ -16,15 +20,44 @@ export async function recordSemanticProducerRole(
   const command = currentCommand(tx);
   await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
   await tx.query(
-    `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
+    `${sourceRoleInsert}
     VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
     [command.partition, transactionId, accountId, role],
   );
 }
 
+/** Enroll the creator and fence of a revision that this command actually wrote. */
+export async function enrollRevisionErasureSource(
+  tx: CommandTransaction,
+  route: number,
+  subject: string,
+  revision: number,
+): Promise<boolean> {
+  const { partition, transactionId, basis } = currentCommand(tx);
+  if (!basis?.actorAccountId) throw new TypeError('Revision Source enrollment requires an account writer');
+  const original = await tx.query({
+    name: 'semantic_enroll_revision_source_v1',
+    text: `WITH original AS MATERIALIZED (
+      SELECT recorded_transaction_id FROM semantic.revision
+      WHERE route=$3::integer AND subject_id=$4::uuid AND revision=$5::integer AND recorded_transaction_id=$2::uuid
+        AND kind IN ('create','propose','terms')
+    ), origin AS MATERIALIZED (
+      SELECT set_config('semantic.erasure_native_transaction',recorded_transaction_id::text,true) FROM original
+    ), producer AS (
+      ${sourceRoleInsert}
+      SELECT $1::integer,$2::uuid,$6::uuid,'operator' FROM origin ON CONFLICT DO NOTHING
+    ), fence AS (
+      ${sourceCommitInsert} AND EXISTS (SELECT FROM origin) ON CONFLICT DO NOTHING
+    )
+    SELECT recorded_transaction_id FROM original`,
+    values: [partition, transactionId, route, subject, revision, basis.actorAccountId],
+  });
+  return original.rows.length === 1;
+}
+
 export type SemanticCopyRole = { account_id: string; role: string };
 
-export const bindSemanticProducerRolesSql = `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
+export const bindSemanticProducerRolesSql = `${sourceRoleInsert}
       SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`;
 
 /** Exact source/provenance join before opening the receiving home. */
@@ -111,8 +144,7 @@ export function bindSearchIdentityJobRoles(
 export async function recordSemanticSourceCommit(tx: CommandTransaction, transactionId: string): Promise<void> {
   const { partition } = currentCommand(tx);
   await tx.query(
-    `INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
-     SELECT partition_no,$2,epoch,position+1 FROM core.partition WHERE partition_no=$1 AND write_state='active'
+    `${sourceCommitInsert}
      ON CONFLICT DO NOTHING`,
     [partition, transactionId],
   );

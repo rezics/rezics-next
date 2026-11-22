@@ -148,11 +148,13 @@ test('concurrent native proposals rebuild the exact revision manifest without or
     client.query = new Proxy(client.query, {
       apply(target, receiver, args: unknown[]) {
         const pending: unknown = Reflect.apply(target, receiver, args);
+        const query = args[0] as string | { text?: string; values?: unknown[] };
+        const statement = typeof query === 'string' ? query : query.text;
+        const values = typeof query === 'string' ? args[1] : (query.values ?? args[1]);
         if (
-          typeof args[0] !== 'string' ||
-          !args[0].startsWith('SELECT revision FROM semantic.revision WHERE route=') ||
-          !Array.isArray(args[1]) ||
-          args[1][1] !== subject ||
+          !statement?.startsWith('SELECT revision FROM semantic.revision WHERE route=') ||
+          !Array.isArray(values) ||
+          values[1] !== subject ||
           readers >= 2
         )
           return pending;

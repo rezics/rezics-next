@@ -3,7 +3,7 @@ import { creationDeclares } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import type { Resource } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
-import { recordSemanticProducerRole, recordSemanticSourceCommit } from './erasure-producer.ts';
+import { enrollRevisionErasureSource } from './erasure-producer.ts';
 
 export const REVISION_NS = '8af5a11d-ae8c-4cc8-9173-ef84bd62057d';
 
@@ -41,19 +41,8 @@ export async function initializeRevisionAuthorship(
   const declaredSubject = input.revision === 1 && creationDeclares(tx, subject);
   if (!declaredRevision) throw new TypeError('Revision authorship resource was not declared');
 
-  const provenance = await tx.query<{ recorded_transaction_id: string }>(
-    `SELECT recorded_transaction_id::text FROM semantic.revision
-     WHERE route=$1 AND subject_id=$2 AND revision=$3 AND kind IN ('create','propose','terms')
-       AND recorded_transaction_id=$4::uuid`,
-    [route, input.subject, input.revision, transactionId],
-  );
-  if (provenance.rows.length !== 1 || !provenance.rows[0]?.recorded_transaction_id)
+  if (!(await enrollRevisionErasureSource(tx, route, input.subject, input.revision)))
     throw new TypeError('Original native revision is missing from the current command body');
-
-  // Enroll the actual creator and this native commit with the existing Source producer.
-  // This local custody does not certify shared history/set completeness or account cleanup.
-  await recordSemanticProducerRole(tx, transactionId, creator, 'operator');
-  await recordSemanticSourceCommit(tx, transactionId);
   await initializeResourceGrants(tx, { resource: anchor, type: 'semantic.revision', creator });
 
   if (declaredSubject) {
