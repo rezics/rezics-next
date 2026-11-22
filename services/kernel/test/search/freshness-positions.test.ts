@@ -29,7 +29,7 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   const cut = '9007199254740993';
   const earlier = new Date('2026-01-01T00:00:01Z');
   const later = new Date('2026-01-01T00:00:02Z');
-  const legacySql = await Bun.file(new URL('./freshness-original-reader.sql', import.meta.url)).text();
+  const legacySql = await Bun.file(new URL('./freshness-original-reader.sql.txt', import.meta.url)).text();
   const legacy = async (consumer: string) => (await db.query(legacySql, [consumer])).rows[0]!;
   const read = async (consumer: string) => {
     const row = await freshness.run(db, { consumer });
