@@ -76,7 +76,9 @@ export function Home() {
       key={`${locale}:${viewer?.scope ?? 'public'}`}
       initial={loaded.feed}
       catalogue={
-        loaded.catalogue === undefined ? undefined : <HomeCatalogue result={loaded.catalogue} locale={locale} />
+        loaded.catalogue === undefined ? undefined : (
+          <HomeCatalogue result={loaded.catalogue} locale={locale} localCatalogue={loaded.localCatalogue} />
+        )
       }
       locale={locale}
       signedIn={viewer !== null}
@@ -88,7 +90,7 @@ export function Home() {
       origin={loaded.origin}
       reader={viewer?.subject ?? null}
       credentialEpoch={viewer?.scope ?? null}
-      catalogueObservation={homeCatalogueObservation(loaded.catalogue)}
+      catalogueObservation={homeCatalogueObservation(loaded.catalogue, loaded.localCatalogue)}
       verification={loaded.verification}
     />
   );

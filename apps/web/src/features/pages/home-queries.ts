@@ -55,12 +55,19 @@ const readHomePage = createServerFn({ method: 'GET' })
   .handler(async ({ data: locale }) => {
     const { env } = await import('cloudflare:workers');
     const client = kernelClient(locale);
-    const feed = await loadPublicHomeFeed(client, undefined, undefined, getRequest().signal);
-    // The native mixed feed supplies discovery when ready. Keep catalogue navigation as outage recovery.
-    const catalogue =
-      feed.state === 'ready' && feed.page.sources.discovery === 'ready'
-        ? undefined
-        : await loadRoutePage(client, '/', locale);
+    const request = getRequest();
+    const feed = await loadPublicHomeFeed(client, undefined, undefined, request.signal);
+    const discoverable = feed.state === 'ready' && feed.page.sources.discovery === 'ready';
+    const [catalogue, localCatalogue] = discoverable
+      ? [undefined, undefined]
+      : await Promise.all([
+          loadRoutePage(client, '/', locale),
+          import.meta.env.DEV && import.meta.env.VITE_REZICS_DEV_HOME_SUBJECT_IDS
+            ? import('./local-home-catalogue').then(({ readLocalHomeCatalogue }) =>
+                readLocalHomeCatalogue(client, import.meta.env.VITE_REZICS_DEV_HOME_SUBJECT_IDS, request.signal),
+              )
+            : undefined,
+        ]);
     const origin = validatePublicOrigin(
       (env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN,
       getRequest().url,
@@ -74,7 +81,7 @@ const readHomePage = createServerFn({ method: 'GET' })
             'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
         }
       : undefined;
-    return { feed, origin, catalogue, verification };
+    return { feed, origin, catalogue, localCatalogue, verification };
   });
 
 /** Only this anonymous result enters the reusable page query cache or hydration payload. */
