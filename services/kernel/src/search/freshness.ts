@@ -1,3 +1,4 @@
+import { preparedStatementClient } from '../database/native-source-query.ts';
 import type { Pool, PoolClient } from 'pg';
 import { BoundedReadDeadlineError, withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -61,7 +62,12 @@ function freshnessAt(at: Date, behind: number, oldest: Date | null): Freshness {
 }
 
 async function observeChangedHomes(client: PoolClient, consumer: string, previous?: ObservationCut) {
-  const [row] = await readObservation.run(client, {
+  const transport = preparedStatementClient(
+    client,
+    readObservation['~standard'].query.text,
+    'search_freshness_observation_v2',
+  );
+  const [row] = await readObservation.run(transport, {
     consumer,
     snapshot: previous?.snapshot ?? '',
     revision: previous?.revision ?? '',
@@ -72,7 +78,13 @@ async function observeChangedHomes(client: PoolClient, consumer: string, previou
   for (const point of row.homes) {
     if (!Array.isArray(point)) throw new Error('Freshness observation returned an invalid home');
     const [home, behind, recorded] = point;
-    if (!Number.isInteger(home) || home < 0 || home >= PARTITIONS || typeof behind !== 'boolean')
+    if (
+      typeof home !== 'number' ||
+      !Number.isInteger(home) ||
+      home < 0 ||
+      home >= PARTITIONS ||
+      typeof behind !== 'boolean'
+    )
       throw new Error('Freshness observation returned an invalid home');
     if (behind) pending.set(home, recorded === null ? null : new Date(recorded).getTime());
     else pending.delete(home);

@@ -71,10 +71,18 @@ test('dense observations follow committed points, removed envelopes and a replac
     await writer.query('SAVEPOINT inner_change');
     await checkpoint(homes[0]!);
     await writer.query('RELEASE SAVEPOINT inner_change');
+    const pending = (await writer.query<{ xid: string }>('SELECT pg_current_xact_id()::text AS xid')).rows[0]!.xid;
+    await pool.query('SELECT pg_current_xact_id()');
     await check(160, first);
     expect(hasPrior()).toBe(false);
     await check(160, first);
     expect(hasPrior()).toBe(true);
+    const prior = statements[0]!.operands.find((operand) => typeof operand === 'string' && /^\d+:\d+:/.test(operand));
+    const inFlight = await pool.query<{ present: boolean }>(
+      'SELECT EXISTS (SELECT FROM pg_snapshot_xip($1::pg_snapshot) active WHERE active = $2::xid8) AS present',
+      [prior, pending],
+    );
+    expect(inFlight.rows[0]!.present).toBe(true);
     await writer.query('COMMIT');
     await check(159, second);
     expect(hasPrior()).toBe(true);
