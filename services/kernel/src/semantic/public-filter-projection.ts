@@ -1825,6 +1825,8 @@ export async function readPublicFilterProjectionPage(
           headLimit: request.inputLimit - probed - selected.length,
         };
       },
+      // The visibility-floor lookup retains its indexed execution when it shares this snapshot.
+      !supportRelease && !!config.access.prepareReadDecisions,
     );
     if ('status' in snapshot) return snapshot;
     const { meaning } = snapshot;
