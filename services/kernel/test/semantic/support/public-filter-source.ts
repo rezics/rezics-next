@@ -223,7 +223,9 @@ async function prepareFixture(db: GrowthDatabase) {
   }
   const active = await activeRelease(db.pool);
   if (active?.digest !== digest) {
-    await post('/v1/definitions/releases', { release });
+    const published = await call('/v1/definitions/releases', { release });
+    expect([200, 201]).toContain(published.status);
+    expect(published.body).toEqual({ digest });
     await post(`/v1/definitions/releases/${digest}:activate`, { expected_head: active?.head ?? null });
   }
   const config = {
