@@ -214,33 +214,31 @@ test('a current full-chain denial keeps advancing through sparse native inbox pa
         [route, thread.id, root.id],
       )
     ).rows[0]!;
-    const contentPressure: string[] = [];
     const accessPressure: string[] = [];
     const growContent = async (scale: number, previous: number) => {
       const count = scale - previous;
       const postIds = Array.from({ length: count }, () => newId(route));
       const revisionIds = postIds.map(() => newId(route));
-      contentPressure.push(...postIds);
       await f.db.admin.query(
-        `INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,
-                                 security_revision,recorded_transaction_id)
-         SELECT $1,$2,posts.post_id,$4,posts.revision_id,'published',1,posts.post_id
-         FROM unnest($3::uuid[],$5::uuid[]) AS posts(post_id,revision_id)`,
-        [route, thread.id, postIds, sourcePost.author_account_id, revisionIds],
-      );
-      await f.db.admin.query(
-        `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,
+        `WITH posts AS (
+           INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,
+                                    security_revision,recorded_transaction_id)
+           SELECT $1,$2,i.post_id,$4,i.revision_id,'published',1,i.post_id
+           FROM unnest($3::uuid[],$5::uuid[]) AS i(post_id,revision_id)
+           RETURNING route,thread_id,post_id,head_revision_id
+         )
+         INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,
                                       subject_ids,board_id,availability,recorded_transaction_id)
-         SELECT $1,$2,posts.post_id,posts.revision_id,$4,$5,'','MIT','{}',$6,'available',posts.post_id
-         FROM unnest($3::uuid[],$7::uuid[]) AS posts(post_id,revision_id)`,
+         SELECT route,thread_id,post_id,head_revision_id,$6,$7,'','MIT','{}',$8,'available',post_id FROM posts`,
         [
           route,
           thread.id,
           postIds,
+          sourcePost.author_account_id,
+          revisionIds,
           sourceRevision.body,
           sourceRevision.body_sha256,
           sourceRevision.board_id,
-          revisionIds,
         ],
       );
     };
@@ -294,16 +292,7 @@ test('a current full-chain denial keeps advancing through sparse native inbox pa
       root.id,
       recipient,
     ]);
-    if (contentPressure.length > 0) {
-      await f.db.admin.query('DELETE FROM content.revision WHERE route=$1 AND post_id=ANY($2::uuid[])', [
-        route,
-        contentPressure,
-      ]);
-      await f.db.admin.query('DELETE FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[])', [
-        route,
-        contentPressure,
-      ]);
-    }
+    // Immutable post revisions are released with this fixture's dedicated database.
     if (accessPressure.length > 0)
       await f.db.admin.query('DELETE FROM access.resource_grant WHERE resource_id=ANY($1::uuid[])', [accessPressure]);
   } finally {
