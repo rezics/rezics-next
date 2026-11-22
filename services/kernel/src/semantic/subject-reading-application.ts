@@ -647,7 +647,15 @@ async function projectSummaries(
     const rows = new Map<string, Row>();
     if (!subjects.length) return rows;
     const slots = new Map<string, { slot_id: string; ordinal: number }[]>();
-    for (const { id, slot_id, ordinal } of await readRepresentativeEditions.run(deps.client, { subjects })) {
+    const editionsClient =
+      subjects.length === 1
+        ? preparedStatementClient(
+            deps.client,
+            readRepresentativeEditions['~standard'].query.text,
+            'semantic_single_editions_v1',
+          )
+        : deps.client;
+    for (const { id, slot_id, ordinal } of await readRepresentativeEditions.run(editionsClient, { subjects })) {
       if (id === null) continue;
       const selected = slots.get(id) ?? [];
       selected.push({ slot_id, ordinal: Number(ordinal) });
@@ -1206,7 +1214,14 @@ async function readSubjectNative(
           properties.length > 0 &&
           (context !== GLOBAL_SUBJECT_CONTEXT ||
             readsPrivateStatements() ||
-            (await globalPropertyData.run(client, { route, subject_id: subjectId }))!.present)
+            (await globalPropertyData.run(
+              preparedStatementClient(
+                client,
+                globalPropertyData['~standard'].query.text,
+                'semantic_global_property_presence_v1',
+              ),
+              { route, subject_id: subjectId },
+            ))!.present)
         ) {
           const relations = properties.filter((property) => isRelationProperty(release, property));
           const scalarViews = await propertySlotViews(

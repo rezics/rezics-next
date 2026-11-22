@@ -324,6 +324,23 @@ export async function readNoticeInboxItem(
   return { viewer: { state: 'current' }, notice: buildInboxItem(accountId, row, projection) };
 }
 
+// The two branches are exclusive. An existing frontier becomes an index seek with its exact PostgreSQL timestamp.
+const unreadCandidatesAfter = (condition: string) => `
+    SELECT n.notice_id,n.kind,n.created_at,n.created_at::text AS created_at_key,
+           n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,true AS unread
+    FROM content.notice n WHERE n.route=$1 AND n.recipient_id=$2 AND ${condition} AND ${unacknowledgedSql()}
+    ORDER BY n.created_at,n.notice_id LIMIT $3`;
+
+const unreadFrontierSql = `WITH frontier AS MATERIALIZED (
+         SELECT seen_created_at,seen_notice_id FROM content.notice_seen WHERE route=$1 AND account_id=$2
+       )
+       SELECT notices.* FROM (
+         (${unreadCandidatesAfter('NOT EXISTS (SELECT 1 FROM frontier)')})
+         UNION ALL
+         SELECT tail.* FROM frontier f CROSS JOIN LATERAL
+           (${unreadCandidatesAfter('(n.created_at,n.notice_id) > (f.seen_created_at,f.seen_notice_id)')}) tail
+       ) notices ORDER BY created_at,notice_id`;
+
 export async function countUnreadNotices(
   dependencies: InboxDependencies,
   accountId: string,
@@ -331,12 +348,6 @@ export async function countUnreadNotices(
   const visit = inboxReadVisit(dependencies);
   const accountRoute = route(accountId);
   const checkViewer = await prepareInboxViewer(visit, accountId);
-  // The two branches are exclusive. An existing frontier becomes an index seek with its exact PostgreSQL timestamp.
-  const after = (condition: string) => `
-    SELECT n.notice_id,n.kind,n.created_at,n.created_at::text AS created_at_key,
-           n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,true AS unread
-    FROM content.notice n WHERE n.route=$1 AND n.recipient_id=$2 AND ${condition} AND ${unacknowledgedSql()}
-    ORDER BY n.created_at,n.notice_id LIMIT $3`;
   const rows = await withNoticeInboxReadConnection(
     visit.pool,
     visit.deadline,
@@ -344,18 +355,11 @@ export async function countUnreadNotices(
       // Read eligibility and the unread frontier from one snapshot. With no candidates,
       // this snapshot already witnesses the complete disclosure.
       await checkViewer(client);
-      const result = await client.query(
-        `WITH frontier AS MATERIALIZED (
-         SELECT seen_created_at,seen_notice_id FROM content.notice_seen WHERE route=$1 AND account_id=$2
-       )
-       SELECT notices.* FROM (
-         (${after('NOT EXISTS (SELECT 1 FROM frontier)')})
-         UNION ALL
-         SELECT tail.* FROM frontier f CROSS JOIN LATERAL
-           (${after('(n.created_at,n.notice_id) > (f.seen_created_at,f.seen_notice_id)')}) tail
-       ) notices ORDER BY created_at,notice_id`,
-        [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
-      );
+      const result = await client.query({
+        name: 'content_unread_frontier_v1',
+        text: unreadFrontierSql,
+        values: [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
+      });
       return result.rows as NoticeCandidate[];
     },
     { repeatableRead: true },
