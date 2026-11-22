@@ -826,8 +826,16 @@ test('a genuinely waiting link freshness probe has constant work per poll across
       ).length;
       expect(polls).toBeGreaterThan(0);
       expect(polls).toBeLessThanOrEqual(Math.ceil(waitBudget / FRESHNESS_POLL_MS) + 1);
-      expect(cost.statements).toBe(polls);
-      expect(cost.controlStatements).toBe(2 * polls);
+      for (let poll = 0; poll < polls; poll++) {
+        const [setup, checkpoint, restore] = run.statements.slice(poll * 3, poll * 3 + 3);
+        expect(setup?.statement).toStartWith('WITH previous AS MATERIALIZED (SELECT current_setting(?) AS timeout)');
+        expect(setup?.statement).toContain('set_config(');
+        expect(checkpoint?.statement).toContain('FROM core.consumer_checkpoint');
+        expect(restore?.statement).toBe('SELECT set_config(?, ?::text, false) AS restored;');
+      }
+      // These two session controls return native rows and plans. Both SELECTs count in the statement budget.
+      expect(cost.statements).toBe(3 * polls);
+      expect(cost.controlStatements).toBe(0);
       const countedWork = cost.statements + cost.controlStatements;
       expect(countedWork).toBe(3 * polls);
       expect(countedWork % polls).toBe(0);

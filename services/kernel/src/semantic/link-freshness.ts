@@ -15,7 +15,7 @@ import readLinkCheckpoint from './read-link-checkpoint.sql';
 import readPendingMember from './links-read-pending-member.sql';
 import prioritizeReads from './links-prioritize-reads.sql';
 import readProjectionPending from './merge-read-projection-pending.sql';
-import { withReadTransaction } from './read.ts';
+import { withReadStatement, withReadTransaction } from './read.ts';
 
 export const FRESHNESS_WAIT_MS = 2_000;
 export const FRESHNESS_POLL_MS = 100;
@@ -134,9 +134,21 @@ export async function subjectLinksCovered(
   const transport = preparedStatementClient(
     client,
     readLinkCheckpoint['~standard'].query.text,
-    'semantic_subject_link_checkpoint_v1',
+    'semantic_subject_link_checkpoint_v2',
   );
-  let behind = requirements.partitions.length ? await readLinkCheckpoint.run(transport, requirements) : null;
+  const includePending = !anchor && requirements.partitions.length > 0;
+  const checkpoint = (input: ReturnType<typeof linkRequirements>) =>
+    readLinkCheckpoint.run(transport, {
+      ...input,
+      include_pending: includePending,
+      route: routeOf(subject)!,
+      subject_id: subject,
+    });
+  let behind = requirements.partitions.length ? await checkpoint(requirements) : null;
+  if (includePending) {
+    observe?.(behind?.pending_merge ? 'merge' : behind ? checkpointWaitReason(behind, subject) : 'deadline');
+    return behind === null;
+  }
   // Only the detail reader supplies its authorized Subject home anchor. A positive link
   // checkpoint plus a complete suffix of already committed maintenance has no link work left.
   if (
@@ -154,7 +166,7 @@ export async function subjectLinksCovered(
       ),
       observeMissing,
     );
-    behind = otherRequirements.partitions.length ? await readLinkCheckpoint.run(transport, otherRequirements) : null;
+    behind = otherRequirements.partitions.length ? await checkpoint(otherRequirements) : null;
   }
   if (behind) {
     observe?.(checkpointWaitReason(behind, subject));
@@ -178,15 +190,17 @@ export async function linksCaughtUp(
   anchor?: SessionComponent,
 ): Promise<boolean> {
   const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
+  const pollingStarted = Date.now();
   let requestedPriority = false;
   let lastObservation: SubjectLinkWaitReason = 'deadline';
   const unfinished = () => {
     observeWait?.(lastObservation);
     return false;
   };
+  const readPoll = anchor ? withReadTransaction : withReadStatement;
   try {
     while (Date.now() < deadline) {
-      const covered = await withReadTransaction(
+      const covered = await readPoll(
         pool,
         (client) =>
           subjectLinksCovered(client, seen, subject, observeMissing, anchor, (reason) => {
@@ -212,8 +226,14 @@ export async function linksCaughtUp(
         );
         if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
       }
-      // The database connection is released before this wait; yield the request's admission permit too.
-      await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
+      // Poll on the request's cadence so query time does not accumulate into a last transaction at the deadline.
+      // A slow query or reacquired permit skips missed ticks instead of issuing a burst of catch-up reads.
+      const now = Date.now();
+      const nextPoll =
+        pollingStarted + (Math.floor((now - pollingStarted) / FRESHNESS_POLL_MS) + 1) * FRESHNESS_POLL_MS;
+      if (nextPoll >= deadline) return unfinished();
+      const wait = () => sleep(Math.max(0, nextPoll - Date.now()));
+      await (yieldAdmission ? yieldAdmission(wait) : wait());
     }
     return unfinished();
   } catch (error) {
