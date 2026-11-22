@@ -90,7 +90,7 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
                 home.epoch,home.position::text,home.write_state AS state
          FROM semantic.partition_subjects population
          LEFT JOIN core.partition home ON home.partition_no=population.partition_no
-         WHERE population.canonical_count>0 ORDER BY population.partition_no LIMIT 4097`,
+         WHERE population.canonical_populated ORDER BY population.partition_no LIMIT 4097`,
           ),
         canonicalReadOptions(deadline),
       );

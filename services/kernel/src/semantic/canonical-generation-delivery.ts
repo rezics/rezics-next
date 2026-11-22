@@ -88,8 +88,7 @@ export async function readCanonicalGenerationDeliveryPage(
       deadlineClient(client, deadline).query<CanonicalGenerationDelivery>(
         `SELECT partition_no AS partition,canonical_generation::text AS generation
        FROM semantic.partition_subjects
-       WHERE partition_no>$1 AND canonical_delivered_generation<canonical_generation
-         ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
+       WHERE partition_no>$1 AND ${unannouncedOnly ? 'canonical_announcement_pending' : 'canonical_delivery_pending'}
        ORDER BY partition_no LIMIT $2`,
         [after ?? -1, limit],
       ),

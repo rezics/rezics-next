@@ -91,18 +91,23 @@ test('key pages expose identity-pending or unavailable instead of false empty', 
         [partition, id, original.owner_epoch],
       );
     }
-    const owner = (await f.db.admin.query('SELECT write_state FROM core.partition WHERE partition_no=$1', [partition]))
-      .rows[0]!;
+    const owner = (
+      await f.db.admin.query('SELECT write_state,moved_to FROM core.partition WHERE partition_no=$1', [partition])
+    ).rows[0]!;
     try {
-      await f.db.admin.query("UPDATE core.partition SET write_state='moved' WHERE partition_no=$1", [partition]);
+      await f.db.admin.query(
+        "UPDATE core.partition SET write_state='moved', moved_to='other-node' WHERE partition_no=$1",
+        [partition],
+      );
       expect(await pages.read({ partition, after: null, inputLimit: 256 }, readContext())).toMatchObject({
         status: 'unavailable',
         reason: 'moved',
       });
     } finally {
-      await f.db.admin.query('UPDATE core.partition SET write_state=$2 WHERE partition_no=$1', [
+      await f.db.admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
         partition,
         owner.write_state,
+        owner.moved_to,
       ]);
     }
     expect(await pages.read({ partition, after: null, inputLimit: 256 }, { deadline: Date.now() - 1 })).toMatchObject({
