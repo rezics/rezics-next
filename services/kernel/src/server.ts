@@ -14,6 +14,7 @@ import { createWriteRateStage, type WriteRateStageOptions } from './access/write
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
 import type { Pool } from 'pg';
 import { createKernel } from './http/kernel.ts';
+import { Admission, ADMISSION_LIMITS } from './http/admission.ts';
 import type { KeyRing } from './tokens/seal.ts';
 import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce/config.ts';
 import { createStripePort } from './commerce/stripe.ts';
@@ -67,6 +68,7 @@ export type ServerConfig = {
   moneyPolicy?: CommerceMoneyPolicy;
   databaseUrl: string;
   poolAcquireTimeoutMillis: number;
+  normalQueueLimit?: number;
   /** Test override for verifying that the server pool survives its idle eviction interval. */
   poolIdleTimeoutMillis?: number;
   hostname: string;
@@ -101,6 +103,13 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const port = Number(portValue);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new ConfigError('KERNEL_PORT');
 
+  const queueValue = env.KERNEL_NORMAL_QUEUE_LIMIT;
+  let normalQueueLimit: number | undefined;
+  if (queueValue !== undefined) {
+    normalQueueLimit = Number(queueValue);
+    if (!/^\d+$/.test(queueValue) || normalQueueLimit > ADMISSION_LIMITS.queue)
+      throw new ConfigError('KERNEL_NORMAL_QUEUE_LIMIT');
+  }
   const search = readSearchConfig(env);
   const commerce = readCommerceConfig(env);
   const economyBookId = env.KERNEL_ECONOMY_BOOK_ID;
@@ -116,6 +125,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   return {
     databaseUrl,
     poolAcquireTimeoutMillis,
+    ...(normalQueueLimit === undefined ? {} : { normalQueueLimit }),
     hostname,
     port,
     routeKey,
@@ -277,6 +287,9 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         ? undefined
         : createNativeEconomyTestFunding(pool, { ...config.economyTestFunding, ...economyConfig }).port;
     app = createKernel({
+      ...(config.normalQueueLimit === undefined
+        ? {}
+        : { admission: new Admission({ ...ADMISSION_LIMITS, normalQueue: config.normalQueueLimit }) }),
       ...(economyConfig === undefined
         ? {}
         : {

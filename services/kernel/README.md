@@ -266,6 +266,11 @@ all 10 PostgreSQL pool connections and keeps them open while idle. The worker al
 `KERNEL_RATING_COUNTER_SECRET`, a canonical base64url value containing at least 32 bytes, shared by every worker
 instance so controller counts remain stable.
 
+`KERNEL_NORMAL_QUEUE_LIMIT` sets how many normal requests an API process can queue while all eight normal permits
+are in use. It accepts whole numbers from 0 through 32. Dedicated Search processes can set it independently.
+By default normal and reserved requests share all 32 waiting slots. The two reserved permits and the shared ceiling
+of 32 waiting requests apply with every setting.
+
 Commerce settings are optional and all or nothing: `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`,
 `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` are required when enabled; the API also requires
 `STRIPE_WEBHOOK_SECRETS`, and `STRIPE_API_HOST` is an optional endpoint override. With none set, the API serves

@@ -59,6 +59,30 @@ test('a full queue is refused at once as overloaded with Retry-After', async () 
   await Promise.all(held);
 });
 
+test('a configured normal queue preserves reserved permits and the shared waiting limit', async () => {
+  for (const normalQueue of [0, 2]) {
+    const admission = new Admission({ permits: 2, reserved: 1, queue: 3, normalQueue });
+    const blocker = gate();
+    const normal = Array.from({ length: 2 + normalQueue }, () => admission.run('normal', later(), () => blocker.opened));
+    const reserved = [admission.run('reserved', later(), () => blocker.opened)];
+    try {
+      expect(admission.running).toEqual({ normal: 2, reserved: 1 });
+      expect(admission.waiting).toBe(normalQueue);
+      await expect(admission.run('normal', later(), async () => {})).rejects.toMatchObject({
+        code: 'overloaded', headers: { 'retry-after': '1' },
+      });
+      for (let i = normalQueue; i < 3; i++) reserved.push(admission.run('reserved', later(), () => blocker.opened));
+      expect(admission.waiting).toBe(3);
+      await expect(admission.run('reserved', later(), async () => {})).rejects.toMatchObject({ code: 'overloaded' });
+    } finally {
+      blocker.open();
+      await Promise.all([...normal, ...reserved]);
+    }
+    expect(admission.waiting).toBe(0);
+    expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  }
+});
+
 test('a waiter leaves the queue when its deadline passes or its client goes away', async () => {
   const admission = new Admission({ permits: 1, reserved: 1, queue: 4 });
   const blocker = gate();

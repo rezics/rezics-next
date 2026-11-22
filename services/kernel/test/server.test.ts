@@ -57,6 +57,12 @@ test('the server reads its configuration from the environment and names, never e
     port: 0,
   });
 
+  expect(config.normalQueueLimit).toBeUndefined();
+  for (const limit of [0, 2, 32]) {
+    expect(readConfig({ ...env, KERNEL_NORMAL_QUEUE_LIMIT: String(limit) }).normalQueueLimit).toBe(limit);
+  }
+  for (const value of ['-1', '33', '1.5', 'two', '']) refusal('KERNEL_NORMAL_QUEUE_LIMIT', value);
+
   refusal('DATABASE_URL', undefined);
   refusal('KERNEL_ROUTE_KEY', undefined);
   refusal('KERNEL_ROUTE_KEY', key(31));

@@ -5,7 +5,7 @@ export const ADMISSION_LIMITS = { permits: 8, reserved: 2, queue: 32 } as const;
 export type AdmissionLane = 'normal' | 'reserved';
 export type JobContext = { deadline: number; signal?: AbortSignal };
 
-type Limits = { permits: number; reserved: number; queue: number };
+type Limits = { permits: number; reserved: number; queue: number; normalQueue?: number };
 type Waiter = {
   lane: AdmissionLane;
   context: JobContext;
@@ -111,6 +111,15 @@ export class Admission {
       return Promise.resolve(this.release(lane));
     }
     if (this.queue.length >= this.limits.queue) return Promise.reject(overloaded());
+    const normalQueue = this.limits.normalQueue;
+    if (
+      lane === 'normal' &&
+      normalQueue !== undefined &&
+      this.queue.length >= normalQueue &&
+      this.queue.filter((waiter) => waiter.lane === 'normal').length >= normalQueue
+    ) {
+      return Promise.reject(overloaded());
+    }
 
     return new Promise((resolve, reject) => {
       const remaining = Math.max(0, context.deadline - Date.now());
