@@ -1475,6 +1475,15 @@ test('Native public Source repair step and complete original cut are durably rev
       { sort: 'id', size: 10, filterDocument: undefined, text: undefined },
       'prepared',
     );
+    const firstBuild = await f.db.pool.query<{ build: string; delivery: string | null }>(
+      `SELECT o.prepared_build AS build,r.consumer_bootstrap AS delivery
+       FROM search.public_filter_registration r JOIN search.public_filter_observation o
+         ON (o.partition_no,o.registration)=(r.partition_no,r.id)
+       WHERE r.physical_target=$1 AND o.prepared_build IS NOT NULL`,
+      [consumer.physicalTarget],
+    );
+    if (capture.queried.snapshot.kind !== 'prepared') throw new Error('Missing original prepared build');
+    expect(firstBuild.rows).toEqual([{ build: capture.queried.snapshot.build, delivery: null }]);
     const query = await consumer.operations.query(capture.queried, readContext());
     expect(query.status).toBe('queried');
     if (query.status !== 'queried') throw new Error(`Native default query ${query.status}`);
@@ -1485,6 +1494,27 @@ test('Native public Source repair step and complete original cut are durably rev
     );
     expect(retained.status).toBe('found');
     if (retained.status !== 'found' || !retained.execution) throw new Error('Missing actual Search execution');
+    // The completed reader returned its lease. An ordinary FINAL cannot borrow the publication proof.
+    const finished = await f.db.pool.query<{ state: string; held: boolean }>(
+      `SELECT pg.state,EXISTS(SELECT 1 FROM search.public_filter_reference f
+         WHERE (f.partition_no,f.observation,f.token)=(pg.partition_no,pg.observation,pg.reference_token)) AS held
+       FROM search.public_filter_execution e JOIN search.public_filter_coverage_page pg
+         ON (pg.partition_no,pg.id)=(e.partition_no,e.page_id)
+       WHERE (e.partition_no,e.observation,e.id)=(0,$1,$2)`,
+      [query.queried.snapshot.observation, query.execution],
+    );
+    expect(finished.rows).toEqual([{ state: 'finished', held: false }]);
+    expect(
+      (
+        await source.readPrivacyReductionHeads({
+          kind: 'population',
+          queried: query.queried,
+          start: retained.execution.start,
+          execution: query.execution,
+          context: readContext(),
+        })
+      ).status,
+    ).not.toBe('observed');
     const request = {
       bootstrap: retained.covered.observation,
       queried: query.queried,
@@ -1499,9 +1529,12 @@ test('Native public Source repair step and complete original cut are durably rev
     const losingReply = new Proxy(f.db.pool, {
       get(target, key) {
         if (key === 'query')
-          return async (statement: string, values?: unknown[]) => {
+          return async (statement: string | import('pg').QueryConfig, values?: unknown[]) => {
             const result = await target.query(statement, values);
-            if (!interrupted && statement.includes('SET publication_job=')) {
+            if (
+              !interrupted &&
+              (typeof statement === 'string' ? statement : statement.text).includes('SET publication_job=')
+            ) {
               interrupted = true;
               throw new Error('Lost original Source publication association reply');
             }

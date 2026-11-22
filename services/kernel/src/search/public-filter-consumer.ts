@@ -1374,7 +1374,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   }
   // Native page metadata/control work uses the original consumer meter. Reserve
   // misses, locks, FK checks and attempted writes before submitting each statement.
-  function reservePageWork(page: Page, footprint: { points: number; keys: number; writes: number }) {
+  function reservePageWork(page: Pick<Page, 'm'>, footprint: { points: number; keys: number; writes: number }) {
     page.m.cost.dependencyPoints += footprint.points;
     page.m.cost.inputKeys += footprint.keys;
     page.m.cost.rows += footprint.points;
@@ -1382,7 +1382,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page.m.check();
   }
   async function pageSql<T extends import('pg').QueryResultRow>(
-    page: Page,
+    page: Pick<Page, 'm'>,
     footprint: { points: number; keys: number; writes: number },
     statement: string | Readonly<{ name: string; text: string }>,
     values: () => unknown[],
@@ -2817,6 +2817,25 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         markUnpublishedIndependentPit(q);
         return { status: 'captured', queried: q, repair: job, cost: m.cost };
       }
+    } else if (!transferred && !publication && !config.discoveryTarget && q.snapshot.kind === 'prepared') {
+      // Keep the original bootstrap locator until a fresh capture verifies and takes this build.
+      const moved = await pageSql(
+        { m },
+        { points: 4, keys: 8, writes: 2 },
+        `WITH owner AS MATERIALIZED (
+           SELECT partition_no,id FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)
+             AND consumer_bootstrap=$3 AND consumer_work=$4 AND state='active' FOR UPDATE
+         ), moved AS (
+           UPDATE search.public_filter_observation o SET consumer_work=$4,consumer_bootstrap=$3
+           FROM owner r WHERE (o.partition_no,o.registration,o.observation)=(r.partition_no,r.id,$5)
+             AND o.prepared_build=$3 AND o.state='open' AND o.consumer_work IS NULL RETURNING r.partition_no,r.id
+         )
+         UPDATE search.public_filter_registration r SET consumer_work=NULL FROM moved
+         WHERE (r.partition_no,r.id)=(moved.partition_no,moved.id) RETURNING r.id`,
+        () => [work.registration.partition, work.registration.id, work.bootstrap.id, encoded, q.snapshot.observation],
+      );
+      if (moved.rowCount !== 1) return m.unavailable('source_pending');
+      return (await resumeUnpublishedPreparation(work.registration, m, context)) ?? m.unavailable('observation_lost');
     } else if (!transferred) {
       await save(work, null, false, m);
       await m.sql(
@@ -2854,6 +2873,78 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return { status: 'preparing', repair: job, cost: m.cost };
       throw error;
     }
+  }
+
+  async function resumeUnpublishedPreparation(
+    registration: ConsumerWork['registration'],
+    m: Meter,
+    context: PublicFilterConsumerContext,
+  ): Promise<PublicFilterConsumerCapture | undefined> {
+    if (!bootstrapBinding(binding)) return;
+    const {
+      rows: [saved],
+    } = await pageSql<{ bootstrap: string; observation: string; live: boolean; work: string | null }>(
+      { m },
+      { points: 2, keys: 4, writes: 0 },
+      `SELECT r.consumer_bootstrap AS bootstrap,o.observation,
+         (o.state='open' AND o.expires_at>$3) AS live, o.consumer_work AS work
+       FROM search.public_filter_registration r JOIN search.public_filter_observation o
+         ON (o.partition_no,o.consumer_bootstrap,o.registration)=(r.partition_no,r.consumer_bootstrap,r.id)
+       WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND r.consumer_work IS NULL
+         AND o.prepared_build=r.consumer_bootstrap`,
+      () => [registration.partition, registration.id, Date.now()],
+    );
+    if (!saved) return;
+    const release = () =>
+      pageSql(
+        { m },
+        { points: 1, keys: 2, writes: 1 },
+        `UPDATE search.public_filter_registration SET consumer_bootstrap=NULL
+       WHERE (partition_no,id)=($1,$2) AND consumer_work IS NULL AND consumer_bootstrap=$3 RETURNING id`,
+        () => [registration.partition, registration.id, saved.bootstrap],
+      );
+    // Expiry releases only the delivery pointer. Observation custody owns prior executions.
+    if (!saved.live) {
+      await release();
+      return;
+    }
+    if (!saved.work) return m.unavailable('observation_lost');
+    const work = decodeWork(saved.work);
+    const q = work.queried;
+    if (
+      !q ||
+      q.snapshot.kind !== 'prepared' ||
+      q.snapshot.observation !== saved.observation ||
+      q.snapshot.build !== saved.bootstrap ||
+      work.bootstrap.id !== saved.bootstrap ||
+      work.bootstrap.coveragePublication ||
+      !work.adopted ||
+      !isDeepStrictEqual(work.registration, registration)
+    )
+      return m.unavailable('observation_lost');
+    const repaired = { consumer: q.consumer, job: q.snapshot.observation };
+    const recovered = m.takePreparation(await binding.recover({ bootstrap: saved.bootstrap }, context));
+    if (
+      recovered.status !== 'adopted' ||
+      !isDeepStrictEqual(recovered.queried, q) ||
+      !isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap)
+    )
+      return m.unavailable('source_pending');
+    await physical(q, m, context);
+    const joined = await join(q, undefined, m, context);
+    if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+    try {
+      const current = await observe(q, null, undefined, m, context);
+      if (!observationIsDisclosableFromUnknown(current) || !(await finishPreparationBuild(work, q, m, context)))
+        return { status: 'preparing', repair: repaired, cost: m.cost };
+    } catch (error) {
+      if (error instanceof ConsumerFailure && ['source_pending', 'routing_incomplete'].includes(error.reason))
+        return { status: 'preparing', repair: repaired, cost: m.cost };
+      throw error;
+    }
+    if ((await release()).rowCount !== 1) return m.unavailable('source_pending');
+    own(q, context, m);
+    return { status: 'captured', queried: q, repair: repaired, cost: m.cost };
   }
 
   async function capturePlan(
@@ -3031,6 +3122,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             };
           return m.unavailable('source_pending');
         }
+      }
+      if (!publication && !config.discoveryTarget && snapshot === 'prepared') {
+        const resumed = await resumeUnpublishedPreparation(registration, m, context);
+        if (resumed) return resumed;
       }
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
@@ -3248,7 +3343,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
-      const restoring = page?.id === null && prefix !== undefined;
+      // A separately opened prepared observation also restores its cut before any candidate work.
+      const restoring =
+        page?.id === null &&
+        (prefix !== undefined || (!mixed && page.queried === null && q.snapshot.kind === 'prepared'));
       const restoringMixed = mixed && restoring;
       const restorePage = restoring ? (mixed ? 'mixed' : 'subject') : undefined;
       const cut = bookCut ?? (await join(q, undefined, m, context, restorePage));
@@ -3534,7 +3632,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function repairStep(
     input: PublicFilterConsumerJob,
     context: PublicFilterConsumerContext,
-    m = meter(context),
+    // A retained repair spends its actual Source inputs, including empty home windows.
+    m = meter(context, true),
     publication?: NativePublicFilterPublication,
   ) {
     const job = structuredClone(input);
@@ -3582,8 +3681,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // Its page producer and independent verifier each reopen Source with the
       // exact execution. A third join without that execution adds no evidence.
       const originalSubject = publication !== undefined && config.discoveryTarget === undefined;
+      const nativeJoin = originalSubject ? null : await joinNativePublicFilterRepair(binding, { queried: q }, context);
       if (!originalSubject) {
-        const nativeJoin = await joinNativePublicFilterRepair(binding, { queried: q }, context);
         const joined = nativeJoin ? m.take(nativeJoin) : await join(q, undefined, m, context);
         if (joined.status !== 'joined') return m.unavailable('source_pending');
         if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
@@ -3885,27 +3984,56 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           return m.unavailable('observation_lost');
         return { status: 'settled' as const, job, cost: m.cost };
       }
-      const nativeSettlement = m.take(
-        await withPublicFilterRepairAllowance(
-          spent(),
-          () => readPublicFilterRepairSettlement(config.pool, { queried: q, execution: work.execution! }, context),
-          m.maintenance,
-        ),
-      );
-      if (nativeSettlement.status !== 'settled')
-        return nativeSettlement.advanced ? progress() : m.unavailable('source_pending');
+      const original = { bootstrap: work.bootstrap.id, queried: q, execution: work.execution };
+      // The native Source brackets its own receiver settlement with current Source reads.
+      // Other bindings still require Search's independent physical guard.
+      if (!nativeJoin) {
+        const guarded = m.take(
+          await withPublicFilterRepairAllowance(
+            spent(),
+            () => readPublicFilterRepairSettlement(config.pool, { queried: q, execution: original.execution }, context),
+            m.maintenance,
+          ),
+        );
+        if (guarded.status !== 'settled') return guarded.advanced ? progress() : m.unavailable('source_pending');
+      } else if (advanced > 0) {
+        return progress();
+      }
+      // Reserve the final population read and original lease release before funding the receiver.
+      const allowance = spent();
+      if (nativeJoin) {
+        allowance.inputKeys += PUBLIC_FILTER_PREPARATION_INPUT_RESERVE;
+        allowance.bytes += 32 * 1024;
+      }
+      let receiver: object | undefined;
       const settled = m.take(
         await withPublicFilterRepairAllowance(
-          spent(),
-          () => binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution! }, context),
+          allowance,
+          () => binding.settle(original, context, nativeJoin ? allowance : undefined),
           m.maintenance,
+          nativeJoin
+            ? (pool, proof) => {
+                if (
+                  pool === config.pool &&
+                  proof.execution.id === original.execution &&
+                  isDeepStrictEqual(proof.queried, q)
+                )
+                  receiver = proof.settlement;
+              }
+            : undefined,
         ),
       );
-      if (settled.status !== 'joined') return m.unavailable('source_pending');
+      if (settled.status !== 'joined') return settled.advanced ? progress() : m.unavailable('source_pending');
+      if (nativeJoin && (!receiver || !('settlement' in settled) || settled.settlement !== receiver))
+        return m.unavailable('observation_lost');
       if (!isDeepStrictEqual(settled.covered, work.bootstrap.covered) || settled.execution?.id !== work.execution)
         return m.unavailable('observation_lost');
       // settle verifies canonical Source receipts AND Search dispatch/copy/visibility, including FOREIGN work.
-      const final = await observe(q, settled.execution.start, work.execution, m, context);
+      // After native settlement a fresh population START checks current readiness.
+      // A finished serving page has already returned its lease and cannot replay a public FINAL.
+      const final = nativeJoin
+        ? await observe(q, null, undefined, m, context)
+        : await observe(q, settled.execution.start, work.execution, m, context);
       if (final.blocking.length || final.unacknowledged.length) return m.unavailable('source_pending');
       // Changed-since-start remains a disclosure barrier for the old execution in query/readStatus.
       // It does not undo genuinely completed repair; settled is only a maintenance diagnostic.

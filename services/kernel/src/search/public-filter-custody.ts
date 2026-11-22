@@ -578,7 +578,13 @@ export async function readPublicFilterConsumerCustody(
 // Constructor routing only, analogous to publicFilterSourceOrigin. No receipt, positive result,
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
-const repairAllowance = new AsyncLocalStorage<Readonly<{ spent: CustodyCost; maintenance: boolean }>>();
+type ReceiverSettlement = (
+  pool: Pool,
+  result: Extract<PublicFilterRepairSettlementResult, { status: 'settled' }>,
+) => void;
+const repairAllowance = new AsyncLocalStorage<
+  Readonly<{ spent: CustodyCost; maintenance: boolean; receiver: ReceiverSettlement | undefined }>
+>();
 const discoveryRepair = new AsyncLocalStorage<{ observation: string; target: string; bootstrap: string }>();
 
 /** Background repair retains an adopted cut as evidence after its serving PIT expires. */
@@ -604,8 +610,9 @@ export function withPublicFilterRepairAllowance<T>(
   spent: CustodyCost,
   work: () => Promise<T>,
   maintenance = false,
+  receiver = repairAllowance.getStore()?.receiver,
 ): Promise<T> {
-  return repairAllowance.run({ spent: { ...spent }, maintenance }, work);
+  return repairAllowance.run({ spent: { ...spent }, maintenance, receiver }, work);
 }
 
 // Only the generation's maintenance call can receive a repair candidate from this read.
@@ -797,10 +804,27 @@ export async function readPublicFilterRepairSettlement(
       if (
         work.bootstrap.id !== state.bootstrap ||
         !isDeepStrictEqual(work.bootstrap.covered, retained.covered) ||
-        !isDeepStrictEqual(work.queried, q) ||
-        work.execution !== input.execution
+        !isDeepStrictEqual(work.queried, q)
       )
         throw new Failure('binding_mismatch');
+      if (work.execution !== input.execution) {
+        // A finished page may move the current work to its own execution. Only
+        // an already fenced original can be verified alongside that distinct window.
+        if (
+          !state.fence ||
+          state.fence.incarnation !== q.consumer.incarnation ||
+          state.fence.sourceEpoch !== retained.definition.source.epoch ||
+          typeof work.execution !== 'string'
+        )
+          throw new Failure('binding_mismatch');
+        const other = await db.query(
+          `SELECT 1 FROM search.public_filter_execution
+           WHERE (partition_no,observation,id)=($1,$2,$3) AND consumer_window IS NOT NULL
+             AND (page_id IS NULL OR page_status='complete')`,
+          [home, q.snapshot.observation, work.execution],
+        );
+        if (other.rowCount !== 1) throw new Failure('binding_mismatch');
+      }
       if (work.repairPage || work.records.length || work.projectionSource || work.repair || work.dispatch)
         throw new Failure('owner_unavailable');
       const target = await repairTarget.run(db, {
@@ -826,7 +850,8 @@ export async function readPublicFilterRepairSettlement(
         definition: retained.definition,
         execution: retained.execution,
         queried: retained.queried,
-        work: stateRow.consumer_work,
+        // Current work may record a subsequent query on the same immutable observation.
+        // The original is bound above by its own closed execution, cut and native fence.
         registration: stateRow.registration,
       });
       let row = (
@@ -1352,6 +1377,11 @@ export async function readPublicFilterRepairSettlement(
         cost: meter,
       };
     };
+    function confirmed(result: Extract<PublicFilterRepairSettlementResult, { status: 'settled' }>) {
+      // Both terminal paths return only after the receiver's fenced transaction commits.
+      repairAllowance.getStore()?.receiver?.(pool, result);
+      return result;
+    }
     const room = () => {
       const remaining = capacity();
       return remaining.bytes >= 1_500_000 && remaining.keys >= 160 && remaining.rows >= 32 && remaining.points >= 10;
@@ -1386,7 +1416,7 @@ export async function readPublicFilterRepairSettlement(
         if (row.ordinal <= progress.after && row.ordinal !== terminal) throw new Failure('binding_mismatch');
         return { kind: 'source' as const, row, page, current };
       });
-      if (stage.kind === 'settled') return stage.result;
+      if (stage.kind === 'settled') return confirmed(stage.result);
       if (stage.kind === 'source') {
         await verifySource(stage.current.state, stage.page);
         const result = await local(async (db, raw) => {
@@ -1407,7 +1437,7 @@ export async function readPublicFilterRepairSettlement(
           await save(db, current, next);
           return null;
         });
-        if (result) return result;
+        if (result) return confirmed(result);
       }
       if (!room()) break;
     }

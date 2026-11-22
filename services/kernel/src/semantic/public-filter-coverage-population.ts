@@ -77,6 +77,22 @@ const publicationStatement =
     NULL::text AS inserted_start,NULL::text AS started_page,NULL::text AS finished_page,
     '[]'::jsonb AS page_children
   FROM binding b WHERE EXISTS (SELECT 1 FROM population)`;
+// A historical publication may name a real, finished serving page. Its original
+// lease has been released. Bind the complete seal AND this exact population start,
+// then run the normal child, window, owner and current privacy checks.
+const publishedPageStatement = statement
+  .replace(
+    "AND b.snapshot_kind='prepared' AND e.page_id IS NULL AND e.consumer_window IS NULL",
+    `AND b.snapshot_kind='prepared' AND e.page_id=pg.id AND e.consumer_window IS NOT NULL
+      AND (st.id,st.registration,st.observation,st.bootstrap,st.read_definition,st.consumer,st.covered_generation,st.owner_epoch)=
+          (pg.id,o.registration,o.observation,b.bootstrap,b.read_definition,r.consumer,b.coverage_generation,p.epoch)`,
+  )
+  .replace('AND f.token IS NOT NULL', "AND i.publication_job IS NOT NULL AND pg.state='finished'")
+  // A changed head is reported separately. The historical reader still needs
+  // every original child to verify the finished page before it can report it.
+  .replace(/children AS MATERIALIZED \([\s\S]*?\), decoded AS MATERIALIZED/, (children) =>
+    children.replaceAll(' AND NOT EXISTS(SELECT 1 FROM heads)', ''),
+  );
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function nativePopulationStartId(locator: string): string {
   if (!locator.startsWith('population:') || !uuid.test(locator.slice(11)))
@@ -215,7 +231,7 @@ function validBindings(
     q.consumer.readDefinition !== row.read_definition
   )
     return false;
-  if (publication) {
+  if (publication && request.start?.observation === `0:${publication.bootstrap}`) {
     if (!completed || completed.execution === null || completed.consumer_window !== null || row.page_id !== null)
       return false;
     const execution = search.decodeState<CustodyExecution>(completed.execution);
@@ -229,7 +245,7 @@ function validBindings(
   if (request.start !== null) {
     // Known relevant change is already sufficient to block; no own/child scan
     // is dispatched after this indexed fail-fast result.
-    if (completed?.heads.length) return true;
+    if (!publication && completed?.heads.length) return true;
     if (row.page_id !== null) {
       if (
         row.page_children.length !== row.page_rounds ||
@@ -430,6 +446,8 @@ async function readPopulations(
 ): Promise<PrivacyReductionObservation[]> {
   if (!requests.length || requests.length > MAX_PAGE_READS) throw new RangeError('Invalid population page width');
   const final = requests[0]!.start !== null;
+  const maintenanceStart =
+    publication !== undefined && requests[0]!.start?.observation === `0:${publication.bootstrap}`;
   const costs = requests.map((request) => reservePopulationRole(request.start !== null));
   const unready = () =>
     costs.map((cost) => ({ status: 'unready' as const, reason: 'metadata_missing' as const, cost }));
@@ -461,9 +479,9 @@ async function readPopulations(
         throw new TypeError('Invalid native population role');
       if (
         publication &&
-        (request.start?.observation !== `0:${publication.bootstrap}` ||
+        (request.start === null ||
           q.snapshot.kind !== 'prepared' ||
-          q.snapshot.build !== request.start.observation ||
+          q.snapshot.build !== `0:${publication.bootstrap}` ||
           !uuid.test(publication.job) ||
           !uuid.test(publication.bootstrap) ||
           !uuid.test(publication.terminal.step) ||
@@ -473,7 +491,7 @@ async function readPopulations(
       const pageId = final ? null : search.coverageStart(requests[slot]!.context);
       if (bookPage && (q.snapshot.kind !== 'pit' || (!final && pageId === null)))
         throw new TypeError('A composed population requires native pages');
-      const start = publication
+      const start = maintenanceStart
         ? null
         : final
           ? nativePopulationStartId(request.start!.observation)
@@ -532,10 +550,13 @@ async function readPopulations(
     // validBindings still decodes it and demands the exact start and empty own rows.
     const discovery = /discovery-g[1-9][0-9]*$/.test(members[0]!.physical_target);
     const role = final ? 'final' : 'start';
-    const sql = (publication ? publicationStatement : (discovery ? discoveryRoles : subjectRoles)[role]).replace(
-      'semantic.privacy-role',
-      `semantic.privacy-${role}`,
-    );
+    const sql = (
+      publication
+        ? maintenanceStart
+          ? publicationStatement
+          : publishedPageStatement
+        : (discovery ? discoveryRoles : subjectRoles)[role]
+    ).replace('semantic.privacy-role', `semantic.privacy-${role}`);
     const values = [
       JSON.stringify(members),
       Date.now(),
@@ -557,7 +578,9 @@ async function readPopulations(
           // the current clock, observation and native start or final witnesses at a fresh snapshot.
           const query = {
             name: publication
-              ? 'semantic_privacy_publication_final_v3'
+              ? maintenanceStart
+                ? 'semantic_privacy_publication_final_v3'
+                : 'semantic_privacy_published_page_final_v1'
               : `semantic_privacy_${discovery ? 'discovery' : 'subjects'}_${role}_v3`,
             text: sql,
             values,

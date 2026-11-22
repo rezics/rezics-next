@@ -581,7 +581,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         execution: string;
       }>,
       context: PublicFilterConsumerContext,
-    ): ReturnType<PublicFilterSourceBinding['join']>;
+      spent?: PublicFilterCost & Readonly<{ bytes: number }>,
+    ): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> & { advanced?: boolean }>;
   }>;
 
 /** Original Source operands retained for one Search generation job. No engine state is copied. */
@@ -4932,22 +4933,29 @@ export function createNativePublicFilterSourceBinding(
         return repairNative(cut.bootstrap, joined, input, db, cost, { deadline });
       });
     },
-    settle: settleNative,
-    async settleMixed(input, context, spent) {
-      if (
-        !Number.isSafeInteger(spent.inputKeys) ||
-        spent.inputKeys < 0 ||
-        spent.inputKeys >= preparationInputLimit ||
-        !Number.isSafeInteger(spent.bytes) ||
-        spent.bytes < 0 ||
-        spent.bytes >= 4 * 1024 * 1024
-      )
-        return fail('owner_unavailable');
-      const original = publicFilterBindingCost();
-      addCost(original, spent);
-      return settleNative(input, context, original, true);
-    },
+    settle: (input, context, spent) =>
+      spent ? fundedSettlement(input, context, spent, false) : settleNative(input, context),
+    settleMixed: (input, context, spent) => fundedSettlement(input, context, spent, true),
   };
+  async function fundedSettlement(
+    input: Parameters<PublicFilterSourceBootstrapBinding['settle']>[0],
+    context: PublicFilterConsumerContext,
+    spent: PublicFilterCost & Readonly<{ bytes: number }>,
+    mixed: boolean,
+  ) {
+    if (
+      !Number.isSafeInteger(spent.inputKeys) ||
+      spent.inputKeys < 0 ||
+      spent.inputKeys >= preparationInputLimit ||
+      !Number.isSafeInteger(spent.bytes) ||
+      spent.bytes < 0 ||
+      spent.bytes >= 4 * 1024 * 1024
+    )
+      return fail('owner_unavailable');
+    const original = publicFilterBindingCost();
+    addCost(original, spent);
+    return settleNative(input, context, original, mixed);
+  }
   nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, 'repair'));
   nativeRepairReadBatches.set(bootstrapBinding, async (input, context, read, accounts) => {
     const ids = accounts ? [...new Set(accounts.ids)] : [];
@@ -5564,9 +5572,7 @@ export function createNativePublicFilterSourceBinding(
         },
         ports.search,
         ports.access,
-        settled.execution!.start.observation === publication.bootstrap
-          ? { job: publication.job, bootstrap: retained.bootstrap, terminal: settled.terminal }
-          : undefined,
+        { job: publication.job, bootstrap: retained.bootstrap, terminal: settled.terminal },
       );
       addCost(cost, observation.cost);
       if (

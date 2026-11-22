@@ -1,5 +1,7 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../../../src/command/command.ts';
+import { deadlineFor } from '../../../src/request/deadline.ts';
 import type { PublicFilterSourceBinding } from '../../../src/semantic/public-filter-source-binding.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../../../src/clock.ts';
@@ -190,7 +192,7 @@ export async function createPublicFilterConsumerFixture(
         next = undefined;
         for (const gate of held) gate.release();
         try {
-          await operations.close();
+          await operations.close({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
         } finally {
           await config.search.request('DELETE', `/${physicalTarget}`);
         }
