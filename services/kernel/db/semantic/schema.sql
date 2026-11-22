@@ -9824,6 +9824,29 @@ CREATE TABLE semantic.public_filter_projection_head (
 
 
 --
+-- Name: public_filter_projection_reclamation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_projection_reclamation (
+    partition_no integer NOT NULL,
+    subject_id uuid NOT NULL,
+    build_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    successor uuid NOT NULL,
+    meaning_digest text NOT NULL,
+    source_key text NOT NULL,
+    source jsonb NOT NULL,
+    heads jsonb NOT NULL,
+    input_limit integer NOT NULL,
+    step integer NOT NULL,
+    CONSTRAINT public_filter_projection_reclamation_check CHECK ((successor <> build_id)),
+    CONSTRAINT public_filter_projection_reclamation_generation_check CHECK ((generation > 0)),
+    CONSTRAINT public_filter_projection_reclamation_input_limit_check CHECK (((input_limit >= 1) AND (input_limit <= 1000))),
+    CONSTRAINT public_filter_projection_reclamation_step_check CHECK (((step >= 0) AND (step <= 4096)))
+);
+
+
+--
 -- Name: public_filter_projection_replay; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -12487,6 +12510,14 @@ ALTER TABLE ONLY semantic.public_filter_projection_build
 
 ALTER TABLE ONLY semantic.public_filter_projection_head
     ADD CONSTRAINT public_filter_projection_head_pkey PRIMARY KEY (build_id, partition_no);
+
+
+--
+-- Name: public_filter_projection_reclamation public_filter_projection_reclamation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_reclamation
+    ADD CONSTRAINT public_filter_projection_reclamation_pkey PRIMARY KEY (partition_no, subject_id);
 
 
 --
@@ -18295,6 +18326,14 @@ ALTER TABLE ONLY semantic.public_filter_projection_head
 
 ALTER TABLE ONLY semantic.public_filter_projection_head
     ADD CONSTRAINT public_filter_projection_head_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_projection_reclamation public_filter_projection_reclamati_partition_no_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_reclamation
+    ADD CONSTRAINT public_filter_projection_reclamati_partition_no_subject_id_fkey FOREIGN KEY (partition_no, subject_id) REFERENCES semantic.public_filter_projection_build(partition_no, subject_id) ON DELETE CASCADE;
 
 
 --

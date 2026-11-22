@@ -267,6 +267,11 @@ Retain pending work rather than erase the active frontier on every poll. Under q
 finishes; a replay rereads at most one step. Native implementation must supply indexed current-selection access
 where current helpers still fold history; no schema/runtime implementation is claimed here.
 
+Ordinary projection reclaims a large prior generation in bounded steps before starting selection again.
+The signed continuation binds the replacement build, retired generation, input allowance and step. Each step
+checks the original Source observation and retained privacy heads under the build lock. Replaying a committed
+step returns the same successor. Readers can start selection on the replacement after the old heads are gone.
+
 Every raw key, reject, duplicate, lookahead, reread, Access point and dependency phase is charged. A 16-key step
 cannot return 16 records after reading an unbounded hidden prefix. It returns `progress`, possibly no records, with
 a strictly advanced retained frontier. `complete` closes all pages of that exact generation, including all-hidden

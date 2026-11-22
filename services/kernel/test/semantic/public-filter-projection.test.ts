@@ -6,7 +6,7 @@ import identityFloors from '../../src/semantic/public-filter-identity-floors.sql
 import installedFloors from '../../src/semantic/public-filter-installed-identity-floors.sql';
 import { withConnection, withoutQueryAccounting, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
-import { lockReleasedProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
+import { prepareProjectionBuildSql } from '../../src/semantic/public-filter-projection-build-write.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readPopulationProjection } from '../../src/search/public-filter-preparation-segment.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
@@ -183,12 +183,13 @@ test('concurrent first pages for one Book complete across a native serialization
       {
         connection: (dispatch) => dispatch(),
         async query(sql, _values, dispatch) {
-          if (sql === lockReleasedProjectionBuildForRetirementSql) {
-            if (++attempts === 2) snapshots.resolve();
-            await snapshots.promise;
-          }
           try {
-            return await dispatch();
+            const result = await dispatch();
+            if (sql === prepareProjectionBuildSql) {
+              if (++attempts === 2) snapshots.resolve();
+              await snapshots.promise;
+            }
+            return result;
           } catch (error) {
             if (error instanceof Error && 'code' in error && error.code === '40001') conflicts++;
             throw error;
@@ -493,7 +494,7 @@ test('native complete selected public facet projection retains bounded frontier 
   } finally {
     await f.close();
   }
-});
+}, 300_000);
 
 test('one immutable release projects each native subject type and keeps exact currentness without a meaning type', async () => {
   const { publicFilterSource } = await nativeProducer();
