@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
+import { accessEvidence } from '../../src/access/evidence.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { creationCapability, parentCreationAuthorization } from '../../src/access/parent-creation.ts';
@@ -475,5 +476,27 @@ test('real board HTTP read classifies resource evidence failures and hides their
       log.mockRestore();
       cause = undefined;
     }
+  }
+});
+
+test('an interrupted native evidence read and an unavailable relation retain their dependency outcome', async () => {
+  const denied = () => new GrantDeniedError();
+  await expect(
+    accessEvidence(() => pool.query('SELECT 1 FROM pg_temp.missing_authorization_anchor'), denied),
+  ).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'overloaded', cause: { code: '42P01' } });
+
+  const client = await pool.connect();
+  try {
+    const socket = (client as PoolClient & { connection: { stream: import('node:net').Socket } }).connection.stream;
+    const connectionError = new Promise<Error>((resolve) => client.once('error', resolve));
+    const read = accessEvidence(async () => {
+      const active = client.query('SELECT pg_sleep(1)');
+      socket.destroy();
+      return await active;
+    }, denied);
+    await expect(read).rejects.toMatchObject({ name: 'AccessUnavailableError', reason: 'overloaded' });
+    expect((await connectionError).message).toBe('Connection terminated unexpectedly');
+  } finally {
+    client.release(true);
   }
 });

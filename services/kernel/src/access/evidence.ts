@@ -1,6 +1,7 @@
+import { DatabaseError } from 'pg';
 import { ProblemError, PROBLEMS } from '../http/problem-error.ts';
 import { GrantDeniedError } from './resource-access-errors.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 
 // Existing owning-module denial contracts have no common base class. Keep their
 // closed set of names here instead of importing domains into Access.
@@ -29,6 +30,12 @@ export async function accessEvidence<T>(
     return await callback();
   } catch (error) {
     throwAccessUnavailable(error, deadline);
+    // A missing native relation prevents the callback from observing its resource.
+    if (error instanceof DatabaseError && error.severity === 'ERROR' && error.code === '42P01') {
+      const unavailable = new AccessUnavailableError('overloaded');
+      Object.defineProperty(unavailable, 'cause', { value: error, configurable: true, writable: true });
+      throw unavailable;
+    }
     throwEvidenceFailure(error);
     const denial = denied === false ? new Error('Access evidence denied') : denied();
     if (

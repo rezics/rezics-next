@@ -1,6 +1,16 @@
 import { AccessUnavailableError, CommandUnavailableError } from './contract/errors.ts';
 export { AccessUnavailableError, CommandUnavailableError } from './contract/errors.ts';
 
+const connectionErrors = new Set([
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+]);
+
 /** Constant-time classification shared by Access, commands, HTTP, and durable work. */
 export function classifyUnavailability(error: unknown): CommandUnavailableError['reason'] | undefined {
   if (error instanceof AccessUnavailableError || error instanceof CommandUnavailableError) return error.reason;
@@ -11,12 +21,16 @@ export function classifyUnavailability(error: unknown): CommandUnavailableError[
   if (code === '57014' || (error instanceof Error && /query read timeout/i.test(error.message))) return 'deadline';
   if (code === '40001' || code === '40P01' || code === '55P03') return 'contention';
   if (
-    (typeof code === 'string' && /^(?:08|53)/.test(code)) ||
+    (typeof code === 'string' && (/^(?:08|53)/.test(code) || connectionErrors.has(code))) ||
     code === '57P01' ||
     code === '57P02' ||
     code === '57P03' ||
     (error instanceof Error &&
-      /timeout exceeded when trying to connect|connection (?:acquisition )?timeout/i.test(error.message))
+      (/timeout exceeded when trying to connect|connection (?:acquisition )?timeout/i.test(error.message) ||
+        error.message === 'Connection terminated unexpectedly' ||
+        error.message === 'Connection terminated' ||
+        error.message === 'Client has encountered a connection error and is not queryable' ||
+        error.message === 'Client was closed and is not queryable'))
   )
     return 'overloaded';
   return undefined;
