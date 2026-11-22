@@ -1053,7 +1053,6 @@ async function readSubjectNative(
   const contextRecord = context === GLOBAL_SUBJECT_CONTEXT ? null : await ports.readContextSnapshot(pool, context);
   if (context !== GLOBAL_SUBJECT_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
-  const active = await ports.readActiveRelease(pool);
   const deadline = summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const readSnapshot = async (subjectId: string, terminal?: string) => {
     const route = routeOf(subjectId)!;
@@ -1191,7 +1190,10 @@ async function readSubjectNative(
             revision: rows[0]!.revision,
             securityRevision,
           };
-        const stored = await ports.readRelease(client, rows[0]!.release);
+        // The primary page needs the current display release. Its native activation also proves that digest exists.
+        const active = terminal ? null : await ports.readActiveRelease(client);
+        const stored =
+          active?.digest === rows[0]!.release ? active.release : await ports.readRelease(client, rows[0]!.release);
         if (!stored) throw new Error('Subject revision release is missing');
         // The Context's own relation types show with the subject's release; reads never register the digest.
         const layer = await ports.layerRelease(client, { digest: rows[0]!.release, release: stored }, context);
@@ -1316,6 +1318,7 @@ async function readSubjectNative(
         if (!allowed) return null;
         return {
           freshnessRetry: false as const,
+          active,
           reviewedIdentity:
             summaries.reviewIdentity && subjectId === id && !terminal
               ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
@@ -1357,7 +1360,7 @@ async function readSubjectNative(
   };
   const snapshot = await readSnapshot(id);
   if (!snapshot) return null;
-  const { rows, component, release, layerDigest, resolution, relationCounts } = snapshot;
+  const { rows, component, release, layerDigest, resolution, relationCounts, active } = snapshot;
   const supported = await disclosedTargets(
     pool,
     release,
