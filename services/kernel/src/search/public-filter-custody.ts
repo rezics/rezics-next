@@ -320,7 +320,7 @@ async function sql(
   meter: Meter,
   query: string,
   values: unknown[] = [],
-  native?: Readonly<{ points: number; keys: number; writes: number }>,
+  native?: Readonly<{ points: number; keys: number; writes: number; name?: string }>,
 ): Promise<QueryResult> {
   meter.statements++;
   meter.inputKeys += native?.keys ?? values.length;
@@ -335,7 +335,10 @@ async function sql(
     meter.bytes += treeByteLength(result.rows);
     if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
   };
-  const dispatch = (client: Queryable) => queryCompletion.run(complete, () => client.query(query, values));
+  const dispatch = (client: Queryable) =>
+    queryCompletion.run(complete, () =>
+      native?.name ? client.query({ name: native.name, text: query, values }) : client.query(query, values),
+    );
   return db === lifetimes.get(meter)!.pool ? connection(meter, dispatch) : dispatch(db);
 }
 function isReleaseReference(
@@ -1934,7 +1937,7 @@ export function createPublicFilterCustody(
                   shared,
                   retainServing,
                   [consumer.physicalTarget, consumer.incarnation, JSON.stringify(items), Date.now()],
-                  { points: 2 + 5 * count, keys: 4 + 12 * count, writes: 0 },
+                  { points: 2 + 5 * count, keys: 4 + 12 * count, writes: 0, name: 'search_retain_serving_pit_v1' },
                 );
                 shared.resultWrites += 3 * (result.rowCount ?? 0);
                 return result;
