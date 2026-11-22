@@ -1,7 +1,7 @@
 import { HistoryReceiptTooLargeError } from '../contract/errors.ts';
 import { jsonParameter } from '../../database/json.ts';
 import { captureAgentIdentityInventory, finalizeAgentIdentityInventory } from './agent-identity-inventory.ts';
-import { hasCommandRecordSourceSet, recordCommandRecordSourceSetCopies } from './record-source-set.ts';
+import { hasCommandRecordSourceSet, recordScopedSourceSetCopies, type ScopedHistoryCopy } from './record-source-set.ts';
 import { recordAgentIdentityCopy, releaseAgentIdentitySource } from './agent-identity-source.ts';
 import type { CommandTransaction } from '../../command/command.ts';
 import { currentCommand } from '../../command/command.ts';
@@ -21,7 +21,6 @@ import {
   type CommandHistoryKind,
   type CommandHistoryScopes,
   type HistoryScope,
-  type HistoryLocator,
   MAX_HISTORY_PAYLOAD_BYTES,
   classifyEvent,
   encodeLocator,
@@ -180,10 +179,14 @@ export async function recordCommandHistory(
   });
   // The native set and explicit record sources are mutually exclusive. One original
   // can bind all generated receipt/event coordinates in this transaction.
-  const setCopies: HistoryLocator[] | undefined =
+  const setCopies: ScopedHistoryCopy[] | undefined =
     hasCommandRecordSourceSet(tx) && !commandAgentIdentitySource(tx) ? [] : undefined;
   if (setCopies) beginRecordHistorySerialization(tx);
   const write = async (scope: HistoryScope, locator: Uint8Array) => {
+    if (setCopies) {
+      setCopies.push({ artifactType: scope.artifactType, locator: Buffer.from(locator), accounts: scope.accounts });
+      return;
+    }
     await insert.run(tx, {
       partition_no: declaration.partition,
       artifact_type: scope.artifactType,
@@ -192,10 +195,6 @@ export async function recordCommandHistory(
     });
     const { decodeLocator } = await import('../contract/locator.ts');
     const nativeLocator = decodeLocator(scope.artifactType, locator);
-    if (setCopies) {
-      setCopies.push(nativeLocator);
-      return;
-    }
     await recordRecordHistoryCopy(tx, nativeLocator, input.position);
     await recordAgentIdentityCopy(
       tx,
@@ -218,7 +217,7 @@ export async function recordCommandHistory(
         eventSeq,
       }),
     );
-  if (setCopies) await recordCommandRecordSourceSetCopies(tx, setCopies, input.position);
+  if (setCopies) await recordScopedSourceSetCopies(tx, setCopies, input.position);
   await finalizeAgentIdentityInventory(tx, input.position);
 }
 

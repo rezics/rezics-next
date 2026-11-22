@@ -5,7 +5,7 @@ import {
   type SemanticRecordSourceSetLocator,
   type SemanticRecordSourceSetSnapshot,
 } from './record-source-set-native.ts';
-import { type HistoryLocator, encodeLocator } from '../contract/index.ts';
+import { type HistoryLocator, type HistoryScope, encodeLocator } from '../contract/index.ts';
 
 export type { SemanticRecordSourceSet } from '../../semantic/record-source-set.ts';
 export const MAX_NATIVE_RECORD_SOURCE_SET_MEMBERS = 512;
@@ -109,10 +109,40 @@ export async function recordCommandRecordSourceSetCopy(
   return recordCommandRecordSourceSetCopies(tx, [locator], position);
 }
 
+type EncodedCopy = { artifactType: HistoryLocator['artifactType']; locator: Buffer };
+export type ScopedHistoryCopy = EncodedCopy & { accounts: HistoryScope['accounts'] };
+
 export async function recordCommandRecordSourceSetCopies(
   tx: CommandTransaction,
   locators: readonly HistoryLocator[],
   position: bigint | null,
+): Promise<void> {
+  if (!hasCommandRecordSourceSet(tx)) return;
+  const copies = locators.map((locator) => ({
+    artifactType: locator.artifactType,
+    locator: Buffer.from(encodeLocator(locator)),
+  }));
+  return associateSourceSetCopies(tx, copies, position);
+}
+
+export function recordScopedSourceSetCopies(
+  tx: CommandTransaction,
+  copies: readonly ScopedHistoryCopy[],
+  position: bigint,
+): Promise<void> {
+  return associateSourceSetCopies(
+    tx,
+    copies,
+    position,
+    copies.map((copy) => copy.accounts),
+  );
+}
+
+async function associateSourceSetCopies(
+  tx: CommandTransaction,
+  copies: readonly EncodedCopy[],
+  position: bigint | null,
+  accounts?: readonly HistoryScope['accounts'][],
 ): Promise<void> {
   const declaration = sets.get(tx);
   if (!declaration) return;
@@ -121,8 +151,24 @@ export async function recordCommandRecordSourceSetCopies(
   const key = recordSourceSetStorageKey(set);
   // A just-inserted row is already owned by this transaction. For a prior
   // association, keep its share lock until the command commits.
-  const accepted = await tx.query<{ original_ok: boolean; copy_ok: boolean }>(
-    `WITH inserted AS (
+  // Receipt and outbox scopes come from the same command declaration, in artifact order.
+  // Staged copies already own their receiving scopes and only need the association.
+  const enroll =
+    accounts === undefined
+      ? ''
+      : `
+     , roles AS (
+       INSERT INTO core.history_locator
+         (partition_no,account_route,account_id,artifact_type,locator,roles,minimizer_version)
+       SELECT $7,a."accountRoute",a."accountId",input.kind,input.locator,a.roles,1
+       FROM unnest($8::text[], $9::bytea[]) WITH ORDINALITY AS input(kind,locator,ordinal)
+       CROSS JOIN LATERAL jsonb_to_recordset($10::jsonb -> ((input.ordinal - 1)::integer))
+         AS a("accountRoute" integer,"accountId" uuid,roles integer)
+       ORDER BY input.ordinal,a."accountRoute",a."accountId"
+     )`;
+  const accepted = await tx.query<{ original_ok: boolean; copy_ok: boolean }>({
+    name: accounts ? 'history_record_scoped_source_set_copies_v1' : 'history_record_source_set_copies_v1',
+    text: `WITH inserted AS (
        INSERT INTO core.record_history_source_set
          (source_partition,set_locator,set_revision,original_transaction,original_position,member_count,
           producer_version,native_revision,snapshot_digest,metadata_state)
@@ -147,20 +193,22 @@ export async function recordCommandRecordSourceSetCopies(
        ON CONFLICT (partition_no,artifact_type,locator) DO SELECT FOR SHARE
        RETURNING source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
      )
+     ${enroll}
      SELECT EXISTS (SELECT 1 FROM eligible) AS original_ok,
        (SELECT count(*) FROM copy WHERE (source_partition,set_locator,set_revision)=($1,$2,$3)
          AND original_transaction=$4 AND producer_version=1
          AND (original_position IS NULL OR $5::bigint IS NULL OR original_position=$5)) = cardinality($8::text[]) AS copy_ok`,
-    [
+    values: [
       ...key,
       set.transactionId,
       position?.toString() ?? null,
       set.revision,
       command.partition,
-      locators.map((locator) => locator.artifactType),
-      locators.map((locator) => Buffer.from(encodeLocator(locator))),
+      copies.map((copy) => copy.artifactType),
+      copies.map((copy) => copy.locator),
+      ...(accounts ? [JSON.stringify(accounts)] : []),
     ],
-  );
+  });
   if (!accepted.rows[0]?.original_ok) throw new TypeError('Conflicting immutable native record source set');
   if (!accepted.rows[0].copy_ok) throw new TypeError('Conflicting native record source set copy');
 }

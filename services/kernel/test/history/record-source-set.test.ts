@@ -284,6 +284,47 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   });
 });
 
+test('one source set retains the distinct receiving account roles of each generated event', async () => {
+  const producer = actualProducer();
+  const related = await f.auth.person('source-event-role-' + randomUUID());
+  const result = await command(async (tx) => {
+    const set = await producer.beginSemanticRecordSourceSet(tx);
+    const artifact = sourceSetCommand({ ok: true });
+    const event = artifact.result.events[0]!;
+    await declareCommandHistory(tx, kind, {
+      response: artifact.declaration.response,
+      events: [
+        { artifactType: 'outbox-event/v1', accounts: [] },
+        { artifactType: 'outbox-event/v1', accounts: scope(related).response.accounts },
+      ],
+    });
+    await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
+    await producer.sealSemanticRecordSourceSet(tx, set);
+    return { value: artifact.result.value, events: [event, event] };
+  });
+  const rows = await f.db.admin.query(
+    `SELECT l.artifact_type,l.locator,l.roles FROM core.record_history_source_set_copy AS c
+     JOIN core.history_locator AS l USING (partition_no,artifact_type,locator)
+     WHERE c.partition_no=$1 AND c.original_transaction=$2
+       AND l.account_route=$3 AND l.account_id=$4`,
+    [partition, result.transactionId, routeOf(related.accountId), related.accountId],
+  );
+  expect(rows.rows).toEqual([
+    {
+      artifact_type: 'outbox-event/v1',
+      locator: Buffer.from(
+        encodeLocator({
+          artifactType: 'outbox-event/v1',
+          partitionNo: partition,
+          position: result.position,
+          eventSeq: 1,
+        }),
+      ),
+      roles: scope(related).response.accounts[0]!.roles,
+    },
+  ]);
+});
+
 test('the native seal guard rolls back building source and generated work together and rejects a different command handle', async () => {
   const producer = actualProducer();
   let handle: OwnerSourceSet | undefined;
