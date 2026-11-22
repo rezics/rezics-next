@@ -626,7 +626,8 @@ test('native Subject enrollment prepares disjoint ranges and rechecks the origin
 }, 60_000);
 
 test('canonical retained observation execution joins preserve complete compiler keys', async () => {
-  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
+  const { createPublicFilterCustody, readGenerationPublicationCustody } =
+    await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { parseText } = await import('../../src/search/text.ts');
   const { publicFilterSource } = await nativeProducer();
@@ -702,7 +703,7 @@ test('canonical retained observation execution joins preserve complete compiler 
       {
         registration: registered.registration,
         covered: begun.bootstrap.covered,
-        build: crypto.randomUUID(),
+        build: begun.bootstrap.id,
         generation: 1n,
         rows: [{ original: book, terminal: book }],
         expiresAt: Date.now() + 60000,
@@ -746,10 +747,73 @@ test('canonical retained observation execution joins preserve complete compiler 
       readContext(),
     );
     expect(recovered.status).toBe('adopted');
-    // Closing Search custody invalidates this immutable observation without borrowing another cut.
-    await custody.closeObservation(retained.queried, search, readContext());
-    expect((await binding.join({ queried: retained.queried }, readContext())).status).not.toBe('joined');
-    expect(await binding.abort({ bootstrap: begun.bootstrap.id }, readContext())).toMatchObject({ status: 'pending' });
+    const readOriginal = (observation?: string, covered = begun.bootstrap.covered) =>
+      readGenerationPublicationCustody(f.db.pool, registered.consumer, 0, readContext(), observation, {
+        bootstrap: covered,
+        snapshot: 'prepared',
+      });
+    const retainDirect = (build: string, generation: bigint) =>
+      custody.retainPrepared(
+        {
+          registration: registered.registration,
+          covered: begun.bootstrap.covered,
+          build,
+          generation,
+          rows: [{ original: book, terminal: book }],
+          expiresAt: Date.now() + 60_000,
+        },
+        readContext(),
+      );
+    const extraRetained: (typeof retained.queried)[] = [];
+    try {
+      // These direct records have the same coverage and rows, but different immutable preparation identities.
+      for (const [build, generation] of [
+        [begun.bootstrap.id, 2n],
+        [`0:${crypto.randomUUID()}`, 1n],
+      ] as const) {
+        const other = await retainDirect(build, generation);
+        if (other.status !== 'retained') throw new Error(other.reason);
+        extraRetained.push(other.queried);
+        expect(await readOriginal(other.queried.snapshot.observation)).toMatchObject({ reason: 'binding_mismatch' });
+      }
+      expect(await readOriginal()).toMatchObject({ queried: retained.queried });
+      expect(
+        await readOriginal(retained.queried.snapshot.observation, { observation: `0:${crypto.randomUUID()}` }),
+      ).toMatchObject({
+        queried: null,
+      });
+      expect(
+        await readGenerationPublicationCustody(f.db.pool, registered.consumer, 0, readContext(), undefined, {
+          bootstrap: begun.bootstrap.covered,
+          snapshot: 'pit',
+        }),
+      ).toMatchObject({ queried: null });
+      expect(
+        await readGenerationPublicationCustody(
+          f.db.pool,
+          { ...registered.consumer, incarnation: crypto.randomUUID() },
+          0,
+          readContext(),
+          retained.queried.snapshot.observation,
+          { bootstrap: begun.bootstrap.covered, snapshot: 'prepared' },
+        ),
+      ).toMatchObject({ reason: 'definition_missing' });
+      const sibling = await retainDirect(begun.bootstrap.id, 1n);
+      if (sibling.status !== 'retained') throw new Error(sibling.reason);
+      extraRetained.push(sibling.queried);
+      expect(await readOriginal()).toMatchObject({ reason: 'definition_missing' });
+      expect(await readOriginal(retained.queried.snapshot.observation)).toMatchObject({ queried: retained.queried });
+      expect(await readOriginal(sibling.queried.snapshot.observation)).toMatchObject({ queried: sibling.queried });
+      // Closing Search custody invalidates this immutable observation without borrowing another cut.
+      await custody.closeObservation(retained.queried, search, readContext());
+      expect(await readOriginal(retained.queried.snapshot.observation)).toMatchObject({ queried: null });
+      expect((await binding.join({ queried: retained.queried }, readContext())).status).not.toBe('joined');
+      expect(await binding.abort({ bootstrap: begun.bootstrap.id }, readContext())).toMatchObject({
+        status: 'pending',
+      });
+    } finally {
+      for (const copy of extraRetained) await custody.closeObservation(copy, search, readContext());
+    }
   } finally {
     await custody.close();
     if (created) await search.request('DELETE', `/${index}`);
@@ -1204,7 +1268,7 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       {
         registration: registered.registration,
         covered: begun.bootstrap.covered,
-        build: crypto.randomUUID(),
+        build: begun.bootstrap.id,
         generation: 1n,
         rows: [{ original: book, terminal: book }],
         expiresAt: Date.now() + 600000,
@@ -1836,7 +1900,7 @@ test('native Source replays its original creation window after the same home adv
       {
         registration: registered.registration,
         covered: begun.bootstrap.covered,
-        build: crypto.randomUUID(),
+        build: begun.bootstrap.id,
         generation: 1n,
         rows: [],
         expiresAt: Date.now() + 600000,

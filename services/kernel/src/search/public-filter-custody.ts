@@ -3769,21 +3769,35 @@ export async function readGenerationPublicationCustody(
     check(context);
     if (sourceHome !== undefined) home(sourceHome);
     const original = typeof recovery === 'object' ? recovery : undefined;
+    const build = original?.snapshot === 'prepared' ? original.bootstrap.observation : null;
+    // Direct retained rows keep their immutable build and generation in the queried envelope.
+    // Segmented preparations also index them. Source bootstraps own generation one of their build.
+    const preparedOwner =
+      build === null
+        ? `prepared_build IS NOT DISTINCT FROM $7::text${original ? ' AND ($5::text IS NOT NULL OR prepared_rows IS NULL OR queried::jsonb @> $9::jsonb)' : ''}`
+        : `((prepared_build=$7 AND prepared_generation=1)
+            OR (prepared_build IS NULL AND prepared_rows IS NOT NULL
+                AND ($5::text IS NOT NULL OR queried::jsonb @> $9::jsonb)
+                AND EXISTS (
+                  SELECT 1 FROM search.public_filter_prepared p
+                  WHERE (p.partition_no,p.registration,p.build,p.generation)=
+                    (retained.partition_no,retained.registration,$7,1)
+                    AND p.state='active' AND p.rows=retained.prepared_rows)))`;
     // Only an unpinned population may resume its registered, unfinished materialization.
     const population = recovery === 'population' && observation === undefined;
     const registered = await sql(
       pool,
       meter,
-      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at${population ? ',r.consumer_work AS registration_work' : ''}
+      `SELECT r.partition_no,r.id,r.definition,o.queried,o.expires_at${original ? ',o.observation' : ''}${population ? ',r.consumer_work AS registration_work' : ''}
        FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
        LEFT JOIN LATERAL (
-         SELECT queried,expires_at FROM search.public_filter_observation
+         SELECT queried,expires_at${original ? ',observation' : ''} FROM search.public_filter_observation${build === null ? '' : ' retained'}
          WHERE (partition_no,registration)=(r.partition_no,r.id)
            AND NOT $8::boolean AND ${population ? 'r.consumer_work IS NULL AND ' : ''}(observation=$5::text OR $5::text IS NULL) AND state='open'
            AND ($6::text IS NULL OR
-             (md5(covered)=md5($6) AND covered=$6 AND prepared_build IS NOT DISTINCT FROM $7::text))
-         ORDER BY observation DESC LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
+             (md5(covered)=md5($6) AND covered=$6 AND ${preparedOwner}))
+         ${original ? '' : 'ORDER BY observation DESC'} LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
        ) o ON true
        WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3)
          AND r.consumer=$3 AND r.state='active' AND t.incarnation=$4 LIMIT 2`,
@@ -3794,8 +3808,11 @@ export async function readGenerationPublicationCustody(
         consumer.incarnation,
         observation ?? null,
         original ? encode(original.bootstrap) : null,
-        original?.snapshot === 'prepared' ? original.bootstrap.observation : null,
+        build,
         recovery === 'registration',
+        ...(original
+          ? [encode({ snapshot: build === null ? { kind: 'pit' } : { kind: 'prepared', build, generation: 1n } })]
+          : []),
       ],
     );
     const row = registered.rows[0];
@@ -3821,6 +3838,13 @@ export async function readGenerationPublicationCustody(
     const q = decode<PublicFilterQueriedObservation>(row.queried);
     queried(q);
     requireValue(encode(q.consumer) === encode(consumer) && encode(q) === row.queried);
+    if (
+      original &&
+      (q.snapshot.observation !== row.observation ||
+        q.snapshot.kind !== original.snapshot ||
+        (q.snapshot.kind === 'prepared' && (q.snapshot.build !== build || q.snapshot.generation !== 1n)))
+    )
+      throw new Failure('binding_mismatch');
     if (!(Number(row.expires_at) > Date.now())) throw new Failure('observation_lost');
     if (isReleaseReference(definition.data.meaning.release)) {
       requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
