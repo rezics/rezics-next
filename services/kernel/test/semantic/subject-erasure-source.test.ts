@@ -169,6 +169,61 @@ async function mergeMapped(
   }
 }
 
+test('a new Book and its replay retain each native record role and just one original write basis', async () => {
+  const actor = await f.person();
+  await f.grant(GLOBAL_CONTEXT, actor, ['subject:create']);
+  const stores = [
+    'fact',
+    'identity_epoch_home_gate',
+    'identity_epoch_mapping',
+    'record_source_set',
+    'record_source_set_member',
+    'revision',
+    'subject',
+  ];
+  const expected = [
+    ...stores.flatMap((store) => ['actor', 'operator'].map((role) => `${store}/${role}`)),
+    'write_basis/actor',
+  ].sort();
+  const revisionRoles = () =>
+    f.db.admin.query(
+      "SELECT record_key FROM semantic.erasure_locator WHERE account_id=$1 AND role='operator' AND store='revision'",
+      [actor.accountId],
+    );
+  expect((await revisionRoles()).rows).toHaveLength(0);
+  for (const label of ['First native Book', 'Second native Book']) {
+    const body = { type: 'schema:Book', labels: { en: label } };
+    const headers = { 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
+    const created = await f.call(actor, 'POST', '/v1/subjects', body, headers);
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.subject.id as string;
+    expect(created.headers.get('location')).toBe(`/v1/subjects/${id}`);
+    const inventory = () =>
+      f.db.admin.query<{ record: string; inventory: boolean }>(
+        `SELECT l.store || '/' || l.role AS record, EXISTS (
+         SELECT FROM semantic.erasure_source_record o
+         WHERE (o.partition_no,o.account_id,o.role,o.store,o.record_key,o.source_transaction_id,
+                o.source_position,o.delivery_position)
+             = (l.partition_no,l.account_id,l.role,l.store,l.record_key,l.source_transaction_id,
+                l.source_position,l.delivery_position)
+       ) AS inventory
+       FROM semantic.subject s JOIN editorial.write_basis b
+         ON b.partition_no=s.route/16 AND b.transaction_id=s.recorded_transaction_id
+       JOIN semantic.erasure_locator l ON l.partition_no=b.partition_no AND l.source_transaction_id=b.transaction_id
+         AND l.account_id=$3 AND l.source_position=b.position AND l.delivery_position=b.position
+       WHERE s.route=$1 AND s.subject_id=$2 AND l.store=ANY($4) ORDER BY (l.store || '/' || l.role) COLLATE "C"`,
+        [routeOf(id)!, id, actor.accountId, [...stores, 'write_basis']],
+      );
+    const original = await inventory();
+    expect(original.rows).toEqual(expected.map((record) => ({ record, inventory: true })));
+    const replay = await f.call(actor, 'POST', '/v1/subjects', body, headers);
+    expect(replay.status).toBe(201);
+    expect(replay.body.subject).toEqual(created.body.subject);
+    expect((await inventory()).rows).toEqual(original.rows);
+  }
+  expect((await revisionRoles()).rows).toHaveLength(2);
+}, 90_000);
+
 test('repeated native Source capture keeps one write-basis row and reopens a completed home for pending work', async () => {
   const actor = await f.author();
   const id = await subject(actor, 'Repeated actor source');
