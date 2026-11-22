@@ -17,7 +17,7 @@ const detail = (operationId: string) => ({
 });
 const app = createApp({ pool })
   .post('/probe/:id', { detail: detail('probe.write') }, () => {
-    throw Object.assign(new TypeError('connection to 10.0.0.7 refused'), { code: 'ECONNREFUSED' });
+    throw Object.assign(new TypeError('constraint rejected the write on 10.0.0.7'), { code: '23514' });
   })
   .get('/forbidden', { detail: detail('probe.forbidden') }, () => {
     throw new ProblemError('forbidden');
@@ -54,7 +54,7 @@ test('an error that becomes internal_error writes one structured log line', asyn
   const body = JSON.parse(text);
   expect(response.status).toBe(500);
   expect(body).toMatchObject({ code: 'internal_error', retryable: false });
-  expect(text).not.toMatch(/10\.0\.0\.7|ECONNREFUSED/);
+  expect(text).not.toMatch(/10\.0\.0\.7|23514/);
 
   expect(lines).toHaveLength(1);
   expect(lines[0]).toHaveLength(1);
@@ -65,9 +65,9 @@ test('an error that becomes internal_error writes one structured log line', asyn
     method: 'POST',
     route: '/probe/:id',
     name: 'TypeError',
-    code: 'ECONNREFUSED',
+    code: '23514',
   });
-  expect(line.stack).toContain('connection to 10.0.0.7 refused');
+  expect(line.stack).toContain('constraint rejected the write on 10.0.0.7');
   expect(raw).not.toMatch(/body-secret|header-value|query-secret|\/probe\/42/);
 });
 

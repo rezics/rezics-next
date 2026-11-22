@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { Elysia, t, ValidationError } from 'elysia';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -200,7 +200,9 @@ export function createApp({
       // Log hidden server failures, including unavailable native dependencies, never request content.
       if (
         problem.status === 500 ||
-        (problem.status === 503 && (!(error instanceof ProblemError) || error.code === 'overloaded'))
+        (problem.status === 503 &&
+          (!(error instanceof ProblemError) || error.code === 'overloaded') &&
+          classifyUnavailability(error) !== 'deadline')
       ) {
         logInternalError({
           requestId: idFor(request),
