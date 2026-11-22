@@ -698,7 +698,7 @@ export async function stepSemanticErasure(
   const probe = inspected.locator;
   if (!probe && !unsettled) return advanceEmptyHome(pool, accountId, progress, inspected.applied, continuation);
   // Local discovery can outrun the source relay. Commit this exact child's late obligation before its payload.
-  if (probe) await recordLocatorObligation(pool, partition, accountId, probe);
+  if (probe) await recordLocatorObligations(pool, partition, accountId, [probe]);
   const retain = await retainProjection(pool, partition, probe);
   const result = await runCommand(pool, { partition, basis: platform }, async (tx) => {
     await tx.query('SET LOCAL enable_seqscan=off');
@@ -883,7 +883,13 @@ function lateKey(partition: number, locator: Locator) {
 }
 
 /** Copy an exact source locator to the account home while holding the genuine participant fence. */
-async function recordLocatorObligation(pool: Pool, partition: number, accountId: string, locator: Locator) {
+async function recordLocatorObligations(
+  pool: Pool,
+  partition: number,
+  accountId: string,
+  locators: readonly Locator[],
+) {
+  const locator = locators[0]!;
   const { route, partition: accountHome } = home(accountId);
   return (
     await runCommand(pool, { partition: accountHome, basis: platform }, async (tx) => {
@@ -898,6 +904,38 @@ async function recordLocatorObligation(pool: Pool, partition: number, accountId:
         [route, accountId],
       );
       const closed = fence.rows[0].at !== null;
+      if (!closed) {
+        const keys = [
+          route,
+          accountId,
+          partition,
+          locators.map((l) => l.store),
+          locators.map((l) => l.record_key),
+          locators.map((l) => l.role),
+          locators.map((l) => l.delivery_position),
+        ];
+        const input =
+          'unnest($4::text[],$5::bigint[],$6::text[],$7::bigint[]) i(store,record_key,role,delivery_position)';
+        const admitted = await tx.query(
+          `INSERT INTO semantic.erasure_inbox(route,account_id,source_partition,store,record_key,role,delivery_position,late)
+           SELECT $1,$2,$3,i.store,i.record_key,i.role,i.delivery_position,false FROM ${input}
+           ON CONFLICT(route,account_id,source_partition,store,record_key,role,delivery_position) DO NOTHING`,
+          keys,
+        );
+        if (admitted.rowCount !== locators.length) {
+          const missing = await tx.query(
+            `SELECT 1 FROM ${input} WHERE NOT EXISTS (
+               SELECT 1 FROM semantic.erasure_inbox r WHERE (r.route,r.account_id,r.source_partition) = ($1,$2,$3)
+                 AND (r.store,r.record_key,r.role,r.delivery_position) = (i.store,i.record_key,i.role,i.delivery_position)
+             ) LIMIT 1`,
+            keys,
+          );
+          if (missing.rowCount) throw new TypeError('Missing native Semantic locator admission');
+        }
+        return admitted.rowCount ? { value: false, events: event(accountId) } : noEffect(false);
+      }
+      // A closed fence admits just the first role. Its late receipt and child minimization
+      // must settle before the source cursor can pass this exact locator.
       const admission = await tx.query(
         `INSERT INTO semantic.erasure_inbox(route,account_id,source_partition,store,record_key,role,delivery_position,late)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(route,account_id,source_partition,store,record_key,role,delivery_position)
@@ -913,38 +951,31 @@ async function recordLocatorObligation(pool: Pool, partition: number, accountId:
           closed,
         ],
       );
-      if (closed) {
-        await recordLateErasureItem(tx, {
+      await recordLateErasureItem(tx, {
+        accountId,
+        participant: 'semantic',
+        locator: lateKey(partition, locator),
+      });
+      if (admission.rowCount) {
+        // A newly admitted native generation invalidates both independently transferred
+        // Source cursors. Replaying an existing late item cannot reset work in progress.
+        await tx.query('DELETE FROM semantic.erasure_source_terminal WHERE route=$1 AND account_id=$2', [
+          route,
           accountId,
-          participant: 'semantic',
-          locator: lateKey(partition, locator),
-        });
-        if (admission.rowCount) {
-          // A newly admitted native generation invalidates both independently transferred
-          // Source cursors. Replaying an existing late item cannot reset work in progress.
-          await tx.query('DELETE FROM semantic.erasure_source_terminal WHERE route=$1 AND account_id=$2', [
-            route,
-            accountId,
-          ]);
-          await tx.query('DELETE FROM semantic.erasure_source_page WHERE route=$1 AND account_id=$2', [
-            route,
-            accountId,
-          ]);
-          await tx.query(
-            `UPDATE semantic.erasure_progress SET partition_no=least(partition_no,$3),state='local'
-             WHERE route=$1 AND account_id=$2`,
-            [route, accountId, partition],
-          );
-        }
+        ]);
+        await tx.query('DELETE FROM semantic.erasure_source_page WHERE route=$1 AND account_id=$2', [route, accountId]);
+        await tx.query(
+          `UPDATE semantic.erasure_progress SET partition_no=least(partition_no,$3),state='local'
+           WHERE route=$1 AND account_id=$2`,
+          [route, accountId, partition],
+        );
       }
-      return { value: closed, events: closed && admission.rowCount ? wake(accountId) : event(accountId) };
+      return { value: true, events: admission.rowCount ? wake(accountId) : event(accountId) };
     })
   ).value;
 }
 
-async function deliverLocator(pool: Pool, partition: number, accountId: string, locator: Locator) {
-  const late = await recordLocatorObligation(pool, partition, accountId, locator);
-  if (!late) return true;
+async function settleLateLocator(pool: Pool, partition: number, accountId: string, locator: Locator) {
   const unsettled = await unsettledLocator(pool, partition, accountId);
   if (unsettled?.state === 'minimized') {
     await settleLocatorObligation(pool, partition, accountId, unsettled);
@@ -960,7 +991,7 @@ async function deliverLocator(pool: Pool, partition: number, accountId: string, 
     probe &&
     (probe.store !== locator.store || probe.record_key !== locator.record_key || probe.role !== locator.role)
   )
-    await recordLocatorObligation(pool, partition, accountId, probe);
+    await recordLocatorObligations(pool, partition, accountId, [probe]);
   const retain = await retainProjection(pool, partition, probe);
   const minimized = (
     await runCommand(pool, { partition, basis: platform }, async (tx) => {
@@ -1123,16 +1154,33 @@ export function createSemanticLocatorEffect(pool: Pool): Effect {
         : ['', '0', '00000000-0000-0000-0000-000000000000', ''];
       const page = await withConnection(pool, (tx) =>
         tx.query<Locator & { account_id: string }>(
-          `SELECT store,record_key::text,role,account_id::text,source_transaction_id::text,source_position::text,delivery_position::text
+          `SELECT CASE WHEN octet_length(store)<=$7 THEN store END AS store,record_key::text,role,account_id::text,source_transaction_id::text,source_position::text,delivery_position::text
         FROM semantic.erasure_locator WHERE partition_no=$1 AND delivery_position=$2::bigint
         AND (store,record_key,account_id,role)>($3,$4::bigint,$5::uuid,$6)
-        ORDER BY store,semantic.erasure_locator.record_key,semantic.erasure_locator.account_id,role LIMIT 1`,
-          [partition, position, ...after],
+        ORDER BY semantic.erasure_locator.store,semantic.erasure_locator.record_key,semantic.erasure_locator.account_id,role LIMIT 16`,
+          [partition, position, ...after, SEMANTIC_ERASURE_LIMITS.locatorBytes],
         ),
       );
-      const locator = page.rows[0];
-      const delivered = locator ? await deliverLocator(pool, partition, locator.account_id, locator) : true;
-      const next = locator && delivered ? [locator.store, locator.record_key, locator.account_id, locator.role] : after;
+      for (const row of page.rows) {
+        if (row.store === null || Buffer.byteLength(JSON.stringify(row)) > SEMANTIC_ERASURE_LIMITS.locatorBytes)
+          throw new TypeError('Semantic locator byte bound exceeded');
+      }
+      const first = page.rows[0];
+      const key = (row: Pick<Locator, 'store' | 'record_key' | 'role'> & { account_id: string }) => [
+        row.store,
+        row.record_key,
+        row.account_id,
+        row.role,
+      ];
+      let admitted: typeof page.rows = [];
+      if (first) {
+        // Only a consecutive prefix under one real account fence can share the receiving commit.
+        const other = page.rows.findIndex((row) => row.account_id !== first.account_id);
+        const sameAccount = other < 0 ? page.rows : page.rows.slice(0, other);
+        const late = await recordLocatorObligations(pool, partition, first.account_id, sameAccount);
+        if (!late) admitted = sameAccount;
+        else if (await settleLateLocator(pool, partition, first.account_id, first)) admitted = [first];
+      }
       await runCommand(pool, { partition, basis: platform }, async (tx) => {
         const locked = await tx.query(
           `SELECT after_store,after_key::text,after_account::text,after_role,complete
@@ -1147,17 +1195,37 @@ export function createSemanticLocatorEffect(pool: Pool): Effect {
               after.join(':'))
         )
           return noEffect(null);
+        // A source can add an interior key while the account fence is being visited.
+        // Only pass the consecutive keys this transaction sees with a real receiving receipt.
+        const current = await tx.query<Pick<Locator, 'store' | 'record_key' | 'role'> & { account_id: string }>(
+          `SELECT CASE WHEN octet_length(store)<=$7 THEN store END AS store,record_key::text,account_id::text,role FROM semantic.erasure_locator
+           WHERE partition_no=$1 AND delivery_position=$2::bigint
+             AND (store,record_key,account_id,role)>($3,$4::bigint,$5::uuid,$6)
+           ORDER BY semantic.erasure_locator.store,semantic.erasure_locator.record_key,semantic.erasure_locator.account_id,role LIMIT 17`,
+          [partition, position, ...after, SEMANTIC_ERASURE_LIMITS.locatorBytes],
+        );
+        const receipts = new Set(admitted.map((row) => JSON.stringify(key(row))));
+        let next = after;
+        let complete = current.rows.length < 17 && (!first || admitted.length > 0);
+        for (const row of current.rows) {
+          const native = key(row);
+          if (row.store === null || !receipts.has(JSON.stringify(native))) {
+            complete = false;
+            break;
+          }
+          next = native;
+        }
         await tx.query(
           `INSERT INTO semantic.erasure_delivery(partition_no,source_position,after_store,after_key,after_account,after_role,complete)
           VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(partition_no,source_position) DO UPDATE
           SET after_store=EXCLUDED.after_store,after_key=EXCLUDED.after_key,after_account=EXCLUDED.after_account,after_role=EXCLUDED.after_role,complete=EXCLUDED.complete`,
-          [partition, position, ...next, !locator],
+          [partition, position, ...next, complete],
         );
         return {
           value: null,
           events: [
             {
-              type: locator ? SEMANTIC_LOCATOR_SCHEDULED : SEMANTIC_LOCATOR_ADVANCED,
+              type: complete ? SEMANTIC_LOCATOR_ADVANCED : SEMANTIC_LOCATOR_SCHEDULED,
               data: { position },
             },
           ],

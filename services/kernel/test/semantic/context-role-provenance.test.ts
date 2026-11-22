@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { readBatch, type CloudEvent } from '../../src/events/log.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { readContextRoleProvenance, type ContextRoleProvenance } from '../../src/access/shared-history-context.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -9,6 +11,8 @@ import {
   beginSemanticErasure,
   createSemanticLocatorEffect,
   SEMANTIC_LOCATOR_SCHEDULED,
+  SEMANTIC_LOCATOR_ADVANCED,
+  SEMANTIC_ERASURE_PROGRESS,
 } from '../../src/semantic/account-erasure.ts';
 import { accountErasureFixture, type AccountErasureFixture } from './support/account-erasure-fixture.ts';
 
@@ -17,6 +21,8 @@ let single: Pool;
 beforeAll(async () => {
   f = await accountErasureFixture();
   single = new Pool({ connectionString: f.db.url, max: 1 });
+  configureTestReceiptKeys(single);
+  configureTestReceiptKeys(f.db.pool);
 });
 afterAll(async () => {
   await single?.end();
@@ -60,7 +66,7 @@ async function enroll(resource: { id: string; route: number }, accountId: string
 }
 async function relay(result: Awaited<ReturnType<typeof enroll>>) {
   const effect = createSemanticLocatorEffect(single);
-  // The existing effect advances one indexed native locator per call; replay its real envelope.
+  // A late receipt can require several bounded child minimization turns.
   for (let step = 0; step < 12; step++) {
     await effect.run({
       specversion: '1.0',
@@ -80,6 +86,154 @@ async function relay(result: Awaited<ReturnType<typeof enroll>>) {
   }
   throw new Error('Context locator page did not finish');
 }
+
+test('one public Book command delivers all its open-fence roles once across a lost source checkpoint', async () => {
+  const author = await f.author();
+  const created = await f.call(author, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Held Book' } });
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const subject = created.body.subject.id as string;
+  const partition = partitionOf(routeOf(subject)!);
+  const events: CloudEvent[] = [];
+  await readBatch(single, {
+    partition,
+    consumer: 'test_semantic_book_locators',
+    async apply(envelopes) {
+      events.push(...envelopes.flatMap((envelope) => envelope.events));
+    },
+  });
+  const original = events.find((e) => e.type === 'com.rezics.subject.created.v1' && e.subject === subject)!;
+  expect(original.sequence).toMatch(/^\d{19}$/);
+  const position = BigInt(original.sequence).toString();
+  const projection = 'store,record_key::text,role,account_id::text,delivery_position::text';
+  const source = await single.query(
+    `SELECT ${projection} FROM semantic.erasure_locator WHERE partition_no=$1 AND delivery_position=$2 ORDER BY 1,2,3,4`,
+    [partition, position],
+  );
+  expect(source.rows.length).toBeGreaterThan(1);
+  expect(source.rows.length).toBeLessThanOrEqual(16);
+  expect(source.rows.every((row) => row.account_id === author.accountId)).toBe(true);
+  const counts = async () =>
+    (
+      await single.query<{ enrolled: number; next: number; done: number }>(
+        `SELECT count(*) FILTER (WHERE type=$1 AND subject=$4)::int AS enrolled,
+       count(*) FILTER (WHERE type=$2 AND partition_no=$5 AND data->>'position'=$6)::int AS next,
+       count(*) FILTER (WHERE type=$3 AND partition_no=$5 AND data->>'position'=$6)::int AS done
+     FROM core.outbox WHERE partition_no=ANY($7::int[])`,
+        [
+          SEMANTIC_ERASURE_PROGRESS,
+          SEMANTIC_LOCATOR_SCHEDULED,
+          SEMANTIC_LOCATOR_ADVANCED,
+          author.accountId,
+          partition,
+          original.sequence,
+          [partition, partitionOf(routeOf(author.accountId)!)],
+        ],
+      )
+    ).rows[0]!;
+  const before = await counts();
+  const effect = createSemanticLocatorEffect(single);
+  const withheld = BigInt(source.rows[0]!.record_key);
+  await single.query(`CREATE FUNCTION public.withhold_locator() RETURNS trigger LANGUAGE plpgsql AS
+    $$BEGIN RETURN NULL; END$$`);
+  await single.query(`CREATE TRIGGER withhold_locator BEFORE INSERT ON semantic.erasure_inbox
+    FOR EACH ROW WHEN (NEW.source_partition=${partition} AND NEW.delivery_position=${position}
+      AND NEW.record_key=${withheld}) EXECUTE FUNCTION public.withhold_locator()`);
+  try {
+    await expect(effect.run(original)).rejects.toThrow('Missing native Semantic locator admission');
+    expect(
+      (
+        await single.query('SELECT 1 FROM semantic.erasure_inbox WHERE source_partition=$1 AND delivery_position=$2', [
+          partition,
+          position,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(await counts()).toEqual(before);
+  } finally {
+    await single.query('DROP TRIGGER withhold_locator ON semantic.erasure_inbox');
+    await single.query('DROP FUNCTION public.withhold_locator()');
+  }
+  await single.query(`CREATE FUNCTION public.reject_locator_checkpoint() RETURNS trigger LANGUAGE plpgsql AS
+    $$BEGIN RAISE EXCEPTION 'Source checkpoint unavailable'; END$$`);
+  await single.query(`CREATE TRIGGER reject_locator_checkpoint BEFORE INSERT OR UPDATE ON semantic.erasure_delivery
+    FOR EACH ROW WHEN (NEW.partition_no=${partition} AND NEW.source_position=${position}) EXECUTE FUNCTION public.reject_locator_checkpoint()`);
+  try {
+    await expect(effect.run(original)).rejects.toThrow('Source checkpoint unavailable');
+    const accepted = await single.query(
+      `SELECT ${projection} FROM semantic.erasure_inbox WHERE source_partition=$1 AND delivery_position=$2
+       AND NOT late ORDER BY 1,2,3,4`,
+      [partition, position],
+    );
+    expect(accepted.rows).toEqual(source.rows);
+    expect(await counts()).toEqual({ enrolled: before.enrolled + 1, next: before.next, done: before.done });
+  } finally {
+    await single.query('DROP TRIGGER reject_locator_checkpoint ON semantic.erasure_delivery');
+    await single.query('DROP FUNCTION public.reject_locator_checkpoint()');
+  }
+  await Promise.all([effect.run(original), createSemanticLocatorEffect(f.db.pool).run(original)]);
+  await effect.run(original);
+  expect(await counts()).toEqual({ enrolled: before.enrolled + 1, next: before.next, done: before.done + 1 });
+  expect(
+    (
+      await single.query(
+        'SELECT complete FROM semantic.erasure_delivery WHERE partition_no=$1 AND source_position=$2',
+        [partition, position],
+      )
+    ).rows,
+  ).toEqual([{ complete: true }]);
+}, 120_000);
+
+test('an original with more open-fence roles than one page retains its next source cursor', async () => {
+  const who = await f.author();
+  const result = await f.call(who, 'POST', '/v1/subjects', {
+    type: 'schema:Book',
+    labels: { en: 'Native source', fr: 'Source native', de: 'Quelle', ja: '原本' },
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(201);
+  const id = result.body.subject.id as string,
+    partition = partitionOf(routeOf(id)!);
+  const pending = async () => {
+    const events: CloudEvent[] = [];
+    await readBatch(single, {
+      consumer: 'test_locator_pages',
+      partition,
+      async apply(rows) {
+        events.push(...rows.flatMap((row) => row.events));
+      },
+    });
+    return events;
+  };
+  const original = (await pending()).find((e) => e.type === 'com.rezics.subject.created.v1' && e.subject === id)!;
+  const position = BigInt(original.sequence).toString();
+  const total = (
+    await single.query(
+      'SELECT count(*)::int n FROM semantic.erasure_locator WHERE partition_no=$1 AND delivery_position=$2',
+      [partition, position],
+    )
+  ).rows[0]!.n;
+  expect(total).toBeGreaterThan(16);
+  const effect = createSemanticLocatorEffect(single);
+  let input = original;
+  for (let n = 0; n < total; n += 16) {
+    await effect.run(input);
+    const state = await single.query(
+      'SELECT complete FROM semantic.erasure_delivery WHERE partition_no=$1 AND source_position=$2',
+      [partition, position],
+    );
+    expect(state.rows).toEqual([{ complete: n + 16 >= total }]);
+    const receipts = await single.query(
+      'SELECT 1 FROM semantic.erasure_inbox WHERE source_partition=$1 AND delivery_position=$2 AND account_id=$3 AND NOT late',
+      [partition, position, who.accountId],
+    );
+    expect(receipts.rowCount).toBe(Math.min(n + 16, total));
+    if (n + 16 < total) {
+      input = (await pending()).find(
+        (e) => e.type === SEMANTIC_LOCATOR_SCHEDULED && (e.data as { position: string }).position === original.sequence,
+      )!;
+      expect(input).toBeDefined();
+    }
+  }
+}, 120_000);
 
 test('Native Access Context creator new and former owner occurrences enroll exact actual Context erasure locators in the same source transaction and dirty late generations without claiming final history closure', async () => {
   const creator = await f.author();

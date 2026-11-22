@@ -29,6 +29,13 @@ initiator. Exact replay is immutable/no-effect; a conflicting outcome is refused
 an ACK. Observe the real record with `readErasureStatus(client, accountId)`, not an invented HTTP route; the value
 is `participants.semantic = { outcome: 'pending', retained: [] }` until actual acknowledgement.
 
+Before an account fence closes, the locator effect can register up to 16 consecutive roles from one source
+position for the same account in one account-home command. Every native inbox row keeps its original home,
+store, key, role and delivery position. The source checkpoint transaction reads the next 17 source keys in
+index order and advances only past the contiguous confirmed prefix. It emits the terminal event on exhaustion
+or one continuation for the remaining work. A replay after a lost checkpoint reuses the committed inbox rows.
+A closed account fence processes one late role with its existing child and minimization receipts.
+
 ## Effect locators and terminal closure
 
 Close the per-account native fence **first**, retaining the exact native T. Then enumerate and handle copies
