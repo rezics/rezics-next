@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { bundledRelease } from '@rezics/definitions/bundled';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { readListPresentationFacts } from '../../src/semantic/list-presentation.ts';
 import type { CurrentWorkContext, WorkContextSection } from '../../src/search/work-context.ts';
@@ -178,8 +177,21 @@ test('native disclosed lookahead, exact source fences and changed identity retir
     await expect(readListPresentationFacts({ ...deps, access }, [work], { workContext: true })).rejects.toMatchObject({
       code: 'semantic_not_ready',
     });
-    expect(bundledRelease.types['schema:MusicRelease']).toBeUndefined();
-    expect(bundledRelease.types['schema:MusicRecording']).toBeUndefined();
+    const release = await f.create('schema:MusicRelease');
+    const recording = await f.create('schema:MusicRecording');
+    const music = await read([release, recording]);
+    expect(music.get(release)?.workContext).toMatchObject({
+      state: 'current',
+      subjectId: release,
+      type: { id: 'schema:MusicRelease' },
+      kind: 'release',
+    });
+    expect(music.get(recording)?.workContext).toMatchObject({
+      state: 'current',
+      subjectId: recording,
+      type: { id: 'schema:MusicRecording' },
+      kind: 'recording',
+    });
   } finally {
     await f.close();
   }

@@ -157,6 +157,7 @@ function fixture() {
     createReleasedRelationDirectionResolver: () => undefined,
     withPublicStatementReader: (read: () => Promise<unknown>) => read(),
     listWorkTargets: () => [],
+    fenceKey: () => assert.fail('An undisclosed original cannot supply a source fence'),
     subjectsSQL: { sql: 'subjects' },
   };
   const reader = new Function(...Object.keys(bindings), `${body}\nreturn readNativeListPresentationFacts;`)(

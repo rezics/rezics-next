@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
+import selectJobById from '../../src/semantic/identity-epoch-store-select-job-by-id.sql';
 import { ensureAccountAgent, accountAgentId } from '../../src/semantic/index.ts';
 import { readListPresentationFacts } from '../../src/semantic/list-presentation.ts';
 import { createListPresentationFixture } from './support/list-presentation-fixture.ts';
@@ -34,7 +36,7 @@ test('100 raw inputs mix current Types, duplicates, sparse and unknown subjects 
       id: book,
       facts: {
         'schema:author': [{ kind: 'item', id: author, labels: { en: 'Public author' } }],
-        'schema:datePublished': [{ kind: 'time', year: 2024 }],
+        'schema:datePublished': [{ kind: 'time', year: 2024, month: 1, day: 1 }],
         'schema:wordCount': [{ kind: 'quantity', amount: 123, unit: '1' }],
       },
     });
@@ -170,19 +172,29 @@ test('current account T removes consent disclosures but retains deidentified pub
   }
 }, 180_000);
 
-test('native stale identity proof never becomes positive reuse and a hidden original conceals a public terminal', async () => {
+test('native stale identity proof never becomes positive reuse and a hidden original remains concealed during admission', async () => {
   const f = await createListPresentationFixture();
   try {
     const first = await f.create('schema:Book', { 'schema:wordCount': quantity('+10') });
     const second = await f.create('schema:Book', { 'schema:wordCount': quantity('+20') });
     const [terminal, original] = [first, second].sort() as [string, string];
-    expect((await readListPresentationFacts(await f.deps(), [original])).get(original)?.id).toBe(original);
+    const initial = await readListPresentationFacts(await f.deps(), [original, terminal]);
+    expect(initial.get(original)?.id).toBe(original);
+    expect(initial.get(terminal)?.id).toBe(terminal);
     const deps = await f.deps();
     let preparations = 0;
     const access = deriveAccess(deps.access, {
       async prepare(actor, action, resource, context) {
-        if (resource.id === original && ++preparations === 2)
-          await f.checked('POST', '/v1/subjects:merge', { subjects: [original, terminal] });
+        if (resource.id === original && ++preparations === 2) {
+          const admitted = await f.checked('POST', '/v1/subjects:merge', { subjects: [original, terminal] });
+          const jobId = admitted.operation.id as string;
+          const row = (await f.pool.query(selectJobById.sql, [partitionOf(routeOf(jobId)!), jobId])).rows[0]!;
+          const job = { jobId, epoch: BigInt(row.epoch) };
+          let progress = await stepIdentityEpochAdmission(f.pool, job);
+          for (let page = 1; page < 16 && progress.state === 'preparing'; page++)
+            progress = await stepIdentityEpochAdmission(f.pool, job);
+          expect(progress.state).toBe('pending');
+        }
         return deps.access.prepare!(actor, action, resource, context);
       },
     });
@@ -195,7 +207,9 @@ test('native stale identity proof never becomes positive reuse and a hidden orig
     });
     await f.hide(original);
     expect((await readListPresentationFacts(await f.deps(), [original])).get(original)).toBeNull();
-    expect((await readListPresentationFacts(await f.deps(), [terminal])).get(terminal)?.id).toBe(terminal);
+    await expect(readListPresentationFacts(await f.deps(), [terminal])).rejects.toMatchObject({
+      code: 'semantic_not_ready',
+    });
   } finally {
     await f.close();
   }
