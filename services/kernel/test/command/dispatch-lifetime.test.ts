@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { DatabaseError, Pool } from 'pg';
 import {
   CommandUnavailableError,
   CommandCommitUncertainError,
@@ -778,24 +778,94 @@ for (const code of ['40001', '40P01']) {
   });
 }
 
-test('ordinary lost COMMIT response stays uncertain without retry after the real effect commits', async () => {
-  const observer = observe();
-  const error = Object.assign(new Error('lost response'), { code: '40001' });
-  observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error });
+test('ordinary COMMIT reports the native deferred integrity rejection and rolls back without retry', async () => {
+  await admin.query('ALTER SEQUENCE public.dispatch_commit_abort_attempt RESTART WITH 1');
   const id = randomUUID();
   let bodies = 0;
   const failure = await failed(
     runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
       bodies++;
-      await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+      await tx.query('INSERT INTO public.dispatch_commit_abort_probe VALUES($1,$2)', [id, '23514']);
       return noEffect(id);
     }),
   );
-  expect(failure).toBeInstanceOf(CommandCommitUncertainError);
-  expect(failure).toMatchObject({ cause: error });
+  expect(failure).toBeInstanceOf(DatabaseError);
+  expect(failure).toMatchObject({ code: '23514', severity: 'ERROR', message: 'Native deferred COMMIT abort' });
   expect(bodies).toBe(1);
-  expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(1);
-  expect((await admin.query('SELECT id FROM public.dispatch_lifetime_probe WHERE id=$1', [id])).rows).toEqual([{ id }]);
+  expect((await admin.query('SELECT id FROM public.dispatch_commit_abort_probe WHERE id=$1', [id])).rows).toEqual([]);
+});
+
+for (const source of ['client error', 'forged integrity fields', 'earlier server error'] as const) {
+  test(`ordinary lost COMMIT response stays uncertain after the real effect commits with ${source}`, async () => {
+    const observer = observe();
+    const error =
+      source === 'earlier server error'
+        ? await failed(admin.query("DO $$ BEGIN RAISE check_violation USING MESSAGE='earlier rejection'; END $$"))
+        : Object.assign(
+            new Error('lost response'),
+            source === 'client error' ? { code: '40001' } : { code: '23514', severity: 'ERROR' },
+          );
+    if (!(error instanceof Error)) throw new Error('Expected the original native or client failure');
+    if (source === 'earlier server error') expect(error).toBeInstanceOf(DatabaseError);
+    observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error });
+    const id = randomUUID();
+    let bodies = 0;
+    const failure = await failed(
+      runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
+        bodies++;
+        await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+        return noEffect(id);
+      }),
+    );
+    expect(failure).toBeInstanceOf(CommandCommitUncertainError);
+    expect(failure).toMatchObject({ cause: error });
+    expect(bodies).toBe(1);
+    expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(1);
+    expect((await admin.query('SELECT id FROM public.dispatch_lifetime_probe WHERE id=$1', [id])).rows).toEqual([
+      { id },
+    ]);
+  });
+}
+
+test('a subsequent server error on the same backend cannot undo its acknowledged COMMIT', async () => {
+  const isolated = createPool(url!);
+  const id = randomUUID();
+  let sent = false;
+  let later: unknown;
+  isolated.on('connect', (client) => {
+    const original = client.query.bind(client);
+    client.query = new Proxy(original, {
+      apply(target, receiver, args) {
+        const result = Reflect.apply(target, receiver, args);
+        const text = typeof args[0] === 'string' ? args[0] : args[0]?.text;
+        if (!sent || text !== 'COMMIT') return result;
+        sent = false;
+        return Promise.resolve(result).then(async () => {
+          later = await failed(
+            original("DO $$ BEGIN RAISE check_violation USING MESSAGE='after native COMMIT'; END $$"),
+          );
+          throw later;
+        });
+      },
+    });
+  });
+  try {
+    const failure = await failed(
+      runCommand(isolated, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
+        await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+        sent = true;
+        return noEffect(id);
+      }),
+    );
+    expect(later).toBeInstanceOf(DatabaseError);
+    expect(failure).toBeInstanceOf(CommandCommitUncertainError);
+    expect((failure as CommandCommitUncertainError).cause).toBe(later);
+    expect((await admin.query('SELECT id FROM public.dispatch_lifetime_probe WHERE id=$1', [id])).rows).toEqual([
+      { id },
+    ]);
+  } finally {
+    await isolated.end();
+  }
 });
 
 // Literal derivation assertions are authored alongside native outcomes, not physical proof.

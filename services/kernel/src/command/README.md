@@ -31,6 +31,11 @@ predeclared work budget retain their original executor. The request deadline cov
 the transferred advisory lock at transaction completion. A lost acquisition or transfer discards the
 underlying session.
 
+PostgreSQL can reject a writing `COMMIT` when it checks a deferred integrity constraint.
+An ordinary command propagates the original class 23 server error after observing it on
+its leased connection before a terminal command tag. Serialization and deadlock rejections
+at this same boundary retain their ordinary transaction retry policy.
+
 A lost or timed-out `COMMIT` response is an uncertain durable outcome. It must not be
 reported as success or as a proven rollback, and it must not be retried as a fresh effect.
 Owners settle receipt-bearing commands by reading their existing receipt under current

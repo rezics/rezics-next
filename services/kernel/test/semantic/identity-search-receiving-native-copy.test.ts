@@ -64,10 +64,11 @@ beforeAll(async () => {
     if (originals.has(client)) return;
     const query = client.query;
     originals.set(client, query);
-    client.query = function (this: PoolClient, ...args: unknown[]) {
-      if (args[0] === sql.enable) active.add(this);
-      if (args[0] === 'ROLLBACK') active.delete(this);
-      if (args[0] === 'COMMIT' && active.delete(this)) {
+    client.query = function (this: PoolClient, ...args: [string | { text: string }, ...unknown[]]) {
+      const statement = typeof args[0] === 'string' ? args[0] : args[0].text;
+      if (statement === sql.enable) active.add(this);
+      if (statement === 'ROLLBACK') active.delete(this);
+      if (statement === 'COMMIT' && active.delete(this)) {
         return plan(this).then(async () => {
           // Adversarial native mutation after the real planner, before the actual
           // COMMIT. It must invalidate the arm before the extra locator dispatch.

@@ -64,13 +64,14 @@ beforeAll(async () => {
     if (originals.has(client)) return;
     const query = client.query;
     originals.set(client, query);
-    client.query = function (this: PoolClient, ...args: unknown[]) {
-      if (args[0] === sql.enable) {
+    client.query = function (this: PoolClient, ...args: [string | { text: string }, ...unknown[]]) {
+      const statement = typeof args[0] === 'string' ? args[0] : args[0].text;
+      if (statement === sql.enable) {
         capturedClient = this;
         armed.add(this);
       }
-      if (args[0] === 'ROLLBACK') armed.delete(this);
-      if (args[0] === 'COMMIT' && armed.delete(this) && mode === 'after-fence') {
+      if (statement === 'ROLLBACK') armed.delete(this);
+      if (statement === 'COMMIT' && armed.delete(this) && mode === 'after-fence') {
         return plan(this).then(() => Reflect.apply(query, this, args));
       }
       return Reflect.apply(query, this, args);

@@ -7,7 +7,7 @@ import {
 } from './dispatch-lifetime.ts';
 export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
-import type { Pool, PoolClient } from 'pg';
+import { DatabaseError, type Pool, type PoolClient } from 'pg';
 import type { StandardQueryV1 } from 'reylo';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Actor } from '../request/access.ts';
@@ -424,6 +424,37 @@ export class CommandResultErasedError extends Error {
   }
 }
 
+/** Only the rejection from this checkout before its terminal command tag can prove rollback. */
+function observeCommitResponse(client: PoolClient) {
+  let completed = false;
+  let rejected: DatabaseError | undefined;
+  const commandComplete = ({ text }: { text: string }) => {
+    if (text === 'COMMIT' || text === 'ROLLBACK') {
+      completed = true;
+      rejected = undefined;
+    }
+  };
+  const errorMessage = (error: unknown) => {
+    if (
+      !completed &&
+      error instanceof DatabaseError &&
+      error.severity === 'ERROR' &&
+      (isPostgresTransactionAbort(error) || /^23[0-9A-Z]{3}$/.test(error.code ?? ''))
+    )
+      rejected = error;
+  };
+  const connection = client.connection;
+  connection?.on('errorMessage', errorMessage);
+  connection?.on('commandComplete', commandComplete);
+  return {
+    rejected: (error: unknown) => rejected !== undefined && error === rejected,
+    stop() {
+      connection?.off('errorMessage', errorMessage);
+      connection?.off('commandComplete', commandComplete);
+    },
+  };
+}
+
 /** A sent COMMIT may be durable even when its native response is lost. */
 export class CommandCommitUncertainError extends Error {
   readonly partition: number;
@@ -756,6 +787,7 @@ async function executeCommand<T>(
       const ordinary = !dispatch && !publisher;
       let callbackState: CallbackState | undefined;
       let commitPending = false;
+      let commitResponse: ReturnType<typeof observeCommitResponse> | undefined;
       const checkout = async <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => {
         if (coordinatesBirth && !waitForBirth) await prepare();
         dispatch?.checkout();
@@ -769,7 +801,7 @@ async function executeCommand<T>(
               deadlineError: () => new CommandUnavailableError('deadline', partition),
               mapError: (error) => {
                 if (!commitPending || error instanceof CommandCommitUncertainError) return error;
-                if (isPostgresTransactionAbort(error)) {
+                if (commitResponse?.rejected(error)) {
                   commitPending = false;
                   return error;
                 }
@@ -802,13 +834,16 @@ async function executeCommand<T>(
         if (dispatch) selectedCallbacks.set(state, { tx, dispatch });
         if (publisher) publisherCallbacks.add(state);
         const commit = async () => {
-          if (ordinary) commitPending = true;
+          if (ordinary) {
+            commitPending = true;
+            commitResponse = observeCommitResponse(client);
+          }
           try {
             const result = await client.query('COMMIT');
             commitPending = false;
             return result;
           } catch (error) {
-            if (isPostgresTransactionAbort(error)) {
+            if (commitResponse?.rejected(error)) {
               commitPending = false;
               throw error;
             }
@@ -817,6 +852,8 @@ async function executeCommand<T>(
                 ? error
                 : new CommandCommitUncertainError(partition, error);
             throw error;
+          } finally {
+            commitResponse?.stop();
           }
         };
         let checkBirthReceipt = false;
