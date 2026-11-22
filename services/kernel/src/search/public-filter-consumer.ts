@@ -956,6 +956,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const inputLimit = Math.min(offeredInputs, PUBLIC_FILTER_PREPARATION_INPUT_LIMIT);
     const cost: ConsumerMeter = emptyConsumerCost();
     let preparationInputKeys = 0;
+    let fundedStatements = 0;
     const add = (next: PublicFilterCost) => {
       for (const key of Object.keys(cost) as (keyof ConsumerMeter)[]) {
         const value = Reflect.get(next, key) ?? 0;
@@ -994,6 +995,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         parameters = values();
       }
       check();
+      fundedStatements++;
       return parameters;
     };
     const sql = async <T extends import('pg').QueryResultRow>(
@@ -1256,6 +1258,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       add,
       check,
       fundSql,
+      get fundedStatements() {
+        return fundedStatements;
+      },
       async submitControls(text: string, values: unknown[], receive: (rows: ControlRow[]) => void) {
         const client = await connect((db) => async (query, parameters) => {
           const result = await db.query(query, parameters);
@@ -3534,6 +3539,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         ) {
           // The native child and consuming the first claim have no intervening external work.
           delete work.independentPit;
+          const before = { ...m.cost };
+          const fundedBefore = m.fundedStatements;
           try {
             await completePage(page, execution, rows, window, size, {
               registration: work.registration.id,
@@ -3546,6 +3553,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             // Keep the engine result if only the claim write failed. Even after a lost
             // commit reply, the pending child and its empty window can be completed only once.
             if (page.tail !== execution) {
+              // Funding can refuse the larger statement before any checkout. Charge the
+              // original completion against its prior budget only in that case.
+              if (m.fundedStatements === fundedBefore) Object.assign(m.cost, before);
               await completePage(page, execution, rows, window, size).catch(() => {});
             }
             throw error;
