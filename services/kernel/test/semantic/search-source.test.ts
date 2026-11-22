@@ -89,6 +89,36 @@ const position = async (partition: number) =>
   );
 const counted = async (id: string) => (await source.count(subjectPartition(id))).count;
 
+test('catalogue text candidates preserve current terms and defer adopted searchable names to full disclosure', async () => {
+  const book = await ok(
+    '/v1/subjects',
+    {
+      type: 'schema:Book',
+      labels: { en: 'A book', ja: '本' },
+      descriptions: { en: 'A description' },
+      aliases: { en: ['First alias', 'Second alias'] },
+    },
+    201,
+  );
+  const id: string = book.subject.id;
+  const home = subjectPartition(id);
+  const snapshot = await source.read(home, [id]);
+  const { relationFacetOverflow, ...terms } = snapshot.subjects[0]!;
+  expect(await source.readCatalogueTextCandidate!(id)).toEqual({ ...snapshot, subjects: [terms] });
+  const absent = newId(routeOf(id)!);
+  expect(await source.readCatalogueTextCandidate!(absent)).toEqual({ ...snapshot, subjects: [] });
+  const rich = await ok(
+    '/v1/subjects',
+    {
+      type: 'schema:Book',
+      labels: { en: 'A second book' },
+      statements: { 'schema:name': [statement('schema:name', { language: 'en', text: 'An adopted title' })] },
+    },
+    201,
+  );
+  expect(await source.readCatalogueTextCandidate!(rich.subject.id)).toBeNull();
+});
+
 test("the source reads a subject's terms and adopted Global statements in one snapshot at the partition position", async () => {
   const soseki = await person('Natsume Soseki');
   const work = (

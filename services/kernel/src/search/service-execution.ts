@@ -1301,7 +1301,18 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 : {}),
               ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
             }
-          : source;
+          : text && hasPublicBookSearchShape(request) && source.readCatalogueTextCandidate
+            ? {
+                ...source,
+                async read(partition, ids) {
+                  if (ids.length === 1) {
+                    const current = await source.readCatalogueTextCandidate!(ids[0]!);
+                    if (current) return current;
+                  }
+                  return source.read(partition, ids);
+                },
+              }
+            : source;
       const evaluateScope = async (ids: readonly string[]) => {
         if (!scope || !preparedScope || !scopeWork) throw indexNotReady();
         if (ids.length === 0) return [] as const;

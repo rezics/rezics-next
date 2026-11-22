@@ -55,6 +55,7 @@ import readRelatedStates from './read-subject-related-states.sql';
 import { withReadTransaction } from './read.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { bookCandidateNames } from './search-source-book-names.ts';
+import { currentTerms, readCatalogueTextCandidate } from './search-source-terms.ts';
 
 export { readPartition };
 
@@ -132,26 +133,6 @@ function assertPartition(partition: number): void {
     throw new TypeError('Partition must be an integer from 0 through 4095');
 }
 
-function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
-  const current = new Map<string, string>();
-  const aliases = new Map<string, string[]>();
-  for (const row of rows) {
-    if (row.kind !== kind || row.language === null || typeof row.body !== 'string') continue;
-    if (kind === 'alias') {
-      const values = aliases.get(row.language) ?? [];
-      const index = values.indexOf(row.body);
-      if (row.operation === 'retract') {
-        if (index >= 0) values.splice(index, 1);
-      } else if (index < 0) values.push(row.body);
-      aliases.set(row.language, values);
-    } else if (row.operation === 'retract') current.delete(row.language);
-    else current.set(row.language, row.body);
-  }
-  if (kind === 'alias')
-    return [...aliases].flatMap(([language, values]) => values.map((value) => ({ language, value })));
-  return [...current].map(([language, value]) => ({ language, value }));
-}
-
 export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   return withReadTransaction(pool, work);
 }
@@ -219,6 +200,7 @@ export function subjectSource(
   return {
     readSubjectKeyPage,
     canonicalNames: createSubjectCanonicalNames(pool),
+    readCatalogueTextCandidate: (id) => readCatalogueTextCandidate(pool, id),
     readBookCandidateNames: bookCandidateNames(pool, routeKey, (deadline, subject) =>
       resumeSelection(pool, deadline, subject),
     ),
@@ -380,11 +362,7 @@ export function subjectSource(
               visibility: row.redirect ? 'hidden' : row.visibility,
               redirect: row.redirect,
               securityRevision: Number(row.securityRevision),
-              labels: termValues(facts, 'label').sort((left, right) => ASCII(left.language, right.language)),
-              aliases: termValues(facts, 'alias').sort((left, right) => ASCII(left.language, right.language)),
-              descriptions: termValues(facts, 'description').sort((left, right) =>
-                ASCII(left.language, right.language),
-              ),
+              ...currentTerms(facts),
               statements: indexedStatements,
             });
           }
