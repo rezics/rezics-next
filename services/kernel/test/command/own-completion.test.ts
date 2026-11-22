@@ -341,20 +341,25 @@ test('expired authorized attempt loses receipt authority before transaction exit
   const resource = await target(3107);
   const { input } = await complete(resource);
   const native = await options(resource);
-  let expired = false;
+  const lostAuthority = Promise.withResolvers<void>();
   const before = await snapshot(3107);
   const measured = await capture(db, async () => {
+    const deadline = Date.now() + 1500;
     await expect(
-      runCommand(db.pool, { ...native, deadline: Date.now() + 1500 }, async (tx) => {
-        await new Promise((resolve) => setTimeout(resolve, 1600));
-        expect(hasLiveCommandTransaction(tx)).toBe(true);
-        await expect(hasOwnCommandCompletion(tx, input)).rejects.toBeInstanceOf(TypeError);
-        expired = true;
+      runCommand(db.pool, { ...native, deadline }, async (tx) => {
+        await Bun.sleep(Math.max(0, deadline - Date.now() + 10));
+        try {
+          expect(hasLiveCommandTransaction(tx)).toBe(false);
+          await expect(hasOwnCommandCompletion(tx, input)).rejects.toBeInstanceOf(TypeError);
+          lostAuthority.resolve();
+        } catch (error) {
+          lostAuthority.reject(error);
+        }
         throw new Error('expired body rolls back');
       }),
     ).rejects.toBeInstanceOf(CommandUnavailableError);
+    await lostAuthority.promise;
   });
-  expect(expired).toBe(true);
   expect(completionStatements(measured.capture.statements)).toEqual([]);
   expect(await snapshot(3107)).toEqual(before);
 }, 10_000);
