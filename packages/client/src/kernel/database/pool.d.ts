@@ -23,8 +23,14 @@ export declare function withQueryAccounting<T>(accounting: QueryAccounting, run:
 export declare function withoutQueryAccounting<T>(run: () => Promise<T>): Promise<T>;
 export declare function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
 type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction' | 'mode'>;
+export declare function hasPretransactionReadSession(pool: Pool): boolean;
+/** Before writer BEGIN, bounded native point reads on this exact pool may use
+ * the already leased backend. Distinct pools keep their own checkout custody. */
+export declare function withPretransactionReads<T>(pool: Pool, client: PoolClient, prepare: () => Promise<T>): Promise<T>;
 /** Opt in to one finite physical checkout for native read work. */
 export declare function withBoundedReadConnection<T>(pool: Pool, deadline: number, read: (client: PoolClient) => Promise<T>, options?: BoundedReadOptions): Promise<T>;
+/** Lease one backend for successive, separately committed native read-only snapshots. */
+export declare function withBoundedIndependentReads<T>(pool: Pool, deadline: number, read: () => Promise<T>, options?: BoundedReadOptions): Promise<T>;
 /** Bound a native transaction without changing the identity of its original Pool. */
 export declare function withBoundedCommandConnection<T>(pool: Pool, deadline: number, work: (client: PoolClient) => Promise<T>, options?: BoundedReadOptions): Promise<T>;
 /** Opt in to a finite read-only repeatable-read transaction on one checkout. */

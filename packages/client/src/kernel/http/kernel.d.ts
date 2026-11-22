@@ -10,6 +10,12 @@ import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
+import { economyRoutes } from '../economy/routes.ts';
+import { economySpotRoutes, type SpotAccessPort } from '../economy/spot-routes.ts';
+import { economyMarketRoutes, type EconomyMarketPort } from '../economy/market-routes.ts';
+import { economyMarketRepairRoutes, type EconomyMarketRepairPort } from '../economy/market-repair-routes.ts';
+import { economyTestFundingRoutes, type EconomyTestFundingPort } from '../economy/test-funding-routes.ts';
+import type { EconomyWalletPort } from '../economy/contract.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
 import { continueRoutes } from '../library/continue-routes.ts';
 import { feedRoutes } from '../content/feed-routes.ts';
@@ -74,6 +80,11 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Real wall time for request deadlines; defaults to the system clock at composition. */
     deadlineNow?: () => number;
     commerce?: CommerceDependencies;
+    economy?: EconomyWalletPort;
+    economySpot?: SpotAccessPort;
+    economyMarket?: EconomyMarketPort;
+    economyMarketRepair?: EconomyMarketRepairPort;
+    economyTestFunding?: EconomyTestFundingPort;
     moneyPolicy?: CommerceMoneyPolicy;
     content?: ContentRuntime & Partial<Pick<ContentBoardDependencies, 'cursorNow'>> & {
         readConsent?: CurrentConsentReader;
@@ -141,7 +152,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones' | 'platform'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & RatingHttpApp & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<CommunityHttpDeclaration['routes']> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ContentHttpRoutes & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof hostedReadingRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & RatingHttpApp & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof aniListImportRoutes> & ReturnType<typeof vndbImportRoutes> & ReturnType<typeof libraryExportRoutes> & ReturnType<typeof libraryArchiveMergeRoutes> & ReturnType<typeof copyArchiveRoutes> & ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> & ReturnType<CommunityHttpDeclaration['routes']> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ContentHttpRoutes & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof economyRoutes> & ReturnType<typeof economySpotRoutes> & ReturnType<typeof economyMarketRoutes> & ReturnType<typeof economyMarketRepairRoutes> & ReturnType<typeof economyTestFundingRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof readingInsightsRoutes> & ReturnType<typeof yearlyCompletionGoalRoutes> & ReturnType<typeof hostedReadingRoutes> & ReturnType<typeof diaryRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {

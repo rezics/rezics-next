@@ -3,7 +3,7 @@ export { indexedStatement } from './scope-leaf-selection.ts';
 import { type SubjectCanonicalNames, type SubjectSourceKeyTraversal as SubjectSourceKeyPages } from './subject-source-key-pages.ts';
 import { relationSource } from './search-relations.ts';
 import type { Pool, PoolClient } from 'pg';
-import type { SubjectSource } from '../search/source.ts';
+import type { SubjectSnapshot, SubjectSource } from '../search/source.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
@@ -19,7 +19,9 @@ export declare const SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET = 32;
 export declare const readSearchCanonicalGenerationSql = "SELECT last_value::text,is_called FROM semantic.search_canonical_generation";
 export declare function readSearchCanonicalGeneration(pool: CommandTransaction): Promise<string>;
 export declare function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
+type SubjectSnapshotObserver = (client: Pick<PoolClient, 'query'>) => Promise<void>;
 export declare function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages & {
+    read(partition: number, ids: readonly string[], observe?: SubjectSnapshotObserver): Promise<SubjectSnapshot>;
     canonicalNames: SubjectCanonicalNames;
     conceptBrowse: ReturnType<typeof relationSource>['conceptBrowse'];
     readConceptStatements: ConceptStatementReader;

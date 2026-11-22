@@ -44,6 +44,7 @@ export type PrivateLink = {
     target_type: string;
     order_key: string;
 };
+export declare function readsPrivateStatements(): boolean;
 export declare function privateLinks(client: PoolClient, input: {
     subject: string;
     inbound?: boolean;

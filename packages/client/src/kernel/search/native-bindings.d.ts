@@ -5,10 +5,12 @@ export declare let REVIEW_DISCOVERY_READ_LIMIT: SearchNativePorts['REVIEW_DISCOV
 export declare let SPACE_DISCOVERY_NATIVE_EVENTS: SearchNativePorts['SPACE_DISCOVERY_NATIVE_EVENTS'];
 export declare let accountDiscoverySource: SearchNativePorts['accountDiscoverySource'];
 export declare let activeRelease: SearchNativePorts['activeRelease'];
+export declare let boundedActiveRelease: SearchNativePorts['boundedActiveRelease'];
 export declare let admitCollectionKindPreparationStep: SearchNativePorts['admitCollectionKindPreparationStep'];
 export declare let admitCollectionMemberQuery: SearchNativePorts['admitCollectionMemberQuery'];
 export declare let admitCollectionPublicationStep: SearchNativePorts['admitCollectionPublicationStep'];
 export declare let advanceNativePublicFilterPreparation: SearchNativePorts['advanceNativePublicFilterPreparation'];
+export declare let planColdSubjectEnrollment: SearchNativePorts['planColdSubjectEnrollment'];
 export declare let bindCollectionKindPreparationStep: SearchNativePorts['bindCollectionKindPreparationStep'];
 export declare let bindOwnerFilterRead: SearchNativePorts['bindOwnerFilterRead'];
 export declare let createIdentityScopedObservations: SearchNativePorts['createIdentityScopedObservations'];

@@ -2,10 +2,11 @@ import type { PublicFilterConsumerContext } from './public-filter-consumer-contr
 type SemanticSourceApi = Pick<typeof import('../semantic/index.ts'), 'createIdentityScopedObservations' | 'createIdentitySourceSupportReader' | 'createPublicFilterSourceBinding' | 'createPublicIdentitySourceCapture' | 'createSubjectSourceKeyPages' | 'publicFilterSource' | 'readNativePublicFilterPublicationCompletion' | 'readPublicFilterSourceDefinition'>;
 type SemanticIdentityReadApi = Pick<typeof import('../semantic/identity-adapters/read.ts'), 'readIdentityMappings'>;
 type SemanticSearchSourceApi = Pick<typeof import('../semantic/search-source.ts'), 'readIdentitySourceProjection' | 'prepareRetainedIdentitySourceProjections' | 'subjectSource'>;
-type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'readRelease'>;
+type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'boundedActiveRelease' | 'readRelease'>;
 type SemanticDefinitionDigestApi = Pick<typeof import('../semantic/definition-release-read.ts'), 'hasVerifiedReleaseDigest'>;
 type SemanticPublicFilterBindingApi = Pick<typeof import('../semantic/public-filter-source-binding.ts'), 'PublicFilterSourceDefinitionError' | 'advanceNativePublicFilterPreparation' | 'joinNativePublicFilterRepair' | 'nativePublicFilterRepairEvidence' | 'withNativePublicFilterRepairReadBatch' | 'readNativePublicFilterAccountRepair' | 'readNativePublicFilterRepairStart'>;
 type SemanticPublicFilterOriginApi = Pick<typeof import('../semantic/public-filter-source.ts'), 'publicFilterSourceOrigin'>;
+type SemanticColdEnrollmentApi = Pick<typeof import('../semantic/public-filter-coverage-baseline.ts'), 'planColdSubjectEnrollment'>;
 type SemanticReadApi = Pick<typeof import('../semantic/read.ts'), 'currentReadSnapshot' | 'withReadTransaction'>;
 type SemanticIdentityStoreApi = Pick<typeof import('../semantic/identity-adapters/index.ts'), 'identityEpochStore' | 'recordIdentityEpochNativeCommit'>;
 type SemanticObservationApi = Pick<typeof import('../semantic/identity-scoped-observations.ts'), 'identityScopeAddress'>;
@@ -14,7 +15,7 @@ type SemanticErasureProofApi = Pick<typeof import('../semantic/account-erasure-s
 type SemanticLeafEvidenceApi = Pick<typeof import('../semantic/scope-leaf-evidence.ts'), 'readScopeLeafEvidence'>;
 type SemanticSummaryApi = Pick<typeof import('../semantic/summaries.ts'), 'readSubjectSummaries'>;
 /** Search declares the Semantic capabilities required by its native publication, discovery and scope consumers. */
-export type SearchSemanticSourcePort = Readonly<SemanticSourceApi & SemanticIdentityReadApi & SemanticSearchSourceApi & SemanticDefinitionReadApi & SemanticDefinitionDigestApi & SemanticPublicFilterBindingApi & SemanticPublicFilterOriginApi & SemanticReadApi & SemanticIdentityStoreApi & SemanticObservationApi & SemanticRelationApi & SemanticErasureProofApi & SemanticLeafEvidenceApi & SemanticSummaryApi>;
+export type SearchSemanticSourcePort = Readonly<SemanticSourceApi & SemanticIdentityReadApi & SemanticSearchSourceApi & SemanticDefinitionReadApi & SemanticDefinitionDigestApi & SemanticPublicFilterBindingApi & SemanticColdEnrollmentApi & SemanticPublicFilterOriginApi & SemanticReadApi & SemanticIdentityStoreApi & SemanticObservationApi & SemanticRelationApi & SemanticErasureProofApi & SemanticLeafEvidenceApi & SemanticSummaryApi>;
 export type SearchPublicFilterSource = ReturnType<SearchSemanticSourcePort['publicFilterSource']>;
 export type SearchPublicFilterSourceBinding = Parameters<SearchSemanticSourcePort['readNativePublicFilterPublicationCompletion']>[0];
 export type SearchPublicFilterSourceKeyPages = ReturnType<SearchSemanticSourcePort['createSubjectSourceKeyPages']>;

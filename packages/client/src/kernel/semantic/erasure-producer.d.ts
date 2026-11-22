@@ -5,6 +5,8 @@ export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
  * No account registry or business payload is copied. Deferred source hooks attach exact record ordinals.
  */
 export declare function recordSemanticProducerRole(tx: CommandTransaction, transactionId: string, accountId: string, role: 'subject' | 'operator'): Promise<void>;
+/** Enroll the creator and fence of a revision that this command actually wrote. */
+export declare function enrollRevisionErasureSource(tx: CommandTransaction, route: number, subject: string, revision: number): Promise<boolean>;
 export type SemanticCopyRole = {
     account_id: string;
     role: string;

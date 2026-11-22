@@ -1,6 +1,6 @@
 import { type ConceptStatementReader } from '../search/concept-browse-statements.ts';
 import type { ConceptBrowseBinding, ConceptBrowseSource, ConceptDescendantSelection } from '../search/concept-browse.ts';
-import { type Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import { type Partition } from '../partition/partition.ts';

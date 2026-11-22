@@ -1935,6 +1935,7 @@ export declare function EVENT_TYPES(): Readonly<{
         outcome: Type.TUnion<[Type.TLiteral<"erased">, Type.TLiteral<"none">]>;
     }>;
     readonly 'com.rezics.history.minimized.v1': Type.TObject<{}>;
+    readonly 'com.rezics.economy.market.repair_accepted.v1': Type.TObject<{}>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;
     }>;

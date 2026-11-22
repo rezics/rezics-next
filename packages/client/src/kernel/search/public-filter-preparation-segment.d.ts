@@ -1,4 +1,5 @@
 import type { QueryResult, QueryResultRow } from 'pg';
+import type { PublicFilterProjectionFrontier, PublicFilterProjectionRequest, PublicFilterSource } from '../semantic/index.ts';
 /** One raw native candidate and the owner witness that was checked before retention. */
 export type PublicFilterPreparationSegmentEntry = Readonly<{
     rawOrdinal: number;
@@ -22,6 +23,7 @@ export type PublicFilterPreparationSegmentFrontier = Readonly<{
     outputCount: number;
     after: readonly (string | number | null)[] | undefined;
     rawExhausted: boolean;
+    populationVerified?: boolean;
     state: 'missing' | 'building' | 'complete' | 'legacy' | 'erasing';
 }>;
 export type PreparedSegmentQuery = <Row extends QueryResultRow = QueryResultRow>(statement: string, values?: unknown[]) => Promise<QueryResult<Row>>;
@@ -31,6 +33,26 @@ export declare const replaySql: string;
 export declare const retireSql: string;
 export declare function appendPayload(entries: readonly PublicFilterPreparationSegmentEntry[]): string;
 export declare function insertSegmentRows(query: PreparedSegmentQuery, key: PublicFilterPreparationSegmentKey, entries: readonly PublicFilterPreparationSegmentEntry[]): Promise<number>;
+export type SubjectPopulationProjection = Readonly<{
+    ordinal: number;
+    subject: string;
+    frontier: PublicFilterProjectionFrontier;
+}>;
+/** Resume only the Source-issued frontier for this exact physical candidate and ordinal. */
+export declare function readPopulationProjection(source: PublicFilterSource, request: Omit<PublicFilterProjectionRequest, 'frontier'>, ordinal: number, retained?: SubjectPopulationProjection): Promise<{
+    page: import("../semantic/public-filter-source-contract.ts").PublicFilterProjectionPage;
+    next: {
+        ordinal: number;
+        subject: string;
+        frontier: Readonly<{
+            build: string;
+            generation: bigint;
+            continuation: string;
+        }>;
+    } | undefined;
+} | null>;
+/** Resume duplicate reduction inside the original native window after a partial checkpoint. */
+export declare function readPopulationTerminals(query: PreparedSegmentQuery, key: PublicFilterPreparationSegmentKey, first: number, end: number): Promise<string[] | null>;
 export declare function readSegmentWindow(query: PreparedSegmentQuery, key: PublicFilterPreparationSegmentKey, afterOutputOrdinal: number, size: number): Promise<QueryResult<{
     segment_state: PublicFilterPreparationSegmentFrontier['state'];
     raw_count: number;

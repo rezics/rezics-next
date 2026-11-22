@@ -1,4 +1,7 @@
 export { SearchUnavailableError } from './operation-outcomes.ts';
+export declare const INDEX_UUID_QUERY: Readonly<{
+    filter_path: "*.settings.index.uuid,error,status";
+}>;
 export type SearchQuery = Record<string, string | number | boolean>;
 /** Internal physical byte reservation and absolute caller deadline. The meter returns no verdict. */
 export type SearchRequestWork = Readonly<{

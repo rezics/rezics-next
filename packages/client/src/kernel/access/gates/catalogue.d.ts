@@ -1,10 +1,14 @@
 import { type AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
 import { type CommandAuthorization, type AuthoritativeTime, type CommandOutcome } from '../../command/command.ts';
-import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
+import type { AccessClient, AccountActor, AccessContext, Resource } from '../../request/access.ts';
 import { isExposureGroup } from '@rezics/access';
 export declare const GLOBAL_CONTEXT: Resource;
 export { isExposureGroup };
+/** Economy remains a private beta for accounts with its exact platform grant. */
+export declare function requiresExplicitExposureGrant(group: string): boolean;
+export declare function gateAuthorityActions(group: string): readonly string[];
+export declare function readExplicitExposureGrant(client: AccessClient, group: string, accountId: string, at?: string): Promise<boolean>;
 export type ExposureState = {
     open: boolean;
     at: string;

@@ -8,3 +8,7 @@ export declare class OperationalWorkUnavailable extends Error {
 export declare class HistorySealedError extends Error {
     constructor();
 }
+/** The original JSON response is too large to retain as one native receipt. */
+export declare class HistoryReceiptTooLargeError extends TypeError {
+    constructor();
+}

@@ -1,3 +1,4 @@
+import type { Pool } from 'pg';
 import { type ContentReadDependencies } from './reads.ts';
 import type { ReadContext } from './model.ts';
 import { type ReviewCensusCoverage, type ReviewCensusStep } from './review-census.ts';
@@ -7,6 +8,7 @@ export declare const REVIEW_DISCOVERY_CANDIDATE_FACTOR = 4;
 export declare const REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES: number;
 export declare const REVIEW_DISCOVERY_MAX_DEPENDENCIES = 512;
 export declare const REVIEW_DISCOVERY_MAX_CUT_HOMES = 256;
+export declare const REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT = 100;
 /** Candidate fields only. Author presentation is read from Accounts during final hydration. */
 export type IndexedReview = Readonly<{
     id: string;
@@ -120,6 +122,8 @@ export declare const REVIEW_DISCOVERY_BOUNDS: Readonly<{
     continuationHomes: 256;
     countCandidateReads: 0;
 }>;
+/** A scheduling decision never advances the installation. A changed or multi-home cut takes the ordinary page. */
+export declare function pendingReviewCensusHomes(pool: Pool, homes: readonly number[], deadline: number): Promise<number[]>;
 export declare class ReviewDiscoverySourceError extends Error {
     readonly state: 'changed' | 'unavailable' | 'preparing';
     readonly missing: string;

@@ -8,22 +8,24 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
 import type { SelectedRuntime } from './selected-runtime.ts';
-export type WorkService = {
-    stop(): Promise<void>;
-};
+import type { WorkService } from './contract/index.ts';
+export type { WorkService } from './contract/index.ts';
 export type WorkContext = {
     readonly pool: Pool;
     readonly queues: typeof WORK_QUEUES;
     readonly client: WorkClient;
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly clock: KernelClock;
+    readonly drainOriginals?: boolean;
     readonly history?: HistoryRegistry;
     getAuthorization(): WorkerAuthorization;
     getSelectedRuntime?(): SelectedRuntime;
     getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
     addEffects(effects: Effect[]): void;
     addNativeEffects?(effects: NativeEffect[]): void;
-    addService(start: () => WorkService | Promise<WorkService>): void;
+    addService(start: () => WorkService | Promise<WorkService>, options?: {
+        servesOriginals: true;
+    }): void;
 };
 export type WorkModule = {
     name: string;
@@ -32,6 +34,7 @@ export type WorkModule = {
 export type WorkOptions = {
     databaseUrl: string;
     executorId?: string;
+    drainOriginals?: boolean;
     pool: Pool;
     client: WorkClient;
     env?: Readonly<Record<string, string | undefined>>;

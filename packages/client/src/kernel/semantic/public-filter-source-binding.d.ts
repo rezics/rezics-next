@@ -1,4 +1,5 @@
 import { type CommandTransaction } from '../command/command.ts';
+import { type ColdEnrollmentRequest, type PreparedEnrollmentRange } from './public-filter-coverage-baseline.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../access/index.ts';
 import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
@@ -144,6 +145,8 @@ export type NativeSourceRepairStepRead = Readonly<{
     queried: PublicFilterQueriedObservation;
     execution: string;
     predecessor: string | null;
+    /** A continuation funded for a Subject home scan only. */
+    scanOnly?: true;
 }>;
 export type NativeSourceRepairStepVerification = Readonly<{
     status: 'verified';
@@ -206,8 +209,37 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         queried: PublicFilterQueriedObservation;
         cost: PublicFilterCost;
     }> | PublicFilterBindingFailure>;
+    /** Fence only an expired, unadopted serving observation before Search drains its original physical copies. */
+    fenceExpiredRegistration?(request: Readonly<{
+        bootstrap: string;
+        registration: string;
+        work: string;
+    }>, context: PublicFilterConsumerContext): Promise<Readonly<{
+        status: 'fenced' | 'pending';
+        cost: PublicFilterCost;
+    }> | PublicFilterBindingFailure>;
+    /** Finish the original Search handoff after Source committed adoption and its serving request ended. */
+    releaseAdoptedRegistration?(request: Readonly<{
+        bootstrap: string;
+        registration: string;
+        observation: string;
+        work: string;
+    }>, context: PublicFilterConsumerContext): Promise<Readonly<{
+        status: 'released' | 'pending';
+        cost: PublicFilterCost;
+    }> | Readonly<{
+        status: 'closing';
+        observations: readonly PublicFilterQueriedObservation[];
+        cost: PublicFilterCost;
+    }> | PublicFilterBindingFailure>;
     abort(request: Readonly<{
         bootstrap: string;
+        closedPreparation?: Readonly<{
+            registration: string;
+            observation: string;
+            work: string;
+            populationJob?: string;
+        }>;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'aborted' | 'pending';
         cost: PublicFilterCost;
@@ -223,6 +255,7 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        scanOnly?: true;
     }>, context: PublicFilterConsumerContext): Promise<PublicSourceRepairPage>;
     settleMixed?(request: Readonly<{
         bootstrap: string;
@@ -237,7 +270,11 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         bootstrap: string;
         queried: PublicFilterQueriedObservation;
         execution: string;
-    }>, context: PublicFilterConsumerContext): ReturnType<PublicFilterSourceBinding['join']>;
+    }>, context: PublicFilterConsumerContext, spent?: PublicFilterCost & Readonly<{
+        bytes: number;
+    }>): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> & {
+        advanced?: boolean;
+    }>;
 }>;
 /** Original Source operands retained for one Search generation job. No engine state is copied. */
 export type NativePublicFilterPublication = Readonly<{
@@ -282,29 +319,37 @@ export type NativePublicFilterPublicationCompletion = Readonly<{
 export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;
 export declare function readNativePublicFilterPublicationCompletion(binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext, spent?: NativePublicationSpent): Promise<NativePublicFilterPublicationCompletion>;
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
+type SubjectEnrollment = Readonly<{
+    consumer: PublicFilterConsumer;
+    source: PublicFilterSourceDefinition['source'];
+    registration: {
+        partition: number;
+        id: string;
+    };
+    capturingOnly?: true;
+}>;
 type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] & Readonly<{
     inputLimit?: number;
-    usePublishedCoverage?: true | 'reconcile';
+    usePublishedCoverage?: true | 'reconcile' | 'independent-pit';
     definition?: PublicFilterSourceDefinition;
 }>) | Readonly<{
     bootstrap: string;
     inputLimit?: number;
-    subjectEnrollment?: Readonly<{
-        consumer: PublicFilterConsumer;
-        source: PublicFilterSourceDefinition['source'];
-        registration: {
-            partition: number;
-            id: string;
-        };
-        capturingOnly?: true;
-    }>;
+    subjectEnrollment?: SubjectEnrollment;
+    coldEnrollment?: ColdEnrollmentRequest;
 }>;
+type FreshPitTransfer = (queried: PublicFilterQueriedObservation, previousWork: string, adoptedWork: string) => Promise<{
+    transferred: boolean;
+    cost: PublicFilterCost;
+} | PublicFilterBindingFailure>;
 export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult, {
     status: 'begun';
 }> & {
     enrollmentAdvanced?: true;
-    freshBook?: Readonly<{
-        unopened(): Promise<{
+    freshPit?: Readonly<{
+        independent?: true;
+        transfer?: FreshPitTransfer;
+        unopened(initialWork?: string): Promise<{
             unopened: boolean;
             cost: PublicFilterCost;
         } | PublicFilterBindingFailure>;
@@ -320,11 +365,26 @@ export type NativePublicFilterPreparation = (Extract<PublicSourceBootstrapResult
     enrollmentAdvanced: boolean;
     cost: PublicFilterCost;
 }>;
+type NativePreparationResult = NativePublicFilterPreparation | Readonly<{
+    status: 'enrollment-sealed';
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'ranges-prepared';
+    ranges: readonly PreparedEnrollmentRange[];
+    cost: BindingCost;
+}> | Readonly<{
+    status: 'range-adopted' | 'range-pending';
+    cost: BindingCost;
+}>;
 type SubjectRepairWriterObligation = Pick<PublicFilterProjectionObservation, 'subject' | 'partition' | 'epoch' | 'position'>;
 type NativeRepairEvidence = Readonly<{
     repairs: readonly PublicSourceRepair[];
     account: AccountDiscoveryRepairObservation | null;
     subject?: SubjectRepairWriterObligation;
+    nextScan?: Readonly<{
+        inputKeys: number;
+        bytes: number;
+    }>;
 }>;
 export declare function nativePublicFilterRepairEvidence(binding: PublicFilterSourceBinding, step: Extract<NativeSourceRepairStepVerification, {
     status: 'verified';
@@ -371,7 +431,23 @@ export declare function advanceNativePublicFilterPreparation(binding: PublicFilt
     pageObservation: PublicFilterQueriedObservation;
 }, context: PublicFilterConsumerContext): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> | null>;
 export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: BookPreparationGroup, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation[] | null>;
-export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: NativePreparationInput, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: {
+    bootstrap: string;
+    inputLimit: number;
+    subjectEnrollment: SubjectEnrollment;
+    coldEnrollment: ColdEnrollmentRequest;
+}, context: PublicFilterConsumerContext): Promise<NativePreparationResult | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: {
+    bootstrap: string;
+    inputLimit?: number;
+    subjectEnrollment: SubjectEnrollment;
+}, context: PublicFilterConsumerContext): Promise<NativePreparationResult | null>;
+export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: Exclude<NativePreparationInput, {
+    bootstrap: string;
+}> | {
+    bootstrap: string;
+    inputLimit?: number;
+}, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
 type BindingCost = {
     -readonly [K in keyof PublicFilterCost]: number;
 } & {

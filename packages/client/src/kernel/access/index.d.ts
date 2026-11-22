@@ -1,4 +1,6 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
+export { readExplicitExposureGrant } from './gates/catalogue.ts';
+export { lockNativeEconomyAdmission } from './gates/economy-admission.ts';
 export type { Access, AccessCheck, AccessContext, Actor, Resource, PreparedAccessCheckInvocation, PreparedAccessCheckWork, } from '../request/access.ts';
 /** Compatibility exports; implementation consumers import the defining public leaf. */
 export { authorizePlatformGate, viewerActionReadTime } from './read-bindings.ts';

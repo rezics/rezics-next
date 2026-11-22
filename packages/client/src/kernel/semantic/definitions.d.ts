@@ -4,7 +4,7 @@ import { type CommandAuthorization } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 export { DefinitionInputError, DefinitionAccessDeniedError, DefinitionNotFoundError, StaleEditorialHeadError, } from './contract/definition-values.ts';
 export { freeze } from './core/freeze.ts';
-export { activeRelease, readRelease } from './definition-release-read.ts';
+export { activeRelease, boundedActiveRelease, readRelease } from './definition-release-read.ts';
 export { GLOBAL_CONTEXT } from './contract/global-context.ts';
 export type WriteOptions = {
     actor: AccountActor;

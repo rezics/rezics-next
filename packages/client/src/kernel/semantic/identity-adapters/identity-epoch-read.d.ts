@@ -83,6 +83,10 @@ export type BasisRead = {
     state: 'not_ready';
 };
 export declare function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
+export type IdentityBasisReadOptions = {
+    deadline: number;
+    freshSearch?: boolean;
+};
 /** Mapping, rating-review and basis readers closed over one native read capability. */
 export declare function createIdentityReaders(capabilities: NativeIdentityCapabilities): IdentityNativeReaders;
 export declare function readIdentityRatingReview(pool: Pool, input: Readonly<{
@@ -91,8 +95,6 @@ export declare function readIdentityRatingReview(pool: Pool, input: Readonly<{
     deadline: number;
 }>): Promise<IdentityRatingReviewResult>;
 export declare function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
-export declare function readIdentityBasis(pool: Pool, options: {
-    deadline: number;
-}): Promise<BasisRead>;
+export declare function readIdentityBasis(pool: Pool, options: IdentityBasisReadOptions): Promise<BasisRead>;
 /** One original through the same bounded producer and current native capability set. */
 export declare function readIdentityMapping(pool: Pool, original: string): Promise<IdentityMapping>;

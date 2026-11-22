@@ -1,6 +1,6 @@
 import { type CommandPrincipal } from './key.ts';
 export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
-import type { Pool, PoolClient } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
 import { type CommandWorkAssociation } from './work-context.ts';

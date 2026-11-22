@@ -8,6 +8,7 @@ export type WorkSdkConfig = Readonly<{
     runMigrations: boolean;
     logLevel: string;
     executorID?: string;
+    drainOriginals?: boolean;
 }>;
 export type WorkEnqueueCapture = (created: boolean) => void;
 export type SdkEnqueuePort = {
@@ -19,6 +20,7 @@ export type SdkRuntimePort = {
     setConfig(config: WorkSdkConfig): void;
     registerQueue(client: WorkSdkClient, name: string, options: WorkQueueOptions): Promise<void>;
     launch(): Promise<void>;
+    deactivateEventReceivers(): Promise<void>;
     shutdown(options: {
         workflowCompletionTimeoutMS: number;
     }): Promise<void>;
@@ -224,6 +226,7 @@ export type WorkApplicationPorts = {
 export type WorkComposeOptions = {
     databaseUrl: string;
     executorId?: string;
+    drainOriginals?: boolean;
     pool: WorkPool;
     client: WorkSdkClient;
     env?: Readonly<Record<string, string | undefined>>;
@@ -237,12 +240,15 @@ export type WorkRegistrationContext = {
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly clock: WorkClock;
     readonly history?: WorkHistoryRegistry;
+    readonly drainOriginals?: boolean;
     getAuthorization(): WorkAuthorization;
     getSelectedRuntime(): WorkSelectedRuntime;
     getKindConsentParticipant?(deadline: number): unknown;
     addEffects(effects: WorkEffect[]): void;
     addNativeEffects?(effects: WorkEffect[]): void;
-    addService(start: () => WorkService | Promise<WorkService>): void;
+    addService(start: () => WorkService | Promise<WorkService>, options?: {
+        servesOriginals: true;
+    }): void;
 };
 export type WorkModule = {
     name: string;

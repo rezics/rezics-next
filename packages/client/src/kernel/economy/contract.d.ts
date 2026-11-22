@@ -1,0 +1,211 @@
+export declare function isEconomyBookId(value: string): boolean;
+export type EconomyAsset = Readonly<{
+    id: string;
+    scale: number;
+    transferable: boolean;
+}>;
+export type AssetProgram = EconomyAsset & Readonly<{
+    programId: string;
+    version: string;
+    issuanceSource: string;
+    supplyCap: string;
+    redeemable: boolean;
+    expiresAt: string | null;
+}>;
+/** A native expiry key that preserves the database timestamp's full precision. */
+export type ExpiredAssetProgram = Readonly<{
+    assetId: string;
+    expiresAt: string;
+}>;
+export type WalletBalance = Readonly<{
+    asset: EconomyAsset;
+    posted: string;
+    held: string;
+    restricted: string;
+    pending: string;
+    available: string;
+}>;
+export type WalletBalancePage = Readonly<{
+    balances: WalletBalance[];
+    next: string | null;
+}>;
+export declare const WALLET_BALANCE_PAGE_LIMIT = 100;
+export type WalletEntry = Readonly<{
+    position: string;
+    operationId: string;
+    kind: 'issue' | 'transfer' | 'reserve' | 'capture' | 'release' | 'expire' | 'deposit' | 'withdrawal' | 'withdrawal_return' | 'chargeback' | 'withdrawal_refusal' | 'redeem' | 'credit_expiry';
+    postedDelta: string;
+    heldDelta: string;
+    recordedAt: string;
+}>;
+export type WalletStatement = Readonly<{
+    entries: readonly WalletEntry[];
+    next: string | null;
+}>;
+export type EconomyFailure = 'asset_missing' | 'operation_conflict' | 'insufficient_funds' | 'asset_not_transferable' | 'hold_missing' | 'hold_closed' | 'allocation_missing' | 'allocation_closed' | 'invalid_amount' | 'invalid_operation' | 'program_ineligible' | 'program_expired' | 'program_supply_exceeded' | 'unavailable';
+export type EconomyResult<T> = Readonly<{
+    kind: 'ok';
+    value: T;
+}> | Readonly<{
+    kind: EconomyFailure;
+}>;
+export type EconomyReceipt = Readonly<{
+    operationId: string;
+}>;
+type WalletKey = Readonly<{
+    accountId: string;
+    assetId: string;
+}>;
+type WalletCommand = WalletKey & Readonly<{
+    operationId: string;
+}>;
+type WalletHold = WalletCommand & Readonly<{
+    holdId: string;
+}>;
+export type HoldAllocationPurpose = 'spot_fill' | 'market_trade' | 'withdrawal';
+export type HoldAllocationKey = WalletKey & Readonly<{
+    holdId: string;
+    purpose: HoldAllocationPurpose;
+    reference: string;
+}>;
+export type HoldAllocation = Readonly<{
+    purpose: HoldAllocationPurpose;
+    reference: string;
+    amount: string;
+    status: 'protected' | 'captured' | 'released';
+    recipientId: string | null;
+    allocatedAt: string;
+    resolvedAt: string | null;
+}>;
+type AllocationCommand = HoldAllocationKey & Pick<WalletCommand, 'operationId'>;
+/** Settled quantities in the instrument’s native units. */
+export type SpotTrade = Readonly<{
+    price: string;
+    lots: string;
+    baseUnits: string;
+    quoteUnits: string;
+    settledAt: string;
+}>;
+export type SpotQuote = Readonly<{
+    revision: string;
+    bestBid: string | null;
+    bestAsk: string | null;
+    latestTrade: SpotTrade | null;
+}>;
+/** Native keyset position with sub-millisecond precision. */
+export type SpotTradePosition = readonly [settledAt: string, fillId: string];
+export type SpotTradePage = Readonly<{
+    trades: SpotTrade[];
+    after: SpotTradePosition | null;
+}>;
+export type SpotOrderFill = Readonly<Omit<SpotTrade, 'settledAt'> & {
+    quoteFeeUnits: string;
+} & ({
+    status: 'pending';
+} | {
+    status: 'settled';
+    settledAt: string;
+})>;
+export type SpotOrderFillsPage = Readonly<{
+    fills: SpotOrderFill[];
+    after: string | null;
+}>;
+export type SpotDiscoveryPage<T> = Readonly<{
+    entries: T[];
+    after: string | null;
+}>;
+export declare const SPOT_DISCOVERY_PAGE_LIMIT = 100;
+export declare const SPOT_TRADE_PAGE_LIMIT = 100;
+export declare const SPOT_ORDER_FILL_PAGE_LIMIT = 100;
+export declare function isSpotInstrumentId(value: string): boolean;
+export declare function isSpotOrderSequence(value: string): boolean;
+export declare function isSpotFillId(value: string): boolean;
+export declare function isSpotTradePosition(after: readonly unknown[]): after is SpotTradePosition;
+/** Trusted terms captured by the instrument owner for one same-book fill. */
+export type SpotFillSettlement = Readonly<{
+    fillId: string;
+    instrumentId: string;
+    policyVersion: string;
+    buyerId: string;
+    sellerId: string;
+    buyerHoldId: string;
+    sellerHoldId: string;
+    baseAssetId: string;
+    quoteAssetId: string;
+    baseUnits: string;
+    quoteUnits: string;
+    buyerFeeUnits: string;
+    sellerFeeUnits: string;
+    feeAccountId: string;
+}>;
+export interface EconomyWalletPort {
+    listBalances(input: Readonly<{
+        accountId: string;
+        after?: string;
+        limit: number;
+    }>): Promise<EconomyResult<WalletBalancePage>>;
+    readBalance(input: WalletKey): Promise<EconomyResult<WalletBalance>>;
+    readStatement(input: WalletKey & Readonly<{
+        before?: string;
+        limit: number;
+    }>): Promise<EconomyResult<WalletStatement>>;
+    transfer(input: WalletCommand & Readonly<{
+        recipientId: string;
+        amount: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+}
+/** Trusted owner operations. HTTP entry points use EconomyWalletPort. */
+export interface EconomyLedger extends EconomyWalletPort {
+    provisionAsset(input: EconomyAsset): Promise<EconomyResult<EconomyAsset>>;
+    issue(input: WalletCommand & Readonly<{
+        amount: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    provisionAssetProgram(input: AssetProgram): Promise<EconomyResult<AssetProgram>>;
+    enrollAssetProgramRecipient(input: WalletKey & Readonly<{
+        issuanceSource: string;
+    }>): Promise<EconomyResult<null>>;
+    issueProgramUnits(input: WalletKey & Readonly<{
+        issuanceSource: string;
+        sourceReference: string;
+        amount: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    redeemProgramUnits(input: WalletKey & Readonly<{
+        amount: string;
+        redemptionReference: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    nextExpiredAssetProgram(after?: ExpiredAssetProgram): Promise<EconomyResult<ExpiredAssetProgram | null>>;
+    retireExpiredAssetProgram(assetId: string): Promise<EconomyResult<boolean>>;
+    expireProgramCredits(input: WalletKey): Promise<EconomyResult<EconomyReceipt>>;
+    listExpiredProgramCredits(input: Readonly<{
+        assetId: string;
+        limit: number;
+        after?: string;
+    }>): Promise<EconomyResult<Readonly<{
+        accounts: readonly string[];
+        next: string | null;
+    }>>>;
+    reserve(input: WalletHold & Readonly<{
+        amount: string;
+        expiresAt: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    capture(input: WalletHold & Readonly<{
+        recipientId: string;
+        amount: string;
+        final: boolean;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    release(input: WalletHold): Promise<EconomyResult<EconomyReceipt>>;
+    expire(input: WalletHold): Promise<EconomyResult<EconomyReceipt>>;
+    releaseAmount(input: WalletHold & Readonly<{
+        amount: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    allocate(input: AllocationCommand & Readonly<{
+        amount: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    readAllocation(input: HoldAllocationKey): Promise<EconomyResult<HoldAllocation>>;
+    captureAllocation(input: AllocationCommand & Readonly<{
+        recipientId: string;
+    }>): Promise<EconomyResult<EconomyReceipt>>;
+    releaseAllocation(input: AllocationCommand): Promise<EconomyResult<EconomyReceipt>>;
+    settleSpotFill(input: SpotFillSettlement): Promise<EconomyResult<EconomyReceipt>>;
+}
+export {};

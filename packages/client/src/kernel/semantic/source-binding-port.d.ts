@@ -100,6 +100,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
     catalogue(consumer: PublicFilterConsumer, mixed: boolean): unknown;
     encodeConsumer(consumer: PublicFilterConsumer): string;
     encodeState(value: unknown): string;
+    encodedStateByteLength(value: unknown): number;
     decodeState<T>(value: string): T;
     coverageStart(context: PublicFilterConsumerContext): string | null;
     readConsumerCustody(pool: Pool, request: Readonly<{
@@ -117,6 +118,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
     readRepairSettlement(pool: Pool, request: Readonly<{
         queried: PublicFilterQueriedObservation;
         execution: string;
+        commitReceiverManifest?: true;
     }>, context: PublicFilterConsumerContext): Promise<SourceBindingSettlementResult>;
     withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>, maintenance?: boolean): Promise<T>;
 }>;

@@ -11,8 +11,8 @@ export declare function readSubjectErasureSourceProof(deps: Readonly<{
     pool: Pool;
     clock?: () => Date;
 }>, barrier: HistoryBarrier, context: PublicFilterReadContext): Promise<SubjectErasureSourceProof | null>;
-/** Resolve the privately transferred all-home terminal chain in the account command. */
-export declare function verifySubjectErasureSourceProof(tx: CommandTransaction, barrier: HistoryBarrier, proof: SubjectErasureSourceProof): Promise<boolean>;
+/** Resolve the separate Source terminal and, when requested, the receiver's exact consumed terminal. */
+export declare function verifySubjectErasureSourceProof(tx: CommandTransaction, barrier: HistoryBarrier, proof: SubjectErasureSourceProof, consumedPageId?: string): Promise<boolean>;
 /** Receipts are native row locators. No object identity or caller brand participates in verification.
  * Accept custody in Search's existing account-home command before requesting the next page.
  */

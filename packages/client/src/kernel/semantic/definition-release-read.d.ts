@@ -8,16 +8,21 @@ export declare function readRelease(pool: Pool | CommandTransaction, digest: str
 }): Promise<Release | null>;
 /** Observe each base digest on the caller's snapshot. Only uncached immutable bodies cross the wire. */
 export declare function readBaseReleases(db: Db, digests: readonly string[]): Promise<Map<string, Release | null>>;
-export declare function activeRelease(pool: Pool | CommandTransaction, mode?: 'native'): Promise<{
+type ActiveRelease = {
     digest: string;
     head: number;
     release: Release;
-} | null>;
+};
+export declare function activeRelease(pool: Pool | CommandTransaction, mode?: 'native', deadline?: number): Promise<ActiveRelease | null>;
+/** A Search observation retains its caller's deadline and uncertain-connection policy on both paths. */
+export declare function boundedActiveRelease(pool: Pool, deadline: number, deadlineError: () => Error): Promise<ActiveRelease | null>;
 type Layer = {
     digest: string;
     release: Release;
 };
 type Db = Pool | CommandTransaction;
+/** Reuse this validated immutable base body after observing its exact (route 0, digest) row. */
+export declare function verifiedBaseReleaseBody(digest: string): Release | undefined;
 /** Identify the immutable body already digest-checked by the Definitions owner. This grants no current read. */
 export declare function hasVerifiedReleaseDigest(release: Release, digest: string): boolean;
 /** Compatibility cache probe. Current Context custody requires the asynchronous native read below. */
@@ -42,6 +47,15 @@ export declare function storedActiveExtension(db: Db, route: number, context: st
  * unchanged, so a warm request pays each Context's current availability and extension head probes.
  */
 export declare function layeredRelease(db: Db, base: Layer, context: string, persist?: boolean): Promise<Layer>;
+/** The base release and its Global interpretation share the same observed pointers. */
+export declare function activeGlobalRelease(db: Db, persist?: boolean, deadline?: number): Promise<{
+    active: {
+        digest: string;
+        head: number;
+        release: Release;
+    };
+    global: Layer;
+} | null>;
 /**
  * The active release with the terms `context` sees; Global's view is the default. A write passes `persist`, so the
  * composed digest it stores is registered; a read never writes.

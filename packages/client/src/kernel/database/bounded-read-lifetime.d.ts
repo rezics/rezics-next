@@ -16,6 +16,10 @@ export declare class RetiredReadClientError extends Error {
 export type BoundedReadLifetimeOptions = Readonly<{
     transaction?: 'repeatable-read-read-only';
     mode?: 'command';
+    /** The checkout owns session state which must be restored before reuse. */
+    discardOnExpiry?: boolean;
+    /** A sequence may have a shorter original deadline for acquiring its first backend. */
+    checkoutDeadline?: number;
     deadlineError?: () => Error;
     mapError?: (error: unknown) => unknown;
     isUncertainError?: (error: unknown) => boolean;
@@ -25,6 +29,8 @@ export type BoundedReadLifetimeOptions = Readonly<{
 }>;
 type Checkout = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
 type Discard = (client: PoolClient, error: Error) => void;
+/** A nested owner can request disposal without taking over physical release. */
+export declare function discardBoundedReadLease(client: PoolClient, error: Error): boolean;
 export declare function isPostgresServerError(error: unknown): error is {
     code: string;
     severity: 'ERROR';

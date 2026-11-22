@@ -5,7 +5,7 @@ import type { CommandAuthorization, CommandBasis, CommandResult, CommandTransact
 import type { RatingReviewPort } from './contract/domain-ports.ts';
 import type { IdentityAdmissionInput, IdentityEpochStore, IdentityIntent, IdentityJobRef, IdentityReceipt, IdentityReceiptBinding, ReviewedPersonEndpoint, ReviewedPersonExpectation, ReviewedPersonSource } from './identity-adapters/identity-epoch-contract.ts';
 import type { IdentitySourceConsumerReference } from './identity-source-consumer-custody.ts';
-import type { BasisRead, HomeIdentity, IdentityRepairEvidence } from './identity-adapters/identity-epoch-read.ts';
+import type { BasisRead, HomeIdentity, IdentityBasisReadOptions, IdentityRepairEvidence } from './identity-adapters/identity-epoch-read.ts';
 import type { IdentityMapping, IdentityRatingNativeEvidence, IdentityRatingReviewResult } from './identity-core/index.ts';
 import type { IdentityRatingCommitParticipant } from './identity-rating-commit-participant.ts';
 /** One queryable native connection held by the caller. */
@@ -18,6 +18,7 @@ export type NativeIdentityQueryable = Readonly<{
 /** Narrow released-home read used by mapping and rating-review readers. */
 export type NativeIdentityRead = Readonly<{
     requestDeadline(): number;
+    withReadStatement?<T>(pool: Pool, read: (client: PoolClient) => Promise<T>, deadline: number): Promise<T>;
     withReadTransaction<T>(pool: Pool, read: (client: PoolClient) => Promise<T>, deadline?: number): Promise<T>;
 }>;
 /** Narrow command executor used by binding, admission, reviewed Person and Rating participants. */
@@ -119,9 +120,7 @@ export type IdentityNativeReaders = Readonly<{
         originals: readonly string[];
         commandHome: number;
     }>): Promise<IdentityRepairEvidence>;
-    readIdentityBasis(pool: Pool, options: {
-        deadline: number;
-    }): Promise<BasisRead>;
+    readIdentityBasis(pool: Pool, options: IdentityBasisReadOptions): Promise<BasisRead>;
     readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
 }>;
 /** Consumer-owned identity adapter port installed at the composition root. */

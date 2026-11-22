@@ -19,6 +19,8 @@ type RouteApp = {
         strictPath?: boolean;
     };
 };
+/** Bind the sealed Kernel's full declaration, including scopes with no public route. */
+export declare function bindKernelActionCatalogue(app: RouteApp, actions: ActionCatalogue): void;
 /** Composes mounted routes with trusted native declarations, checking their agreement. */
 export declare function actionCatalogue(app: RouteApp, nativeActions?: ActionCatalogue): ActionCatalogue;
 /** A snapshot of server declarations, indexed by native method and matched template.

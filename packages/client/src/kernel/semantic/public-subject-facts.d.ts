@@ -8,8 +8,9 @@ export type ItemTypeDetails = {
 };
 /** Unlocalized projection keys use the shared label rule without reader or original-language preferences. */
 export declare function subjectLabel(labels: Record<string, string>, language?: string): string;
-/** Item targets of one write, one primary-key probe per id and one statement per partition. */
 export declare function readItemDetails(client: Queryable, ids: readonly string[]): Promise<Map<string, ItemTypeDetails>>;
+/** The validated write can name more targets than one native home read accepts. */
+export declare function readWriteItemDetails(client: Queryable, ids: readonly string[]): Promise<Map<string, ItemTypeDetails>>;
 export declare function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>>;
 export type SubjectPageState = {
     id: string;

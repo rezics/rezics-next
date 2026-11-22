@@ -71,9 +71,18 @@ type Configuration = {
     clock: KernelClock;
     routeKey: Uint8Array;
 };
+type Point = {
+    generation: string;
+    readiness: string;
+    public_effective_at: string | null;
+    evidence: string;
+    completed_position: string;
+    change_position: string;
+    witnesses: unknown;
+};
 export declare function publicState(value: unknown): PublicState;
 /** Native creation proves an empty baseline without inventing a public time. */
-export declare function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<void>;
+export declare function initializeSubjectPagePublication(tx: CommandTransaction, subject: SubjectKey): Promise<Point>;
 /** Persist only actual affected identities; this never discovers a subject's degree. */
 export declare function recordSubjectPageTransition(tx: CommandTransaction, input: {
     subject: SubjectKey;
@@ -81,6 +90,7 @@ export declare function recordSubjectPageTransition(tx: CommandTransaction, inpu
     components: ComponentTransition[];
     outbox: CommandEvent[];
     invalidateGate?: boolean;
+    initialize?: true;
 }): Promise<void>;
 export declare function enqueueSubjectPageRepair(tx: CommandTransaction, input: {
     subject: SubjectKey;

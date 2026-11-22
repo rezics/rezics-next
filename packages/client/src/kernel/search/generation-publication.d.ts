@@ -57,6 +57,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
     clock: KernelClock;
     meaning: SearchPublicFilterProjectionMeaning;
     writerGuard: SearchWriterPublicationGuard;
+    subjectAckProtocol?: 1;
     creditSearch?: CreditSearchSource;
     registry?: DiscoveryRegistry;
 }>;

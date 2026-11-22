@@ -17,4 +17,6 @@ export declare function enqueueWorkIntent(work: WorkClient, client: PoolClient, 
  * legacy too; a newly inserted SDK status row cannot retroactively cover their creation. */
 export declare function hasRetainedWorkCopies(client: PoolClient, workflowId: string): Promise<boolean>;
 /** Enqueue without launching an executor. A supplied pool remains the caller's responsibility. */
-export declare function createWorkClient(databaseUrl: string, pool?: Pool): Promise<WorkClient>;
+export declare function createWorkClient(databaseUrl: string, pool?: Pool, options?: {
+    preserveSchedules?: boolean;
+}): Promise<WorkClient>;

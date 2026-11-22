@@ -12,6 +12,7 @@ type Limits = {
     permits: number;
     reserved: number;
     queue: number;
+    normalQueue?: number;
 };
 /** Temporarily releases a permit during an explicit wait, then fairly reacquires it. */
 export type AdmissionYield = <T>(wait: () => Promise<T>) => Promise<T>;

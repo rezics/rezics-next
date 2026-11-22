@@ -41,6 +41,15 @@ export type OwnerIndexWorkFrontier = Readonly<{
     subject: string | null;
     fact: string | null;
 }>;
+/** Resume a persisted sweep at its home boundary or after its exact last owner. */
+export declare function nextOwnerIndexAccount(client: Client, cursor: {
+    partition: number;
+    route: number | null;
+    account: string | null;
+}): Promise<{
+    route: number;
+    account: string;
+} | undefined>;
 /** Older owner directories need one additional pass even if their family bootstrap already completed. */
 export declare function readOwnerIndexWorkFrontier(client: Client, accountId: string): Promise<OwnerIndexWorkFrontier | null>;
 /** At most 100 examined native facts. The caller supplies the real fenced Core operational transaction. */

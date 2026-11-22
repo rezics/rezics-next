@@ -10,6 +10,9 @@ export type ConversationActivityRepairPage = Readonly<{
     sourceComplete: boolean;
     more: boolean;
 }>;
+export declare const CONVERSATION_ACTIVITY_HOME_WINDOW = 128;
+/** Scheduler hint only. The page rechecks and locks the live owner before advancing any frontier. */
+export declare function pendingConversationActivityHomes(pool: Pool, homes: readonly number[], deadline: number): Promise<number[]>;
 /**
  * Advances exactly one resumable native prefix: the raw thread census, one
  * board invalidation page, or one thread's ordered post page. Each transaction

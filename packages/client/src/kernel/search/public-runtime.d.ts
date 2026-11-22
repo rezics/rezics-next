@@ -23,6 +23,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     prefix: string;
     clock: KernelClock;
     creditSearch?: CreditSearchSource;
+    subjectAckProtocol?: 1;
     discoveryProducers?: DiscoveryProducerEntry;
     /** Composition-bound Access observation; omitted fixtures keep throwing through. */
     facetAccess?: FacetAccessObservationPort;

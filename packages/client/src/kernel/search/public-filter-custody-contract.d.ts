@@ -70,6 +70,7 @@ export type CustodyFound = Readonly<{
 }>;
 export type CustodyRetained = Readonly<{
     status: 'retained';
+    claimWork?: string;
     queried: PublicFilterQueriedObservation;
     cost: CustodyCost;
 }>;
@@ -160,7 +161,15 @@ export interface PublicFilterCustody {
         registration: CustodyRegistration;
         covered: PrivacyReductionStart;
         keepAliveMs: number;
-    }>, search: OpenSearch, context: PublicFilterConsumerContext): Promise<CustodyRetained | CustodyFailure>;
+        claim?: string;
+    }>, search: OpenSearch, context: PublicFilterConsumerContext, 
+    /** An original grant returns the budget check to perform immediately before its sole physical dispatch. */
+    admitPhysicalOpen?: () => Promise<(() => void) | undefined>, 
+    /** Move this exact opener's recovery work with its retained physical receipt. */
+    claimWork?: Readonly<{
+        previous: string;
+        retained(queried: PublicFilterQueriedObservation): string;
+    }>): Promise<CustodyRetained | CustodyFailure>;
     /** Immutable SQL prepared input owned by this observation, not a mutable cache or population proof. */
     retainPrepared(request: Readonly<{
         registration: CustodyRegistration;
@@ -182,6 +191,7 @@ export interface PublicFilterCustody {
     }> | CustodyFailure>;
     /** Atomically append one bounded step and advance its indexed raw/output frontier. */
     appendPreparationSegment(request: Readonly<{
+        populationJob?: string;
         registration: CustodyRegistration;
         consumer: PublicFilterConsumer;
         build: string;
@@ -200,6 +210,7 @@ export interface PublicFilterCustody {
     }> | CustodyFailure>;
     /** Create or recover the prepared observation after raw Search exhaustion; still unreadable until finalization. */
     retainPreparedSegments(request: Readonly<{
+        populationJob?: string;
         registration: CustodyRegistration;
         covered: PrivacyReductionStart;
         build: string;
@@ -210,11 +221,12 @@ export interface PublicFilterCustody {
     }>, context: PublicFilterConsumerContext): Promise<CustodyRetained | CustodyFailure>;
     /** Mark a raw-exhausted build servable after the consumer's source disclosure has completed. */
     completePreparationBuild(request: Readonly<{
+        populationJob?: string;
         queried: PublicFilterQueriedObservation;
         rawCount: number;
         outputCount: number;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
-        status: 'complete';
+        status: 'complete' | 'verifying';
         cost: CustodyCost;
     }> | CustodyFailure>;
     /** One indexed output-ordinal window. It never includes the stored owner witness. */
@@ -224,9 +236,10 @@ export interface PublicFilterCustody {
         afterOutputOrdinal: number;
         size: number;
     }>, context: PublicFilterConsumerContext): Promise<CustodyPreparationWindow | CustodyPreparationUnavailable | CustodyFailure>;
-    acquire(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<Readonly<{
+    acquire(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, readConsumerWork?: boolean): Promise<Readonly<{
         status: 'acquired';
         use: CustodyUse;
+        consumerWork?: string | null;
         cost: CustodyCost;
     }> | CustodyFailure>;
     appendExecution(request: Readonly<{
@@ -247,8 +260,9 @@ export interface PublicFilterCustody {
         pit: string;
     }>, context: PublicFilterConsumerContext): Promise<CustodyRetained | CustodyFailure>;
     renewPit(queried: PublicFilterQueriedObservation, keepAliveMs: number, search: OpenSearch, context: PublicFilterConsumerContext): Promise<CustodyRetained | CustodyFailure>;
-    closeObservation(queried: PublicFilterQueriedObservation, search: OpenSearch, context: PublicFilterConsumerContext): Promise<Readonly<{
+    closeObservation(queried: PublicFilterQueriedObservation, search: OpenSearch, context: PublicFilterConsumerContext, release?: CustodyUse): Promise<Readonly<{
         status: 'closed';
+        consumerWork: string | null;
         cost: CustodyCost;
     }> | CustodyFailure>;
     retire(registration: CustodyRegistration, context: PublicFilterConsumerContext): Promise<Readonly<{
