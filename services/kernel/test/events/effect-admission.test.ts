@@ -9,6 +9,7 @@ import {
   relayEffects,
   shutdownWork,
   type Effect,
+  type NativeEffect,
 } from '../../src/events/effects.ts';
 import type { CloudEvent, Envelope } from '../../src/events/log.ts';
 
@@ -20,6 +21,9 @@ const relayPool = new pg.Pool({ connectionString: databaseUrl, max: 1, idleTimeo
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const CREATED = 'com.rezics.subject.created.v1';
 const CONTEXT_CREATED = 'com.rezics.semantic.context.created.v1';
+
+const UNOBSERVED = 'com.rezics.economy.market.repair_accepted.v1';
+const PUBLISHED = 'com.rezics.definitions.published.v1';
 
 type Draft = { type: string; id: string; data: { id: string } };
 type Appended = { epoch: number; position: bigint; eventIds: string[]; time: string };
@@ -80,7 +84,14 @@ const rollbackEffect: Effect = {
   async run() {},
 };
 
-const effects = registerEffects([ownerEffect, legacyEffect, rollbackEffect]);
+const nativeEffect: NativeEffect = {
+  name: 'native_catalogue',
+  types: [PUBLISHED],
+  delivery: 'native',
+  admit: insertOwnerItem,
+};
+const subscribers = [ownerEffect, legacyEffect, rollbackEffect, nativeEffect];
+const effects = registerEffects(subscribers);
 const enqueue = effects.enqueue.bind(effects);
 
 beforeAll(async () => {
@@ -125,7 +136,13 @@ async function append(partition: number, types: readonly string[]): Promise<Appe
           event.id,
           event.type,
           event.data.id,
-          JSON.stringify(event.data),
+          JSON.stringify(
+            event.type === UNOBSERVED
+              ? {}
+              : event.type === PUBLISHED
+                ? { digest: `sha256:${'1'.repeat(64)}` }
+                : event.data,
+          ),
           time,
         ],
       );
@@ -176,6 +193,100 @@ function eventFor(id: string, time: string): CloudEvent {
 async function waitForWorkflow(id: string): Promise<void> {
   await DBOS.retrieveWorkflow(id).getResult();
 }
+
+test.serial('a sealed subscription set skips empty admissions and still transfers native-only events', async () => {
+  const partition = freshPartition();
+  const absent = await append(partition, [UNOBSERVED]);
+  let checkouts = 0;
+  const count = () => {
+    checkouts += 1;
+  };
+  const late = { name: 'late_subscriber', types: [UNOBSERVED], run: async () => {} };
+  subscribers.push(late);
+  ownerEffect.types.push(UNOBSERVED);
+  relayPool.on('acquire', count);
+  try {
+    expect(await relayEffects(relayPool, effects, partition)).toEqual({
+      status: 'read',
+      envelopes: 1,
+      position: absent.position,
+    });
+  } finally {
+    relayPool.off('acquire', count);
+    ownerEffect.types.pop();
+    subscribers.pop();
+  }
+  expect(checkouts).toBe(2);
+  expect(await checkpoint(partition)).toBe(String(absent.position));
+  expect(
+    (
+      await admin.query('SELECT consumer FROM core.history_event_consumer WHERE partition_no=$1 AND position=$2', [
+        partition,
+        String(absent.position),
+      ])
+    ).rows,
+  ).toEqual([]);
+  const source = envelopeAt(partition, absent.epoch, absent.position);
+  for (const name of [late.name, ownerEffect.name])
+    expect(await DBOS.getWorkflowStatus(effectWorkflowId(source, 0, name))).toBeFalsy();
+
+  const observed = await append(partition, [UNOBSERVED]);
+  const stages: string[] = [];
+  checkouts = 0;
+  relayPool.on('acquire', count);
+  try {
+    expect(await relayEffects(relayPool, effects, partition, (entry) => stages.push(entry.stage))).toEqual({
+      status: 'read',
+      envelopes: 1,
+      position: observed.position,
+    });
+  } finally {
+    relayPool.off('acquire', count);
+  }
+  expect(checkouts).toBe(2);
+  expect(stages).toEqual(['read', 'released', 'prepare', 'enqueue', 'checkpoint', 'checkpoint_advanced']);
+
+  const mixed = await append(partition, [UNOBSERVED, PUBLISHED]);
+  expect(await relayEffects(relayPool, effects, partition)).toEqual({
+    status: 'read',
+    envelopes: 1,
+    position: mixed.position,
+  });
+  expect(await checkpoint(partition)).toBe(String(mixed.position));
+  expect(
+    (
+      await admin.query(
+        'SELECT event_seq, consumer, state FROM core.history_event_consumer WHERE partition_no=$1 AND position=$2',
+        [partition, String(mixed.position)],
+      )
+    ).rows,
+  ).toEqual([{ event_seq: 1, consumer: nativeEffect.name, state: 'transferred' }]);
+  expect((await ownerItem(mixed.eventIds[1]!))?.state).toBe('pending');
+  expect(
+    await DBOS.getWorkflowStatus(
+      effectWorkflowId(envelopeAt(partition, mixed.epoch, mixed.position), 1, nativeEffect.name),
+    ),
+  ).toBeFalsy();
+});
+
+test.serial('an independent admission can reject an event with no registered subscribers', async () => {
+  const partition = freshPartition();
+  const item = await append(partition, [UNOBSERVED]);
+  const rejection = new Error('independent relay admission rejected');
+  const independent = {
+    ...effects,
+    async admit() {
+      throw rejection;
+    },
+  };
+  await expect(relayEffects(relayPool, independent, partition)).rejects.toBe(rejection);
+  expect(await checkpoint(partition)).toBe('0');
+  expect(await relayEffects(relayPool, effects, partition)).toEqual({
+    status: 'read',
+    envelopes: 1,
+    position: item.position,
+  });
+});
 
 test.serial('owner admission commits before enqueue and checkpoint advance with no relay checkout held', async () => {
   admissionOrder.length = 0;

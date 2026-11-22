@@ -43,6 +43,10 @@ type RegisteredEffects = {
   admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
   scanPriority?: NonNullable<Relay['scanPriority']>;
 };
+const hasAdmissionSubscribers = new WeakMap<
+  NonNullable<RegisteredEffects['admit']>,
+  (envelopes: readonly Envelope[]) => boolean
+>();
 const identityOriginalPreparations = new WeakMap<
   RegisteredEffects,
   (envelopes: readonly Envelope[]) => Promise<void>
@@ -57,25 +61,22 @@ export function effectWorkflowId(envelope: Envelope, eventSeq: number, name: str
 let compatibilityPool: Pool | undefined;
 
 export function registerEffects(effects: RegisteredEffect[], pool?: Pool): RegisteredEffects {
-  const names = new Set<string>();
+  const byName = new Map<string, RegisteredEffect>();
+  const subscribers = new Map<string, RegisteredEffect[]>();
   for (const effect of effects) {
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(effect.name)) throw new RangeError(`Invalid effect name: ${effect.name}`);
-    if (names.has(effect.name)) throw new RangeError(`Duplicate effect name: ${effect.name}`);
-    names.add(effect.name);
-    for (const type of effect.types) {
+    if (byName.has(effect.name)) throw new RangeError(`Duplicate effect name: ${effect.name}`);
+    byName.set(effect.name, effect);
+    for (const type of new Set(effect.types)) {
       if (type === 'com.rezics.history.minimized.v1') throw new TypeError('A minimized marker has no effect consumers');
       if (!lookupEventType(type)) throw new RangeError(`Unknown event type for effect ${effect.name}: ${type}`);
+      const registered = subscribers.get(type) ?? [];
+      if (registered.length === 32) throw new TypeError('History effect fanout exceeds 32 consumers');
+      registered.push(effect);
+      subscribers.set(type, registered);
     }
   }
-  const fanout = new Map<string, number>();
-  for (const effect of effects)
-    for (const type of new Set(effect.types)) {
-      const count = (fanout.get(type) ?? 0) + 1;
-      if (count > 32) throw new TypeError('History effect fanout exceeds 32 consumers');
-      fanout.set(type, count);
-    }
 
-  const byName = new Map(effects.map((effect) => [effect.name, effect]));
   const runEffect = DBOS.registerStep(
     async (name: string, event: CloudEvent) => {
       const effect = byName.get(name);
@@ -124,8 +125,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       });
     for (const { envelope } of orderedEnvelopes) {
       for (const [eventSeq, event] of envelope.events.entries()) {
-        for (const effect of effects) {
-          if (!effect.types.includes(event.type)) continue;
+        for (const effect of subscribers.get(event.type) ?? []) {
           await client.query(
             `INSERT INTO core.history_event_consumer(partition_no,position,event_seq,consumer,workflow_id)
                  VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
@@ -154,7 +154,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   const prepareIdentityOriginals = async (envelopes: readonly Envelope[]) => {
     for (const envelope of envelopes)
       for (const [eventSeq, event] of envelope.events.entries()) {
-        for (const effect of effects)
+        for (const effect of byName.values())
           if (effect.delivery !== 'native' && isIdentityOriginalEffect(effect, event)) {
             await associateIdentityFxOriginal(
               effect,
@@ -168,11 +168,10 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   };
 
   const registered: RegisteredEffects = {
-    ...(admit === undefined ? {} : { admit }),
-    ...(effects.some(
-      (effect) =>
-        effect.delivery !== 'native' && effect.queue === 'governance' && effect.types.includes(IDENTITY_EPOCH_ADMITTED),
-    ) && {
+    admit,
+    ...(subscribers
+      .get(IDENTITY_EPOCH_ADMITTED)
+      ?.some((effect) => effect.delivery !== 'native' && effect.queue === 'governance') && {
       scanPriority: (client: PoolClient) => scanIdentityAdmission.run(client, { consumer: EFFECTS_CONSUMER }),
     }),
     async enqueue(envelopes) {
@@ -184,8 +183,8 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       >();
       for (const envelope of envelopes) {
         for (const [eventSeq, event] of envelope.events.entries()) {
-          for (const effect of effects) {
-            if (effect.delivery !== 'native' && effect.types.includes(event.type)) {
+          for (const effect of subscribers.get(event.type) ?? []) {
+            if (effect.delivery !== 'native') {
               const jobs = partitions.get(envelope.partition) ?? [];
               jobs.push({ envelope, eventSeq, event, effect });
               partitions.set(envelope.partition, jobs);
@@ -232,6 +231,9 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       );
     },
   };
+  hasAdmissionSubscribers.set(admit, (envelopes) =>
+    envelopes.some((envelope) => envelope.events.some((event) => subscribers.has(event.type))),
+  );
   identityOriginalPreparations.set(registered, prepareIdentityOriginals);
   return registered;
 }
@@ -302,12 +304,13 @@ export function relayEffects(
     apply: async (envelopes) => {
       observe?.({ stage: 'prepare' });
       await identityOriginalPreparations.get(effects)?.(envelopes);
-      if (effects.admit) {
+      const admit = effects.admit;
+      if (admit && hasAdmissionSubscribers.get(admit)?.(envelopes) !== false) {
         observe?.({ stage: 'admit' });
         await withConnection(pool, async (client) => {
           await client.query('BEGIN');
           try {
-            await effects.admit!(client, envelopes);
+            await admit.call(effects, client, envelopes);
             await client.query('COMMIT');
           } catch (error) {
             try {
