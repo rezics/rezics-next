@@ -30,7 +30,15 @@ import { maintenanceCutCandidates } from '../../src/search/discovery-maintenance
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
-import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
+import {
+  createDiscoveryRepairWriter,
+  isDiscoveryRepairWriterReceipt,
+  retainedRepairWriterWinner,
+  verifyDiscoveryRepairWriterReceipts,
+} from '../../src/search/writer-guard.ts';
+import repairGate from '../../src/search/public-filter-custody-repair-gate.sql';
+import repairOwner from '../../src/search/public-filter-custody-repair-owner.sql';
+import repairWriters from '../../src/search/public-filter-custody-repair-writers.sql';
 import { createSemanticLocatorEffect, SEMANTIC_LOCATOR_ADVANCED } from '../../src/semantic/account-erasure.ts';
 import {
   deliverCanonicalGenerationEvent,
@@ -45,8 +53,14 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);
   let wideEmptyProofs = 0;
   let indexedReads = 0;
+  let afterAccountWrite: (() => Promise<void>) | undefined;
   const search: typeof native = {
     ...native,
+    async bulkRaw<T>(...args: Parameters<NonNullable<typeof native.bulkRaw>>) {
+      const result = await native.bulkRaw!<T>(...args);
+      if (afterAccountWrite) await afterAccountWrite();
+      return result;
+    },
     request(...args) {
       const body = args[2] as { query?: { bool?: { should?: unknown[] } } } | undefined;
       if (args[1].endsWith('/_search')) {
@@ -504,11 +518,77 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     ).toEqual([{ position: String(advanced.position), settled: true }]);
     await verify();
     expect(winnerReads).toBe(2);
+    const verifyRetained = () =>
+      withConnection(pool, async (client) => {
+        await client.query('BEGIN');
+        try {
+          const [gate] = await repairGate.run(client, { homes: [home], physical_target: index });
+          const [writer] = await repairWriters.run(client, {
+            subjects: [{ partition_no: home, original_id: id }],
+            physical_target: index,
+          });
+          const [owner] = await repairOwner.run(client, { homes: [home] });
+          const winner = retainedRepairWriterWinner(index, present, gate, writer, owner);
+          if (!isDiscoveryRepairWriterReceipt(winner)) throw new Error('Expected Discovery winner');
+          await verifyDiscoveryRepairWriterReceipts(client, measuredSearch, index, [winner]);
+          return winner;
+        } finally {
+          await client.query('ROLLBACK');
+        }
+      });
+
+    // A different cut writes the same Account. The visible native operation cannot lend its
+    // success to the original until the actual successor's dispatch and settlement have completed.
+    const sent = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    afterAccountWrite = async () => {
+      sent.resolve();
+      await release.promise;
+      throw new Error('Lost native Account dispatch response');
+    };
+    const second = repair.repairAccount(id, 'second-cut', { deadline });
+    try {
+      await Promise.race([
+        sent.promise,
+        second.then(() => {
+          throw new Error('Account write was never withheld');
+        }),
+      ]);
+      await expect(verifyRetained()).rejects.toThrow();
+      await expect(repair.repairAccount(id, 'third-cut', { deadline })).rejects.toThrow();
+    } finally {
+      afterAccountWrite = undefined;
+      release.resolve();
+      await expect(second).rejects.toThrow('Lost native Account dispatch response');
+    }
+    await expect(verifyRetained()).rejects.toThrow();
+    const recovered = await repair.repairAccount(id, 'second-cut', { deadline });
+    expect(recovered.enrollment.position).toBeGreaterThan(present.completion.position);
+    expect(await verifyRetained()).toEqual(recovered);
+    const third = await repair.repairAccount(id, 'third-cut', { deadline });
+    expect(await verifyRetained()).toEqual(third);
+    await expect(verify()).rejects.toThrow();
+
     const removed = await search.request('DELETE', `/${index}/_doc/${encodeURIComponent(indexed!.id)}`, undefined, {
       query: { refresh: 'wait_for' },
     });
     expect(removed.status).toBe(200);
-    await expect(verify()).rejects.toThrow('Native generation keys or external versions do not match');
+    await expect(verifyRetained()).rejects.toThrow('Native generation keys or external versions do not match');
+    await runCommand(pool, { partition: home }, async (tx, command) => {
+      await tx.query('UPDATE access.account SET display_name=$3,transaction_id=$4 WHERE route=$1 AND account_id=$2', [
+        route,
+        id,
+        'Changed repair source',
+        command.transactionId,
+      ]);
+      return {
+        value: null,
+        events: [{ type: 'com.rezics.access.account-updated.v1', subject: id, data: { accountId: id } }],
+      };
+    });
+    const changed = await repair.repairAccount(id, 'changed-cut', { deadline });
+    expect(changed.account?.account?.revision).not.toBe(present.account?.account?.revision);
+    await expect(verifyRetained()).rejects.toThrow('Native repair receipt or final writer fence changed');
   } finally {
     try {
       const owned = await search.request<{ indices: { name: string }[] }>(

@@ -26,7 +26,7 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import {
   readSearchRepairWinner,
-  assertRetainedRepairWriterFence,
+  retainedRepairWriterWinner,
   verifyDiscoveryRepairWinners,
   readPublicFilterRepairPhysicalTarget,
   repairWriterPosition,
@@ -1182,7 +1182,7 @@ export async function readPublicFilterRepairSettlement(
           }
         }
       }
-      assertRetainedRepairWriterFence(receipt, gate, writer, owner);
+      receipt = retainedRepairWriterWinner(physical_target, receipt, gate, writer, owner);
       if (isDiscoveryRepairWriterReceipt(receipt)) {
         if (!('allocation' in physical) || typeof physical.allocation !== 'string')
           throw new Failure('binding_mismatch');

@@ -408,16 +408,67 @@ function checkRepairOwner(receipt: PublicFilterRepairWriterReceipt, owner: Repai
     changedRepairFence();
 }
 
-/** Checks the rows already locked by the reopened native settlement transaction. */
-export function assertRetainedRepairWriterFence(
-  receipt: PublicFilterRepairWriterReceipt,
+/** The old receipt came from this execution's immutable repair_effect. A later Account repair
+ * may carry the same public facts at its own external version, with two independent native writes. */
+export function retainedRepairWriterWinner(
+  index: string,
+  original: PublicFilterRepairWriterReceipt,
   gate: RepairGate | undefined,
   writer: RepairWriter | undefined,
   owner: RepairOwner | undefined,
-) {
-  checkRepairGate(receipt, gate);
-  checkRepairWriter(receipt, writer);
-  checkRepairOwner(receipt, owner);
+): PublicFilterRepairWriterReceipt {
+  checkRepairGate(original, gate);
+  checkRepairOwner(original, owner);
+  if (
+    !isDiscoveryRepairWriterReceipt(original) ||
+    original.owner !== 'accounts' ||
+    !original.account ||
+    !writer?.repair_receipt ||
+    writer.writer_transaction_id === original.enrollment.transactionId
+  ) {
+    checkRepairWriter(original, writer);
+    return original;
+  }
+  const next: PublicFilterRepairWriterReceipt = JSON.parse(writer.repair_receipt, repairReviver);
+  if (
+    !isDiscoveryRepairWriterReceipt(next) ||
+    next.owner !== 'accounts' ||
+    !next.account ||
+    next.subject !== original.subject ||
+    next.partition !== original.partition ||
+    next.epoch !== original.epoch ||
+    next.consumer !== original.consumer ||
+    next.incarnation !== original.incarnation ||
+    next.allocation !== original.allocation ||
+    next.writeAlias !== original.writeAlias ||
+    next.enrollment.position <= original.completion.position ||
+    next.account.position < original.account.position ||
+    !isDeepStrictEqual({ ...next.account, position: original.account.position }, original.account) ||
+    next.effects.length !== original.effects.length
+  )
+    changedRepairFence();
+  validatePublicFilterRepairWriterEvidence(index, original);
+  validatePublicFilterRepairWriterEvidence(index, next);
+  for (const [i, { key, action }] of original.effects.entries()) {
+    const current = next.effects[i]!;
+    const later = current.action;
+    if (
+      !isDeepStrictEqual(key, current.key) ||
+      later.id !== action.id ||
+      later.op !== action.op ||
+      later.version <= action.version ||
+      (action.op === 'index' &&
+        (later.op !== 'index' ||
+          later.document.source_position !== String(later.version) ||
+          action.document.source_position !== String(action.version) ||
+          !isDeepStrictEqual({ ...later.document, source_position: action.document.source_position }, action.document)))
+    )
+      changedRepairFence();
+  }
+  checkRepairGate(next, gate);
+  checkRepairWriter(next, writer);
+  checkRepairOwner(next, owner);
+  return next;
 }
 
 async function verifyRetainedRepairWriter(
@@ -819,7 +870,10 @@ export function createDiscoveryRepairWriter(options: {
       (floor, effect) => (effect.action.version < floor ? effect.action.version : floor),
       effects[0]!.action.version,
     );
-    if (sourcePosition < obligation) throw unavailable('Mixed repair did not cover its own-home Source version');
+    // Account replay reopens the retained native input. Its own dispatch advances the home
+    // position, so a later invocation's live position cannot be the original action's floor.
+    if (sourcePosition < (account?.position ?? obligation))
+      throw unavailable('Mixed repair did not cover its own-home Source version');
     if (!isDeepStrictEqual(await readDiscoveryWriterPhysicalTarget(pool, search, index), physical))
       throw unavailable('Mixed repair allocation changed after dispatch');
     if (account) {
