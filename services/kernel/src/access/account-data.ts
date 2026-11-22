@@ -1,3 +1,4 @@
+import { preparedStatementClient } from '../database/native-source-query.ts';
 import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import agentPagesPage from './agent-pages-page.sql';
@@ -86,7 +87,7 @@ export async function readAccount(
 ): Promise<Account | null> {
   const input = { route, account_id: accountId };
   const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () =>
-    accountRead.run(client, input),
+    accountRead.run(preparedStatementClient(client, accountRead['~standard'].query.text, 'access_account_v1'), input),
   );
   if (!row) return null;
   return { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) };

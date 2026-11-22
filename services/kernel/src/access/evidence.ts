@@ -18,6 +18,14 @@ export function throwEvidenceFailure(error: unknown): void {
   if (error instanceof Error && failures.has(error)) throw error;
 }
 
+export function throwMissingEvidenceRelation(error: unknown): void {
+  if (error instanceof DatabaseError && error.severity === 'ERROR' && error.code === '42P01') {
+    const unavailable = new AccessUnavailableError('overloaded');
+    Object.defineProperty(unavailable, 'cause', { value: error, configurable: true, writable: true });
+    throw unavailable;
+  }
+}
+
 /** The sole boundary for trusted owning-module resource evidence callbacks.
  * A false denial form lets the enclosing boolean check deny the whole request.
  */
@@ -30,12 +38,7 @@ export async function accessEvidence<T>(
     return await callback();
   } catch (error) {
     throwAccessUnavailable(error, deadline);
-    // A missing native relation prevents the callback from observing its resource.
-    if (error instanceof DatabaseError && error.severity === 'ERROR' && error.code === '42P01') {
-      const unavailable = new AccessUnavailableError('overloaded');
-      Object.defineProperty(unavailable, 'cause', { value: error, configurable: true, writable: true });
-      throw unavailable;
-    }
+    throwMissingEvidenceRelation(error);
     throwEvidenceFailure(error);
     const denial = denied === false ? new Error('Access evidence denied') : denied();
     if (

@@ -420,6 +420,58 @@ test('missing evidence denies access and unavailable permission tables propagate
   expect(await run()).toBe(false);
 });
 
+test('an unassigned self-account read observes current grants, mounted roles and denials on the resource client', async () => {
+  const verb = 'account:read';
+  const role = 'fixture.account.viewer';
+  const self = { route: routeOf(actorId), id: actorId };
+  const actor = identity({ scopes: [verb], requestedBy: null });
+  let at = '2030-01-01T12:00:00Z';
+  const api = createAccess({
+    actions: new Map([[verb, { anonymous: false }]]),
+    resourceRoles: { roles: { [role]: [verb] }, types: { account: { owner: role, standing: [] } } },
+    clock: () => new Date(at),
+    accountEvidence: (_actor, ctx) => ctx.account,
+  });
+  const ctx = await context(actor);
+  const ordinary = await accessCheck(api, actor, verb, self, ctx);
+  const general = await accessExplicitCheck(api, actor, verb, self, ctx);
+  async function decisions(allowed: boolean, explicit = false) {
+    expect(await ordinary(pool)).toBe(allowed);
+    expect(await general(pool)).toEqual({ allowed, explicit });
+  }
+
+  await decisions(false);
+  await pool.query(
+    `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+     VALUES ($1,$2,$2,$3,'[2030-01-01,2030-01-02)',$4)`,
+    [self.route, self.id, role, transactionId],
+  );
+  try {
+    await decisions(true);
+    at = '2030-01-02T00:00:00Z';
+    await decisions(false);
+    await grant(actorId, verb, self);
+    await decisions(true, true);
+    await pool.query(
+      `INSERT INTO access.resource_denial(route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+       VALUES ($1,$2,$2,'',$3,'resource','[2030-01-02,2030-01-03)',$4)`,
+      [self.route, self.id, verb, transactionId],
+    );
+    await decisions(false);
+    at = '2030-01-03T00:00:00Z';
+    await decisions(true, true);
+    await unavailable('principal_assignment', async () => {
+      await expect(ordinary(pool)).rejects.toBeInstanceOf(AccessUnavailableError);
+    });
+  } finally {
+    await pool.query('DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND grant_role=$3', [
+      self.route,
+      self.id,
+      role,
+    ]);
+  }
+});
+
 test('anonymous grants and missing branches match the native formula for every requested target', async () => {
   const general = (await import('../../src/access/permission-check.sql')).default;
   const anonymous = (await import('../../src/access/permission-check-anonymous.sql')).default;

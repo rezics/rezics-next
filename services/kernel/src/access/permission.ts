@@ -22,7 +22,7 @@ import {
   type ContentPostBuyerFactReader,
 } from './authenticated-benefit.ts';
 import { memoizedValue } from '../memoized.ts';
-import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
+import { accessEvidence, throwEvidenceFailure, throwMissingEvidenceRelation } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { readNativeAccountStates, readNativePermissionAccount, type PermissionAccount } from './account-authority.ts';
@@ -68,6 +68,8 @@ import { routeOf as readRoute } from '../route/route.ts';
 import { deadlineClient, within } from './deadline.ts';
 import inverseRead from './permission-inverse.sql';
 import candidatesRead from './permission-candidates.sql';
+import selfReadDecision from './permission-self-read.sql';
+import selfPreparationRead from './permission-self-preparation.sql';
 import emptyCandidatesRead from './permission-candidates-empty.sql';
 import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
@@ -279,6 +281,7 @@ function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | unde
 }
 
 type Prepared = {
+  emptySelfRead?: true;
   policyCatalogue: PolicyCatalogue;
   work?: AccessWorkAccounting;
   time?: AuthoritativeTime;
@@ -366,10 +369,22 @@ async function readPermissionTime(
   const row = await accessNativeWork(work, 'time', input, {}, () =>
     compiledPermissionChecks.getStore()
       ? nativeSourceQuery(client, timeRead, input, 'compiled')
-      : timeRead.run(client, input),
+      : timeRead.run(
+          preparedStatementClient(client, permissionCheckTimeStatement(), 'access_permission_time_v1'),
+          input,
+        ),
   );
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
+}
+
+async function readSelfPreparation(client: AccessClient, resource: Resource, clock?: () => Date) {
+  const observedAt = Date.now();
+  const row = await selfPreparationRead.run(
+    preparedStatementClient(client, selfPreparationRead['~standard'].query.text, 'access_self_preparation_v1'),
+    { route: resource.route, account_id: resource.id, at: clock?.().toISOString() ?? '' },
+  );
+  return row && { ...row, observedAt };
 }
 
 /** Mint from the exact native observation without another clock query. */
@@ -515,7 +530,13 @@ async function checkPreparedPermission(
       return { allowed: false, explicit: false };
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
-    const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock, facts.work))?.at;
+    // A complete unmetered self read has no domain callback to share this T.
+    // Its final native ACL probe can bind the configured clock directly.
+    const emptySelfRead = facts.emptySelfRead && !compiledPermissionChecks.getStore();
+    const selfTime = !time && emptySelfRead ? clock?.().toISOString() : undefined;
+    const at = time
+      ? authoritativeTimeValue(time)
+      : (selfTime ?? (await readPermissionTime(client, clock, facts.work))?.at);
     requireAccessDeadline(facts.deadline);
     if (!at || (facts.buyerEvidence && !validBuyerEvidence(facts.buyerEvidence, time)))
       return { allowed: false, explicit: false };
@@ -546,6 +567,20 @@ async function checkPreparedPermission(
     const policyResourceType = pointCheckPolicyResourceType(facts.policyCatalogue, action, resource, page);
     const policyCore =
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
+    if (emptySelfRead && !policyCore && !includeExplicit && !facts.ownAccount) {
+      const self = await selfReadDecision.run(
+        preparedStatementClient(client, selfReadDecision['~standard'].query.text, 'access_self_read_v1'),
+        {
+          route: resource.route,
+          account_id: resource.id,
+          at,
+          grant_roles: [...facts.grantRoles],
+          deadline: facts.databaseDeadline,
+        },
+      );
+      if (!stillValid() || typeof self?.allowed !== 'boolean') return { allowed: false, explicit: false };
+      return { allowed: self.allowed, explicit: false, decisions: Object.freeze({ [resource.id]: self.allowed }) };
+    }
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
       readFormula(client, formula.input),
@@ -635,6 +670,7 @@ async function checkPreparedPermission(
   } catch (error) {
     facts?.work?.fail(error);
     throwAccessUnavailable(error, facts?.deadline);
+    throwMissingEvidenceRelation(error);
     throwEvidenceFailure(error);
     return { allowed: false, explicit: false };
   }
@@ -813,8 +849,26 @@ export function createAccess(config: PermissionConfig): Access {
       );
       // Every source query has its own bounded checkout before resource checkout.
       // None holds a connection while another partition is consulted.
-      const recorded = shared?.clock ?? (await readPermissionTime(source, config.clock, context.work));
+      const selfRead =
+        actor.kind === 'account' &&
+        action === 'account:read' &&
+        actor.accountId === resource.id &&
+        actor.requestedBy === null &&
+        account?.operatorAccountId === null &&
+        !time &&
+        !context.work &&
+        !shared &&
+        !page &&
+        !benefit &&
+        !verifyFloor &&
+        !compiledPermissionChecks.getStore();
+      const recorded =
+        shared?.clock ??
+        (selfRead
+          ? await readSelfPreparation(source, resource, config.clock)
+          : await readPermissionTime(source, config.clock, context.work));
       if (!recorded?.databaseAt) return evidence;
+      const emptySelfRead = 'emptyRoles' in recorded && recorded.emptyRoles === true;
       if (shared) shared.clock = recorded;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
@@ -913,7 +967,7 @@ export function createAccess(config: PermissionConfig): Access {
       }
       const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
       const roles: RoleEvidence[] = [];
-      if (actor.kind === 'account') {
+      if (actor.kind === 'account' && !emptySelfRead) {
         // The inverse is admission evidence only. Never derive identities from
         // resource ACLs or treat a stale inverse row as a membership role.
         for (const member of members) {
@@ -975,7 +1029,14 @@ export function createAccess(config: PermissionConfig): Access {
               grantRoles: grantRoles.length,
             },
             () => {
-              if (roles.length === 0) return emptyCandidatesRead.run(source);
+              if (roles.length === 0)
+                return emptyCandidatesRead.run(
+                  preparedStatementClient(
+                    source,
+                    emptyCandidatesRead['~standard'].query.text,
+                    'access_empty_acl_candidates_v1',
+                  ),
+                );
               return globalReach ? governanceReachCandidatesRead.run(source, input) : candidatesRead.run(source, input);
             },
           );
@@ -1077,6 +1138,7 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        ...(emptySelfRead ? { emptySelfRead: true } : {}),
         policyCatalogue,
         ...(context.work ? { work: context.work } : {}),
         ...(time ? { time } : {}),
