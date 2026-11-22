@@ -18,6 +18,7 @@ import { mergeSubjects } from '../../src/semantic/merges.ts';
 import * as identityMappings from '../../src/semantic/identity-adapters/read.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId } from '../../src/route/route.ts';
+import { subjectPartition } from '../../src/search/source.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -283,6 +284,19 @@ test('an empty Book credit cut survives unrelated writes and expires when the Bo
   expect(initial).toMatchObject({ state: 'complete', names: [] });
   if (initial.state !== 'complete') throw new Error('complete empty projection');
 
+  let leases = 0;
+  const countLease = () => {
+    leases++;
+  };
+  pool.on('acquire', countLease);
+  try {
+    const empty = await adapter.projectEmptyForIndex!(subjectPartition(work.id), [work.id]);
+    expect(empty.get(work.id)).toEqual({ state: 'complete', names: [] });
+    expect(leases).toBe(1);
+  } finally {
+    pool.off('acquire', countLease);
+  }
+
   const author = await person('New Book Author');
   expect(await adapter.unchanged(work.id, initial.observation)).toBe(true);
 
@@ -306,6 +320,7 @@ test('an empty Book credit cut survives unrelated writes and expires when the Bo
     expected_head: null,
   });
   expect(await adapter.unchanged(work.id, initial.observation)).toBe(false);
+  expect((await adapter.projectEmptyForIndex!(subjectPartition(work.id), [work.id])).has(work.id)).toBe(false);
   expect(await receiveCreditSearch(adapter, work.id)).toMatchObject({
     state: 'complete',
     names: [expect.objectContaining({ targetId: author.id })],

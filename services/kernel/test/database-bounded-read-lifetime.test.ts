@@ -5,6 +5,7 @@ import {
   NestedPoolCheckoutError,
   RetiredReadClientError,
   withBoundedCommandConnection,
+  withBoundedIndependentReads,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
   withConnection,
@@ -721,4 +722,33 @@ test('an adopted Continue reader preserves native options and accounts one check
   expect(request.query_timeout).toBe(25);
   expect(accounted).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT current', 'COMMIT']);
   expect(connections).toBe(1);
+});
+
+test('a late independent read lease releases before any child transaction starts', async () => {
+  const acquired = deferred<PoolClient>();
+  const released = deferred<Error | boolean | undefined>();
+  const database = fakePool(() => acquired.promise);
+  let work = false;
+  let queries = 0;
+  const visit = withBoundedIndependentReads(
+    database,
+    Date.now() + 5000,
+    async () => {
+      work = true;
+    },
+    { checkoutDeadline: Date.now() + 30 },
+  );
+  await expect(visit).rejects.toBeInstanceOf(BoundedReadDeadlineError);
+  acquired.resolve(
+    fakeClient(
+      () => {
+        queries++;
+        return queryResult([]);
+      },
+      (error) => released.resolve(error),
+    ),
+  );
+  expect(await released.promise).toBeUndefined();
+  expect(work).toBe(false);
+  expect(queries).toBe(0);
 });

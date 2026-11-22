@@ -12,7 +12,11 @@ import {
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
-import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import {
+  withBoundedIndependentReads,
+  withBoundedReadConnection,
+  withBoundedReadOnlyTransaction,
+} from '../database/pool.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
 export { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable };
@@ -125,6 +129,23 @@ export function withReadStatement<T>(
       }
     },
     { ...readLifetimeOptions, discardOnExpiry: true },
+  );
+}
+
+/** Keep both native snapshots independent, including the original lifetime of each observation. */
+export function withIndependentReadSnapshots<A, T>(
+  pool: Pool,
+  initial: () => Promise<A>,
+  recheck: (first: A) => Promise<T>,
+): Promise<T> {
+  const started = Date.now();
+  const firstDeadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS, () => started);
+  const pairDeadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS * 2, () => started);
+  return withBoundedIndependentReads(
+    pool,
+    pairDeadline,
+    async () => recheck(await withRequestDeadline(firstDeadline, initial)),
+    { ...readLifetimeOptions, checkoutDeadline: firstDeadline },
   );
 }
 

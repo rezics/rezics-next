@@ -2,6 +2,9 @@ import { expect, test } from 'bun:test';
 import { ConfigError, readConfig, startServer } from '../src/server.ts';
 import { createPool } from '../src/database/pool.ts';
 import { newId } from '../src/route/route.ts';
+import { testReceiptKeysEnv } from './support/receipt-keys.ts';
+import { withIndependentReadSnapshots, withReadTransaction, withRequestDeadline } from '../src/semantic/read.ts';
+import { AccessUnavailableError } from '../src/access/unavailable.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -9,6 +12,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const routeKey = Buffer.alloc(32, 1).toString('base64url');
 const sessionKey = Buffer.alloc(32, 2).toString('base64url');
 const baseEnv = {
+  ...testReceiptKeysEnv(),
   DATABASE_URL: databaseUrl,
   KERNEL_ROUTE_KEY: routeKey,
   KERNEL_SESSION_KEYS: `1:${sessionKey}`,
@@ -79,5 +83,83 @@ test('a started server fills its pool before serving and retains every connectio
     expect(pool.idleCount).toBe(pool.max);
   } finally {
     await server.stop();
+  }
+});
+
+test('independent read snapshots keep one backend and observe a concurrent commit between cuts', async () => {
+  const reader = createPool(databaseUrl!);
+  const writer = createPool(databaseUrl!);
+  const client = await writer.connect();
+  let leased = 0;
+  reader.on('acquire', () => {
+    leased++;
+  });
+  try {
+    await client.query('BEGIN');
+    const { xid } = (await client.query<{ xid: string }>('SELECT pg_current_xact_id()::text AS xid')).rows[0]!;
+    const observe = () =>
+      withReadTransaction(reader, async (tx) => {
+        const row = (
+          await tx.query<{ pid: number; visible: boolean; mode: string; timeout_ms: number }>(
+            `SELECT pg_backend_pid() AS pid, pg_visible_in_snapshot($1::xid8, pg_current_snapshot()) AS visible,
+                current_setting('transaction_isolation') AS mode, setting::integer AS timeout_ms
+         FROM pg_settings WHERE name='statement_timeout'`,
+            [xid],
+          )
+        ).rows[0]!;
+        expect(row.mode).toBe('repeatable read');
+        expect(row.timeout_ms).toBeGreaterThan(0);
+        return row;
+      });
+    await withIndependentReadSnapshots(reader, observe, async (first) => {
+      await client.query('COMMIT');
+      const second = await observe();
+      expect(first.visible).toBe(false);
+      expect(second.visible).toBe(true);
+      expect(first.pid).toBe(second.pid);
+    });
+    expect(leased).toBe(1);
+  } finally {
+    client.release(true);
+    await Promise.all([reader.end(), writer.end()]);
+  }
+});
+
+test('independent snapshots preserve per-step background deadlines and the shared request deadline', async () => {
+  const pool = createPool(databaseUrl!);
+  try {
+    const observe = (duration: number) =>
+      withReadTransaction(
+        pool,
+        async (tx) =>
+          (await tx.query<{ pid: number }>('SELECT pg_backend_pid() AS pid, pg_sleep($1)', [duration])).rows[0]!.pid,
+      );
+    await withIndependentReadSnapshots(
+      pool,
+      () => observe(1.05),
+      async (first) => {
+        expect(await observe(1.05)).toBe(first);
+      },
+    );
+    let activeBackend: number | undefined;
+    const bounded = withRequestDeadline(Date.now() + 150, () =>
+      withIndependentReadSnapshots(
+        pool,
+        () => observe(0),
+        async (first) => {
+          activeBackend = first;
+          return observe(1);
+        },
+      ),
+    );
+    await expect(bounded).rejects.toBeInstanceOf(AccessUnavailableError);
+    expect(activeBackend).toBeDefined();
+    expect(
+      (await pool.query("SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event='PgSleep'", [activeBackend]))
+        .rowCount,
+    ).toBe(0);
+    expect(await observe(0)).toBeGreaterThan(0);
+  } finally {
+    await pool.end();
   }
 });

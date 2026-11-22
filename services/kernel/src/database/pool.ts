@@ -123,6 +123,7 @@ type PreparationSession = {
   pool: Pool;
   client: PoolClient;
   open: boolean;
+  independentTransactions: boolean;
   reads: Promise<void>;
 };
 const preparationSession = new AsyncLocalStorage<PreparationSession>();
@@ -130,7 +131,7 @@ const readingSession = new AsyncLocalStorage<PreparationSession>();
 
 export function hasPretransactionReadSession(pool: Pool): boolean {
   const session = preparationSession.getStore();
-  return session?.pool === pool && session.open;
+  return session?.pool === pool && session.open && !session.independentTransactions;
 }
 
 /** Before writer BEGIN, bounded native point reads on this exact pool may use
@@ -140,9 +141,18 @@ export async function withPretransactionReads<T>(
   client: PoolClient,
   prepare: () => Promise<T>,
 ): Promise<T> {
-  const session = { pool, client, open: true, reads: Promise.resolve() };
+  return scopedReadSession(pool, client, prepare, false);
+}
+
+async function scopedReadSession<T>(
+  pool: Pool,
+  client: PoolClient,
+  read: () => Promise<T>,
+  independentTransactions: boolean,
+): Promise<T> {
+  const session = { pool, client, open: true, independentTransactions, reads: Promise.resolve() };
   try {
-    return await preparationSession.run(session, prepare);
+    return await preparationSession.run(session, read);
   } finally {
     session.open = false;
     await session.reads;
@@ -174,6 +184,22 @@ export function withBoundedReadConnection<T>(
   return withBoundedReadLifetime((work) => checkoutRead(pool, work), retireConnection, deadline, read, options);
 }
 
+/** Lease one backend for successive, separately committed native read-only snapshots. */
+export function withBoundedIndependentReads<T>(
+  pool: Pool,
+  deadline: number,
+  read: () => Promise<T>,
+  options: BoundedReadOptions = {},
+): Promise<T> {
+  return withBoundedReadLifetime(
+    (run) => withConnection(pool, run),
+    retireConnection,
+    deadline,
+    (client) => scopedReadSession(pool, client, read, true),
+    options,
+  );
+}
+
 /** Bound a native transaction without changing the identity of its original Pool. */
 export function withBoundedCommandConnection<T>(
   pool: Pool,
@@ -195,7 +221,8 @@ export function withBoundedReadOnlyTransaction<T>(
   options: BoundedReadOptions = {},
 ): Promise<T> {
   return withBoundedReadLifetime(
-    (work) => withConnection(pool, work),
+    (work) =>
+      preparationSession.getStore()?.independentTransactions ? checkoutRead(pool, work) : withConnection(pool, work),
     (client, error) => retireConnection(client, error),
     deadline,
     read,

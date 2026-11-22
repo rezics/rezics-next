@@ -31,6 +31,8 @@ export type BoundedReadLifetimeOptions = Readonly<{
   mode?: 'command';
   /** The checkout owns session state which must be restored before reuse. */
   discardOnExpiry?: boolean;
+  /** A sequence may have a shorter original deadline for acquiring its first backend. */
+  checkoutDeadline?: number;
   deadlineError?: () => Error;
   mapError?: (error: unknown) => unknown;
   isUncertainError?: (error: unknown) => boolean;
@@ -218,8 +220,14 @@ export function withBoundedReadLifetime<T>(
   };
   const retiredError = () => new RetiredReadClientError();
 
+  const checkoutBy = Math.min(deadline, options.checkoutDeadline ?? deadline);
+  const acquired = checkoutBy < deadline ? Promise.withResolvers<void>() : undefined;
   const operation = checkout(async (raw) => {
     connection = raw;
+    if (acquired) {
+      before(checkoutBy, deadlineError);
+      acquired.resolve();
+    }
     if (retired) throw deadlineError();
     before(deadline, deadlineError);
 
@@ -378,7 +386,11 @@ export function withBoundedReadLifetime<T>(
     }
   });
 
-  return until(operation, deadline, deadlineError).catch((error: unknown) => {
+  const finished = until(operation, deadline, deadlineError);
+  const bounded = acquired
+    ? until(Promise.race([acquired.promise, finished.then(() => {})]), checkoutBy, deadlineError).then(() => finished)
+    : finished;
+  return bounded.catch((error: unknown) => {
     if (!retired) {
       if (connection && mustDiscard()) discard(hasFailure ? firstFailure : error);
       else retire();

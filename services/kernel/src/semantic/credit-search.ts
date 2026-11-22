@@ -21,7 +21,7 @@ import {
   type CreditCreatorSnapshot,
   type PublicCreator,
 } from './credit-search-creators.ts';
-import { currentReadSnapshot, withReadTransaction } from './read.ts';
+import { currentReadSnapshot, withIndependentReadSnapshots, withReadTransaction } from './read.ts';
 import {
   digestOf,
   installedLimits,
@@ -299,15 +299,20 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       const projections = new Map<string, CreditSearchIndexProjection>();
       if (!workIds.length || workIds.length > SEARCH_IDENTITY_WRITER_CHUNK || currentReadSnapshot(pool))
         return projections;
-      const initial = await emptyCreditObservations(pool, partition, workIds);
-      if (!initial.size) return projections;
-      const rechecked = await emptyCreditObservations(pool, partition, [...initial.keys()]);
-      for (const [id, observation] of initial)
-        projections.set(
-          id,
-          rechecked.get(id) === observation ? { state: 'complete', names: [] } : { state: 'restart' },
-        );
-      return projections;
+      return withIndependentReadSnapshots(
+        pool,
+        () => emptyCreditObservations(pool, partition, workIds),
+        async (initial) => {
+          if (!initial.size) return projections;
+          const rechecked = await emptyCreditObservations(pool, partition, [...initial.keys()]);
+          for (const [id, observation] of initial)
+            projections.set(
+              id,
+              rechecked.get(id) === observation ? { state: 'complete', names: [] } : { state: 'restart' },
+            );
+          return projections;
+        },
+      );
     },
   };
 }
