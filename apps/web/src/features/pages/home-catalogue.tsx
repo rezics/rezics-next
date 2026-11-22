@@ -92,14 +92,14 @@ function HomeCatalogueSlot({
   locale: string;
   candidates: LocalHomeSubject[] | undefined;
 }) {
-  const section = useContext(OverviewContext)?.sections.get(String(props.id));
+  const overview = useContext(OverviewContext);
+  const section = overview?.sections.get(String(props.id));
   const types = props.types;
   const available =
     section && !section.ok && section.status === 503 && Array.isArray(types)
       ? candidates?.filter((subject) => types.includes(subject.type))
       : undefined;
-  if (!available?.length) return <TypeList {...props} />;
-  const messages = subjectPageMessages(locale);
+  if (!overview || !available?.length) return <TypeList {...props} />;
   const title = pageText(props.title, locale);
   return (
     <section data-slot="local-home-catalogue" className="min-w-0 space-y-4">
@@ -117,12 +117,8 @@ function HomeCatalogueSlot({
               subject: coverSubject(subject.id, subject.label.value, subject),
               cover: coverOf(subject),
               src: coverSrc,
-              labels: {
-                withheld: messages.coverWithheld,
-                reveal: messages.coverReveal,
-                credit: messages.coverCredit,
-                via: messages.coverVia,
-              },
+              labels: overview.labels.cover,
+              suitability: overview.reader.suitability,
             }}
           />
         ))}
