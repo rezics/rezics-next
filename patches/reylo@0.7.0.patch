@@ -1,0 +1,23 @@
+diff --git a/src/execute.js b/src/execute.js
+--- a/src/execute.js
++++ b/src/execute.js
+@@ -227,8 +227,18 @@
+   bound.text = sentText(query, bound.text);
+   return bound;
+ }
++const sentTexts = new WeakMap();
+ export function sentText(query, text) {
+-  return query.sqlcommenter && query.source ? withSqlcommenter(text, query.source) : text;
++  const enabled = query.sqlcommenter;
++  if (!enabled || !query.source) return text;
++  const source = query.source;
++  if (enabled !== true || typeof source !== "string" || typeof text !== "string")
++    return withSqlcommenter(text, source);
++  const previous = sentTexts.get(query);
++  if (previous && previous.text === text && previous.source === source) return previous.wire;
++  const wire = withSqlcommenter(text, source);
++  sentTexts.set(query, { text, source, wire });
++  return wire;
+ }
+ export function rawStatement(query, params) {
+   checkParams(query, params);
