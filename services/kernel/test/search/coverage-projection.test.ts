@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
-import { runCommand } from '../../src/command/command.ts';
-import { accessCheck } from '../../src/request/access.ts';
-import { newId } from '../../src/route/route.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { runCommand, type CommandEvent } from '../../src/command/command.ts';
+import { partitionOf } from '../../src/route/route.ts';
 import { createSubjectProjectionCoordinator, type IndexIncarnation } from '../../src/search/coverage.ts';
 import { createCoverageProjection } from '../../src/search/coverage-projection.ts';
 import { createCoverageStore } from '../../src/search/coverage-store.ts';
@@ -11,15 +10,19 @@ import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.t
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { subjectPartition } from '../../src/search/source.ts';
-import { activeRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { writeSubject } from '../../src/semantic/subject.ts';
-import { createRealAccess } from '../semantic/real-access.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createCoverageFixture, holdBulk } from './coverage-fixture.ts';
 
 // Native red specifications. The shared fixture establishes commands/Access/source/engine first.
 let f: Awaited<ReturnType<typeof createCoverageFixture>>;
 beforeAll(async () => {
-  f = await createCoverageFixture();
+  f = await createCoverageFixture(
+    undefined,
+    createWriteRateLimiter({
+      secret: 'subject-projection-fixture-write-rate-key',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 300, seconds: 60 } } }),
+    }),
+  );
 }, 180_000);
 afterAll(async () => {
   await f?.close();
@@ -73,61 +76,21 @@ async function slot(i: IndexIncarnation, partition: number) {
   return (await store().readHome(i, partition))?.attempt;
 }
 
-// One genuine native command with many anchors, real authenticated Access, no source facts seeded by SQL.
+// Each anchor owns its native authorization, source set, History copies and committed event.
 async function anchors(count: number) {
   const vacant = await f.admin.query<{ partition_no: number }>(
     `SELECT partition_no FROM core.partition p WHERE p.position=0 AND p.partition_no>0 AND NOT EXISTS
      (SELECT 1 FROM core.outbox o WHERE o.partition_no=p.partition_no) ORDER BY partition_no LIMIT 1`,
   );
   const partition = vacant.rows[0]!.partition_no;
-  const route = partition * 16;
-  const account = newId(30002);
-  const auth = await createRealAccess(f.admin, { writer: account }, ['subject:create']);
-  const resource = { route: 0, id: GLOBAL_CONTEXT };
-  await auth.grant(resource, 'writer', 'subject:create');
-  const access = auth.access({ actions: new Map([['subject:create', { anonymous: false }]]) });
-  const deadline = Date.now() + 120_000;
-  const actor = await access.authenticate(auth.bearer('writer'), { pool: f.admin, deadline });
-  if (actor.kind !== 'account') throw new Error('Real account authentication required');
-  const check = await accessCheck(access, actor, 'subject:create', resource, { pool: f.admin, deadline });
-  const key = crypto.randomUUID();
-  const release = (await activeRelease(f.pool))!;
-  const ids = Array.from({ length: count }, () => newId(route));
-  await runCommand(
-    f.pool,
-    {
-      partition,
-      deadline,
-      receipt: {
-        actorAccountId: actor.accountId,
-        kind: 'subject.create',
-        key,
-        digest: createHash('sha256').update(key).digest(),
-      },
-      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
-      authorization: {
-        action: 'subject:create',
-        resource,
-        denied: () => new Error('Native creation denied'),
-        async authorize(tx, attempt) {
-          if (!(await check(tx, attempt.time))) throw new Error('Native creation denied');
-          return 'execute';
-        },
-      },
-    },
-    async (tx, { transactionId }) => {
-      const events = [];
-      for (const id of ids) {
-        const written = await writeSubject(tx, transactionId, {
-          target: { route, id },
-          release,
-          item: { type: 'schema:Book', labels: { en: 'Projection anchor' } },
-        });
-        events.push(...written.events);
-      }
-      return { value: null, events };
-    },
-  );
+  const ids: string[] = [];
+  while (ids.length < count) {
+    const key = crypto.randomUUID();
+    if (partitionOf(subjectTarget(f.routeKey, f.accountId, key).route) !== partition) continue;
+    const created = await f.post('/v1/subjects', { type: 'schema:Book', labels: { en: 'Projection anchor' } }, key);
+    expect(subjectPartition(created.subject.id)).toBe(partition);
+    ids.push(created.subject.id);
+  }
   return { partition, ids };
 }
 
@@ -408,16 +371,35 @@ for (const corruption of ['gap', 'invalid_data'] as const)
 
 test('all real source chunks are at most 256 and every chunk is visible before the envelope checkpoint', async () => {
   const { partition, ids } = await anchors(257);
+  const through = (await f.source.read(partition, [])).position;
   await expect(f.source.read(partition, ids)).rejects.toThrow();
-  const { incarnation: i, config } = await target();
+  const { incarnation: i, config, coordinator } = await target();
+  while ((await checkpoint(i, partition)) < through) {
+    const step = await coordinator.run(i, partition);
+    expect(step.status).toBe('read');
+    if (step.status !== 'read' || !step.envelopes) throw new Error('Original births did not advance');
+  }
+  expect(await checkpoint(i, partition)).toBe(through);
+
+  // Redeliver the 257 actual birth payloads as a single fixture envelope after their individual writes.
+  const original = await f.admin.query<CommandEvent>(
+    `SELECT type, subject, data FROM core.outbox
+     WHERE partition_no=$1 AND position <= $2 AND type='com.rezics.subject.created.v1'
+     ORDER BY position, event_seq`,
+    [partition, through.toString()],
+  );
+  expect(original.rows.map((event) => event.subject)).toEqual(ids);
+  const redelivery = await runCommand(f.pool, { partition }, async () => ({ value: null, events: original.rows }));
+  expect(redelivery.position).toBe(through + 1n);
   const sizes: number[] = [];
+  const visible = new Set<string>();
   let writes = 0;
   const source = {
     ...f.source,
     async read(p: number, selected: readonly string[]) {
       sizes.push(selected.length);
       expect(selected.length).toBeLessThanOrEqual(256);
-      expect(await checkpoint(i, partition)).toBe(0n);
+      expect(await checkpoint(i, partition)).toBe(through);
       return f.source.read(p, selected);
     },
   };
@@ -426,7 +408,15 @@ test('all real source chunks are at most 256 and every chunk is visible before t
     async bulk<T>(...args: Parameters<OpenSearch['bulk']>) {
       const response = await f.search.bulk<T>(...args);
       writes++;
-      expect(await checkpoint(i, partition)).toBe(0n);
+      const page = await f.search.request<{ hits: { hits: { _id: string; _version: number }[] } }>(
+        'POST',
+        `/${i.index}/_search`,
+        { size: ids.length, _source: false, version: true, query: { ids: { values: ids } } },
+      );
+      for (const hit of page.body.hits.hits) {
+        if (BigInt(hit._version) === redelivery.position) visible.add(hit._id);
+      }
+      expect(await checkpoint(i, partition)).toBe(through);
       return response;
     },
   };
@@ -436,8 +426,9 @@ test('all real source chunks are at most 256 and every chunk is visible before t
   expect(sizes.reduce((a, b) => a + b, 0)).toBe(257);
   expect(sizes.length).toBeGreaterThan(1);
   expect(writes).toBeGreaterThan(0);
+  expect(visible).toEqual(new Set(ids));
   expect(await count(i)).toBe(257);
-  expect(await checkpoint(i, partition)).toBe(1n);
+  expect(await checkpoint(i, partition)).toBe(redelivery.position);
 }, 180_000);
 
 test('a native structural change during a real source snapshot cannot be stamped as its source tuple or fence', async () => {
