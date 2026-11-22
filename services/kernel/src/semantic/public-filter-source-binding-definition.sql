@@ -1,6 +1,8 @@
+/* semantic.native-keyed:4:10 */
 SELECT s.source_id::text, s.configuration::text, s.owner_epoch, s.route_digest,
   d.release_digest, d.capture, d.dependency_keys,
-  octet_length(d.capture)::bigint + octet_length(d.dependency_keys::text)::bigint AS definition_bytes
+  octet_length(d.capture)::bigint + octet_length(d.dependency_keys::text)::bigint AS definition_bytes,
+  EXISTS (SELECT FROM semantic.definition_release base WHERE base.route = 0 AND base.digest = d.release_digest) AS base_present
 FROM semantic.public_filter_read_definition d
 JOIN semantic.public_filter_source s ON (s.partition_no, s.source_id, s.configuration) =
   (d.partition_no, d.source_id, d.configuration)

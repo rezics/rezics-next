@@ -41,6 +41,8 @@ import sourceSupportGroups from './identity-source-support-groups.sql';
 import sourceBindingLookup from './public-filter-source-binding-lookup.sql';
 import sourceBindingRegister from './public-filter-source-binding-register.sql';
 import sourceBindingDefine from './public-filter-source-binding-define.sql';
+import readStatementTimeout from './read-statement-timeout.sql';
+import restoreStatementTimeout from './restore-statement-timeout.sql';
 import sourceDefinitionRead from './public-filter-source-binding-definition.sql';
 import releaseExists from './definitions-exists.sql';
 import releaseRead from './definitions-read.sql';
@@ -99,10 +101,12 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [sourceSupportInputs.sql, [2, 2, 1, 1024, 1]],
         [sourceSupportOriginals.sql, [1, 1, 1, 512, 1]],
         [sourceSupportGroups.sql, [1, 1, 1, 512, 1]],
-        [sourceBindingLookup.sql, [3, 10, 1, 32768, 3]],
+        [sourceBindingLookup.sql, [4, 12, 1, 32768, 4]],
         [sourceBindingRegister.sql, [1, 1, 1, 1024, 1]],
         [sourceBindingDefine.sql, [1, 1, 1, 32768, 1]],
-        [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
+        [sourceDefinitionRead.sql, [4, 10, 1, 32768, 4]],
+        [readStatementTimeout.sql, [1, 1, 1, 1024, 0]],
+        [restoreStatementTimeout.sql, [1, 1, 1, 512, 0]],
         [releaseExists.sql, [1, 1, 1, 512, 1]],
         [releaseRead.sql, [1, 1, 1, 65536, 1]],
         [activeReleaseRead.sql, [1, 1, 1, 1024, 1]],

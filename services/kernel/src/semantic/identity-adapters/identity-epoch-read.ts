@@ -420,7 +420,7 @@ async function readIdentityMappingsWith(
     const controlOwners: IdentityOwnerEvidence[] = [],
       pendingRows: IdentityPendingEvidence[] = [],
       currentRows: IdentityControlEvidence[] = [];
-    const localStatement = sourceHomes.size > 1 ? capabilities.read.withReadStatement : undefined;
+    const localStatement = capabilities.read.withReadStatement;
     let foreignControl = false;
     for (const home of sourceHomes) {
       const indices = routes.flatMap((route, index) => (partitionOf(route) === home ? [index] : []));
@@ -509,7 +509,10 @@ async function readIdentityMappingsWith(
         };
     }
     if (localStatement && !foreignControl)
-      return { singleSnapshot: false, evidence: { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows } };
+      return {
+        singleSnapshot: sourceHomes.size === 1,
+        evidence: { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows },
+      };
     // A foreign mapping may share a group with another original. Reread each control at its own
     // home in the original phase order, including every local control, before double collection.
     controlOwners.length = 0;

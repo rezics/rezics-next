@@ -15,7 +15,7 @@ import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { hasVerifiedReleaseDigest, readRelease } from './definition-release-read.ts';
+import { hasVerifiedReleaseDigest, readRelease, verifiedBaseReleaseBody } from './definition-release-read.ts';
 import { withReadTransaction } from './read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { freeze } from './core/freeze.ts';
@@ -967,13 +967,15 @@ export async function readNativePublicFilterSourceDefinition(
       read_definition: id,
       max_bytes: maxBytes,
     },
-    { name: 'semantic_filter_source_definition_v1' },
+    { name: 'semantic_filter_source_definition_v2' },
   );
   if (!row) throw new BindingError('definition_missing');
   if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
   const bytes = Number(row.definition_bytes);
   if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
-  const release = await readRelease(db, row.release_digest);
+  const release =
+    (row.base_present ? verifiedBaseReleaseBody(row.release_digest) : undefined) ??
+    (await readRelease(db, row.release_digest));
   if (!release || Object.keys(release.types).length === 0) throw new BindingError('definition_missing');
   return { definition: restoreDefinition(id, row, release, search), bytes };
 }
@@ -2798,8 +2800,12 @@ export function createNativePublicFilterSourceBinding(
         // An installed definition resolves from the current Source owner and its exact retained input.
         // First-time registration still reconciles a concurrent writer under the unique keys.
         const [retained] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
-        // Caller digest equality is checked again against the actual immutable release owner.
-        const release = await readRelease(db, meaning.digest);
+        // The lookup checked current base custody; its already verified immutable body is reusable.
+        // Cold, copied and composite meanings still go through the release owner.
+        const release =
+          retained?.base_present && hasVerifiedReleaseDigest(meaning.release, meaning.digest)
+            ? meaning.release
+            : await readRelease(db, meaning.digest);
         if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
           throw new BindingError('definition_missing');
         if (retained) {

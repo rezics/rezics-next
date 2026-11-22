@@ -49,6 +49,7 @@ import type {
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
 import readIdentityFloors from './public-filter-identity-floors.sql';
+import readInstalledIdentityFloors from './public-filter-installed-identity-floors.sql';
 import readIdentityPointsQuery from './public-filter-identity-points.sql';
 import readSubjects from './search-source-subjects.sql';
 import readPrivacyHead from './public-filter-projection-head-read.sql';
@@ -718,6 +719,38 @@ function identityWindow(ids: readonly string[], inputLimit: number) {
 }
 type IdentityWindow = ReturnType<typeof identityWindow>;
 type IdentityPoint = SubjectRow & { epoch: number; privacy_position: string };
+type IdentityFloor = { id: string; visible: boolean; revision: string };
+
+async function startIdentityWindow(
+  config: Configuration,
+  meaning: PublicFilterProjectionMeaning,
+  deadline: number,
+  keys?: { id: string; route: number }[],
+) {
+  return inSnapshot(config.pool, deadline, async (client) => {
+    if (keys) {
+      // Access prepares only after releasing the snapshot of the base release,
+      // its owner, the charged first visibility floors and the native read time.
+      await client.query('SET LOCAL enable_seqscan = off');
+      const points = await nativeSourceQuery(client, readInstalledIdentityFloors, {
+        digest: meaning.digest,
+        routes: keys.map(({ route }) => route),
+        ids: keys.map(({ id }) => id),
+      });
+      if (points.length) {
+        const floors = points.flatMap((row): IdentityFloor[] =>
+          row.id !== null && row.visible !== null && row.revision !== null
+            ? [{ id: row.id, visible: row.visible, revision: row.revision }]
+            : [],
+        );
+        return { time: await mintReadTime(client, config.clock, config.pool), floors };
+      }
+    }
+    return (await storedMeaningRelease(client, meaning.digest))
+      ? { time: await mintReadTime(client, config.clock, config.pool), floors: undefined }
+      : null;
+  });
+}
 
 /** Prepare before checkout, then verify the exact visibility revision and evaluate native Access at T
  * on the same snapshot as the owner, privacy head, redirect and selection evidence. */
@@ -726,15 +759,18 @@ async function readIdentityPoints(
   keys: { id: string; route: number }[],
   time: AuthoritativeTime,
   deadline: number,
+  initialFloors?: readonly IdentityFloor[],
 ) {
   const context = { pool: config.pool, deadline };
   const actor = { kind: 'anonymous' } as const;
   const input = { ids: keys.map(({ id }) => id), routes: keys.map(({ route }) => route) };
   // Small catalogues can otherwise scan every Subject once per supplied key.
-  const floors = await inSnapshot(config.pool, deadline, async (client) => {
-    await client.query('SET LOCAL enable_seqscan = off');
-    return nativeSourceQuery(client, readIdentityFloors, input);
-  });
+  const floors =
+    initialFloors ??
+    (await inSnapshot(config.pool, deadline, async (client) => {
+      await client.query('SET LOCAL enable_seqscan = off');
+      return nativeSourceQuery(client, readIdentityFloors, input);
+    }));
   const prepared = new Map(floors.map((row) => [row.id, row]));
   const decisions = await prepareReadDecisions(config.access, {
     actor,
@@ -780,9 +816,15 @@ async function readIdentityWindows(
   config: Configuration,
   port: PublicFilterAccessBindingPort,
   windows: IdentityWindow[],
-  time: AuthoritativeTime,
+  meaning: PublicFilterProjectionMeaning,
   deadline: number,
 ) {
+  let time: AuthoritativeTime | undefined;
+  if (!hasVerifiedReleaseDigest(meaning.release, meaning.digest)) {
+    const initial = await startIdentityWindow(config, meaning, deadline);
+    if (!initial) return false;
+    time = initial.time;
+  }
   for (let depth = 0; depth < 8; depth++) {
     const owners = new Map<string, IdentityWindow[]>();
     for (const window of windows) {
@@ -815,7 +857,14 @@ async function readIdentityWindows(
         payer.cost.accessPoints++;
         payer.cost.dependencyPoints++;
       }
-      const result = await readIdentityPoints(config, keys, time, deadline);
+      let initialFloors: readonly IdentityFloor[] | undefined;
+      if (!time) {
+        const initial = await startIdentityWindow(config, meaning, deadline, keys);
+        if (!initial) return false;
+        time = initial.time;
+        initialFloors = initial.floors;
+      }
+      const result = await readIdentityPoints(config, keys, time, deadline, initialFloors);
       for (const { id, route } of keys) {
         const state = result.get(id);
         const partition = partitionOf(route);
@@ -841,6 +890,7 @@ async function readIdentityWindows(
   }
   for (const { observed, pending } of windows)
     if ([...pending].some((id) => !observed.states.has(id))) observed.complete = false;
+  return true;
 }
 
 function resolveIdentity(
@@ -889,19 +939,19 @@ export async function readPublicFilterSubjectIdentityWindows(
   if (identitySourceSupportRoot() || identitySourceSupportJob())
     return members.map(({ window }) => unready('identity_pending', window.cost));
   try {
-    const time = await inSnapshot(config.pool, deadline, async (client) =>
-      (await storedMeaningRelease(client, meaning.digest)) ? mintReadTime(client, config.clock, config.pool) : null,
-    );
-    if (!time) return members.map(({ window }) => unready('metadata_missing', window.cost));
     if (config.access.prepareReadDecisions) {
-      await readIdentityWindows(
+      const ready = await readIdentityWindows(
         config,
         accessPort,
         members.map(({ window }) => window),
-        time,
+        meaning,
         deadline,
       );
+      if (!ready) return members.map(({ window }) => unready('metadata_missing', window.cost));
     } else {
+      const initial = await startIdentityWindow(config, meaning, deadline);
+      if (!initial) return members.map(({ window }) => unready('metadata_missing', window.cost));
+      const { time } = initial;
       for (const { subjects, window } of members)
         window.observed = await readPublicIdentities(
           config,

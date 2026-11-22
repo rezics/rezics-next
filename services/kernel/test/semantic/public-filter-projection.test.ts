@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import { releaseDigest } from '@rezics/definitions';
+import anonymousPermissionRead from '../../src/access/permission-check-anonymous.sql';
 import identityPoints from '../../src/semantic/public-filter-identity-points.sql';
 import identityFloors from '../../src/semantic/public-filter-identity-floors.sql';
-import { withQueryAccounting } from '../../src/database/pool.ts';
+import installedFloors from '../../src/semantic/public-filter-installed-identity-floors.sql';
+import { withConnection, withoutQueryAccounting, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
 import { lockReleasedProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
@@ -95,7 +97,65 @@ test('native public Subject identity batches retain the same anchors without cre
     expect(windows.reduce((n, window) => n + window.cost.inputKeys, 0)).toBe(3);
     expect(calls.filter((sql) => sql === identityPoints.sql)).toHaveLength(1);
     expect(calls.filter((sql) => sql === identityFloors.sql)).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes('FROM access.resource_grant'))).toHaveLength(1);
+    expect(calls.filter((sql) => sql === anonymousPermissionRead['~standard'].query.text)).toHaveLength(1);
+    const original = subjects[0]!;
+    let prepared = 0;
+    const changed = publicFilterSource({
+      ...f.config,
+      access: {
+        ...f.config.access,
+        async prepareReadDecisions(input) {
+          prepared++;
+          await withoutQueryAccounting(() =>
+            f.post(`/v1/subjects/${original}:hide`, { reason: 'Reduce the original after its visibility floor' }),
+          );
+          return f.config.access.prepareReadDecisions!(input);
+        },
+      },
+    });
+    const phases: string[] = [];
+    const reduced = await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        query(sql, _values, dispatch) {
+          phases.push(sql);
+          return dispatch();
+        },
+      },
+      () =>
+        changed.readPublicFilterSubjectIdentities!({
+          subjects: [original],
+          context: readContext(),
+          meaning: { digest, release: retained },
+          inputLimit: 1,
+        }),
+    );
+    expect(prepared).toBe(1);
+    expect(phases.filter((sql) => sql === installedFloors.sql)).toHaveLength(1);
+    expect(phases.filter((sql) => sql === identityFloors.sql)).toHaveLength(0);
+    expect(phases.filter((sql) => sql === identityPoints.sql)).toHaveLength(1);
+    expect(phases.filter((sql) => sql === anonymousPermissionRead['~standard'].query.text)).toHaveLength(0);
+    expect(reduced.status).toBe('observed');
+    if (reduced.status === 'observed') {
+      expect(reduced.rows.map((row) => row.subject)).toEqual([original]);
+      expect(reduced.rows[0]!.securityRevision).not.toBe(identities.rows[0]!.securityRevision);
+    }
+    await withConnection(f.db.admin, async (writer) => {
+      await writer.query('BEGIN');
+      try {
+        await writer.query('LOCK TABLE semantic.subject IN ACCESS EXCLUSIVE MODE');
+        const blocked = await source.readPublicFilterSubjectIdentities!({
+          subjects: [original],
+          context: { deadline: Date.now() + 300 },
+          meaning: { digest, release: retained },
+          inputLimit: 1,
+        });
+        expect(blocked.status).toBe('unavailable');
+        expect(blocked.cost).toMatchObject({ inputKeys: 1, accessPoints: 1, dependencyPoints: 1 });
+      } finally {
+        await writer.query('ROLLBACK');
+      }
+    });
   } finally {
     await f.close();
   }

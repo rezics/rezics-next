@@ -75,6 +75,12 @@ test('multi-home mapping collects complete local proofs twice and detects a real
         },
       },
     });
+    const oneHome = [redirected, unknown, redirected];
+    expect(await reader.readIdentityMappings(f.pool, oneHome)).toEqual(
+      await control.readIdentityMappings(f.pool, oneHome),
+    );
+    expect(reads).toBe(1);
+    reads = 0;
     expect(await reader.readIdentityMappings(f.pool, keys)).toEqual(expected);
     expect(reads).toBe(4);
     reads = 0;
@@ -83,9 +89,15 @@ test('multi-home mapping collects complete local proofs twice and detects a real
     expect(changed.every(({ state }) => state === 'unavailable')).toBe(true);
     expect(reads).toBe(4);
     expect(job).toBeDefined();
+    admit = false;
     await f.drainMapping(job!, 512);
     expect(await f.nativeDirectRedirect(redirected)).toBe(survivor);
     expect(await reader.readIdentityMappings(f.pool, keys)).toEqual(await control.readIdentityMappings(f.pool, keys));
+    reads = 0;
+    expect(await reader.readIdentityMappings(f.pool, [redirected])).toEqual(
+      await control.readIdentityMappings(f.pool, [redirected]),
+    );
+    expect(reads).toBe(2);
     expect(f.operationBackendIds().size).toBe(1);
   } finally {
     await f.close();

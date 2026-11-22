@@ -264,6 +264,19 @@ test('native public Source configuration and immutable meaning/read definition r
     expect(reused.status).toBe('resolved');
     if (reused.status !== 'resolved') throw new Error(`Native Source reuse ${reused.reason}`);
     expect(reused.definition).toEqual(result.definition);
+    const exact = await binding.resolve(
+      { source, meaning: result.definition.meaning, capture, readOnly: true },
+      readContext(),
+    );
+    expect(exact.status).toBe('resolved');
+    expect(exact.cost.statements).toBe(1);
+    expect(exact.cost.inputKeys).toBeGreaterThanOrEqual(12);
+    const forged = structuredClone(result.definition.meaning);
+    delete forged.release.types['schema:Person'];
+    expect(
+      (await binding.resolve({ source, meaning: forged, capture, readOnly: true }, readContext())).status,
+    ).not.toBe('resolved');
+
     await withConnection(f.db.admin, async (writer) => {
       await writer.query('BEGIN');
       try {

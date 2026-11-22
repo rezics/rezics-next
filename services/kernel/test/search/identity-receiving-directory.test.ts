@@ -80,6 +80,8 @@ import nativeCommit from '../../src/semantic/identity-epoch-store-insert-native-
 import releaseExists from '../../src/semantic/definitions-exists.sql';
 import releaseRead from '../../src/semantic/definitions-read.sql';
 import sourceDefine from '../../src/semantic/public-filter-source-binding-define.sql';
+import readStatementTimeout from '../../src/semantic/read-statement-timeout.sql';
+import restoreStatementTimeout from '../../src/semantic/restore-statement-timeout.sql';
 import definitionRead from '../../src/semantic/public-filter-source-binding-definition.sql';
 import sourceLookup from '../../src/semantic/public-filter-source-binding-lookup.sql';
 import sourceRegister from '../../src/semantic/public-filter-source-binding-register.sql';
@@ -825,12 +827,18 @@ test.each([
       } else if (sql === releaseRead.sql || sql === releaseExists.sql) {
         expect(values).toEqual(['0', bundledDigest]);
         rows = [[sql === releaseRead.sql ? JSON.stringify(bundledRelease) : bundledDigest]];
+      } else if (sql === readStatementTimeout.sql) {
+        rows = [['0', String(values[0])]];
+      } else if (sql === restoreStatementTimeout.sql) {
+        rows = [[String(values[0])]];
       } else if (sql === sourceLookup.sql) {
         expect(values[sourceLookup.params.indexOf('route_digest')]).toBe(routeDigest);
         expect(values[sourceLookup.params.indexOf('release_digest')]).toBe(bundledDigest);
-        const exact = capture !== undefined && capture === values[sourceLookup.params.indexOf('capture')]
-          && dependencies === values[sourceLookup.params.indexOf('dependency_keys')];
-        rows = exact ? [[definitionId, sourceId, sourceConfig, '1', bundledDigest, capture, dependencies]] : [];
+        const exact =
+          capture !== undefined &&
+          capture === values[sourceLookup.params.indexOf('capture')] &&
+          dependencies === values[sourceLookup.params.indexOf('dependency_keys')];
+        rows = exact ? [[definitionId, sourceId, sourceConfig, '1', bundledDigest, capture, dependencies, 't']] : [];
       } else if (sql === sourceRegister.sql) {
         expect(values).toEqual([routeDigest]);
         rows = [[sourceId, sourceConfig, '1']];
@@ -844,7 +852,7 @@ test.each([
         expect(values[0]).toBe(definitionId);
         const captureBytes = Buffer.byteLength(capture!) + Buffer.byteLength(dependencies!);
         rows = [
-          [sourceId, sourceConfig, '1', routeDigest, bundledDigest, capture!, dependencies!, String(captureBytes)],
+          [sourceId, sourceConfig, '1', routeDigest, bundledDigest, capture!, dependencies!, String(captureBytes), 't'],
         ];
       } else if (nativePermission && sql === permissionTime['~standard'].query.text) {
         permissionTimes++;
