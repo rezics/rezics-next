@@ -4099,7 +4099,10 @@ $$;
 --
 
 CREATE FUNCTION semantic.public_filter_mixed_coverage(physical_target text, incarnation text, child_definition uuid, parent_bootstrap uuid, encoded_consumer text) RETURNS TABLE(job uuid, bootstrap uuid, registration text, definition uuid, consumer text, generation bigint, covered_generation bigint, coverage_root text, coverage_keys text[])
-    LANGUAGE sql STABLE
+    LANGUAGE sql STABLE ROWS 1
+    SET plan_cache_mode TO 'force_generic_plan'
+    SET join_collapse_limit TO '1'
+    SET enable_seqscan TO 'off'
     AS $_$
 WITH child AS MATERIALIZED (
   SELECT d.*,semantic.public_filter_mixed_page_scope(d.capture) AS scope
