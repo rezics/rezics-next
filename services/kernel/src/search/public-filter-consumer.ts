@@ -1131,6 +1131,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         let retired = false;
         let uncertainty: Error | undefined;
         let unfinished = false;
+        let attempted = false;
         let activeQueries = 0;
         let finish!: () => void;
         const returned = new Promise<void>((resolve) => {
@@ -1161,6 +1162,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 // A terminal command is uncertain until its exact native reply. In
                 // particular, COMMIT in an aborted transaction replies ROLLBACK.
                 if (/^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT)\b/i.test(statement)) unfinished = true;
+                attempted = true;
                 const result = await observedQuery(query, values);
                 if (expected) {
                   if (result.command !== expected) {
@@ -1179,7 +1181,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               try {
                 return await work(metered);
               } catch (error) {
-                discard(raw, error instanceof Error ? error : new Error(String(error)));
+                if (attempted) discard(raw, error instanceof Error ? error : new Error(String(error)));
                 throw error;
               } finally {
                 if (unfinished || activeQueries > 0) discard(raw, new ConsumerFailure('source_pending'));
@@ -1216,8 +1218,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           lifetimeOptions,
         );
-        // Rejection before handoff rejects acquisition; a late checkout still runs
-        // through the original owner's finally and is physically discarded there.
+        // A late checkout has never run caller SQL. The original owner releases it cleanly.
         void operation.catch(reject);
       });
     }
