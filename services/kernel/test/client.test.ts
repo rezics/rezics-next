@@ -32,11 +32,12 @@ test(
       expect([...emitted.keys()]).toEqual(expect.arrayContaining(['http/kernel.d.ts', 'http/request.d.ts']));
       let sawSqlDeclaration = false;
       for (const [key, content] of emitted) {
-        for (const match of content.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+\.sql)['"]/g)) {
-          const target = resolve(dirname(resolve('/client', key)), match[1]!);
-          const declaration = relative('/client', `${target}.d.ts`).split(sep).join('/');
-          expect(emitted.has(declaration)).toBe(true);
+        const sqlImports = /\b(?:from\s+|import\s*\(\s*)(['"])(\.{1,2}\/[^'"]+\.sql(?:\.d\.ts)?)\1/g;
+        for (const match of content.matchAll(sqlImports)) {
+          const target = resolve(dirname(resolve('/client', key)), match[2]!);
+          const declaration = relative('/client', target).split(sep).join('/');
           expect(declaration.endsWith('.sql.d.ts')).toBe(true);
+          expect(emitted.has(declaration)).toBe(true);
           sawSqlDeclaration = true;
         }
       }
