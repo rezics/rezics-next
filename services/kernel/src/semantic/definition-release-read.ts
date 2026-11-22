@@ -13,6 +13,7 @@ import { nativeSourceQuery, preparedStatementClient } from '../database/native-s
 import releaseRead from './definitions-read.sql';
 import releaseBodies from './definitions-read-bodies.sql';
 import releasePointer from './definitions-active.sql';
+import globalHeads from './definitions-global-heads.sql';
 import composite from './composite-read.sql';
 import registerComposite from './composite-register.sql';
 import readCommunity from './context-read-community.sql';
@@ -277,6 +278,41 @@ export async function layeredRelease(db: Db, base: Layer, context: string, persi
   return layer;
 }
 
+/** Observe both mutable Global heads together. Previously verified bodies remain immutable. */
+async function readGlobalParts(db: Db, loadMissing: boolean) {
+  const heads = await globalHeads.run(
+    preparedStatementClient(db, globalHeads['~standard'].query.text, 'semantic_global_release_heads_v1'),
+    { route: 0, context_id: GLOBAL_CONTEXT },
+  );
+  if (!heads) return null;
+  const body = releases.get(heads.digest) ?? (loadMissing ? await readRelease(db, heads.digest) : undefined);
+  if (!body) {
+    if (loadMissing) throw new Error('Active definition release is missing');
+    return undefined;
+  }
+  const active = { digest: heads.digest, head: heads.head, release: body };
+  if (heads.extensionDigest === null || heads.extensionHead === null) return { active, extension: null };
+  const extension =
+    extensions.get(heads.extensionDigest) ??
+    (loadMissing ? await loadExtension(db, 0, GLOBAL_CONTEXT, heads.extensionDigest) : undefined);
+  if (!extension) {
+    if (loadMissing) throw new Error('Active definition extension is missing');
+    return undefined;
+  }
+  return { active, extension: { digest: heads.extensionDigest, body: extension } };
+}
+
+/** The base release and its Global interpretation share the same observed pointers. */
+export async function activeGlobalRelease(db: Db, persist = false, deadline?: number) {
+  let parts =
+    db instanceof Pool ? await withReadStatement(db, (client) => readGlobalParts(client, false), deadline) : undefined;
+  if (parts === undefined) parts = await definitionRead(db, (client) => readGlobalParts(client, true), deadline);
+  if (!parts) return null;
+  const { active, extension } = parts;
+  const global = extension ? await compose(db, active, extension.digest, extension.body, persist) : active;
+  return { active, global };
+}
+
 /**
  * The active release with the terms `context` sees; Global's view is the default. A write passes `persist`, so the
  * composed digest it stores is registered; a read never writes.
@@ -287,6 +323,10 @@ export async function effectiveRelease(
   persist = false,
   deadline?: number,
 ): Promise<{ digest: string; head: number; release: Release } | null> {
+  if (context === GLOBAL_CONTEXT) {
+    const result = await activeGlobalRelease(pool, persist, deadline);
+    return result && { head: result.active.head, ...result.global };
+  }
   const resolve = async (db: Db) => {
     const active = await activeRelease(db);
     if (!active) return null;

@@ -11,7 +11,11 @@ import { createRealAccess } from './real-access.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { reconcilePageDataDefinitions } from '../../../auth/scripts/dev-stack.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { activeRelease, boundedActiveRelease } from '../../src/semantic/definition-release-read.ts';
+import {
+  activeGlobalRelease,
+  activeRelease,
+  boundedActiveRelease,
+} from '../../src/semantic/definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../../src/semantic/contract/subject-values.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -200,7 +204,19 @@ test('activation is a compare-and-swap on the active head', async () => {
   const stale = await activate(two, null);
   expect(stale.response.status).toBe(409);
   expect(stale.body.code).toBe('stale_editorial_head');
-  expect((await activate(two, 1)).body).toEqual({ digest: two, head: 2 });
+  const snapshot = await admin.connect();
+  try {
+    await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const original = await activeGlobalRelease(snapshot);
+    expect(original?.active).toEqual({ digest: one, head: 1, release: first });
+    expect(original?.global.release).toBe(original?.active.release);
+    expect((await activate(two, 1)).body).toEqual({ digest: two, head: 2 });
+    expect(await activeGlobalRelease(snapshot)).toEqual(original);
+    expect((await activeGlobalRelease(pool))?.active).toEqual({ digest: two, head: 2, release: second });
+  } finally {
+    await snapshot.query('ROLLBACK');
+    snapshot.release();
+  }
   expect((await call('GET', '/v1/definitions/active')).body).toEqual({ digest: two, head: 2 });
   expect((await call('GET', '/v1/definitions')).body).toEqual({ digest: two, head: 2 });
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2)).response.status).toBe(404);
