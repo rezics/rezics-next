@@ -57,10 +57,14 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) disclosure ON true
 LEFT JOIN LATERAL (
+  -- Seek the whole verdict key even when the planner estimates a small acceptance table.
   SELECT a.verdict FROM semantic.acceptance_current a
-  WHERE NOT raw.compact AND (a.route, a.subject_id, a.context_id, a.candidate_id) =
-    (raw.route, raw.subject_id, '00000000-0000-8000-8000-000000000000'::uuid, raw.candidate_id)
-    AND a.route >= input.partition_no * 16 AND a.route < (input.partition_no + 1) * 16
+  WHERE NOT raw.compact AND input.route >= input.partition_no * 16 AND input.route < (input.partition_no + 1) * 16
+    AND (a.route, a.subject_id, a.context_id, a.candidate_id) >=
+      (raw.route, raw.subject_id, '00000000-0000-8000-8000-000000000000'::uuid, raw.candidate_id)
+    AND (a.route, a.subject_id, a.context_id, a.candidate_id) <=
+      (raw.route, raw.subject_id, '00000000-0000-8000-8000-000000000000'::uuid, raw.candidate_id)
+  ORDER BY a.route, a.subject_id, a.context_id, a.candidate_id
   LIMIT 1
 ) accepted ON true
 -- An expanded slot needs the proposal origin only in the absence of a verdict.
