@@ -10,7 +10,8 @@ import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { readMembershipWorkConfig } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { partitionOf, routeOf, ROUTES } from '../route/route.ts';
+import { nextMaintenanceRoute } from './maintenance-route-sweep.ts';
 import { enqueueAndDiscardHandle } from './collection-bulk-enqueue.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
@@ -511,10 +512,15 @@ export async function registerCollectionBulkWork(context: WorkContext) {
       },
     },
   ]);
-  const expiry = DBOS.registerStep((route: number) => expireCollectionBulkPage({ pool, clock }, route), {
-    name: 'library.collectionBulk.expiryPage',
-    ...COMMAND_STEP_RETRIES,
-  });
+  const expiry = DBOS.registerStep(
+    async (from: number): Promise<number | boolean> => {
+      const route = await nextMaintenanceRoute(pool, 'bulk', from);
+      if (route === undefined) return ROUTES;
+      const more = await expireCollectionBulkPage({ pool, clock }, route);
+      return more ? route : route + 1;
+    },
+    { name: 'library.collectionBulk.expiryPage', ...COMMAND_STEP_RETRIES },
+  );
   type Sweep = { root: string; route: number; segment: number };
   const continueSweep = DBOS.registerStep(
     async (input: Sweep) =>
@@ -533,8 +539,13 @@ export async function registerCollectionBulkWork(context: WorkContext) {
   );
   const sweep = async (input: Sweep) => {
     let route = input.route;
-    for (let n = 0; n < 100 && route < 65536; n++) if (!(await expiry(route))) route++;
-    if (route < 65536) await continueSweep({ ...input, route, segment: input.segment + 1 });
+    for (let n = 0; n < 100 && route < ROUTES; n++) {
+      const next = await expiry(route);
+      // Older completed steps recorded whether the requested route had children left.
+      if (typeof next === 'number') route = next;
+      else if (!next) route++;
+    }
+    if (route < ROUTES) await continueSweep({ ...input, route, segment: input.segment + 1 });
   };
   DBOS.registerWorkflow(sweep, { name: 'library.collectionBulkExpirySegment' });
   DBOS.registerWorkflow(() => sweep({ root: DBOS.workflowID!, route: 0, segment: 0 }), {

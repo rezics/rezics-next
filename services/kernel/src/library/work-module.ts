@@ -1,4 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { maintenancePartitionPage, advanceMaintenanceSegment } from './maintenance-route-sweep.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { purgeLabelRetentionPage } from './label-retention.ts';
@@ -52,8 +53,10 @@ type IncarnationSweep = { root: string; sequence: number; partition: number; aft
 
 async function registerEntryIncarnationCutover({ pool, client, clock }: WorkContext) {
   const page = DBOS.registerStep(
-    async (partition: number, after: string | null) =>
-      cutoverEntryIncarnationsPage({ pool, client, clock }, { partition, after, limit: 100 }),
+    (partition: number, after: string | null) =>
+      maintenancePartitionPage(pool, 'entry', partition, after, (partition, after) =>
+        cutoverEntryIncarnationsPage({ pool, client, clock }, { partition, after, limit: 100 }),
+      ),
     { name: 'library.entryIncarnationCutoverPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(
@@ -71,12 +74,7 @@ async function registerEntryIncarnationCutover({ pool, client, clock }: WorkCont
     { name: 'library.entryIncarnationCutoverContinue', ...COMMAND_STEP_RETRIES },
   );
   const segment = async (input: IncarnationSweep) => {
-    let { partition, after } = input;
-    // Fixed routing probes, empty pages and nonlegacy keys all pay the same segment budget.
-    for (let n = 0; n < 100 && partition < 4096; n++) {
-      after = (await page(partition, after)).next;
-      if (after === null) partition++;
-    }
+    const { partition, after } = await advanceMaintenanceSegment(input, page);
     if (partition < 4096) await continuation({ ...input, partition, after, sequence: input.sequence + 1 });
     return { partition, after };
   };
@@ -102,8 +100,10 @@ type LabelSweep = { root: string; sequence: number; partition: number; after: st
 
 async function registerLabelRetention({ pool, client, clock }: WorkContext) {
   const page = DBOS.registerStep(
-    async (partition: number, after: string | null) =>
-      purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after }),
+    (partition: number, after: string | null) =>
+      maintenancePartitionPage(pool, 'labels', partition, after, (partition, after) =>
+        purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after }),
+      ),
     { name: 'library.labelRetentionPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(
@@ -121,11 +121,7 @@ async function registerLabelRetention({ pool, client, clock }: WorkContext) {
     { name: 'library.labelRetentionContinue', ...COMMAND_STEP_RETRIES },
   );
   const segment = async (input: LabelSweep) => {
-    let { partition, after } = input;
-    for (let n = 0; n < 100 && partition < 4096; n++) {
-      after = (await page(partition, after)).next;
-      if (after === null) partition++;
-    }
+    const { partition, after } = await advanceMaintenanceSegment(input, page);
     if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
     return { partition, after };
   };
@@ -151,8 +147,10 @@ type ConsolidationSweep = { root: string; sequence: number; partition: number; a
 
 async function registerLabelConsolidationRetention({ pool, client, clock }: WorkContext) {
   const page = DBOS.registerStep(
-    async (partition: number, after: string | null) =>
-      purgeExpiredLabelConsolidations({ pool, clock }, { partition, limit: 100, after }),
+    (partition: number, after: string | null) =>
+      maintenancePartitionPage(pool, 'consolidation', partition, after, (partition, after) =>
+        purgeExpiredLabelConsolidations({ pool, clock }, { partition, limit: 100, after }),
+      ),
     { name: 'library.labelConsolidationRetentionPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(
@@ -170,11 +168,7 @@ async function registerLabelConsolidationRetention({ pool, client, clock }: Work
     { name: 'library.labelConsolidationRetentionContinue', ...COMMAND_STEP_RETRIES },
   );
   const segment = async (input: ConsolidationSweep) => {
-    let { partition, after } = input;
-    for (let n = 0; n < 100 && partition < 4096; n++) {
-      after = (await page(partition, after)).next;
-      if (after === null) partition++;
-    }
+    const { partition, after } = await advanceMaintenanceSegment(input, page);
     if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
     return { partition, after };
   };
@@ -201,8 +195,10 @@ type EntryAnnotationCorrectionSweep = { root: string; sequence: number; partitio
 
 async function registerEntryAnnotationCorrectionRetention({ pool, client, clock }: WorkContext) {
   const page = DBOS.registerStep(
-    async (partition: number, after: string | null) =>
-      purgeExpiredEntryAnnotationReviews({ pool, clock }, { partition, limit: 100, after }),
+    (partition: number, after: string | null) =>
+      maintenancePartitionPage(pool, 'annotation', partition, after, (partition, after) =>
+        purgeExpiredEntryAnnotationReviews({ pool, clock }, { partition, limit: 100, after }),
+      ),
     { name: 'library.entryAnnotationCorrectionRetentionPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(
@@ -220,11 +216,7 @@ async function registerEntryAnnotationCorrectionRetention({ pool, client, clock 
     { name: 'library.entryAnnotationCorrectionRetentionContinue', ...COMMAND_STEP_RETRIES },
   );
   const segment = async (input: EntryAnnotationCorrectionSweep) => {
-    let { partition, after } = input;
-    for (let n = 0; n < 100 && partition < 4096; n++) {
-      after = (await page(partition, after)).next;
-      if (after === null) partition++;
-    }
+    const { partition, after } = await advanceMaintenanceSegment(input, page);
     if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
     return { partition, after };
   };

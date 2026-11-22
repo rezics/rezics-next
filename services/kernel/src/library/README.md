@@ -2816,6 +2816,15 @@ sends no SQL; uncertain native I/O discards its client, and cleanup shares the o
   sequence commit/replay/rollback. `entry-undo-http.test.ts` proves the real caller and published contract. Automatic
   due delivery and complete library deletion-driver coverage remain separate.
 
+### Scheduled maintenance across sparse routes
+
+Bulk expiry seeks the next populated route in the operation index. Entry incarnation cutover, annotation correction
+retention, label consolidation retention and personal label retention seek the next populated partition through
+their native route-leading indexes. Label retention seeks tombstones in both the label and assignment indexes.
+An empty source takes one durable step. Each occupied page applies its existing custody, eligibility and expiry
+checks. A retained local cursor resumes in its original partition. Rows arriving behind the frontier are eligible
+on the next scheduled sweep. A segment checkpoints at most 100 pages.
+
 ### Automatic retained entry collection
 
 `entry-due-work.ts` registers the default Library worker's UTC ten-minute retention schedule. Each sweep
