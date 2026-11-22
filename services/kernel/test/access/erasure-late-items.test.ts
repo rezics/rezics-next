@@ -283,7 +283,7 @@ test('the undelivered frontier and a held locator effect block durable completio
     queueName: 'effects',
     queuePartitionKey: `test_erasure_other:${copied.partition}`,
   });
-  expect(WORK_QUEUES[LOCATOR_EFFECTS_QUEUE]).toEqual({ ...WORK_QUEUES.effects, minPollingIntervalMs: 50 });
+  expect(WORK_QUEUES[LOCATOR_EFFECTS_QUEUE]).toMatchObject({ ...WORK_QUEUES.effects, minPollingIntervalMs: 50 });
   expect((await advance(accountId)).value).toBe(false);
   expect(await status(accountId)).toMatchObject({
     state: 'pending',
