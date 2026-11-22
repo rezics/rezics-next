@@ -37,6 +37,77 @@ test('unlogged native counter spends all units atomically with a single point up
   expect((await stored()).map((row) => row.count)).toEqual([10]);
 });
 
+test('only a standalone counter spend can defer the logged account lock flush', async () => {
+  const { spendPoolWriteRateCounter } = await import('../../src/access/write-rate-counter.ts');
+  const single = new Pool({ connectionString: url, max: 1, options: '-c synchronous_commit=on' });
+  const actor = newId(input.route);
+  const value = { ...input, accountId: actor };
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [input.route, actor],
+  );
+  await pool.query(`CREATE FUNCTION access.test_rate_commit_mode() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN PERFORM set_config('rezics.rate_commit_observed', current_setting('synchronous_commit'), false); RETURN NEW; END $$;
+    CREATE TRIGGER test_rate_commit_mode BEFORE INSERT OR UPDATE ON access.write_rate_counter
+    FOR EACH ROW EXECUTE FUNCTION access.test_rate_commit_mode()`);
+  const settings = `SELECT current_setting('synchronous_commit') AS current,
+    current_setting('rezics.rate_commit_observed',true) AS observed`;
+  try {
+    expect(await spendPoolWriteRateCounter(single, Date.now() + 5000, value)).toEqual({ allowed: true });
+    expect((await single.query(settings)).rows).toEqual([{ current: 'on', observed: 'off' }]);
+    const client = await single.connect();
+    try {
+      await client.query('BEGIN');
+      expect(await spend(client, value)).toEqual({ allowed: true });
+      expect((await client.query(settings)).rows).toEqual([{ current: 'on', observed: 'on' }]);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+    expect((await stored()).map((row) => row.count)).toEqual([input.units]);
+    const eraser = await pool.connect();
+    try {
+      await eraser.query('BEGIN');
+      await eraser.query(
+        "UPDATE access.account SET state='deleted',authn_fenced=true WHERE route=$1 AND account_id=$2",
+        [input.route, actor],
+      );
+      await eraser.query('DELETE FROM access.write_rate_counter WHERE route=$1 AND account_id=$2', [
+        input.route,
+        actor,
+      ]);
+      const pending = spendPoolWriteRateCounter(single, Date.now() + 5000, value).catch((error: unknown) => error);
+      const {
+        rows: [backend],
+      } = await eraser.query('SELECT pg_backend_pid() AS pid');
+      const end = Date.now() + 3500;
+      let blocked = false;
+      while (!blocked && Date.now() < end) {
+        const { rows } = await pool.query(
+          'SELECT EXISTS (SELECT FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid))) AS blocked',
+          [backend.pid],
+        );
+        blocked = rows[0].blocked;
+        if (!blocked) await Bun.sleep(5);
+      }
+      expect(blocked).toBe(true);
+      await eraser.query('COMMIT');
+      expect(await pending).toBeInstanceOf(Error);
+      expect(await stored()).toEqual([]);
+    } catch (error) {
+      await eraser.query('ROLLBACK');
+      throw error;
+    } finally {
+      eraser.release();
+    }
+  } finally {
+    await single.end();
+    await pool.query(
+      'DROP TRIGGER test_rate_commit_mode ON access.write_rate_counter; DROP FUNCTION access.test_rate_commit_mode()',
+    );
+  }
+});
+
 test('denied batch keeps original expiry and no partial debit', async () => {
   expect(await spend()).toEqual({ allowed: true });
   const before = await stored();

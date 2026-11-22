@@ -810,7 +810,9 @@ authorization remain required even with rate budget. See [write-rate-stage.ts][r
 
 Counters and chunk ledgers are partition-led `UNLOGGED` operational data: account route for an actor, a route
 derived from the identity digest for anonymous traffic. Crash loss or partition movement may reset budgets;
-they are not a global singleton. Bounded expiry retains the 48-hour cleanup grace. A spent budget returns 429
+they are not a global singleton. A standalone counter spend holds the authenticated account's deletion barrier
+through commit and may defer the WAL flush for that tuple lock. A spend on a caller-owned transaction inherits its
+durability setting. Bounded expiry retains the 48-hour cleanup grace. A spent budget returns 429
 with `Retry-After`; unavailable limiting fails closed as retryable 503. See [write-rate-counter.sql][rate-sql],
 [write-rate-expiry.ts][rate-expiry], [write-rate-stage.ts][rate-stage] and [Durable bulk][access-bulk].
 

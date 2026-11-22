@@ -8,7 +8,7 @@ import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 import { deadlineClient } from './deadline.ts';
 import { families, rateLimitBudgets } from './write-rate-budgets.ts';
-import { spendWriteRateCounter } from './write-rate-counter.ts';
+import { spendPoolWriteRateCounter } from './write-rate-counter.ts';
 import { rateIdentity } from './write-rate-identity.ts';
 
 function spendChunkQuery() {
@@ -93,7 +93,7 @@ export function createWriteRateLimiter(config: WriteRateConfig = {}): DurableWri
       try {
         if (!secret) throw new WriteRateUnavailableError();
         const identity = rateIdentity(context, secret);
-        return await spendWriteRateCounter(deadlineClient(context.pool, identity.deadline), {
+        return await spendPoolWriteRateCounter(context.pool, identity.deadline, {
           route: identity.route,
           identityDigest: identity.identityDigest,
           accountId: identity.accountId,

@@ -1,5 +1,8 @@
 WITH identity AS MATERIALIZED (
-  SELECT :route::integer AS route, NULLIF(:account_id::text, '')::uuid AS account_id
+  SELECT :route::integer AS route, NULLIF(:account_id::text, '')::uuid AS account_id,
+         -- A standalone UNLOGGED spend retains its account lock through the implicit commit.
+         -- Its WAL contains the logged account's tuple lock; only this transaction may defer the flush.
+         CASE WHEN :standalone::boolean THEN set_config('synchronous_commit', 'off', true) END AS operational_commit
 ), account_lock AS MATERIALIZED (
   -- Serialize authenticated charges with the permanent deletion barrier. An
   -- already authenticated pre-T context cannot repopulate a purged rate row.
