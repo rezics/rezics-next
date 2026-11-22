@@ -253,10 +253,11 @@ test('production bundled publish phase distributions with the fixture worker qui
     expect(digest).toMatch(/^sha256:/);
   }
   const driver = await createCommunityDriver();
-  const fixture = await driver.provision();
-  await driver.settle();
-  await worker.stop();
   try {
+    const fixture = await driver.provision();
+    // Provisioning publishes the release through HTTP. Pause the actual worker for the
+    // quiet measurements, then let it resume its outstanding work during the loaded ones.
+    await worker.stop();
     for (const load of ['quiet', 'worker'] as const) {
       if (load === 'worker') await restartWorker();
       const samples: NonNullable<ReturnType<typeof commandTimingSnapshot>>[] = [];
