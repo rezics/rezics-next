@@ -60,6 +60,29 @@ contracts linked above. An active progress session can coexist with a non-active
 progress mode retains its accepted unit semantics; no provider value, session, historic activity or counted use is
 inferred from import mapping metadata.
 
+## Subject applications
+
+A Subject application associates an existing Subject with a target for a stated purpose in a particular scope.
+Semantic's Global and community editorial contexts own adopted Subject statements. A personal application uses the account as scope and a Subject as its target. The account holder can read,
+apply and remove up to 32 association values per target through the personal entry API. The private associations
+are stored with the account’s personal facts and removed with those facts on account erasure. A Collection application uses the exact curated member occurrence as its target, with the Collection
+as scope. A [Knowledge association](knowledge-workspaces.md#subject-associations) belongs to its document revision.
+Each owner admits the change and records the acting account through its native command. A released property may
+restrict the type of Subject it accepts.
+
+A Collection editor may apply a readable Subject to one active member and remove that application independently
+from the member. The same member and applied Subject form a set. Reordering a member preserves its applications.
+Removing an occurrence hides its applications immediately. Undo restores the same occurrence with its retained
+applications. Physically purging the member removes its applications. A new occurrence starts with no applications.
+The same Subject may be applied independently to another occurrence of the same work. Dynamic results have no
+member occurrence. A Collection-scoped filter selects matching live occurrences and preserves their curated order.
+
+Read permission for the Collection and for both associated Subjects applies to each result. The display of an
+application never confers access to either Subject. Each member admits at most 32 applied Subjects. A filtered page
+uses an index keyed by Collection, applied Subject and member order, reads at most one page plus a lookahead, and
+may examine only its admitted range. A keyset cursor binds the Collection, applied Subject and current Collection
+revision and order epoch. Writer and retaining lifecycle work is bounded by the affected occurrence count times the member cap.
+
 ## One Collection abstraction
 
 A Collection has one stable identity, owner/curator, visibility, metadata, membership and mount/follow targets.

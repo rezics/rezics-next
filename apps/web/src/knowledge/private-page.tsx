@@ -4,6 +4,7 @@ import { useKnowledgeImageUploader, type KnowledgeImageUploadBinding } from './m
 import { useKnowledgeImageRenderer } from './media-view';
 import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
 import { KnowledgeWorkspaceNavigation } from './workspace-navigation';
+import { KnowledgeSubjectPicker } from './subject-picker';
 import { KnowledgeReferenceAuthoring } from './reference-authoring';
 import { KnowledgeReferenceBody } from './reference-view';
 import { admitReferenceManifest, referenceIssues, type KnowledgeReference } from './reference-model';
@@ -144,6 +145,7 @@ type DocumentDraft = Readonly<{
   body: DocumentSnapshot;
   references: readonly KnowledgeReference[];
   licence: string;
+  subjectIds: readonly string[];
 }>;
 type DocumentIntent = Readonly<
   DocumentDraft & {
@@ -164,7 +166,6 @@ type RevisionIntent = Readonly<
   DocumentDraft & {
     documentId: string;
     expectedHeadRevisionId: string;
-    subjectIds: readonly string[];
     idempotencyKey: string;
     binding: Binding;
   }
@@ -198,7 +199,7 @@ export type KnowledgePrivateOperations = Readonly<{
     expected: Pick<Binding, 'viewer' | 'csrfToken'>,
   ) => Promise<NavigationRead<KnowledgeOwnedNotebooksPage>>;
   readOutline: (
-    input: { notebookId: string; parentPlacementId: string | null; cursor: string | null },
+    input: { notebookId: string; parentPlacementId: string | null; cursor: string | null; appliedSubjectId?: string },
     expected: Pick<Binding, 'viewer' | 'csrfToken'>,
   ) => Promise<NavigationRead<KnowledgeOutlinePage>>;
   createDocument: (intent: DocumentIntent) => Promise<PrivateOperationResult<KnowledgeDocumentReceipt>>;
@@ -391,6 +392,7 @@ function copyDraft(head: KnowledgePrivateHead): DocumentDraft {
     body: structuredClone(head.body),
     references: structuredClone(head.references ?? []),
     licence: head.licence,
+    subjectIds: [...head.subjectIds],
   };
 }
 
@@ -405,6 +407,7 @@ function intentDraft(intent: RevisionIntent): DocumentDraft {
     body: intent.body,
     references: intent.references,
     licence: intent.licence,
+    subjectIds: intent.subjectIds,
   };
 }
 
@@ -613,6 +616,7 @@ function PrivateKnowledgeEditor({
     body: fromPlainText('', 'blocks'),
     references: [],
     licence: defaultLicence,
+    subjectIds: [],
   }));
   const documentDraftRef = useRef(documentDraft);
   const setDocumentDraft = (next: DocumentDraft) => {
@@ -827,7 +831,14 @@ function PrivateKnowledgeEditor({
     setReviewHead(null);
     setNotebookTitle('');
     setNotebookReceipt(null);
-    setDocumentDraft({ title: '', language: null, body: fromPlainText('', 'blocks'), references: [], licence: '' });
+    setDocumentDraft({
+      title: '',
+      language: null,
+      body: fromPlainText('', 'blocks'),
+      references: [],
+      licence: '',
+      subjectIds: [],
+    });
     setDocumentReceipt(null);
     setRevisionReceipt(null);
     setAcknowledgedDraft(null);
@@ -1118,6 +1129,7 @@ function PrivateKnowledgeEditor({
     setDocumentDraft({
       ...knowledgeAuthoringTemplateDraft(knowledgeTemplateCopy(kind, locale), locale),
       references: [],
+      subjectIds: documentDraftRef.current.subjectIds,
     });
   }
 
@@ -1317,7 +1329,6 @@ function PrivateKnowledgeEditor({
       ...structuredClone(writing),
       documentId: currentAddress.documentId,
       expectedHeadRevisionId: head.revisionId,
-      subjectIds: [...head.subjectIds],
       idempotencyKey: crypto.randomUUID(),
       binding,
     });
@@ -1425,6 +1436,7 @@ function PrivateKnowledgeEditor({
         body: fromPlainText('', 'blocks'),
         references: [],
         licence: defaultLicence,
+        subjectIds: [],
       });
       setTemplateKind(null);
     }
@@ -1437,6 +1449,7 @@ function PrivateKnowledgeEditor({
       documentDraft.title !== copy.documentTitle ||
       documentDraft.language !== locale ||
       documentDraft.licence !== defaultLicence ||
+      documentDraft.subjectIds.length > 0 ||
       hasDocumentContent(documentDraft.body) ||
       !!selectedNotebook ||
       editorPending);
@@ -1493,7 +1506,8 @@ function PrivateKnowledgeEditor({
     const notebookFailure = !['idle', 'pending', 'acknowledged'].includes(notebookState);
     const documentFailure = !['idle', 'pending', 'acknowledged'].includes(documentCreateState);
     const documentFrozen = !!documentIntent;
-    const subjectIds = existing && destination ? [destination.subjectId] : [address.subjectId];
+    const anchorSubjectId = existing && destination ? destination.subjectId : address.subjectId;
+    const subjectIds = [...new Set([anchorSubjectId, ...documentDraft.subjectIds])];
     const documentForm = (
       <div className="min-w-0 space-y-5">
         <KnowledgeTemplatePicker
@@ -1514,7 +1528,7 @@ function PrivateKnowledgeEditor({
           inspect={
             binding && operations.inspectReference ? (input) => operations.inspectReference!(input, binding) : undefined
           }
-          subjectIds={subjectIds}
+          anchorSubjectId={anchorSubjectId}
         />
         {destination && existing ? (
           <KnowledgeDestinationReview locale={locale} destination={destination} subjectIds={subjectIds} />
@@ -1857,6 +1871,7 @@ function PrivateKnowledgeEditor({
       licence: restored.licence,
       body: restored.body,
       references,
+      subjectIds: [...restored.subjectIds],
     });
     setEditorGeneration((version) => version + 1);
     setVersionRestored(true);
@@ -1917,7 +1932,6 @@ function PrivateKnowledgeEditor({
             onPendingChange={setEditorPending}
             onSave={() => void submitRevision()}
             inspect={operations.inspectReference ? (input) => operations.inspectReference!(input, binding) : undefined}
-            subjectIds={head.subjectIds}
             mediaSelection={knowledgePrivateMediaSelection(head)}
             uploadBinding={
               binding && access.revise === 'available'
@@ -2120,7 +2134,7 @@ function DocumentDraftFields({
   draft,
   disabled,
   onChange,
-  subjectIds,
+  anchorSubjectId,
   inspect,
   onPendingChange,
   onSave,
@@ -2137,7 +2151,7 @@ function DocumentDraftFields({
   inspect?: ReferenceInspector | undefined;
   onPendingChange: (pending: boolean) => void;
   onSave?: (() => void) | undefined;
-  subjectIds: readonly string[];
+  anchorSubjectId?: string;
 }) {
   const options = localeOptions(locale);
   const labels = useMemo(() => knowledgeEditorLabels(), [locale]);
@@ -2251,11 +2265,18 @@ function DocumentDraftFields({
             />
           </Field>
         </div>
-        <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-          {subjectIds.map((subjectId) => (
-            <IdentityValue key={subjectId} label={m.knowledge_private_subject({}, options)} value={subjectId} exact />
-          ))}
-        </dl>
+        {anchorSubjectId ? (
+          <dl>
+            <IdentityValue label={m.knowledge_private_subject({}, options)} value={anchorSubjectId} exact />
+          </dl>
+        ) : null}
+        <KnowledgeSubjectPicker
+          ids={draft.subjectIds}
+          anchorId={anchorSubjectId}
+          label={m.knowledge_private_subject({}, options)}
+          disabled={disabled}
+          onChange={(subjectIds) => onChange({ ...draft, subjectIds })}
+        />
       </KnowledgeDetails>
       <KnowledgeReferenceAuthoring
         onEditingChange={(editing) => {

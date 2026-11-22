@@ -64,6 +64,7 @@ export type KnowledgeOutlineQuery = Readonly<{
   accountId: string;
   notebookId: string;
   parentPlacementId: string | null;
+  appliedSubjectId?: string;
   cursor: string | null;
   authorization: string;
 }>;
@@ -73,6 +74,7 @@ export type KnowledgeOutlineWire = Readonly<{
   limit: typeof KNOWLEDGE_NAVIGATION_PAGE_LIMIT;
   cursor?: string;
   parentPlacementId?: string;
+  appliedSubjectId?: string;
 }>;
 
 const positionPattern = /^(?:0|[1-9][0-9]{0,37})$/;
@@ -130,11 +132,16 @@ export function knowledgeOwnedNotebooksWire(cursor: string | null): KnowledgeOwn
 }
 
 /** Root omits parentPlacementId. Nested reads send the explicitly chosen placement. */
-export function knowledgeOutlineWire(parentPlacementId: string | null, cursor: string | null): KnowledgeOutlineWire {
+export function knowledgeOutlineWire(
+  parentPlacementId: string | null,
+  cursor: string | null,
+  appliedSubjectId?: string,
+): KnowledgeOutlineWire {
   return {
     limit: KNOWLEDGE_NAVIGATION_PAGE_LIMIT,
     ...(cursor === null ? {} : { cursor }),
     ...(parentPlacementId === null ? {} : { parentPlacementId }),
+    ...(appliedSubjectId === undefined ? {} : { appliedSubjectId }),
   };
 }
 
@@ -258,7 +265,8 @@ export async function readKnowledgeOutline(
   if (
     !isKnowledgeId(input.accountId) ||
     !isKnowledgeId(input.notebookId) ||
-    !(input.parentPlacementId === null || isKnowledgeId(input.parentPlacementId))
+    !(input.parentPlacementId === null || isKnowledgeId(input.parentPlacementId)) ||
+    (input.appliedSubjectId !== undefined && !isKnowledgeId(input.appliedSubjectId))
   )
     return { state: 'unavailable', status: 502 };
   const cursor = parseKnowledgeNavigationCursor(input.cursor);
@@ -267,7 +275,7 @@ export async function readKnowledgeOutline(
     .accounts({ accountId: input.accountId })
     .knowledge.notebooks({ notebookId: input.notebookId })
     .outline.get({
-      query: knowledgeOutlineWire(input.parentPlacementId, cursor),
+      query: knowledgeOutlineWire(input.parentPlacementId, cursor, input.appliedSubjectId),
       headers: { authorization: input.authorization },
       fetch: fetchPolicy,
     });

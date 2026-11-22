@@ -1,3 +1,4 @@
+import { CollectionApplicationFilter, SubjectApplicationsEditor } from './collection-applications';
 import { cn } from '@rezics/ui/utils';
 import { CollectionLayoutSelect } from './collection-layout-select';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
@@ -65,7 +66,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useLocation, useRouter } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useEffect,
   useId,
@@ -104,7 +105,6 @@ import type { CollectionMember, CollectionVisibility } from './reads';
 import { LibraryNavigationNotice, libraryNavigationMenuEntries } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { PinControlNotice, usePinControlActions } from './pin-control';
-import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { EllipsisIcon, Share2Icon } from 'lucide-react';
 import {
@@ -359,6 +359,8 @@ function CollectionPageLifetime({
   const [members, setMembers] = useState(page.members);
   const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [applicationMemberId, setApplicationMemberId] = useState<string>();
+  const applicationsChanged = useRef(false);
   const writeKeys = useRef(new Map<string, string>());
   const commandCredentials = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
@@ -2173,6 +2175,25 @@ function CollectionPageLifetime({
                   ) : null}
                 </div>
               ) : null}
+              {ownerCurrent && !editing ? (
+                <CollectionApplicationFilter
+                  collectionId={page.id}
+                  titles={
+                    new Map(
+                      page.members.flatMap((member) =>
+                        member.subject && member.subjectId
+                          ? [
+                              [
+                                member.subjectId,
+                                pageText(libraryTitleValue(member.subject.label), getLocale()).text,
+                              ] as const,
+                            ]
+                          : [],
+                      ),
+                    )
+                  }
+                />
+              ) : null}
               <CollectionMembersStatus
                 state={page.memberState ?? 'ready'}
                 retrying={readingMembers}
@@ -2250,6 +2271,42 @@ function CollectionPageLifetime({
                     if (transfer === null) setMemberOrder(memberId, after);
                   }}
                   onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
+                  renderApplications={
+                    isCurrent('collection_member.update')
+                      ? (memberId) =>
+                          applicationMemberId === memberId ? (
+                            <SubjectApplicationsEditor
+                              key={memberId}
+                              target={{ scope: 'collection', collectionId: page.id, memberId }}
+                              csrf={() =>
+                                isCurrent('collection_member.update')
+                                  ? admission.csrf('collection_member.update')
+                                  : null
+                              }
+                              onSaved={() => {
+                                applicationsChanged.current = true;
+                              }}
+                              onClose={() => {
+                                setApplicationMemberId(undefined);
+                                if (applicationsChanged.current && !draftChanged) void reloadEditor();
+                                applicationsChanged.current = false;
+                              }}
+                            />
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={
+                                applicationMemberId !== undefined || pending || draftFrozen || transfer !== null
+                              }
+                              onClick={() => setApplicationMemberId(memberId)}
+                            >
+                              {m.collection_applications()}
+                            </Button>
+                          )
+                      : undefined
+                  }
+
                   boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
                   onNoteChange={(memberId, note) => {
                     if (

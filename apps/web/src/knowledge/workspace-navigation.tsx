@@ -1,3 +1,6 @@
+import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { coverSrc } from '../media/cover-src';
+import { searchContentSubjects } from '../threads/content-subject-search';
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -31,6 +34,8 @@ export function KnowledgeWorkspaceNavigation({
 }) {
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
+  const [subjects, setSubjects] = useState<EntityPickerSubject[]>([]);
+  const appliedSubjectId = subjects[0]?.id;
   const regionId = useId();
   const titleId = `${regionId}-title`;
   const options = { locale: locale as never };
@@ -47,6 +52,7 @@ export function KnowledgeWorkspaceNavigation({
             notebookId: outline.notebookId,
             parentPlacementId: outline.parentPlacementId,
             cursor: outline.cursor ?? null,
+            ...(appliedSubjectId ? { appliedSubjectId } : {}),
           },
           binding,
         );
@@ -56,7 +62,7 @@ export function KnowledgeWorkspaceNavigation({
         return { state: result.state === 'stale' || result.state === 'not-found' ? 'changed' : 'unavailable' };
       },
     }),
-    [operations, binding],
+    [operations, binding, appliedSubjectId],
   );
   const lifetime = useMemo(() => ({}), [binding.viewer, binding.csrfToken, address.documentId, operations]);
   const selectNavigation = useShellContextNavigationSelection(lifetime);
@@ -108,8 +114,18 @@ export function KnowledgeWorkspaceNavigation({
           {m.knowledge_workspace_navigation_open({}, options)}
         </Button>
         <div id={regionId} hidden={!open}>
+          {open && admission === 'available' ? (
+            <EntityPicker
+              label={m.collection_application_filter({}, options)}
+              search={searchContentSubjects}
+              value={subjects}
+              onValueChange={setSubjects}
+              src={coverSrc}
+            />
+          ) : null}
           {opened && (
             <KnowledgeNavigationEntry
+              key={appliedSubjectId ?? 'unfiltered'}
               address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
               locale={locale}
               binding={JSON.stringify(binding)}

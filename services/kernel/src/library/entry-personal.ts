@@ -18,7 +18,7 @@ import { newId, routeOf } from '../route/route.ts';
 import { createLibraryCommandRunner, libraryCommandReceiptDigestForActor } from './command-support.ts';
 import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import { withEntryPersonalReadSnapshot } from './entry-personal-read-connection.ts';
 import {
   EntryAnnotationReviewStoppedError,
@@ -636,24 +636,116 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     });
   }
 
+  async function requirePersonalReader(client: QueryClient, account: AccountActor): Promise<number> {
+    const route = requireRoute(account.accountId);
+    const current = await readAccount(client, route, account.accountId);
+    if (
+      !current ||
+      current.kind !== 'actor' ||
+      current.state !== 'active' ||
+      current.fenced ||
+      !Number.isSafeInteger(account.authnEpoch) ||
+      account.authnEpoch < 1 ||
+      current.minimumAuthnEpoch > BigInt(account.authnEpoch)
+    )
+      throw new GrantDeniedError();
+    return route;
+  }
+
+  async function listSubjectApplications(actor: Actor, subjectId: string) {
+    const account = owner(actor, 'library_entry:read');
+    requireRoute(subjectId);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, undefined, deadline);
+    const capture = () =>
+      withEntryPersonalReadSnapshot(pool, deadline, async (client) => {
+        const route = await requirePersonalReader(client, account);
+        const result = await client.query<{ ids: string[]; transactionId: string }>(
+          `SELECT applied_subject_ids AS ids, transaction_id AS "transactionId" FROM library.entry_personal_fact
+          WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+          [route, account.accountId, canonical],
+        );
+        return result.rows[0];
+      });
+    const original = await capture();
+    if (!original?.ids.length) return { appliedSubjectIds: [] };
+    const readable = new Set(await readableSubjects(dependencies, account, original.ids));
+    if ((await capture())?.transactionId !== original.transactionId) throw new ProblemError('conflict');
+    return { appliedSubjectIds: original.ids.filter((id) => readable.has(id)) };
+  }
+
+  async function setSubjectApplication(
+    actor: Actor,
+    subjectId: string,
+    appliedSubjectId: string,
+    present: boolean,
+    requestKey: string,
+  ) {
+    const account = owner(actor, 'library_entry:update');
+    requireRoute(subjectId);
+    requireRoute(appliedSubjectId);
+    return runner.ownAccountPrepared(
+      actor,
+      {
+        action: 'library_entry:update',
+        kind: 'library.entry.subject_application.set',
+        requestKey,
+        input: { subjectId, appliedSubjectId, present },
+        async prepare(attempt) {
+          try {
+            const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time);
+            if (present && !(await resolveSubject(dependencies, account, appliedSubjectId, attempt.time)))
+              throw new LibraryNotFoundError();
+            return { canonical };
+          } catch (error) {
+            return { error };
+          }
+        },
+      },
+      async (tx, command, prepared) => {
+        if ('error' in prepared) throw prepared.error;
+        const route = requireRoute(account.accountId);
+        const time = authoritativeTimeValue(command.time);
+        const anchor = [route, account.accountId, prepared.canonical];
+        const value = { appliedSubjectId, present };
+        if (present) {
+          await tx.query(
+            `INSERT INTO library.entry_personal_fact
+            (route,account_id,subject_id,fact_id,created_at,updated_at,transaction_id)
+            VALUES ($1,$2,$3,$4,$5,$5,$6) ON CONFLICT DO NOTHING`,
+            [...anchor, newFactId(route, prepared.canonical), time, command.transactionId],
+          );
+        }
+        const current = await tx.query<{ ids: string[] }>(
+          `SELECT applied_subject_ids AS ids FROM library.entry_personal_fact
+          WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+          anchor,
+        );
+        const ids = current.rows[0]?.ids ?? [];
+        if (ids.includes(appliedSubjectId) === present) return noEffect(value);
+        if (present && ids.length >= 32) throw new LibraryConflictError();
+        const next = present ? [...ids, appliedSubjectId].sort() : ids.filter((id) => id !== appliedSubjectId);
+        await tx.query(
+          `UPDATE library.entry_personal_fact SET applied_subject_ids=$4,updated_at=$5,transaction_id=$6
+          WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+          [...anchor, next, time, command.transactionId],
+        );
+        return {
+          value,
+          events: [event('com.rezics.library.entry.annotations.updated.v1', account.accountId, prepared.canonical)],
+        };
+      },
+    );
+  }
+
   async function readPersonalEntry(actor: Actor, subjectId: string): Promise<PersonalEntry> {
     const account = owner(actor, 'library_entry:read');
     requireRoute(subjectId);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, undefined, deadline);
     return withEntryPersonalReadSnapshot(pool, deadline, async (client) => {
-      const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
-      if (
-        !current ||
-        current.kind !== 'actor' ||
-        current.state !== 'active' ||
-        current.fenced ||
-        !Number.isSafeInteger(account.authnEpoch) ||
-        account.authnEpoch < 1 ||
-        current.minimumAuthnEpoch > BigInt(account.authnEpoch)
-      )
-        throw new GrantDeniedError();
-      return readPersonal(client, requireRoute(account.accountId), account.accountId, canonical);
+      const route = await requirePersonalReader(client, account);
+      return readPersonal(client, route, account.accountId, canonical);
     });
   }
 
@@ -670,17 +762,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const canonical = await resolveCanonicalSubject(dependencies, account, subjectId, undefined, deadline);
     return withEntryPersonalReadSnapshot(pool, deadline, async (client) => {
-      const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
-      if (
-        !current ||
-        current.kind !== 'actor' ||
-        current.state !== 'active' ||
-        current.fenced ||
-        !Number.isSafeInteger(account.authnEpoch) ||
-        account.authnEpoch < 1 ||
-        current.minimumAuthnEpoch > BigInt(account.authnEpoch)
-      )
-        throw new GrantDeniedError();
+      const route = await requirePersonalReader(client, account);
       const found = await client.query<ObservationRow>(
         `SELECT provider,record_id AS "recordId",revision,privacy_status AS "privacyStatus",
           privacy_meaning AS "privacyMeaning",privacy_source_value AS "privacySourceValue",
@@ -691,7 +773,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
          FROM library.entry_source_observation
          WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5`,
-        [requireRoute(account.accountId), account.accountId, canonical, parsedProvider, parsedRecordId],
+        [route, account.accountId, canonical, parsedProvider, parsedRecordId],
       );
       return found.rows[0] ? observation(found.rows[0]) : null;
     });
@@ -1175,6 +1257,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     receiptDigest,
     readCommandReceipt,
     readPersonalEntry,
+    listSubjectApplications,
+    setSubjectApplication,
     readSourceObservation: (...args: Parameters<typeof readSourceObservation>) =>
       withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => readSourceObservation(...args)),
     saveAnnotations: (...args: Parameters<typeof saveAnnotations>) =>

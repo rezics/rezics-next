@@ -24909,6 +24909,7 @@ export declare function revisionDisclosureRoutes(app: ReturnType<typeof knowledg
                                         cursor?: string;
                                         parentPlacementId?: string;
                                         revisionId?: string;
+                                        appliedSubjectId?: string;
                                     };
                                     headers: unknown;
                                     response: {

@@ -4,6 +4,7 @@ import {
   type CollectionPublicationEpisodes,
 } from './collection-publication-episodes.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { writeCollectionMemberApplication } from './collection-member-applications.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { prepareBuiltinMaterialization } from './builtin-materialization.ts';
 import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
@@ -29,6 +30,7 @@ import { configureReceiptKeys, receiptKeysFor } from '../command/receipt-key.ts'
 import {
   authoritativeTimeValue,
   currentCommand,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type CommandAttempt,
@@ -403,6 +405,7 @@ export function createCollectionCommands(config: {
     addMember,
     moveMember,
     updateMemberNote,
+    setMemberApplication,
     removeMember,
     restoreMember,
     ...createCollectionBatchCommands(config, mutate),
@@ -1199,6 +1202,52 @@ export function createCollectionCommands(config: {
         await touchCollection(tx, route, collectionId, command.time, command.transactionId);
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
+    );
+  }
+
+  async function setMemberApplication(
+    actor: Actor,
+    collectionId: string,
+    memberId: string,
+    appliedSubjectId: string,
+    present: boolean,
+    requestKey: string,
+  ) {
+    collectionRoute(memberId);
+    if (routeOf(appliedSubjectId) === null) throw invalid();
+    const owner = accountActor(actor);
+    return mutate(
+      owner,
+      collectionId,
+      'collection:update',
+      'library.collection.member.application',
+      requestKey,
+      { collectionId, memberId, appliedSubjectId, present },
+      async (tx, command, route) => {
+        const result = await writeCollectionMemberApplication(tx, {
+          route,
+          collectionId,
+          memberId,
+          appliedSubjectId,
+          present,
+        });
+        const value = { appliedSubjectId, present };
+        if (!result.changed) return noEffect(value);
+        await touchCollection(tx, route, collectionId, command.time, command.transactionId, true);
+        return { value, events: [memberEvent(collectionId, memberId, result.memberSubjectId)] };
+      },
+      undefined,
+      present
+        ? async (time) => {
+            const subject = await resolveSubject(
+              { pool, access, ...(clock ? { clock } : {}) },
+              owner,
+              appliedSubjectId,
+              time,
+            );
+            if (!subject) throw notFound();
+          }
+        : undefined,
     );
   }
 

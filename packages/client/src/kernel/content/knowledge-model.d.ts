@@ -30,6 +30,7 @@ export type KnowledgeOwnedNotebookPageInput = KnowledgePageInput & Readonly<{
 export type KnowledgeOutlinePageInput = KnowledgePageInput & Readonly<{
     parentPlacementId?: string;
     revisionId?: string;
+    appliedSubjectId?: string;
 }>;
 export type KnowledgeStructureHistoryInput = KnowledgePageInput;
 export type KnowledgeMovePlacementInput = Readonly<{

@@ -427,6 +427,8 @@ function fullSubjectPage() {
 const collectionParams = t.Object({ collectionId: id }, closed);
 const collectionPublicationParams = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
 const memberParams = t.Object({ collectionId: id, memberId: id }, closed);
+const applicationParams = t.Object({ collectionId: id, memberId: id, appliedSubjectId: id }, closed);
+const applicationResponse = t.Object({ appliedSubjectId: id, present: t.Boolean() }, closed);
 function headers() {
   return memoizedValue(headers, () =>
     t.Object({
@@ -1530,6 +1532,102 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           destination: await writtenCurated(result.value.destination, actor, job.deadline),
           members: result.value.members.map(memberView),
         };
+      },
+    )
+    .get(
+      '/v1/collections/:collectionId/members/:memberId/applications',
+      {
+        params: memberParams,
+        response: {
+          200: t.Object({ appliedSubjectIds: t.Array(id, { maxItems: 32 }) }, closed),
+          ...failures(),
+          422: problemSchema('unsupported_query'),
+        },
+        detail: detail('collection_member.application_list', 'collection:read', true),
+      },
+      async ({ params, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          read().listMemberApplications(actor, params.collectionId, params.memberId, job.deadline),
+        );
+      },
+    )
+    .get(
+      '/v1/collections/:collectionId/applications/:appliedSubjectId/members',
+      {
+        params: t.Object({ collectionId: id, appliedSubjectId: id }, closed),
+        query: t.Object(
+          { cursor: t.Optional(t.String()), limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
+          closed,
+        ),
+        response: {
+          200: t.Object({ members: t.Array(memberSchema), next: nullableString }, closed),
+          ...failures(),
+          422: problemSchema('unsupported_query'),
+        },
+        detail: detail('collection_member.application_members', 'collection:read', true),
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          read().listAppliedMembers(actor, params.collectionId, params.appliedSubjectId, query, job.deadline),
+        );
+      },
+    )
+    .put(
+      '/v1/collections/:collectionId/members/:memberId/applications/:appliedSubjectId',
+      {
+        params: applicationParams,
+        headers: headers(),
+        response: { 200: applicationResponse, ...failures() },
+        detail: detail('collection_member.application_put', 'collection:update'),
+      },
+      async ({ params, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            write().setMemberApplication(
+              actor,
+              params.collectionId,
+              params.memberId,
+              params.appliedSubjectId,
+              true,
+              key,
+            ),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return result.value;
+      },
+    )
+    .delete(
+      '/v1/collections/:collectionId/members/:memberId/applications/:appliedSubjectId',
+      {
+        params: applicationParams,
+        headers: headers(),
+        response: { 200: applicationResponse, ...failures() },
+        detail: detail('collection_member.application_delete', 'collection:update'),
+      },
+      async ({ params, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            write().setMemberApplication(
+              actor,
+              params.collectionId,
+              params.memberId,
+              params.appliedSubjectId,
+              false,
+              key,
+            ),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return result.value;
       },
     )
     .patch(

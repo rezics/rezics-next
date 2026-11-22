@@ -58,6 +58,7 @@ export type KnowledgeDocumentCommand = Readonly<{
   structureRevisionId: string;
   parentPlacementId: string | null;
   subjectId: string;
+  subjectIds?: readonly string[];
   title: string;
   language: string | null;
   body: DocumentSnapshot;
@@ -279,7 +280,7 @@ export async function createKnowledgePrivateDocument(
       body: input.body,
       references: [...(input.references ?? [])],
       licence: input.licence,
-      subjectIds: [input.subjectId],
+      subjectIds: [...new Set([input.subjectId, ...(input.subjectIds ?? [])])],
       expectedStructureRevisionId: input.structureRevisionId,
       parentPlacementId: input.parentPlacementId,
     },

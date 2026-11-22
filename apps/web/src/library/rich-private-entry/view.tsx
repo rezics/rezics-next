@@ -1,3 +1,4 @@
+import { SubjectApplicationsEditor } from '../collection-applications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -110,6 +111,7 @@ function PrivateEntryReview({
   const queryClient = useQueryClient();
   const viewer = session.state === 'signed-in' ? session.subject : null;
   const csrfToken = session.state === 'signed-in' ? session.csrfToken : null;
+  const [applicationsOpen, setApplicationsOpen] = useState(false);
   const enabled = readAllowed && admitted && viewer !== null && csrfToken !== null;
   const mounted = useRef(true);
   const retired = useRef(false);
@@ -835,6 +837,21 @@ function PrivateEntryReview({
   return (
     <EntryWorkspace
       subject={subject}
+      applications={
+        writeAllowed && csrfToken ? (
+          applicationsOpen ? (
+            <SubjectApplicationsEditor
+              target={{ scope: 'personal', subjectId: subject.id }}
+              csrf={() => (currentResult() && writeAllowed ? csrfToken : null)}
+              onClose={() => setApplicationsOpen(false)}
+            />
+          ) : (
+            <Button type="button" variant="outline" onClick={() => setApplicationsOpen(true)}>
+              {m.collection_applications()}
+            </Button>
+          )
+        ) : null
+      }
       entry={entry}
       diaryHref={diaryHref}
       onDiaryClick={followDiary}

@@ -264,6 +264,7 @@ test('document create sends the observed structure revision and explicit parent 
     structureRevisionId,
     parentPlacementId,
     subjectId: notebookSubjectId,
+    subjectIds: [knowledgeSubjectId, notebookSubjectId, knowledgeSubjectId],
     title: 'Scene',
     language: 'en',
     body: knowledgeBody('What happens in this scene.'),
@@ -279,7 +280,6 @@ test('document create sends the observed structure revision and explicit parent 
   expect(body).toMatchObject({
     expectedStructureRevisionId: structureRevisionId,
     parentPlacementId,
-    subjectIds: [notebookSubjectId],
+    subjectIds: [notebookSubjectId, knowledgeSubjectId],
   });
-  expect(JSON.stringify(body)).not.toContain(knowledgeSubjectId);
 });

@@ -193,3 +193,44 @@ test('owners reload paged notebooks and current outlines, then review publicatio
   expect(revoked.status).toBe(401);
   expect(revoked.value.code).toBe('invalid_credentials');
 });
+
+test('the private outline filters by the current document application of a general Subject', async () => {
+  const { subject: anchor } = await fixture.command('/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: 'Notebook outline anchor' },
+  });
+  const { subject: applied } = await fixture.command('/v1/subjects', {
+    type: 'schema:Person',
+    labels: { en: 'Person referenced by this notebook' },
+  });
+  const notebook = await fixture.command('/v1/knowledge/notebooks', { subjectId: anchor.id, title: 'Applications' });
+  const first = await fixture.command(`/v1/knowledge/notebooks/${notebook.notebookId}/documents`, {
+    ...documentInput('Referenced person'),
+    subjectIds: [applied.id],
+    expectedStructureRevisionId: notebook.structureRevisionId,
+    parentPlacementId: null,
+  });
+  await fixture.command(`/v1/knowledge/notebooks/${notebook.notebookId}/documents`, {
+    ...documentInput('Unrelated outline entry'),
+    expectedStructureRevisionId: first.structureRevisionId,
+    parentPlacementId: null,
+  });
+  const outline = `/v1/accounts/${fixture.author.actor.accountId}/knowledge/notebooks/${notebook.notebookId}/outline`;
+  const filtered = `${outline}?appliedSubjectId=${applied.id}`;
+  const matched = await fixture.call('GET', filtered);
+  expect(matched.status).toBe(200);
+  expect(matched.value.placements).toEqual([expect.objectContaining({ documentId: first.documentId })]);
+  expect((await fixture.call('GET', filtered, undefined, { other: true })).status).toBe(404);
+  await fixture.command(
+    `/v1/knowledge/documents/${first.documentId}/revisions:revise`,
+    {
+      ...documentInput('The association was removed'),
+      expectedHeadRevisionId: first.revisionId,
+    },
+    200,
+  );
+  const empty = await fixture.call('GET', filtered);
+  expect(empty.status).toBe(200);
+  expect(empty.value.placements).toEqual([]);
+  expect((await fixture.call('GET', outline)).value.placements).toHaveLength(2);
+});

@@ -188,6 +188,19 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
+    listMemberApplications: (viewer: Actor, collectionId: string, memberId: string, deadline: number) => Promise<{
+        appliedSubjectIds: string[];
+    }>;
+    listAppliedMembers: (viewer: Actor, collectionId: string, appliedSubjectId: string, options: {
+        cursor?: string | null;
+        limit?: number;
+    }, deadline: number) => Promise<{
+        members: MemberView[];
+        next: null;
+    } | {
+        members: MemberView[];
+        next: string;
+    }>;
     readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number, readViewerFacts?: ReadMemberViewerFacts, beforeGeneralPage?: () => Promise<void>) => Promise<import("../search/service-contract.ts").SavedCatalogueMembersPage | {
         preparing: true;
     } | {
