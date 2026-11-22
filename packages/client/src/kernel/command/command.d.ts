@@ -208,6 +208,8 @@ export declare class CommandCommitUncertainError extends Error {
     readonly partition: number;
     constructor(partition: number, cause: unknown);
 }
+/** Only the checkout that dispatched COMMIT can report an unconfirmed outcome. */
+export declare function isUnconfirmedCommandCommit(error: unknown): error is CommandCommitUncertainError;
 export declare class TooManyEventsError extends Error {
     readonly partition: number;
     readonly count: number;

@@ -179,6 +179,17 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                         detail: unknown;
                         errors: unknown;
                     };
+                    500: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
+                    };
                     503: Response | {
                         type: unknown;
                         title: unknown;

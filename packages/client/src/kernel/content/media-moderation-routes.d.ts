@@ -176,6 +176,17 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                         detail: unknown;
                         errors: unknown;
                     };
+                    500: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
+                    };
                     503: Response | {
                         type: unknown;
                         title: unknown;
@@ -7093,10 +7104,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         };
                         503: Response | {
                             type: unknown;
@@ -7218,10 +7229,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         };
                         503: Response | {
                             type: unknown;
@@ -7436,13 +7447,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
         }>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
@@ -7562,10 +7573,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
         };
         503: {
             type: unknown;
@@ -7664,10 +7675,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
             request_id: string;
             detail: unknown;
             errors: unknown;
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
         };
         503: {
             type: unknown;
@@ -7856,13 +7867,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             }>;
             503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
@@ -8036,10 +8047,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 status: number;
                 code: unknown;
                 retryable: unknown;
-                effect_status: "applied" | "not_applicable" | "not_applied";
                 request_id: string;
                 detail: unknown;
                 errors: unknown;
+                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             };
             503: {
                 type: unknown;
@@ -8138,10 +8149,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 status: number;
                 code: unknown;
                 retryable: unknown;
-                effect_status: "applied" | "not_applicable" | "not_applied";
                 request_id: string;
                 detail: unknown;
                 errors: unknown;
+                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             };
             503: {
                 type: unknown;
@@ -8245,10 +8256,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                     status: number;
                     code: unknown;
                     retryable: unknown;
-                    effect_status: "applied" | "not_applicable" | "not_applied";
                     request_id: string;
                     detail: unknown;
                     errors: unknown;
+                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                 };
                 503: {
                     type: unknown;
@@ -8381,10 +8392,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 status: number;
                 code: unknown;
                 retryable: unknown;
-                effect_status: "applied" | "not_applicable" | "not_applied";
                 request_id: string;
                 detail: unknown;
                 errors: unknown;
+                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             };
             503: {
                 type: unknown;
@@ -8483,10 +8494,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                 status: number;
                 code: unknown;
                 retryable: unknown;
-                effect_status: "applied" | "not_applicable" | "not_applied";
                 request_id: string;
                 detail: unknown;
                 errors: unknown;
+                effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             };
             503: {
                 type: unknown;
@@ -8590,10 +8601,10 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                     status: number;
                     code: unknown;
                     retryable: unknown;
-                    effect_status: "applied" | "not_applicable" | "not_applied";
                     request_id: string;
                     detail: unknown;
                     errors: unknown;
+                    effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                 };
                 503: {
                     type: unknown;
@@ -8796,13 +8807,13 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
         }>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
