@@ -10,7 +10,7 @@ import type { RatingCursorContext } from './rating-cursor.ts';
 export type SearchCursorBinding = { operation: string; request: unknown; principal: string };
 export type SearchSortValue = string | number | null;
 export type SearchCursorResult =
-  | { ok: true; generation: number; after: SearchSortValue[] }
+  | { ok: true; generation: number; indexUuid?: string; after: SearchSortValue[] }
   | { ok: false; reason: 'expired' | 'invalid' };
 
 function cursorBinding(binding: SearchCursorBinding) {
@@ -65,17 +65,19 @@ function decodeAfter(values: readonly string[]): SearchSortValue[] | null {
 export async function encodeSearchCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
-  cursor: { generation: number; after: readonly SearchSortValue[] },
+  cursor: { generation: number; indexUuid?: string; after: readonly SearchSortValue[] },
   now = Date.now(),
 ): Promise<string> {
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid search cursor time');
-  return encodeListCursor(
-    ring,
-    cursorBinding(binding),
-    { epoch: cursor.generation, after: encodeAfter(cursor.after) },
-    new Date(now),
-    { profile: 'search' },
-  );
+  const after = encodeAfter(cursor.after);
+  if (cursor.indexUuid !== undefined) {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(cursor.indexUuid)) throw new TypeError('Invalid physical index UUID');
+    // The final key is the stable id on ordinary ranked pages. Preserve the eight-key limit of rating cursors.
+    after.push(`u${cursor.indexUuid}:${after.pop() ?? ''}`);
+  }
+  return encodeListCursor(ring, cursorBinding(binding), { epoch: cursor.generation, after }, new Date(now), {
+    profile: 'search',
+  });
 }
 
 export async function decodeSearchCursor(
@@ -96,8 +98,19 @@ export async function decodeSearchCursor(
   if (!decoded.ok) return decoded;
   if (!decoded.after.every((value): value is string => typeof value === 'string'))
     return { ok: false, reason: 'invalid' };
-  const after = decodeAfter(decoded.after);
-  return after === null ? { ok: false, reason: 'invalid' } : { ok: true, generation: decoded.epoch, after };
+  const keys = [...decoded.after];
+  const last = keys.at(-1);
+  let indexUuid: string | undefined;
+  if (last?.startsWith('u')) {
+    const index = last.indexOf(':');
+    if (index === -1 || !/^[A-Za-z0-9_-]{1,128}$/.test(last.slice(1, index))) return { ok: false, reason: 'invalid' };
+    indexUuid = last.slice(1, index);
+    keys.pop();
+    if (index < last.length - 1) keys.push(last.slice(index + 1));
+  }
+  const after = decodeAfter(keys);
+  if (after === null) return { ok: false, reason: 'invalid' };
+  return { ok: true, generation: decoded.epoch, ...(indexUuid === undefined ? {} : { indexUuid }), after };
 }
 
 /** Confidential locator only. The producer revalidates it against its native retained state. */

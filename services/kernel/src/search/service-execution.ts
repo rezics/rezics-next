@@ -49,6 +49,7 @@ import {
   discoveryIndexUuid,
   hasSubjectNameOrder,
   readSubjectCalendarFormat,
+  readSubjectIndexUuid,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
   subjectGenerations,
@@ -1187,6 +1188,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         invalid('/cursor', 'invalid_format');
       }
 
+      const cursorIndexUuid = cursor?.ok ? cursor.indexUuid : undefined;
       const retained = cursor?.ok ? retainedSearchContinuation(cursor.after) : null;
       if (publicFilters && cursor && !retained) throw new ProblemError('search_restart_required');
       if (!publicFilters && retained) throw new ProblemError('search_restart_required');
@@ -1233,6 +1235,21 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           retained.queried.consumer.meaningDigest !== native?.digest)
       )
         throw new ProblemError('search_restart_required');
+      // Retained reads own a physical PIT or a generation build. A direct, name-addressed query must
+      // independently bracket its engine observation and bind any continuation to that exact index.
+      const directIndexUuid = publicFilters
+        ? undefined
+        : await indexRequest(() => readSubjectIndexUuid(client, prefix, generation));
+      if (cursor && directIndexUuid !== undefined && cursorIndexUuid !== directIndexUuid)
+        throw new ProblemError('search_restart_required');
+      const directCursor = directIndexUuid === undefined ? {} : { indexUuid: directIndexUuid };
+      const assertDirectIndex = async () => {
+        if (
+          directIndexUuid !== undefined &&
+          (await indexRequest(() => readSubjectIndexUuid(client, prefix, generation))) !== directIndexUuid
+        )
+          throw new ProblemError('search_restart_required');
+      };
       const readFormat = () => indexRequest(() => readSubjectSortFormat(client, prefix, generation));
       const format = await (bookPage ? (bookPage.sortFormat ??= readFormat()) : readFormat());
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
@@ -1546,7 +1563,12 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             : {}),
           next: exhausted
             ? null
-            : await encodeSearchCursor(cursors, binding, { generation: generation!, after: after ?? [] }, now),
+            : await encodeSearchCursor(
+                cursors,
+                binding,
+                { generation: generation!, ...directCursor, after: after ?? [] },
+                now,
+              ),
           ...observed,
         }).page;
         await requestStep(async () => readContext?.complete(response));
@@ -1554,6 +1576,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
         if ((await indexRequest(freshAliasGeneration)) !== generation)
           throw new ProblemError('search_restart_required');
+        await assertDirectIndex();
         await assertCurrentRelease();
         return response;
       }
@@ -1750,10 +1773,15 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                     cursors,
                     cursorBinding,
                     rating,
-                    { generation: generation!, phase: ratingPhase!, after: after! },
+                    { generation: generation!, ...directCursor, phase: ratingPhase!, after: after! },
                     now,
                   )
-                : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
+                : await encodeSearchCursor(
+                    cursors,
+                    cursorBinding,
+                    { generation: generation!, ...directCursor, after: after! },
+                    now,
+                  ),
           ...observed,
         }).page;
         // This operation's final observation must follow all query and source work;
@@ -1769,6 +1797,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         };
         await ((bookPage && composedBookCurrent('aliasCurrent', bookPage, String(generation), assertAlias)) ??
           assertAlias());
+        if (directIndexUuid !== undefined) await assertDirectIndex();
         if (retainedRead) {
           await indexRequest(retainedRead.finalize);
           await indexRequest(retainedRead.release);

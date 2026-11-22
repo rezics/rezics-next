@@ -144,7 +144,7 @@ export async function encodeRatingCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   context: RatingCursorContext,
-  cursor: { generation: number; phase: RatingPhase; after: readonly SearchSortValue[] },
+  cursor: { generation: number; indexUuid?: string; phase: RatingPhase; after: readonly SearchSortValue[] },
   now = Date.now(),
 ): Promise<string> {
   if (!validContext(context) || !cursor || !validPosition(context.priorEpoch, cursor.phase, cursor.after))
@@ -155,6 +155,7 @@ export async function encodeRatingCursor(
     binding,
     {
       generation: cursor.generation,
+      ...(cursor.indexUuid === undefined ? {} : { indexUuid: cursor.indexUuid }),
       after: [prefix(context), context.questionId, context.populationId, context.priorEpoch, cursor.phase, ...frontier],
     },
     now,
@@ -196,9 +197,7 @@ export async function decodeRatingCursor(
     priorEpoch !== context.priorEpoch
   )
     return { ok: false, reason: 'restart' };
-  const after = realmToken
-    ? decryptFrontier(ring, context, phase, encodedFrontier[0] as string)
-    : encodedFrontier;
+  const after = realmToken ? decryptFrontier(ring, context, phase, encodedFrontier[0] as string) : encodedFrontier;
   if (!after || (realmToken && !validPosition(signedContext.priorEpoch, phase, after)))
     return { ok: false, reason: 'invalid' };
   return { ok: true, generation: decoded.generation, phase, after };

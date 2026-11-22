@@ -377,3 +377,16 @@ test('hit cursors retain inclusive lifetime and future-skew boundaries and bind 
   ])
     expect(await decodeSearchCursor(ring, scope, bad, issued)).toEqual(invalid);
 });
+
+test('a direct Search continuation authenticates its physical UUID with the complete frontier', async () => {
+  const indexUuid = 'A_b-12';
+  for (const after of [[], [''], [null, 'sort'], [2, 'book-id'], Array.from({ length: 8 }, (_, i) => i)]) {
+    const value = { generation: 3, indexUuid, after };
+    const sealed = await encodeSearchCursor(ring, binding, value, 1000);
+    expect(await decodeSearchCursor(ring, binding, sealed, 1000)).toEqual({ ok: true, ...value });
+    expect(await decodeSearchCursor(ring, { ...binding, operation: 'another' }, sealed, 1000)).toEqual(invalid);
+  }
+  const scoped = await encodeRatingCursor(ring, binding, context, { ...position, indexUuid }, 1000);
+  expect(await decodeSearchCursor(ring, binding, scoped, 1000)).toMatchObject({ ok: true, indexUuid });
+  expect(await decodeRatingCursor(ring, binding, context, scoped, 1000)).toEqual({ ok: true, ...position });
+});
