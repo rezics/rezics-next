@@ -191,6 +191,39 @@ test('a queued creation checks the parent grant again after the competing writer
   }
 });
 
+test('a fresh Book that exhausts its deadline inside a deferred source check rolls back before a receipt is committed', async () => {
+  const rawKey = randomUUID();
+  const key = JSON.stringify(rawKey);
+  const label = 'Deferred source ' + rawKey;
+  const { route } = subjectTarget(routeKey, accounts.writer, rawKey);
+  await admin.query(`CREATE SEQUENCE public.book_source_check_calls;
+    CREATE FUNCTION public.hold_book_source_check() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN PERFORM nextval('public.book_source_check_calls'); PERFORM pg_sleep(4); RETURN NULL; END $$;
+    CREATE CONSTRAINT TRIGGER hold_book_source_check AFTER INSERT ON semantic.subject DEFERRABLE INITIALLY DEFERRED
+      FOR EACH ROW WHEN (NEW.route=${route}) EXECUTE FUNCTION public.hold_book_source_check()`);
+  try {
+    const delayed = await create({ labels: { en: label } }, key);
+    expect((await admin.query('SELECT is_called FROM public.book_source_check_calls')).rows).toEqual([
+      { is_called: true },
+    ]);
+    expect(delayed.body).toMatchObject({ status: 503, code: 'deadline_exceeded' });
+  } finally {
+    // Taking the table lock waits for the original backend's terminal outcome.
+    await admin.query(
+      'DROP TRIGGER hold_book_source_check ON semantic.subject; DROP FUNCTION public.hold_book_source_check(); DROP SEQUENCE public.book_source_check_calls',
+    );
+  }
+  const persisted = () =>
+    admin.query('SELECT subject_id FROM semantic.subject WHERE route=$1 AND canonical_name=$2', [route, label]);
+  expect((await persisted()).rows).toEqual([]);
+  const retry = await create({ labels: { en: label } }, key);
+  expect(retry.response.status).toBe(201);
+  const replay = await create({ labels: { en: label } }, key);
+  expect(replay.response.status).toBe(201);
+  expect(replay.body.subject.id).toBe(retry.body.subject.id);
+  expect((await persisted()).rows).toEqual([{ subject_id: retry.body.subject.id }]);
+}, 15_000);
+
 test('a fresh Book publishes its first label on its original locked point and receipt replay leaves the publication intact', async () => {
   const key = JSON.stringify(randomUUID());
   const book = { labels: { en: 'Initial publication' } };

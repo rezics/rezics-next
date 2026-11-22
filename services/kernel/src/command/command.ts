@@ -1092,6 +1092,8 @@ async function executeCommand<T>(
             );
             publisher.assertLive();
           }
+          // The remaining Source and History checks can still roll back until COMMIT is sent.
+          if (coordinatesBirth && !noEffect) await client.query('SET CONSTRAINTS ALL IMMEDIATE');
           await measureCommandPhase('commit', () =>
             dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(),
           );

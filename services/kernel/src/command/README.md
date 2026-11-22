@@ -31,6 +31,10 @@ predeclared work budget retain their original executor. The request deadline cov
 the transferred advisory lock at transaction completion. A lost acquisition or transfer discards the
 underlying session.
 
+Ordinary fresh Subject creation runs its deferred constraints after recording its receipt, outbox and
+History sources. The original transaction remains open while these checks run. An expired request can
+still roll back during source capture. The separate writing `COMMIT` retains its native acknowledgment boundary.
+
 PostgreSQL can reject a writing `COMMIT` when it checks a deferred integrity constraint.
 An ordinary command propagates the original class 23 server error after observing it on
 its leased connection before a terminal command tag. Serialization and deadlock rejections
