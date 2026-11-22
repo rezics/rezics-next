@@ -34,6 +34,7 @@ import owners from '../identity-epoch-read-owners.sql';
 import sources from '../identity-epoch-read-sources.sql';
 import pending from '../identity-epoch-read-pending.sql';
 import current from '../identity-terminal-closure-current.sql';
+import homeMappings from '../identity-epoch-home-mappings.sql';
 import disclosure from '../identity-epoch-read-review-disclosure.sql';
 import { identitySourceSupportJob } from '../identity-source-support-scope.ts';
 
@@ -419,8 +420,61 @@ async function readIdentityMappingsWith(
     const controlOwners: IdentityOwnerEvidence[] = [],
       pendingRows: IdentityPendingEvidence[] = [],
       currentRows: IdentityControlEvidence[] = [];
+    const localStatement = sourceHomes.size > 1 ? capabilities.read.withReadStatement : undefined;
+    let foreignControl = false;
     for (const home of sourceHomes) {
       const indices = routes.flatMap((route, index) => (partitionOf(route) === home ? [index] : []));
+      if (localStatement) {
+        const localKeys = new Map(indices.map((index) => [originals[index]!, routes[index]!]));
+        const result = await localStatement(
+          pool,
+          (tx) =>
+            tx.query({
+              name: 'semantic_identity_home_mappings_v1',
+              text: homeMappings.sql,
+              values: [home, [...localKeys.keys()], [...localKeys.values()]],
+            }),
+          deadline,
+        );
+        const first = result.rows[0];
+        if (!first) throw new Error('Missing native identity home observation');
+        const owner =
+          first.native_home === null
+            ? undefined
+            : {
+                partition_no: first.native_home,
+                epoch: first.native_epoch,
+                position: first.native_position,
+                write_state: first.native_state,
+              };
+        if (owner) sourceOwners.push(owner);
+        let localControl = false;
+        const localClaims = new Map<string, IdentityPendingEvidence>();
+        for (const {
+          native_home,
+          native_epoch,
+          native_position,
+          native_state,
+          native_current,
+          ...source
+        } of result.rows) {
+          if (!source.subject_id) continue;
+          sourceRows.push(source as IdentitySourceEvidence);
+          if (!source.original || source.control_partition === null || !source.control_group) continue;
+          if (source.control_partition !== home) {
+            foreignControl = true;
+            continue;
+          }
+          localControl = true;
+          if (native_current) {
+            currentRows.push(selectedControlEvidence(native_current));
+            localClaims.set(source.control_group, selectedPendingEvidence(native_current));
+          }
+        }
+        if (localControl && owner) controlOwners.push(owner);
+        pendingRows.push(...localClaims.values());
+        continue;
+      }
       const local = await capabilities.read.withReadTransaction(
         pool,
         async (tx) => {
@@ -454,6 +508,13 @@ async function readIdentityMappingsWith(
           },
         };
     }
+    if (localStatement && !foreignControl)
+      return { singleSnapshot: false, evidence: { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows } };
+    // A foreign mapping may share a group with another original. Reread each control at its own
+    // home in the original phase order, including every local control, before double collection.
+    controlOwners.length = 0;
+    pendingRows.length = 0;
+    currentRows.length = 0;
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
       const group = available.filter((row) => row.control_partition === home);

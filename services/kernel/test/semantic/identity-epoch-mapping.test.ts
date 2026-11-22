@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { createNativeIdentityCapabilities } from '../../src/semantic/identity-adapter-runtime.ts';
+import { createIdentityReaders } from '../../src/semantic/identity-adapters/identity-epoch-read.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
@@ -39,6 +41,52 @@ test('native mapping drains actual admitted cross-home effects with real receipt
     await expect(f.publish(input.job)).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
     expect((await f.readJob(input.job))!.state).not.toBe('published');
     expect(f.operationBackendIds().size).toBeLessThanOrEqual(1);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('multi-home mapping collects complete local proofs twice and detects a real admission between homes', async () => {
+  const f = await createIdentityMappingFixture({ poolMax: 1 });
+  try {
+    const caps = createNativeIdentityCapabilities();
+    const { withReadStatement, ...transactions } = caps.read;
+    const control = createIdentityReaders({ ...caps, read: transactions });
+    const originals = await Promise.all(
+      [0x7310, 0x7320].map(async (route) => (await f.create('Local mapping', route)).subject.id),
+    );
+    const [redirected, survivor] = originals as [string, string];
+    const unknown = newId(0x7310);
+    const keys = [redirected, survivor, unknown, redirected];
+    const expected = await control.readIdentityMappings(f.pool, keys);
+    expect(expected.map(({ state }) => state)).toEqual(['mapped', 'mapped', 'absent', 'mapped']);
+    let reads = 0;
+    let admit = false;
+    let job: Awaited<ReturnType<typeof f.admit>> | undefined;
+    const reader = createIdentityReaders({
+      ...caps,
+      read: {
+        ...caps.read,
+        async withReadStatement(pool, read, deadline) {
+          const result = await withReadStatement!(pool, read, deadline);
+          if (++reads === 2 && admit)
+            job = await f.admit({ kind: 'merge', redirected, survivor, release: release.digest });
+          return result;
+        },
+      },
+    });
+    expect(await reader.readIdentityMappings(f.pool, keys)).toEqual(expected);
+    expect(reads).toBe(4);
+    reads = 0;
+    admit = true;
+    const changed = await reader.readIdentityMappings(f.pool, keys);
+    expect(changed.every(({ state }) => state === 'unavailable')).toBe(true);
+    expect(reads).toBe(4);
+    expect(job).toBeDefined();
+    await f.drainMapping(job!, 512);
+    expect(await f.nativeDirectRedirect(redirected)).toBe(survivor);
+    expect(await reader.readIdentityMappings(f.pool, keys)).toEqual(await control.readIdentityMappings(f.pool, keys));
+    expect(f.operationBackendIds().size).toBe(1);
   } finally {
     await f.close();
   }
