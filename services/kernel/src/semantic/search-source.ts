@@ -188,7 +188,7 @@ function observeSubjectSnapshot<T extends SubjectSnapshot>(
 export function subjectSource(
   pool: Pool,
   routeKey?: Uint8Array,
-): SubjectSource &
+): Omit<SubjectSource, 'read'> &
   SubjectSourceKeyPages & {
     read(partition: number, ids: readonly string[], observe?: SubjectSnapshotObserver): Promise<SubjectSnapshot>;
     canonicalNames: SubjectCanonicalNames;

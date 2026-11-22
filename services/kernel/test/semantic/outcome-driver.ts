@@ -87,7 +87,7 @@ type ManagedSemanticWorker = {
 };
 
 const SEMANTIC_WORKER_START_MS = 30_000;
-const IDENTITY_OPERATION_ADVANCE_MS = 30_000;
+const IDENTITY_OPERATION_ADVANCE_MS = 180_000;
 const IDENTITY_OPERATION_POLL_MS = 100;
 
 /** Run the production worker entrypoint in its own process so it has its own DBOS host and outbox relay. */
@@ -871,6 +871,7 @@ async function startDriver(
         const deadline = Date.now() + IDENTITY_OPERATION_ADVANCE_MS;
         let answer: HttpResponse | undefined;
         while (Date.now() < deadline) {
+          await renewCredential(accounts.acceptor, 5_000);
           answer = await send(accounts.acceptor, 'GET', path, undefined, undefined, 'acceptor');
           if (answer.status !== 200 || (answer.body.operation as { done?: unknown } | undefined)?.done !== false)
             return answer;

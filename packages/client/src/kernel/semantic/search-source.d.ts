@@ -20,7 +20,7 @@ export declare const readSearchCanonicalGenerationSql = "SELECT last_value::text
 export declare function readSearchCanonicalGeneration(pool: CommandTransaction): Promise<string>;
 export declare function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
 type SubjectSnapshotObserver = (client: Pick<PoolClient, 'query'>) => Promise<void>;
-export declare function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages & {
+export declare function subjectSource(pool: Pool, routeKey?: Uint8Array): Omit<SubjectSource, 'read'> & SubjectSourceKeyPages & {
     read(partition: number, ids: readonly string[], observe?: SubjectSnapshotObserver): Promise<SubjectSnapshot>;
     canonicalNames: SubjectCanonicalNames;
     conceptBrowse: ReturnType<typeof relationSource>['conceptBrowse'];

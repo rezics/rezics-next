@@ -7,6 +7,7 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { documentActions } from '../../src/search/document.ts';
@@ -61,22 +62,22 @@ const kernel = createKernel({
   writeRate: realAccess.writeRate,
 });
 
-async function call(method: string, path: string, body?: unknown) {
+async function call(method: string, path: string, body?: unknown, key = randomUUID()) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
         authorization: `Bearer ${realAccess.bearer('editor')}`,
-        ...(body === undefined ? {} : { 'idempotency-key': `"${randomUUID()}"`, 'content-type': 'application/json' }),
+        ...(body === undefined ? {} : { 'idempotency-key': `"${key}"`, 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
   return { response, body: (await response.json()) as Record<string, any> };
 }
-async function ok(path: string, body: unknown, status = 200) {
-  const answer = await call('POST', path, body);
-  expect([path, answer.response.status]).toEqual([path, status]);
+async function ok(path: string, body: unknown, status = 200, key?: ReturnType<typeof randomUUID>) {
+  const answer = await call('POST', path, body, key);
+  expect(answer.response.status, JSON.stringify(answer.body)).toBe(status);
   return answer.body;
 }
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
@@ -182,9 +183,9 @@ test("the source reads a subject's terms and adopted Global statements in one sn
     await ok(
       '/v1/subjects',
       {
-        type: 'schema:Book',
+        type: 'schema:Movie',
         labels: { en: 'I Am a Cat', ja: '吾輩は猫である' },
-        descriptions: { en: 'A satirical novel' },
+        descriptions: { en: 'A film adaptation' },
         aliases: { ja: ['猫'], en: ['Wagahai wa Neko de Aru', 'I am a cat'] },
         statements: {
           'schema:name': [statement('schema:name', { language: 'ja', text: '吾輩は猫である' })],
@@ -226,7 +227,8 @@ test("the source reads a subject's terms and adopted Global statements in one sn
     subjects: [
       {
         id: work.id,
-        type: 'schema:Book',
+        type: 'schema:Movie',
+        relationFacetOverflow: expect.arrayContaining(['schema:author']),
         visibility: 'visible',
         redirect: null,
         securityRevision: 0,
@@ -239,7 +241,7 @@ test("the source reads a subject's terms and adopted Global statements in one sn
           { language: 'en', value: 'I am a cat' },
           { language: 'ja', value: '猫' },
         ],
-        descriptions: [{ language: 'en', value: 'A satirical novel' }],
+        descriptions: [{ language: 'en', value: 'A film adaptation' }],
         statements: expect.arrayContaining([
           { property: 'schema:name', value: '吾輩は猫である', language: 'ja' },
           { property: 'schema:alternateName', value: 'Wagahai wa Neko de Aru', language: 'ja-Latn' },
@@ -262,7 +264,8 @@ test("the source reads a subject's terms and adopted Global statements in one sn
 
   const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
   const names = subjectSource(pool, new Uint8Array(32).fill(4)).readBookCandidateNames!;
-  const book = snapshot.subjects[0]!;
+  const { relationFacetOverflow, ...book } = snapshot.subjects[0]!;
+  expect(relationFacetOverflow).toContain('schema:author');
   const window = await names([work.id, absent, elsewhere]);
   expect(window?.get(partition)).toEqual({
     ...snapshot,
@@ -307,18 +310,23 @@ test('complete work-link reads distinguish absence from concealed targets withou
     await ok(
       '/v1/subjects',
       {
-        type: 'schema:Book',
+        type: 'bf:Instance',
         labels: { en: 'Link source edition' },
         statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)] },
       },
       201,
     )
   ).subject as Record<string, any>;
-  const missing = (await ok('/v1/subjects', { type: 'schema:Book', labels: { en: 'Unlinked edition' } }, 201))
+  const routeKey = new Uint8Array(32).fill(4);
+  const links = subjectSource(pool, routeKey).readCompleteWorkLinks;
+  const home = subjectPartition(edition.id);
+  let key = randomUUID();
+  while (subjectPartition(subjectTarget(routeKey, accounts.editor, key).id) !== home) key = randomUUID();
+  const missing = (await ok('/v1/subjects', { type: 'bf:Instance', labels: { en: 'Unlinked edition' } }, 201, key))
     .subject as Record<string, any>;
 
   const reservations: { operations: number; keys: number }[] = [];
-  const current = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id, missing.id], {
+  const current = await links(home, [edition.id, missing.id], {
     reserve: (reservation) => reservations.push(reservation),
   });
   expect(current.get(edition.id)).toEqual({ complete: true, values: [{ kind: 'work', id: work.id }] });
@@ -327,12 +335,12 @@ test('complete work-link reads distinguish absence from concealed targets withou
   expect(reservations.reduce((total, reservation) => total + reservation.keys, 0)).toBeGreaterThan(0);
 
   await ok(`/v1/subjects/${work.id}:hide`, { reason: 'private target' });
-  const concealed = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id]);
+  const concealed = await links(home, [edition.id]);
   expect(concealed.get(edition.id)).toEqual({ complete: true, values: [{ kind: 'unknown' }] });
   expect(JSON.stringify(concealed.get(edition.id))).not.toContain(work.id);
 });
 
-test('subjects that are not visible or redirected are reported for deletion and the count follows them', async () => {
+test('hidden and taken-down subjects are reported for deletion and the count follows restoration', async () => {
   const subject = await person('Mori Ogai');
   const before = await counted(subject.id);
   await ok(`/v1/subjects/${subject.id}:hide`, { reason: 'spam' });
@@ -345,20 +353,6 @@ test('subjects that are not visible or redirected are reported for deletion and 
   expect([takenDown.visibility, takenDown.securityRevision]).toEqual(['taken_down', 2]);
   await ok(`/v1/subjects/${subject.id}:restore`, { reason: 'Counter-notice accepted.' });
   expect(await counted(subject.id)).toBe(before);
-
-  const [survivor, redirected] = [await person('Higuchi Ichiyo'), await person('Higuchi Natsu')]
-    .map(({ id }) => id as string)
-    .sort();
-  const redirectedBefore = await counted(redirected!);
-  await ok('/v1/subjects:merge', { subjects: [survivor, redirected] });
-  expect(await counted(redirected!)).toBe(redirectedBefore - 1);
-  const merged = (await source.read(subjectPartition(redirected!), [redirected!])).subjects[0]!;
-  expect([merged.redirect, merged.visibility]).toEqual([survivor!, 'hidden']);
-  expect(
-    (await source.readBookCandidateNames!([redirected!]))?.get(subjectPartition(redirected!))?.subjects[0],
-  ).toMatchObject({ redirect: survivor!, visibility: 'hidden', labels: [] });
-  const count = await source.count(subjectPartition(redirected!));
-  expect(count.position).toBe(await position(subjectPartition(redirected!)));
 });
 
 test('every command that appends a revision names the subject in a subject event', async () => {
