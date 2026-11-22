@@ -1146,17 +1146,34 @@ export function createNativePublicFilterSourceBinding(
     return JSON.stringify([publication, generation, epoch, withdrawals, definition.dependencyKeys]);
   }
   type BootstrapRow = NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>;
+  type CutWitness = Pick<
+    BootstrapRow,
+    | 'read_definition'
+    | 'consumer'
+    | 'snapshot_kind'
+    | 'owner_epoch'
+    | 'state'
+    | 'queried'
+    | 'coverage_publication'
+    | 'coverage_generation'
+    | 'withdrawal_digest'
+  >;
   async function loadBootstrap(
     locator: string,
     db: CommandTransaction,
     knownDefinition?: PublicFilterSourceDefinition,
-    captured?: BootstrapRow,
   ) {
-    const row = captured ?? (await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) }));
+    const row = await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) });
     if (!row) throw new BindingError('observation_lost');
-    if (knownDefinition && knownDefinition.readDefinition !== row.read_definition)
-      throw new BindingError('binding_mismatch');
     const definition = knownDefinition ?? (await loadDefinition(row.read_definition, db));
+    return materializeBootstrap(locator, row, definition);
+  }
+  function materializeBootstrap<T extends CutWitness>(
+    locator: string,
+    row: T,
+    definition: PublicFilterSourceDefinition,
+  ) {
+    if (definition.readDefinition !== row.read_definition) throw new BindingError('binding_mismatch');
     if (row.owner_epoch !== definition.source.epoch) throw new BindingError('configuration_changed');
     if (row.snapshot_kind !== 'pit' && row.snapshot_kind !== 'prepared') throw new BindingError('binding_mismatch');
     const bootstrap: PublicSourceBootstrap = {
@@ -2919,8 +2936,11 @@ export function createNativePublicFilterSourceBinding(
           : 'NULL::jsonb';
         const independent = usePublishedCoverage === 'independent-pit' && !mixed && !bookList && snapshot === 'pit';
         const newId = randomUUID();
-        const attachedCut = async (id: string, row?: BootstrapRow) => {
-          const cut = await loadBootstrap('0:' + id, db, resolved.definition, row);
+        const attachedCut = async (id: string, row?: CutWitness) => {
+          const locator = '0:' + id;
+          const cut = row
+            ? materializeBootstrap(locator, row, resolved.definition)
+            : await loadBootstrap(locator, db, resolved.definition);
           const bootstrap = cut.bootstrap;
           // A conflict can return an earlier begun cut with an uncertain PIT.
           // Only the UUID inserted by THIS invocation may take the fresh path.
@@ -3198,9 +3218,9 @@ export function createNativePublicFilterSourceBinding(
           if (captured.bootstrap) return attachedCut(captured.bootstrap, captured.row);
           if (captured.awaiting) throw new BindingError('owner_unavailable');
         } else {
-          const attached = await db.query<{ bootstrap: string }>({
+          const statement = {
             name: independent
-              ? 'semantic_attach_request_pit_v1'
+              ? 'semantic_attach_request_pit_v2'
               : mixed
                 ? 'semantic_attach_mixed_coverage_v1'
                 : bookList
@@ -3228,9 +3248,14 @@ export function createNativePublicFilterSourceBinding(
            ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
            DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap${
              independent
-               ? `)
-             INSERT INTO search.public_filter_pit_claim(partition_no,registration,bootstrap,deadline,target_prefix,retry_after)
-             SELECT 0,$10,bootstrap,$11,regexp_replace($1,'subjects-g[1-9][0-9]*$',''),$11 FROM attached RETURNING bootstrap::text`
+               ? `,read_definition::text,consumer,snapshot_kind,owner_epoch,state,queried,
+                     coverage_publication::text,coverage_generation::text,
+                     encode(sha256(convert_to(book_withdrawals::text,'UTF8')),'hex') AS withdrawal_digest
+             ), claimed AS (
+               INSERT INTO search.public_filter_pit_claim(partition_no,registration,bootstrap,deadline,target_prefix,retry_after)
+               SELECT 0,$10,bootstrap,$11,regexp_replace($1,'subjects-g[1-9][0-9]*$',''),$11 FROM attached
+               RETURNING bootstrap
+             ) SELECT b.* FROM attached b JOIN claimed USING(bootstrap)`
                : '::text'
            }`,
             values: [
@@ -3249,8 +3274,15 @@ export function createNativePublicFilterSourceBinding(
                   ? [ports.search.encodeConsumer(consumer)]
                   : []),
             ],
-          });
-          if (attached.rows[0]) return attachedCut(attached.rows[0].bootstrap);
+          };
+          if (independent) {
+            // The claim and its exact Source cut are returned by the same native statement.
+            const [row] = (await db.query<CutWitness & { bootstrap: string }>(statement)).rows;
+            if (row) return attachedCut(row.bootstrap, row);
+          } else {
+            const [row] = (await db.query<{ bootstrap: string }>(statement)).rows;
+            if (row) return attachedCut(row.bootstrap);
+          }
           if (bookList) {
             // Reserve the bounded visibility proof and the returned bootstrap before dispatch.
             if (inputLimit - cost.inputKeys < 210 + 2) throw new BindingError('owner_unavailable');
