@@ -173,6 +173,7 @@ function createBookReadStages() {
     reserve: phase(readPageControls),
     dispatch: phase(readPageControls),
     complete: phase(readPageControls),
+    completeFirstWindow: phase(readPageControls),
     consume: phase(readPageControls),
     seal: phase(readPageControls),
   };
@@ -204,6 +205,7 @@ function createBookReadStages() {
     bindingStages.successor.stage,
     identities,
     controls.complete,
+    controls.completeFirstWindow,
     controls.saveWindow,
     candidates.stage,
     controls.consume,

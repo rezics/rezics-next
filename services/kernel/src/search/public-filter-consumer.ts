@@ -1543,13 +1543,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     rows: CustodyExecution['ownRows'],
     window: RetainedWindow,
     reserved: number,
+    firstWindow?: { registration: string; bootstrap: string; previous: string; encoded: string },
   ) {
-    await pageControl(
+    const completed = await pageControl(
       page,
-      'complete',
+      firstWindow ? 'completeFirstWindow' : 'complete',
       page.queried!.snapshot.observation,
       page.id!,
-      { points: 4, keys: 8, writes: 2 },
+      firstWindow ? { points: 7, keys: 15, writes: 4 } : { points: 4, keys: 8, writes: 2 },
       () => [
         locatorHome(page.queried!.snapshot.observation),
         page.id,
@@ -1559,10 +1560,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         reserved - window.raw.length,
         encodeState(page.m.cost),
         window.raw.length,
+        ...(firstWindow
+          ? [firstWindow.registration, firstWindow.bootstrap, firstWindow.previous, firstWindow.encoded, Date.now()]
+          : []),
       ],
     );
     page.tail = execution;
     page.charged -= reserved - window.raw.length;
+    // A missing claim or stale work cannot undo the completed, paid execution or grant a continuation.
+    if (firstWindow && !completed.saved) throw new ConsumerFailure('source_pending');
   }
   async function mixedGeneration(m: Meter): Promise<void> {
     if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
@@ -3515,9 +3521,38 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         rounds: work.rounds,
         charged: work.charged,
       };
+      work.queried = q;
+      work.execution = execution;
+      work.frontier = null;
+      let completedFirstWindow = false;
       if (page) {
         page.queried = q;
-        await completePage(page, execution, rows, window, size);
+        if (
+          work.independentPit &&
+          work.bootstrap.id === q.snapshot.observation &&
+          work.registration.partition === locatorHome(q.snapshot.observation)
+        ) {
+          // The native child and consuming the first claim have no intervening external work.
+          delete work.independentPit;
+          try {
+            await completePage(page, execution, rows, window, size, {
+              registration: work.registration.id,
+              bootstrap: work.bootstrap.id,
+              previous: encoded,
+              encoded: boundedWork(work),
+            });
+            completedFirstWindow = true;
+          } catch (error) {
+            // Keep the engine result if only the claim write failed. Even after a lost
+            // commit reply, the pending child and its empty window can be completed only once.
+            if (page.tail !== execution) {
+              await completePage(page, execution, rows, window, size).catch(() => {});
+            }
+            throw error;
+          }
+        } else {
+          await completePage(page, execution, rows, window, size);
+        }
       } else {
         const appended = m.take(
           await custody.appendExecution(
@@ -3531,10 +3566,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           [locatorHome(q.snapshot.observation), q.snapshot.observation, execution, encodeState(window)],
         );
       }
-      work.queried = q;
-      work.execution = execution;
-      work.frontier = null;
-      encoded = await save(work, encoded, false, m, page, 'saveWindow');
+      if (!completedFirstWindow) await save(work, encoded, false, m, page, 'saveWindow');
       // The native Book page's FINAL validates the retained children, input
       // boundary, current coverage and own rows before publishing the result.
       if (!page?.bookCut) {

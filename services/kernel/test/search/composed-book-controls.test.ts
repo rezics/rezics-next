@@ -38,7 +38,7 @@ test('parked Book controls skip unused phases, isolate misses and serialize comp
               values
                 .filter((v) => v !== 'missing')
                 .reverse()
-                .map((v) => ({ id: String(v) })),
+                .map((v) => ({ id: String(v), ...(phase === 'completeFirstWindow' ? { saved: true } : {}) })),
             );
           },
           receive(rows) {
@@ -56,6 +56,7 @@ test('parked Book controls skip unused phases, isolate misses and serialize comp
           expect((await composedBookControl(control('reserve')))?.id).toBe(id);
           expect(composedBookControl(control('reserve'))).toBeUndefined();
         }
+        expect(await composedBookControl(control('completeFirstWindow'))).toEqual({ id, saved: true });
         expect((await composedBookControl(control('seal')))?.id).toBe(id);
         completed.push(id);
       });
@@ -67,6 +68,8 @@ test('parked Book controls skip unused phases, isolate misses and serialize comp
     ['plan', ['one', 'missing']],
     ['plan', ['two']],
     ['reserve', ['one']],
+    ['completeFirstWindow', ['one']],
+    ['completeFirstWindow', ['two']],
     ['seal', ['one']],
     ['seal', ['two']],
   ]);

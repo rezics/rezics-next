@@ -26,6 +26,27 @@ const saveRegistration = control(
   `UPDATE search.public_filter_registration r SET consumer_work=i.work,consumer_bootstrap=i.bootstrap FROM input i
    WHERE (r.partition_no,r.id)=(i.home,i.registration) AND r.consumer_work IS NOT DISTINCT FROM i.previous RETURNING r.id`,
 );
+const completeColumns = {
+  home: 'integer',
+  page: 'uuid',
+  execution: 'text',
+  payload: 'text',
+  raw_window: 'text',
+  unused: 'integer',
+  work: 'text',
+  raw: 'integer',
+};
+const completeExecution = `, locked AS MATERIALIZED (
+      SELECT i.*,p.observation FROM input i JOIN search.public_filter_coverage_page p
+        ON (p.partition_no,p.id)=(i.home,i.page)
+      WHERE p.state='open' AND p.pending=i.execution FOR UPDATE OF p), completed AS (
+      UPDATE search.public_filter_execution e SET execution=i.payload,consumer_window=i.raw_window,page_status='complete',page_raw=i.raw
+      FROM locked i WHERE (e.partition_no,e.observation,e.id)=(i.home,i.observation,i.execution)
+        AND e.page_id=i.page AND e.page_status='dispatched' AND e.consumer_window IS NULL
+      RETURNING e.partition_no,e.page_id,e.id,i.unused,i.work`;
+const advanceTail = `UPDATE search.public_filter_coverage_page p SET tail=c.id,tail_consumed=NULL,pending=NULL,charged=p.charged-c.unused,
+      revision=p.revision+1,work=c.work FROM completed c
+    WHERE (p.partition_no,p.id)=(c.partition_no,c.page_id)`;
 export const pageControls = {
   previousWindow: control(
     { home: 'integer', observation: 'text', execution: 'text' },
@@ -145,28 +166,31 @@ export const pageControls = {
     WHERE (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,p.pending)
       AND e.page_id=p.id AND e.page_status='dispatched' AND e.page_engine_started IS FALSE RETURNING e.page_id AS id`,
   ),
-  complete: control(
-    {
-      home: 'integer',
-      page: 'uuid',
-      execution: 'text',
-      payload: 'text',
-      raw_window: 'text',
-      unused: 'integer',
-      work: 'text',
-      raw: 'integer',
-    },
-    `, locked AS MATERIALIZED (
-      SELECT i.*,p.observation FROM input i JOIN search.public_filter_coverage_page p
-        ON (p.partition_no,p.id)=(i.home,i.page)
-      WHERE p.state='open' AND p.pending=i.execution FOR UPDATE OF p), completed AS (
-      UPDATE search.public_filter_execution e SET execution=i.payload,consumer_window=i.raw_window,page_status='complete',page_raw=i.raw
-      FROM locked i WHERE (e.partition_no,e.observation,e.id)=(i.home,i.observation,i.execution)
-        AND e.page_id=i.page AND e.page_status='dispatched' AND e.consumer_window IS NULL
-      RETURNING e.partition_no,e.page_id,e.id,i.unused,i.work)
-    UPDATE search.public_filter_coverage_page p SET tail=c.id,tail_consumed=NULL,pending=NULL,charged=p.charged-c.unused,
-      revision=p.revision+1,work=c.work FROM completed c
-    WHERE (p.partition_no,p.id)=(c.partition_no,c.page_id) RETURNING p.id`,
+  complete: control(completeColumns, `${completeExecution}) ${advanceTail} RETURNING p.id`),
+  completeFirstWindow: control(
+    { ...completeColumns, registration: 'text', bootstrap: 'text', previous: 'text', next_work: 'text', now: 'bigint' },
+    `${completeExecution},e.consumer_window IS NOT NULL AND e.page_status='complete' AS ready), finished AS (
+      ${advanceTail} RETURNING p.partition_no,p.id,p.observation
+    ), owned AS MATERIALIZED (
+      SELECT f.id,c.partition_no,c.bootstrap,c.registration,c.deadline FROM finished f JOIN completed e
+        ON (e.partition_no,e.page_id)=(f.partition_no,f.id) AND e.ready JOIN input i
+        ON (i.home,i.page,i.bootstrap)=(f.partition_no,f.id,f.observation)
+      CROSS JOIN LATERAL (
+        SELECT c.partition_no,c.registration,c.bootstrap,c.state,c.deadline FROM search.public_filter_pit_claim c
+        WHERE (c.partition_no,c.bootstrap)=(f.partition_no,substring(f.observation from 3)::uuid)
+        LIMIT 1 FOR UPDATE
+      ) c WHERE c.registration=i.registration AND c.state='handed' AND c.deadline>i.now
+    ), saved AS (
+      UPDATE search.public_filter_observation o SET consumer_work=i.next_work
+      FROM owned c JOIN input i ON (i.home,i.page)=(c.partition_no,c.id)
+      WHERE (o.partition_no,o.registration,o.observation)=(c.partition_no,c.registration,i.bootstrap)
+        AND o.consumer_work=i.previous AND o.consumer_bootstrap=i.bootstrap AND o.state='open'
+        AND c.deadline>floor(extract(epoch FROM clock_timestamp())*1000)::bigint
+      RETURNING c.partition_no,c.bootstrap,c.id
+    ), released AS (
+      DELETE FROM search.public_filter_pit_claim c USING saved s
+      WHERE (c.partition_no,c.bootstrap)=(s.partition_no,s.bootstrap) RETURNING s.id
+    ) SELECT f.id,r.id IS NOT NULL AS saved FROM finished f LEFT JOIN released r USING(id)`,
   ),
   consume: control(
     { home: 'integer', page: 'uuid', execution: 'text', consumed: 'integer', work: 'text' },
@@ -197,6 +221,7 @@ export const singlePageControls = Object.fromEntries(
 
 export type ControlRow = {
   id: string;
+  saved?: boolean;
   rounds?: number;
   charged?: number;
   consumer_window?: string | null;

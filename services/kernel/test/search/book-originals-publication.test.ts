@@ -50,6 +50,23 @@ test('cold Subject publication discloses the originals and preserves relevance t
         END IF;
         RETURN NEW;
       END $$;
+      CREATE FUNCTION search.check_test_first_pit_window() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT FROM search.public_filter_observation o
+          JOIN search.public_filter_coverage_page p USING (partition_no,observation)
+          JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,p.tail)
+          WHERE (o.partition_no,o.registration,o.observation)=(OLD.partition_no,OLD.registration,OLD.partition_no::text||':'||OLD.bootstrap::text)
+            AND o.consumer_work IS NOT NULL AND o.consumer_bootstrap=o.observation
+            AND e.page_id=p.id AND e.page_status='complete' AND e.consumer_window IS NOT NULL
+            AND p.pending IS NULL AND p.charged=e.page_raw
+            AND e.xmin=pg_current_xact_id()::xid AND o.xmin=e.xmin AND p.xmin=e.xmin
+        ) THEN RAISE EXCEPTION 'The first PIT window must complete its own execution and transfer the claim together';
+        END IF;
+        RETURN OLD;
+      END $$;
+      CREATE TRIGGER check_test_first_pit_window AFTER DELETE ON search.public_filter_pit_claim
+      FOR EACH ROW WHEN (OLD.state='handed') EXECUTE FUNCTION search.check_test_first_pit_window();
       CREATE TRIGGER check_test_pit_handoff AFTER UPDATE OF state ON search.public_filter_pit_claim
       FOR EACH ROW WHEN (OLD.state<>NEW.state AND NEW.state IN ('opening','retained','handed'))
       EXECUTE FUNCTION search.check_test_pit_handoff()`);
@@ -57,7 +74,8 @@ test('cold Subject publication discloses the originals and preserves relevance t
       Array.from({ length: 4 }, () => fixture.request('anonymous', 'POST', '/v1/subjects:search', query)),
     ).finally(() =>
       database.pool.query(
-        'DROP TRIGGER check_test_pit_handoff ON search.public_filter_pit_claim; DROP FUNCTION search.check_test_pit_handoff()',
+        `DROP TRIGGER check_test_pit_handoff ON search.public_filter_pit_claim; DROP FUNCTION search.check_test_pit_handoff();
+         DROP TRIGGER check_test_first_pit_window ON search.public_filter_pit_claim; DROP FUNCTION search.check_test_first_pit_window()`,
       ),
     );
     for (const response of concurrent) {
