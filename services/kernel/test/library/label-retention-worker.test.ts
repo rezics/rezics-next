@@ -53,7 +53,11 @@ async function waitFor(marker: string) {
       reject(new Error(`Missing ${marker}: ${output}`));
     }, 120000);
     const ready = () => {
-      if (output.includes(marker)) {
+      if (worker?.exitCode != null || worker?.signalCode != null) {
+        clearTimeout(timeout);
+        signals.delete(ready);
+        reject(new Error(`Worker exited before ${marker}: ${output}`));
+      } else if (output.includes(marker)) {
         clearTimeout(timeout);
         signals.delete(ready);
         resolve();
@@ -68,13 +72,16 @@ async function start(mode = 'recover') {
   worker = spawn(
     process.execPath,
     [`${import.meta.dir}/support/label-retention-runtime.ts`, mode, executor, timePath],
-    { cwd: process.cwd(), env: process.env, stdio: 'pipe' },
+    { cwd: process.cwd(), env: f.workerEnv, stdio: 'pipe' },
   );
   for (const stream of [worker.stdout, worker.stderr])
     stream.on('data', (data) => {
       output += data.toString();
       for (const signal of signals) signal();
     });
+  worker.once('exit', () => {
+    for (const signal of signals) signal();
+  });
   await waitFor('worker-ready');
 }
 async function stop(kill = false) {

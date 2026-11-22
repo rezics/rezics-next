@@ -11,7 +11,12 @@ import {
 } from '../../../src/library/label-assignment-lifecycle-store.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { entryKey, type NativeProfileFixture } from './profile-entry-fixture.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
+import { installNativeHistoryPreload } from '../../../src/composition/preload.ts';
 import { createPool } from '../../../src/database/pool.ts';
+import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
+import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { libraryWorkModule, LABEL_RETENTION_SCHEDULE } from '../../../src/library/work-module.ts';
@@ -74,7 +79,14 @@ if (import.meta.main) {
   const [mode, executorId, timePath] = process.argv.slice(2);
   if (!executorId || !timePath) throw new Error('Runtime requires executor identity and clock file');
   const pool = createPool(process.env.DATABASE_URL!);
-  const client = await createWorkClient(process.env.DATABASE_URL!);
+  const clock = () => new Date(Number(readFileSync(timePath, 'utf8')));
+  installNativeHistoryPreload();
+  composeLibraryDomain({ pool, clock });
+  const client = bindExecutionContract(
+    await createWorkClient(process.env.DATABASE_URL!, pool),
+    workExecutionPort(),
+    historyExecutionPort,
+  );
   let parked = false;
   const changed = new WeakSet<object>();
   await observeRetentionQueries(pool, async ({ connection, sql, result }) => {
@@ -94,8 +106,8 @@ if (import.meta.main) {
     client,
     databaseUrl: process.env.DATABASE_URL!,
     executorId,
-    clock: () => new Date(Number(readFileSync(timePath, 'utf8'))),
-    env: {},
+    clock,
+    env: process.env,
   });
   await client.pauseSchedule(LABEL_RETENTION_SCHEDULE);
   await work.launch();

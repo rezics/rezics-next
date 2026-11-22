@@ -36,7 +36,10 @@ export async function maintenancePartitionPage(
   // A retained cursor can refer to a parent or child already removed. Its owner decides how to resume it.
   if (after === null) {
     const route = await nextMaintenanceRoute(pool, family, partition * (ROUTES / PARTITIONS));
-    if (route === undefined) return { next: null, nextPartition: PARTITIONS };
+    if (route === undefined) {
+      const counts = family === 'entry' ? { stamped: 0, pending: 0 } : { removed: 0 };
+      return { examined: 0, ...counts, next: null, nextPartition: PARTITIONS };
+    }
     partition = partitionOf(route);
   }
   const page = await read(partition, after);

@@ -47,8 +47,9 @@ test('empty maintenance sources finish in one durable step and a sparse sweep vi
       'labelConsolidationRetention',
       'entryAnnotationCorrectionRetention',
     ]) {
+      const counts = kind === 'entryIncarnationCutover' ? { stamped: 0, pending: 0 } : { removed: 0 };
       expect(await run(`library.${kind}Sweep`)).toEqual([
-        { name: `library.${kind}Page`, output: { next: null, nextPartition: PARTITIONS } },
+        { name: `library.${kind}Page`, output: { examined: 0, ...counts, next: null, nextPartition: PARTITIONS } },
       ]);
     }
     const route = ROUTES - 7,
