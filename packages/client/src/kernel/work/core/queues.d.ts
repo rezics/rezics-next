@@ -7,7 +7,7 @@ export declare const WORK_QUEUES: Readonly<{
     effects: Readonly<{
         workerConcurrency: 8;
         partitionConcurrency: 1;
-        minPollingIntervalMs: 250;
+        minPollingIntervalMs: 50;
     }>;
     "locator-effects": Readonly<{
         workerConcurrency: 8;
