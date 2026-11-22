@@ -7,7 +7,8 @@ import product from '../../src/access/write-rate-counter.sql';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const route = routeOf(newId(0x7310))!;
+const actor = newId(0x7310);
+const route = routeOf(actor)!;
 const pool = new Pool({ connectionString: url, max: 1 });
 afterAll(() => pool.end());
 
@@ -15,6 +16,8 @@ type Plan = {
   'Node Type': string;
   'Actual Rows': number;
   'Actual Loops': number;
+  'Relation Name'?: string;
+  'Rows Removed by Filter'?: number;
   'Tuples Inserted'?: number;
   'Conflicting Tuples'?: number;
   'Conflict Arbiter Indexes'?: string[];
@@ -31,8 +34,14 @@ test('one seed at three scales proves constant rows and one statement', async ()
   const client = await pool.connect();
   try {
     await client.query('TRUNCATE access.write_rate_counter');
+    await client.query(
+      "INSERT INTO access.account(route,account_id,kind,state,transaction_id) SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) ids(id)",
+      [route, [actor, ...Array.from({ length: 1024 }, () => newId(route))]],
+    );
+    await client.query('ANALYZE access.account');
     // One cumulative seed grows both the measured family and unrelated keys.
-    const measurements: { scale: number; units: number; allowed: boolean; blocks: number }[] = [];
+    const measurements: { scale: number; authenticated: boolean; units: number; allowed: boolean; blocks: number }[] =
+      [];
     let previous = 0;
     for (const scale of [1, 8, 64]) {
       const size = 1024 * scale;
@@ -50,56 +59,77 @@ test('one seed at three scales proves constant rows and one statement', async ()
         { family: 'unrelated', keys: size },
         { family: 'write', keys: size },
       ]);
-      for (const units of [1, 100])
-        for (const allowed of [true, false]) {
-          await client.query(
-            `UPDATE access.write_rate_counter SET count = $1
+      for (const authenticated of [false, true])
+        for (const units of [1, 100])
+          for (const allowed of [true, false]) {
+            await client.query(
+              `UPDATE access.write_rate_counter SET count = $1
           WHERE route = $2 AND identity_digest = md5('1') || md5('1') AND family = 'write'`,
-            [allowed ? 0 : 1000, route],
-          );
-          const statements: QueryConfig[] = [];
-          const captured = Object.create(client) as AccessClient;
-          captured.query = ((query: QueryConfig) => {
-            statements.push(query);
-            return client.query(query);
-          }) as AccessClient['query'];
-          const result = await spendWriteRateCounter(captured, {
-            route,
-            identityDigest: 'c4ca4238a0b923820dcc509a6f75849b'.repeat(2),
-            family: 'write',
-            units,
-            budget: { maximum: 1000, seconds: 60 },
-          });
-          expect(result.allowed).toBe(allowed);
-          expect(statements).toHaveLength(1);
-          const statement = statements[0]!;
-          expect(statement.text).toMatch(/^\s*INSERT\s+INTO\s+access\.write_rate_counter/i);
-          expect(statement.text).toMatch(/ON CONFLICT\s*\(route, identity_digest, family\) DO UPDATE/i);
-          expect(statement.text).not.toMatch(/\b(?:SELECT|DELETE|BEGIN|COMMIT)\b/i);
-          expect(statement.values?.[product.params.indexOf('route')]).toBe(route);
-          expect(await checkStatement(client, { sql: statement.text!, params: [...product.params] })).toEqual({
-            bound: true,
-            parameter: 'route',
-          });
-          // Explain the exact captured product SQL and parameters, without planner overrides.
-          const explained = await client.query({
-            text: `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`,
-            values: statement.values ?? [],
-          });
-          const plan = explained.rows[0]['QUERY PLAN'][0].Plan as Plan;
-          expect(plan['Node Type']).toBe('ModifyTable');
-          expect(plan['Conflict Arbiter Indexes']).toEqual(['write_rate_counter_pkey']);
-          expect(plan['Tuples Inserted']).toBe(0);
-          expect(plan['Conflicting Tuples']).toBe(1);
-          const all = nodes(plan);
-          expect(all.map((node) => node['Actual Rows'] * node['Actual Loops'])).toEqual([1, 1]);
-          expect(all.some((node) => /Scan|Join|Aggregate/.test(node['Node Type']))).toBe(false);
-          measurements.push({ scale, units, allowed, blocks: plan['Shared Hit Blocks'] + plan['Shared Read Blocks'] });
-        }
+              [allowed ? 0 : 1000, route],
+            );
+            const statements: QueryConfig[] = [];
+            const captured = Object.create(client) as AccessClient;
+            captured.query = ((query: QueryConfig) => {
+              statements.push(query);
+              return client.query(query);
+            }) as AccessClient['query'];
+            const result = await spendWriteRateCounter(captured, {
+              route,
+              accountId: authenticated ? actor : null,
+              identityDigest: 'c4ca4238a0b923820dcc509a6f75849b'.repeat(2),
+              family: 'write',
+              units,
+              budget: { maximum: 1000, seconds: 60 },
+            });
+            expect(result.allowed).toBe(allowed);
+            expect(statements).toHaveLength(1);
+            const statement = statements[0]!;
+            expect(statement.text).toMatch(/\bINSERT\s+INTO\s+access\.write_rate_counter/i);
+            expect(statement.text).toMatch(/ON CONFLICT\s*\(route, identity_digest, family\) DO UPDATE/i);
+            expect(statement.text.replace(/--[^\n]*/g, '')).not.toMatch(/\b(?:DELETE|BEGIN|COMMIT)\b/i);
+            expect(statement.values?.[product.params.indexOf('route')]).toBe(route);
+            expect(await checkStatement(client, { sql: statement.text!, params: [...product.params] })).toEqual({
+              bound: true,
+              parameter: 'route',
+            });
+            // Explain the exact captured product SQL and parameters, without planner overrides.
+            const explained = await client.query({
+              text: `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`,
+              values: statement.values ?? [],
+            });
+            const plan = explained.rows[0]['QUERY PLAN'][0].Plan as Plan;
+            expect(plan['Node Type']).toBe('ModifyTable');
+            expect(plan['Conflict Arbiter Indexes']).toEqual(['write_rate_counter_pkey']);
+            expect(plan['Tuples Inserted']).toBe(0);
+            expect(plan['Conflicting Tuples']).toBe(1);
+            const all = nodes(plan);
+            // The account and its deletion barrier are point observations. Anonymous
+            // spends short-circuit both, even after the prepared plan becomes generic.
+            for (const node of all) {
+              expect(
+                (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops'],
+              ).toBeLessThanOrEqual(1);
+              if (node['Relation Name'] === 'account')
+                expect(node['Actual Rows'] * node['Actual Loops']).toBe(authenticated ? 1 : 0);
+              if (!authenticated && node['Relation Name'] === 'erasure') expect(node['Actual Loops']).toBe(0);
+              if (node !== plan) expect(node['Relation Name']).not.toBe('write_rate_counter');
+            }
+            measurements.push({
+              scale,
+              authenticated,
+              units,
+              allowed,
+              blocks: plan['Shared Hit Blocks'] + plan['Shared Read Blocks'],
+            });
+          }
     }
     for (const measurement of measurements) {
       const baseline = measurements.find(
-        (m) => m.scale === 1 && m.units === measurement.units && m.allowed === measurement.allowed,
+        (m) =>
+          m.scale === 1 &&
+          m.authenticated === measurement.authenticated &&
+          m.units === measurement.units &&
+          m.allowed === measurement.allowed,
       )!;
       // A B-tree descent can add a page per level; two indexed keys grow by 64x.
       expect(measurement.blocks).toBeGreaterThan(0);
