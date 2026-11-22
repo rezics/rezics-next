@@ -269,8 +269,7 @@ test('native public Source configuration and immutable meaning/read definition r
       readContext(),
     );
     expect(exact.status).toBe('resolved');
-    expect(exact.cost.statements).toBe(1);
-    expect(exact.cost.inputKeys).toBeGreaterThanOrEqual(12);
+    expect(exact.cost).toMatchObject({ statements: 1, inputKeys: 12 });
     const forged = structuredClone(result.definition.meaning);
     delete forged.release.types['schema:Person'];
     expect(
