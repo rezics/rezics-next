@@ -52,7 +52,11 @@ const slots = mix.map((name) => {
 const operations = Object.fromEntries(
   Object.keys(mixCounts).map((name) => [
     name,
-    { valid: new Rate(`mixed_${name}_valid`), latency: new Trend(`mixed_${name}_ms`, true) },
+    {
+      valid: new Rate(`mixed_${name}_valid`),
+      latency: new Trend(`mixed_${name}_ms`, true),
+      completedInWindow: new Counter(`mixed_${name}_success_in_window`),
+    },
   ]),
 );
 const started = new Counter('mixed_started');
@@ -292,7 +296,9 @@ export function mixed({ run, seed, receipts }) {
   settled.add(1);
   valid.add(ok === true);
   operations[name].valid.add(ok === true);
-  completedInWindow.add(ok && end < execution.scenario.startTime + seconds * 1000 ? 1 : 0);
+  const successfulInWindow = ok && end < execution.scenario.startTime + seconds * 1000 ? 1 : 0;
+  completedInWindow.add(successfulInWindow);
+  operations[name].completedInWindow.add(successfulInWindow);
   if (!ok) {
     const status = response.status;
     const reason =
@@ -324,7 +330,14 @@ export function handleSummary({ metrics }) {
   const values = (metric) => metrics[metric]?.values ?? {};
   const operation = (name) => {
     const v = values(`mixed_${name}_valid`);
-    return { successful: v.passes ?? 0, failed: v.fails ?? 0, latencyMs: values(`mixed_${name}_ms`) };
+    const inWindow = values(`mixed_${name}_success_in_window`).count ?? 0;
+    return {
+      successful: v.passes ?? 0,
+      failed: v.fails ?? 0,
+      successfulInWindow: inWindow,
+      successfulRps: inWindow / seconds,
+      latencyMs: values(`mixed_${name}_ms`),
+    };
   };
   const outcomes = values('mixed_valid');
   const successful = outcomes.passes ?? 0;
