@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { Pool } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -75,6 +76,19 @@ test('the server reads its configuration from the environment and names, never e
   refusal('KERNEL_SESSION_KEYS', `1:${current},`);
   refusal('KERNEL_PORT', '65536');
   refusal('KERNEL_PORT', '80a');
+});
+
+test('an occupied API port fails before opening the server database pool', async () => {
+  const occupied = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
+  const checkout = spyOn(Pool.prototype, 'connect');
+  try {
+    const config = readConfig({ ...env, KERNEL_PORT: String(occupied.port) });
+    expect(() => startServer(config)).toThrow(/in use/i);
+    expect(checkout).toHaveBeenCalledTimes(0);
+  } finally {
+    checkout.mockRestore();
+    await occupied.stop(true);
+  }
 });
 
 test('a started server answers health and the subject routes over HTTP, then stops', async () => {

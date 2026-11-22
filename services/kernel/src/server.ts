@@ -204,7 +204,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     },
   };
   const activeRequests = new Set<Promise<void>>();
-  const boot = (async () => {
+  async function initialize() {
     await fillPool(pool);
     const searchNativePorts =
       config.searchNativePorts ?? (await import('./composition/search-native.ts')).composeSearchNativePorts();
@@ -406,8 +406,8 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             },
           }),
     });
-  })();
-  // The socket is listening before setup finishes. Requests wait for that setup.
+  }
+  // Bind first so a rejected listener leaves no database connections or background work.
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
@@ -428,6 +428,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       }
     },
   });
+  const boot = initialize();
   let stopping: Promise<void> | undefined;
   const running: RunningServer = {
     url: server.url,
