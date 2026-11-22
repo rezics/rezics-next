@@ -567,6 +567,7 @@ export async function readNativeListPresentationFacts(
                 evidence,
                 false,
                 options.workContext === true,
+                directionResolver,
               )),
             ],
           )
