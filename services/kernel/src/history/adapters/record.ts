@@ -1,3 +1,4 @@
+import { HistoryReceiptTooLargeError } from '../contract/errors.ts';
 import { jsonParameter } from '../../database/json.ts';
 import { captureAgentIdentityInventory, finalizeAgentIdentityInventory } from './agent-identity-inventory.ts';
 import { hasCommandRecordSourceSet, recordCommandRecordSourceSetCopies } from './record-source-set.ts';
@@ -142,10 +143,12 @@ export function validateCommandHistory(
   if (!declaration && (kind === undefined || !commandKinds().has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
     throw new TypeError('Missing or mismatched command history declaration');
-  for (const payload of [response, ...events]) {
+  for (const [index, payload] of [response, ...events].entries()) {
     const json = JSON.stringify(payload);
-    if (json === undefined || Buffer.byteLength(json) > MAX_HISTORY_PAYLOAD_BYTES)
+    if (json === undefined || Buffer.byteLength(json) > MAX_HISTORY_PAYLOAD_BYTES) {
+      if (index === 0 && json !== undefined) throw new HistoryReceiptTooLargeError();
       throw new TypeError('History payload exceeds the 64 KiB limit');
+    }
   }
 }
 

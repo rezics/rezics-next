@@ -262,7 +262,7 @@ test('native complete selected public facet projection retains bounded frontier 
     const [left, right, otherLeft, otherRight] = await Promise.all(
       Array.from({ length: 4 }, () => f.create('skos:Concept')),
     );
-    const subject = await f.create('schema:Book', {
+    const statements = {
       'schema:author': targets.map((target, index) =>
         statement(
           'schema:author',
@@ -275,7 +275,35 @@ test('native complete selected public facet projection retains bounded frontier 
         ),
       ),
       'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
-    });
+    };
+    const item = { type: 'schema:Book', labels: { en: 'Native public filter' }, statements };
+    const key = 'native-complete-public-facet';
+    const oversized = await f.call('/v1/subjects', item, key);
+    expect(oversized.status).toBe(400);
+    expect(oversized.body).toMatchObject({ code: 'invalid_request', errors: [{ pointer: '', code: 'out_of_range' }] });
+    // The first slot stays compact until the expansion assertion below. The rest
+    // are selected through ordinary editorial writes within each receipt's bound.
+    const compact = 180;
+    const subject = await f.create(
+      'schema:Book',
+      { ...statements, 'schema:author': statements['schema:author'].slice(0, compact) },
+      key,
+    );
+    for (const target of targets.slice(compact)) {
+      const candidate = await f.propose(subject, target);
+      await f.post(`/v1/subjects/${subject}/candidates/${candidate}:accept`, {
+        context: GLOBAL_CONTEXT,
+        expected_head: null,
+      });
+      await f.post(`/v1/subjects/${subject}:adopt`, {
+        context: GLOBAL_CONTEXT,
+        property: 'schema:author',
+        target,
+        mode: 'replace',
+        selection: [{ candidate, rank: 'normal' }],
+        expected_head: null,
+      });
+    }
     const first = await capturedStep(f.db, () =>
       source.readPublicFilterProjectionPage({
         context: readContext(),

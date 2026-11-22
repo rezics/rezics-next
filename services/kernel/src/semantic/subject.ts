@@ -41,7 +41,7 @@ import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import readLabelChoicesStatement from './read-label-choices.sql';
 import readSubjectStatement from './read-subject.sql';
 import readIdentityVisibility from './read-visibility.sql';
-import { readItemDetails, type ItemTypeDetails } from './public-subject-facts.ts';
+import { readWriteItemDetails, type ItemTypeDetails } from './public-subject-facts.ts';
 export { readItemDetails, readItemTypes, readLabels, type ItemTypeDetails } from './public-subject-facts.ts';
 import { writeFacts } from './write-facts.ts';
 import {
@@ -189,7 +189,7 @@ export async function writeSubject(
   const dataTypes =
     (plan?.dataTypes as Record<string, DataType> | undefined) ?? factDataTypes(options.release.release, facts);
   const statementSubjects = [subjectId, ...checked.targets.map((item) => item.id)];
-  const itemDetails = await readItemDetails(tx, statementSubjects);
+  const itemDetails = await readWriteItemDetails(tx, statementSubjects);
   const privateAccounts = new Map<string, string>();
   for (const fact of facts) {
     if (fact.kind !== 'statement') continue;

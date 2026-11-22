@@ -54,6 +54,7 @@ import { accessCheck, AuthenticationError, prepareReadDecisions } from '../../re
 import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
+import { HistoryReceiptTooLargeError } from '../../history/contract/errors.ts';
 import { isImportCatalogueWalk, ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadDecisionEligibility, relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
@@ -899,6 +900,11 @@ function subjectRoutes(
           set.headers.etag = `"${result.subject.revision}"`;
           return { subject: result.subject };
         } catch (error) {
+          if (error instanceof HistoryReceiptTooLargeError)
+            throw new ProblemError('invalid_request', {
+              detail: 'The complete Subject creation response exceeds the 64 KiB receipt limit.',
+              errors: [{ pointer: '', code: 'out_of_range' }],
+            });
           if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
           if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
             throw new ProblemError('forbidden');

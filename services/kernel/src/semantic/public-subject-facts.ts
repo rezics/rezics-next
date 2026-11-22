@@ -46,29 +46,39 @@ export function subjectLabel(labels: Record<string, string>, language?: string):
   return chooseLabel(labels, languageRanges(null, language))?.value ?? '';
 }
 
-/** Item targets of one write, one primary-key probe per id and one statement per partition. */
 export async function readItemDetails(
   client: Queryable,
   ids: readonly string[],
 ): Promise<Map<string, ItemTypeDetails>> {
   if (ids.length > BATCH_LIMIT + 1) throw new TypeError('An item type and account agent check accepts at most 257 ids');
+  return readWriteItemDetails(client, ids);
+}
+
+/** The validated write can name more targets than one native home read accepts. */
+export async function readWriteItemDetails(
+  client: Queryable,
+  ids: readonly string[],
+): Promise<Map<string, ItemTypeDetails>> {
   const details = new Map<string, ItemTypeDetails>();
   for (const [partition, subjectIds] of groupsOf(ids)) {
-    const result = (await readTypesStatement.run(client, {
-      partition_no: partition,
-      routes: subjectIds.map((id) => routeOf(id)!),
-      subject_ids: subjectIds,
-    })) as
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }[]
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }
-      | null;
-    const rows = result == null ? [] : Array.isArray(result) ? result : [result];
-    for (const row of rows)
-      details.set(row.id, {
-        type: row.type,
-        agentAccountId: row.agent_account_id,
-        agentVerified: row.agent_verified,
-      });
+    for (let offset = 0; offset < subjectIds.length; offset += BATCH_LIMIT) {
+      const chunk = subjectIds.length <= BATCH_LIMIT ? subjectIds : subjectIds.slice(offset, offset + BATCH_LIMIT);
+      const result = (await readTypesStatement.run(client, {
+        partition_no: partition,
+        routes: chunk.map((id) => routeOf(id)!),
+        subject_ids: chunk,
+      })) as
+        | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }[]
+        | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }
+        | null;
+      const rows = result == null ? [] : Array.isArray(result) ? result : [result];
+      for (const row of rows)
+        details.set(row.id, {
+          type: row.type,
+          agentAccountId: row.agent_account_id,
+          agentVerified: row.agent_verified,
+        });
+    }
   }
   return details;
 }

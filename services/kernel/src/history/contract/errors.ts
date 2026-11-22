@@ -16,3 +16,11 @@ export class HistorySealedError extends Error {
     this.name = 'HistorySealedError';
   }
 }
+
+/** The original JSON response is too large to retain as one native receipt. */
+export class HistoryReceiptTooLargeError extends TypeError {
+  constructor() {
+    super('History payload exceeds the 64 KiB limit');
+    this.name = 'HistoryReceiptTooLargeError';
+  }
+}

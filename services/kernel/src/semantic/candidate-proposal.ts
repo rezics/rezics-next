@@ -21,7 +21,8 @@ import { SUBJECT_REVISED } from './events.ts';
 import { itemFacts, isRelationProperty, SubjectInputError, type Violation } from './item.ts';
 import { rejectContent, rejectBulkContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
-import { accountSource, assertAgentStatementAccess, readItemDetails } from './subject.ts';
+import { accountSource, assertAgentStatementAccess } from './subject.ts';
+import { readWriteItemDetails } from './public-subject-facts.ts';
 import { matchesTarget } from './targets.ts';
 import insertCandidate from './candidates-insert-candidate.sql';
 import insertProposalRevision from './candidates-insert-proposal-revision.sql';
@@ -125,7 +126,7 @@ export async function writeProposal(tx: CommandTransaction, transactionId: strin
     options.allowContent === true,
     options.source === undefined,
   );
-  const details = await readItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
+  const details = await readWriteItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
   const privateAccount = await disclosureAccount(tx, options.release.release, input.property, input.fact.body);
   assertAgentStatementAccess(
     tx,
