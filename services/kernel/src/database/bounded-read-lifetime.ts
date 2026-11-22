@@ -29,6 +29,8 @@ export class RetiredReadClientError extends Error {
 export type BoundedReadLifetimeOptions = Readonly<{
   transaction?: 'repeatable-read-read-only';
   mode?: 'command';
+  /** The checkout owns session state which must be restored before reuse. */
+  discardOnExpiry?: boolean;
   deadlineError?: () => Error;
   mapError?: (error: unknown) => unknown;
   isUncertainError?: (error: unknown) => boolean;
@@ -180,11 +182,11 @@ export function withBoundedReadLifetime<T>(
   let hasFailure = false;
   let firstFailure: unknown;
   let deferredDiscard: Error | undefined;
-  const command = options.mode === 'command';
+  const discardExpired = options.mode === 'command' || options.discardOnExpiry;
 
   // After a settled read with no open transaction, retiring the lease is enough.
-  // Command checkouts also discard on expiry while their callback drains.
-  const mustDiscard = () => activeQueries > 0 || transaction === 'open' || (command && Date.now() >= deadline);
+  // Commands and reads with session-local state also discard while an expired callback drains.
+  const mustDiscard = () => activeQueries > 0 || transaction === 'open' || (discardExpired && Date.now() >= deadline);
 
   const retire = () => {
     if (retired) return;

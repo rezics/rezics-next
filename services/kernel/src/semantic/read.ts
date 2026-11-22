@@ -1,5 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
+import readStatementTimeout from './read-statement-timeout.sql';
+import restoreStatementTimeout from './restore-statement-timeout.sql';
 import { deadlineClient } from '../access/deadline.ts';
 import {
   AccessUnavailableError,
@@ -52,7 +55,67 @@ export function withReadStatement<T>(
 ): Promise<T> {
   if (currentReadSnapshot(pool)) return withReadTransaction(pool, read, deadline);
   requireAccessDeadline(deadline);
-  return withBoundedReadConnection(pool, deadline, read, readLifetimeOptions);
+  return withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const guarded = Object.create(client) as PoolClient;
+      let previous: string | undefined;
+      let queued = 0;
+      let tail = Promise.resolve();
+      guarded.query = ((input: unknown, values?: unknown, callback?: unknown) => {
+        const done = typeof values === 'function' ? values : callback;
+        queued++;
+        const query = tail
+          .then(async () => {
+            requireAccessDeadline(deadline);
+            try {
+              const setting = await nativeSourceQuery(client, readStatementTimeout, {
+                timeout_ms: Math.max(1, Math.floor(deadline - Date.now())),
+              });
+              if (!setting?.timeout) throw new Error('Missing original statement timeout');
+              previous ??= setting.timeout;
+            } catch (error) {
+              client.release(true);
+              throw error;
+            }
+            // Callback work and earlier queued queries may have already spent part of the deadline.
+            return Reflect.apply(client.query, client, Array.isArray(values) ? [input, values] : [input]);
+          })
+          .finally(() => {
+            queued--;
+          });
+        tail = query.then(
+          () => {},
+          () => {},
+        );
+        if (typeof done !== 'function') return query;
+        void query.then(
+          (result) => done(null, result),
+          (error) => done(error),
+        );
+      }) as PoolClient['query'];
+
+      let succeeded = false;
+      try {
+        const result = await read(guarded);
+        if (queued) throw new Error('A bounded statement read returned with a query still running');
+        succeeded = true;
+        return result;
+      } finally {
+        if (queued) client.release(true);
+        else if (previous !== undefined) {
+          try {
+            await nativeSourceQuery(client, restoreStatementTimeout, { timeout: previous });
+          } catch (error) {
+            client.release(true);
+            if (succeeded) throw error;
+          }
+        }
+      }
+    },
+    { ...readLifetimeOptions, discardOnExpiry: true },
+  );
 }
 
 /** One physical-pool snapshot across independently bound logical partition reads. */
