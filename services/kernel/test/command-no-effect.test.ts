@@ -6,9 +6,11 @@ import {
   noEffect,
   registerCommandCallback,
   runCommand,
+  withCompiledCommandControls,
   type CommandAuthorization,
   type CommandAuthorizationMode,
 } from '../src/command/command.ts';
+import commandTime from '../src/command/time.sql';
 import { createPool } from '../src/database/pool.ts';
 import { encodeReceiptKey } from '../src/command/receipt-key.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from './support/receipt-keys.ts';
@@ -304,6 +306,21 @@ test('a no-effect result without a receipt commits nothing', async () => {
   expect(await snapshot(partition)).toEqual(before);
   expect(traced.statements).toHaveLength(5);
   expect(noEffectStatements(traced.statements)).toHaveLength(1);
+});
+
+test('receipt-free maintenance dispatches the time and timeout controls its caller funds', async () => {
+  const traced = await trace(() =>
+    withCompiledCommandControls(tracedPool, () =>
+      runCommand(tracedPool, { partition: partitions.withoutReceipt }, async () => noEffect(null)),
+    ),
+  );
+  const opening = traced.statements.slice(0, 4);
+  expect(opening).toEqual([
+    'BEGIN ISOLATION LEVEL SERIALIZABLE',
+    "SET LOCAL lock_timeout = '200ms'",
+    expect.stringMatching(/^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/),
+    commandTime['~standard'].query.text,
+  ]);
 });
 
 test('an empty event list without noEffect still throws', async () => {

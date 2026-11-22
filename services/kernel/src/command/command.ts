@@ -885,13 +885,11 @@ async function executeCommand<T>(
               : undefined;
             checkBirthReceipt = (await beginIdentityBirthTransaction(client, partition, wait)) === 'receipt';
           } else await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-          if (!time && ordinary && !commandWork) {
+          // Literal SQL declarations fund the individual compiled maintenance controls.
+          if (!time && ordinary && !commandWork && !compiled) {
             time = await measureCommandPhase('time_mint', async () => {
               const parameters = { at: configuredTime(options.clock), timeout: `${remaining(deadline)}ms` };
-              const row = compiled
-                ? await runCompiledCommandControl(client, initializeTime, parameters)
-                : await initializeTime.run(client, parameters);
-              return retainTime(row);
+              return retainTime(await initializeTime.run(client, parameters));
             });
           } else {
             if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
