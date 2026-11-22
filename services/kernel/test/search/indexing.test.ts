@@ -59,7 +59,7 @@ const book = (partition: number, n: number): IndexedSubject => ({
 });
 
 /** Appends one envelope naming `subject`, as the fence does. */
-async function append(partition: number, subject: string): Promise<void> {
+async function append(partition: number, subject: string): Promise<bigint> {
   const client = await admin.connect();
   try {
     await client.query('BEGIN');
@@ -73,6 +73,7 @@ async function append(partition: number, subject: string): Promise<void> {
       [partition, rows[0]!.position, rows[0]!.epoch, crypto.randomUUID(), subject],
     );
     await client.query('COMMIT');
+    return BigInt(rows[0]!.position);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -136,9 +137,10 @@ test('a batch indexes each named subject once from one snapshot at the partition
   const fake = createFakeSource();
   const a = book(101, 1);
   const b = book(101, 2);
-  fake.put(a);
-  fake.put(b);
-  for (const subject of [a.id, b.id, a.id]) await append(101, subject);
+  for (const subject of [a, b, a]) {
+    fake.put(subject);
+    await append(101, subject.id);
+  }
   const reads = counted(fake);
   const writes = countingSearch(search);
   const relay = createSubjectIndexer({
@@ -289,24 +291,35 @@ test('the runner creates the first generation, feeds every generation and follow
   const runner = await startSearchIndexing({
     pool,
     search,
-    source: fake,
+    source: {
+      ...fake,
+      async read(partition, ids) {
+        // Native writer enrollments also advance the partition beyond fixture edits.
+        const { rows } = await admin.query<{ position: string }>(
+          'SELECT position::text FROM core.partition WHERE partition_no = $1',
+          [partition],
+        );
+        return { ...(await fake.read(partition, ids)), position: BigInt(rows[0]!.position) };
+      },
+    },
     listing: emptyListing,
     prefix,
     intervalMs: 20,
     discoverMs: 50,
   });
   try {
+    await runner.refresh();
     expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1], active: 1 });
     expect(subjectConsumer('rezics-', 1)).toBe('search_rezics_subjects_g1');
     expect(subjectConsumer(`${'a'.repeat(48)}`, 1)).toBe('search_h2d274556d1f056b8540af32fd12554d7s_g1');
     const a = book(110, 1);
     fake.put(a);
-    await append(110, a.id);
+    const first = await append(110, a.id);
     await eventually(() => exists(subjectIndexName(prefix, 1), a.id));
     await createSubjectIndex(search, prefix, 2);
     await runner.refresh();
     await eventually(() => exists(subjectIndexName(prefix, 2), a.id));
-    await eventually(async () => (await checkpoint(subjectConsumer(prefix, 2), 110)) === '1');
+    await eventually(async () => BigInt((await checkpoint(subjectConsumer(prefix, 2), 110)) ?? 0) >= first);
     await runner.pause();
     const b = book(110, 2);
     fake.put(b);

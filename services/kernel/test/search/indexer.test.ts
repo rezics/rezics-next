@@ -130,10 +130,7 @@ for (const [caseNumber, [name, corrupt]] of corruptions.entries()) {
             [partition],
           );
           sourcePosition = BigInt(rows[0]!.position);
-          const snapshot = structuredClone(subjects);
-          // A real mapper failure on only the second native item; the first write survives.
-          if (injecting && name === 'partial native item failure') snapshot[1]!.securityRevision = Number.MAX_VALUE;
-          return { partition, position: sourcePosition, subjects: snapshot };
+          return { partition, position: sourcePosition, subjects: structuredClone(subjects) };
         },
         async count(): Promise<never> {
           throw new Error('The sink must not scan Source');
@@ -144,10 +141,14 @@ for (const [caseNumber, [name, corrupt]] of corruptions.entries()) {
         async bulk<T>(lines: readonly unknown[], options?: Parameters<OpenSearch['bulk']>[1]) {
           expect(await checkpoint(consumer, partition)).toBe(baseline);
           expect(options).toEqual({ query: { refresh: 'wait_for' } });
-          const body = await native.bulk<Receipt>(lines, options);
+          const sent = structuredClone([...lines]);
+          // Let the actual mapper reject only the second document, after Source validation.
+          if (injecting && name === 'partial native item failure')
+            sent[3] = { ...(sent[3] as SubjectDocument), security_revision: 'invalid' };
+          const body = await native.bulk<Receipt>(sent, options);
           const returned = structuredClone(body);
           if (injecting) corrupt?.(returned);
-          receipts.push({ lines: structuredClone(lines), options, native: body, returned });
+          receipts.push({ lines: sent, options, native: body, returned });
           expect(await checkpoint(consumer, partition)).toBe(baseline);
           if (injecting && name === 'response lost after native write')
             throw new Error('native response lost after write');
