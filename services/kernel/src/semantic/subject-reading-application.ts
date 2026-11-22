@@ -58,7 +58,6 @@ import readSubjectStatement from './read-subject.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import globalLinkPreviews from './subject-global-link-previews.sql';
-import globalPropertyData from './subject-global-property-data.sql';
 import readSourceMembers from './source-records-members.sql';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
 export type { RelatedState } from './related-subject-read.ts';
@@ -859,6 +858,9 @@ async function projectSummaries(
 
 // Native Subject projection and related identity reads moved behind the supplied-port application.
 type SubjectReadRow = {
+  has_global_properties: boolean | null;
+  has_members: boolean;
+  native_revision: boolean | null;
   id: string;
   account: string | null;
   redirect: string | null;
@@ -923,19 +925,26 @@ async function supportedFacts(
   routeKey: Uint8Array | undefined,
   subject: string,
   facts: FactRow[],
+  nativeRevisions?: ReadonlySet<number>,
 ): Promise<SupportedFact[]> {
-  const revisions = [...new Set(facts.flatMap((fact) => (fact.fact_revision ? [fact.fact_revision] : [])))];
-  const rows = listed(
-    (await readHiddenStatement.run(client, {
-      route: routeOf(subject)!,
-      subject_id: subject,
-      revisions,
-    })) as
-      | { revision: number; source: CandidateSource | null }[]
-      | { revision: number; source: CandidateSource | null }
-      | null,
-  );
-  const sources = new Map(rows.map((row) => [row.revision, row.source]));
+  const revisions = [
+    ...new Set(
+      facts.flatMap(({ fact_revision }) =>
+        fact_revision != null && !nativeRevisions?.has(fact_revision) ? [fact_revision] : [],
+      ),
+    ),
+  ];
+  const sources = new Map<number, CandidateSource | null>();
+  if (revisions.length) {
+    const rows = listed(
+      (await readHiddenStatement.run(client, { route: routeOf(subject)!, subject_id: subject, revisions })) as
+        | { revision: number; source: CandidateSource | null }[]
+        | { revision: number; source: CandidateSource | null }
+        | null,
+    );
+    for (const row of rows) sources.set(row.revision, row.source);
+  }
+  for (const revision of nativeRevisions ?? []) sources.set(revision, null);
   const supported = facts.flatMap((fact) => {
     const revision = fact.fact_revision;
     return revision === null || revision === undefined || !sources.has(revision)
@@ -1179,8 +1188,12 @@ async function readSubjectNative(
         if (!component) return null;
         const rows = listed(
           (await readSubjectStatement.run(
-            preparedStatementClient(client, readSubjectStatement['~standard'].query.text, 'semantic_subject_detail_v1'),
-            { route, subject_id: subjectId },
+            preparedStatementClient(client, readSubjectStatement['~standard'].query.text, 'semantic_subject_detail_v2'),
+            {
+              route,
+              subject_id: subjectId,
+              probe_global_properties: context === GLOBAL_SUBJECT_CONTEXT && !readsPrivateStatements(),
+            },
           )) as SubjectReadRow[] | SubjectReadRow | null,
         );
         if (!rows.length) {
@@ -1210,19 +1223,7 @@ async function readSubjectNative(
         const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
         const relationCounts: Record<string, number> = {};
         const properties = release.types[rows[0]!.type]!.properties;
-        if (
-          properties.length > 0 &&
-          (context !== GLOBAL_SUBJECT_CONTEXT ||
-            readsPrivateStatements() ||
-            (await globalPropertyData.run(
-              preparedStatementClient(
-                client,
-                globalPropertyData['~standard'].query.text,
-                'semantic_global_property_presence_v1',
-              ),
-              { route, subject_id: subjectId },
-            ))!.present)
-        ) {
+        if (properties.length > 0 && rows[0]!.has_global_properties !== false) {
           const relations = properties.filter((property) => isRelationProperty(release, property));
           const scalarViews = await propertySlotViews(
             client,
@@ -1339,13 +1340,19 @@ async function readSubjectNative(
               ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
               : null,
           rows,
-          supported: await supportedFacts(client, routeKey, subjectId, [
-            ...currentTerms(asFacts(rows)),
-            ...statementFacts,
-          ]),
-          members: terminal
-            ? []
-            : (await readSourceMembers.run(client, { route, subject_id: subjectId })).map((row) => row.member_id),
+          supported: await supportedFacts(
+            client,
+            routeKey,
+            subjectId,
+            [...currentTerms(asFacts(rows)), ...statementFacts],
+            new Set(
+              rows.flatMap((row) => (row.native_revision && row.fact_revision !== null ? [row.fact_revision] : [])),
+            ),
+          ),
+          members:
+            terminal || !rows[0]!.has_members
+              ? []
+              : (await readSourceMembers.run(client, { route, subject_id: subjectId })).map((row) => row.member_id),
           release,
           layerDigest: layer.digest,
           component,

@@ -7,12 +7,28 @@ WITH input AS NOT MATERIALIZED (
 SELECT s.subject_id::text AS id, s.type, account.account_id::text AS account,
        s.security_revision::text AS security_revision,
        redirect.target::text AS redirect, latest.revision, latest.release,
-       r.revision AS fact_revision, r.release AS fact_release,
+       s.has_global_properties, s.has_members,
+       r.revision AS fact_revision, r.release AS fact_release, r.native AS native_revision,
        f.slot_id::text AS slot_id, f.log_seq, f.operation, f.kind,
        f.language, f.property, f.statement_id::text AS statement_id, f.body
 FROM input
 JOIN LATERAL (
-  SELECT subject.subject_id, subject.type, subject.security_revision
+  SELECT subject.subject_id, subject.type, subject.security_revision,
+         CASE WHEN :probe_global_properties::boolean THEN
+           EXISTS (
+             SELECT FROM semantic.fact AS property_fact
+             WHERE (property_fact.route, property_fact.subject_id) = (subject.route, subject.subject_id)
+               AND property_fact.kind = 'statement'
+           ) OR EXISTS (
+             SELECT FROM semantic.outbound_link AS property_link
+             WHERE (property_link.route, property_link.subject_id) = (subject.route, subject.subject_id)
+               AND property_link.present AND property_link.relation
+           )
+         END AS has_global_properties,
+         EXISTS (
+           SELECT FROM semantic.merge_member AS member
+           WHERE (member.route, member.subject_id) = (subject.route, subject.subject_id)
+         ) AS has_members
   FROM semantic.subject AS subject
   WHERE subject.route = input.route AND subject.subject_id = input.subject_id
     AND subject.visibility = 'visible'
@@ -73,7 +89,9 @@ LEFT JOIN LATERAL (
   ) AS fact
 ) AS f ON true
 LEFT JOIN LATERAL (
-  SELECT revision_row.revision, revision_row.release FROM semantic.revision AS revision_row
+  SELECT revision_row.revision, revision_row.release,
+         (revision_row.source IS NULL OR revision_row.source = 'null'::jsonb) AS native
+  FROM semantic.revision AS revision_row
   WHERE revision_row.route = input.route AND revision_row.subject_id = input.subject_id
     AND revision_row.recorded_transaction_id = f.recorded_transaction_id
     AND revision_row.route >= input.partition_no * 16

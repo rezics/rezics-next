@@ -291,7 +291,7 @@ export async function canonicalFixture(db: GrowthDatabase) {
     // Cold SQL analysis is setup, before a short-lived permission proof. Inspect the real native row without
     // claiming a product allow; add/readable below still use actual Access. Never prepare inside a held read.
     subjectReadWarmup ??= (async () => {
-      const rows = await readSubjectStatement.run(db.pool, { route, subject_id: id });
+      const rows = await readSubjectStatement.run(db.pool, { route, subject_id: id, probe_global_properties: false });
       expect(rows[0]?.id).toBe(id);
     })();
     await subjectReadWarmup;

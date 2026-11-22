@@ -402,11 +402,11 @@ function examined(node: Record<string, unknown>): number {
 }
 
 function assertGlobalPropertyProbe(raw: Capture, scale: number, labelOnly: boolean): void {
-  const plans = raw.plans.filter((plan) => JSON.stringify(plan).includes('subject-global-property-data.sql'));
+  const plans = raw.plans.filter((plan) => JSON.stringify(plan).includes('read-subject.sql'));
   expect(plans).toHaveLength(1);
   writeFileSync(`${evidenceDirectory}/property-${labelOnly ? 'empty-' : ''}${scale}.json`, JSON.stringify(plans[0]));
   const probes = nodes(plans[0]).filter(
-    (node) => Number(node['Actual Loops']) > 0 && ['fact', 'outbound_link'].includes(String(node['Relation Name'])),
+    (node) => Number(node['Actual Loops']) > 0 && ['property_fact', 'property_link'].includes(String(node['Alias'])),
   );
   if (labelOnly) {
     expect(probes.map((node) => node['Relation Name']).sort()).toEqual(['fact', 'outbound_link']);

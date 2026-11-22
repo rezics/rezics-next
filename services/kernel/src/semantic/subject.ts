@@ -505,7 +505,7 @@ export async function updateSubjectIdentity(
         throw new SubjectInputError([{ pointer: '/type', code: 'unsupported' }]);
       const facts = options.labels === undefined ? [] : itemFacts(options.subject, { labels: options.labels });
       const latest = listed(
-        (await readSubjectStatement.run(tx, { route, subject_id: options.subject })) as
+        (await readSubjectStatement.run(tx, { route, subject_id: options.subject, probe_global_properties: false })) as
           | SubjectReadRow[]
           | SubjectReadRow
           | null,
