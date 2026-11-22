@@ -546,7 +546,7 @@ async function readPopulations(
     ];
     const shared = costs[0]!;
     shared.statements++;
-    shared.bytes = Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
+    shared.bytes = Buffer.byteLength(sql) + search.encodedStateByteLength(values);
     dispatched = true;
     const result = await withRequestDeadline(deadline, () =>
       withBoundedReadConnection(
@@ -568,7 +568,7 @@ async function readPopulations(
         { isUncertainSettledQueryError: () => true },
       ),
     );
-    shared.bytes += Buffer.byteLength(search.encodeState(result.rows));
+    shared.bytes += search.encodedStateByteLength(result.rows);
     if (!result.rows.length) {
       accounted = true;
       requireDeadline();

@@ -94,7 +94,7 @@ export async function readBookRole(
     boundRows = false,
   ) {
     costs[0]!.statements++;
-    bytes(Buffer.byteLength(text) + Buffer.byteLength(search.encodeState(values)), input);
+    bytes(Buffer.byteLength(text) + search.encodedStateByteLength(values), input);
     const request = {
       text,
       values,
@@ -102,8 +102,8 @@ export async function readBookRole(
     };
     const result = await client.query<T>(request);
     bytes(
-      Buffer.byteLength(search.encodeState(result.rows)),
-      boundRows ? result.rows.map((row) => ({ slot: row.slot, size: Buffer.byteLength(search.encodeState(row)) })) : [],
+      search.encodedStateByteLength(result.rows),
+      boundRows ? result.rows.map((row) => ({ slot: row.slot, size: search.encodedStateByteLength(row) })) : [],
     );
     return result.rows;
   }

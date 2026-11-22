@@ -1,3 +1,4 @@
+import { treeByteLength } from './public-filter-codec.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import type { PublicFilterSearchBindingPort, SourceBindingCaptureInput } from '../semantic/index.ts';
@@ -139,6 +140,7 @@ export function createSearchSourceBindingAdapter(
     catalogue: publicFilterCatalogue,
     encodeConsumer: encodePublicFilterNativeState,
     encodeState: encodePublicFilterNativeState,
+    encodedStateByteLength: treeByteLength,
     decodeState: decodePublicFilterNativeState,
     coverageStart: publicFilterCoverageStart,
     readConsumerCustody: readPublicFilterConsumerCustody,

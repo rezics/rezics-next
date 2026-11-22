@@ -139,6 +139,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
   catalogue(consumer: PublicFilterConsumer, mixed: boolean): unknown;
   encodeConsumer(consumer: PublicFilterConsumer): string;
   encodeState(value: unknown): string;
+  encodedStateByteLength(value: unknown): number;
   decodeState<T>(value: string): T;
   coverageStart(context: PublicFilterConsumerContext): string | null;
   readConsumerCustody(

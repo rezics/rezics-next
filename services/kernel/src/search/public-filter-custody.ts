@@ -1,6 +1,6 @@
 import { bookBindingStep, bookCostShare, type BindingStep } from '../request/book-binding-steps.ts';
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
-import { encode, decode, requireValue } from './public-filter-codec.ts';
+import { encode, decode, requireValue, treeByteLength } from './public-filter-codec.ts';
 import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
 import { hasExactPublicFilterMeaning, nativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
@@ -329,10 +329,10 @@ async function sql(
     meter.rows += native.points;
     meter.resultWrites += native.writes;
   }
-  meter.bytes += Buffer.byteLength(query) + Buffer.byteLength(encode(values));
+  meter.bytes += Buffer.byteLength(query) + treeByteLength(values);
   const complete = (result: QueryResult) => {
     if (!native) meter.rows += result.rowCount ?? 0;
-    meter.bytes += Buffer.byteLength(encode(result.rows));
+    meter.bytes += treeByteLength(result.rows);
     if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
   };
   const dispatch = (client: Queryable) => queryCompletion.run(complete, () => client.query(query, values));
@@ -384,13 +384,13 @@ async function engine<T>(
 ) {
   check(context);
   meter.engineRequests++;
-  meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
+  meter.bytes += Buffer.byteLength(path) + treeByteLength(body);
   if (path.endsWith('/_search')) meter.engineSearches++;
   onDispatch?.();
   const response = await search.request<T>(method, path, body, {
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
-  meter.bytes += Buffer.byteLength(encode(response.body));
+  meter.bytes += treeByteLength(response.body);
   if (path.endsWith('/_search'))
     meter.engineIteratorSteps += (response.body as { _shards: { total: number } })._shards.total;
   return response.body;
@@ -692,14 +692,13 @@ export async function readPublicFilterRepairSettlement(
       async request(method, path, body, options) {
         admit();
         meter.engineRequests++;
-        meter.bytes +=
-          Buffer.byteLength(path) + Buffer.byteLength(encode(body)) + Buffer.byteLength(encode(options?.query));
+        meter.bytes += Buffer.byteLength(path) + treeByteLength(body) + treeByteLength(options?.query);
         if (path.endsWith('/_search')) meter.engineSearches++;
         const result = await transport.request(method, path, body, {
           ...options,
           timeoutMs: Math.max(1, context.deadline - Date.now()),
         });
-        meter.bytes += Buffer.byteLength(encode(result.body));
+        meter.bytes += treeByteLength(result.body);
         if (path.endsWith('/_search')) {
           const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
           if (Number.isSafeInteger(shards) && shards! > 0) meter.engineIteratorSteps += shards!;

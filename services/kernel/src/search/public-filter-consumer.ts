@@ -1,3 +1,4 @@
+import { treeByteLength } from './public-filter-codec.ts';
 import { hasExactPublicFilterMeaning, nativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
@@ -982,7 +983,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // byte counter is itself part of the request, so settle the finite decimal
       // length before dispatch instead of saving a snapshot from the prior call.
       for (let attempt = 0; ; attempt++) {
-        const bytes = baseBytes + Buffer.byteLength(encodeState(parameters));
+        const bytes = baseBytes + treeByteLength(parameters, 'value');
         if (typeof values !== 'function' || bytes === cost.bytes) {
           cost.bytes = bytes;
           break;
@@ -1008,7 +1009,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const client = await connect((db) => async (query, values) => {
         const result = await db.query(query, values);
         if (!countedRows) cost.rows += result.rows.length;
-        cost.bytes += Buffer.byteLength(encodeState(result.rows));
+        cost.bytes += treeByteLength(result.rows, 'value');
         check();
         return result;
       });
@@ -1038,10 +1039,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       async request(method, path, body, options) {
         check();
         cost.engineRequests++;
-        cost.bytes += Buffer.byteLength(encodeState(body));
+        cost.bytes += treeByteLength(body, 'value');
         if (path.endsWith('/_search') || path.endsWith('/_search/template')) cost.engineSearches++;
         const result = await config.search.request(method, path, body, { ...options, timeoutMs: remaining(context) });
-        cost.bytes += Buffer.byteLength(encodeState(result.body));
+        cost.bytes += treeByteLength(result.body, 'value');
         // Physical keyed repair readbacks have no public query profile. Charge their actual shards;
         // the retained PIT path separately charges its native profile iterator work.
         if (path !== '/_search' && path.endsWith('/_search')) {
@@ -1058,7 +1059,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               cost.engineRequests++;
               cost.bytes += Buffer.byteLength(body);
               const result = await config.search.bulkRaw!<T>(body, { ...options, timeoutMs: remaining(context) });
-              cost.bytes += Buffer.byteLength(encodeState(result));
+              cost.bytes += treeByteLength(result, 'value');
               check();
               return result;
             },
@@ -1067,9 +1068,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       async bulk(lines, options) {
         check();
         cost.engineRequests++;
-        cost.bytes += Buffer.byteLength(encodeState(lines));
+        cost.bytes += treeByteLength(lines, 'value');
         const result = await config.search.bulk(lines, { ...options, timeoutMs: remaining(context) });
-        cost.bytes += Buffer.byteLength(encodeState(result));
+        cost.bytes += treeByteLength(result, 'value');
         check();
         return result as any;
       },
@@ -1082,7 +1083,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!cleanup) check();
       const parameters = values ?? (typeof query === 'string' ? [] : (query.values ?? []));
       cost.statements++;
-      cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
+      cost.bytes += Buffer.byteLength(text) + treeByteLength(parameters, 'value');
       const timeout = remaining(context);
       const supplied = typeof query === 'string' ? undefined : query.query_timeout;
       return {
@@ -1098,7 +1099,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         const request = reserved ? (query as NativeReadQueryConfig) : reserveQuery(query, values);
         const result = await db.query(request);
         cost.rows += result.rows.length;
-        cost.bytes += Buffer.byteLength(encodeState(result.rows));
+        cost.bytes += treeByteLength(result.rows, 'value');
         if (/\b(INSERT|UPDATE|DELETE)\b/.test(request.text)) cost.resultWrites += result.rowCount ?? 0;
         if (!rollback(request)) check();
         return result;
@@ -1413,7 +1414,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         submit: meter.submitControls,
         receive(rows) {
           if (!footprint) meter.cost.rows += rows.length;
-          meter.cost.bytes += Buffer.byteLength(encodeState(rows));
+          meter.cost.bytes += treeByteLength(rows, 'value');
           meter.check();
         },
       })
@@ -1994,7 +1995,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         m.check();
         const summaries = await getOwnerAdapter(kind).readCurrent(ids, request);
         m.cost.rows += summaries.size;
-        m.cost.bytes += Buffer.byteLength(encodeState([...summaries]));
+        m.cost.bytes += treeByteLength([...summaries], 'value');
         m.check();
         return summaries;
       },
@@ -2132,7 +2133,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
     }
     m.cost.rows += hits.length;
-    m.cost.bytes += Buffer.byteLength(encodeState(hits));
+    m.cost.bytes += treeByteLength(hits, 'value');
     return { rows, accepted, finish: metadata.finish };
   }
   async function nativeBatch(
@@ -2397,7 +2398,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           const raw = result.raw;
           m.cost.candidates += raw.length;
           m.cost.rows += raw.length;
-          m.cost.bytes += Buffer.byteLength(encodeState(raw));
+          m.cost.bytes += treeByteLength(raw, 'value');
           let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
           try {
             checked =
@@ -2551,7 +2552,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             let raw = result.raw;
             m.cost.candidates += raw.length;
             m.cost.rows += raw.length;
-            m.cost.bytes += Buffer.byteLength(encodeState(raw));
+            m.cost.bytes += treeByteLength(raw, 'value');
             let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
             try {
               checked =
@@ -3661,8 +3662,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           nextScan !== undefined &&
           remainingInputs >= nextScan.inputKeys &&
           // The checkpoint sends both the old and new encoded work.
-          m.cost.bytes + nextScan.bytes + 4 * Buffer.byteLength(encodeState(encoded)) <=
-            PUBLIC_FILTER_PREPARATION_BYTE_LIMIT;
+          m.cost.bytes + nextScan.bytes + 4 * treeByteLength(encoded, 'value') <= PUBLIC_FILTER_PREPARATION_BYTE_LIMIT;
         if (
           advanced >= SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN ||
           (advanced > 0 && remainingInputs < PUBLIC_FILTER_REPAIR_INPUT_RESERVE && !scanOnly)

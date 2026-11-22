@@ -89,3 +89,35 @@ export function decode<T>(value: string): T {
 export function requireValue(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid public filter custody input');
 }
+
+const escaped = /["\\\u0000-\u001f\ud800-\udfff]/u;
+function stringBytes(text: string) {
+  return escaped.test(text) ? Buffer.byteLength(JSON.stringify(text)) : 2 + Buffer.byteLength(text);
+}
+
+/** Count the canonical UTF-8 encoding while charging work. Object member order has no effect on its size. */
+export function treeByteLength(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): number {
+  if (value === undefined) return '["undefined"]'.length;
+  if (typeof value === 'bigint') return '["bigint",""]'.length + value.toString().length;
+  if (Array.isArray(value)) {
+    let size = '["array",[]]'.length + Math.max(0, value.length - 1);
+    for (let i = 0; i < value.length; i++) size += i in value ? treeByteLength(value[i], scalarTag) : 'null'.length;
+    return size;
+  }
+  if (typeof value === 'object' && value !== null) {
+    let size = '["object",[]]'.length;
+    const keys = Object.keys(value);
+    for (const key of keys) {
+      size += '[,]'.length + stringBytes(key) + treeByteLength((value as Record<string, unknown>)[key], scalarTag);
+    }
+    return size + Math.max(0, keys.length - 1);
+  }
+  const overhead = scalarTag === 'scalar' ? '["scalar",]'.length : '["value",]'.length;
+  if (typeof value === 'string') return overhead + stringBytes(value);
+  if (typeof value === 'number' && (scalarTag === 'value' || Number.isFinite(value)))
+    return overhead + (Number.isFinite(value) ? String(value).length : 'null'.length);
+  if (typeof value === 'boolean') return overhead + (value ? 'true'.length : 'false'.length);
+  if (value === null) return overhead + 'null'.length;
+  if (scalarTag === 'scalar') throw new TypeError('Invalid public filter custody input');
+  return Buffer.byteLength(JSON.stringify([scalarTag, value]));
+}
