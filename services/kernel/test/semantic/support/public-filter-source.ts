@@ -24,6 +24,7 @@ import type {
   PrivacyReductionHead,
 } from '../../../src/semantic/public-filter-source-contract.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { openIsolatedGrowthDatabase } from '../../support/isolated-growth-database.ts';
 import { createRealAccess } from '../real-access.ts';
 
 export const readContext = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
@@ -115,10 +116,20 @@ export const statement = (id: string, content: unknown, qualifiers: ReturnType<t
   qualifiers,
 });
 
-export async function fixture() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const db = await openGrowthDatabase(url);
+/** Isolate cases that change the shared catalogue or require a specific complete population. */
+export async function fixture(options: { isolated?: boolean } = {}) {
+  const isolated = options.isolated ? await openIsolatedGrowthDatabase() : undefined;
+  const db = isolated?.database ?? (await openGrowthDatabase());
+  const close = isolated?.close ?? (() => db.close());
+  try {
+    return { ...(await prepareFixture(db)), close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
+}
+
+async function prepareFixture(db: GrowthDatabase) {
   const routeKey = new Uint8Array(32).fill(79);
   const accounts = { editor: newId(31000) };
   const real = await createRealAccess(db.admin, accounts, actions);
@@ -222,7 +233,7 @@ export async function fixture() {
     access: real.access({ actions: actionCatalogue(kernel), clock: systemClock }),
   };
   const meaning: PublicFilterProjectionMeaning = { digest, release };
-  return { db, real, accounts, config, meaning, create, propose, post, call, close: () => db.close() };
+  return { db, real, accounts, config, meaning, create, propose, post, call };
 }
 export type Fixture = Awaited<ReturnType<typeof fixture>>;
 export const home = (subject: string) => partitionOf(routeOf(subject)!);
@@ -321,7 +332,7 @@ export async function settleConsumer(
 ) {
   for (let step = 0; step < 10000; step++) {
     const result = await consumer.operations.repairStep(job, readContext());
-    expect(['progress', 'settled']).toContain(result.status);
+    expect(['progress', 'settled'], `Native repair step ${step}: ${JSON.stringify(result)}`).toContain(result.status);
     if (result.status === 'settled') return;
   }
   throw new Error('Finite native repair did not settle');

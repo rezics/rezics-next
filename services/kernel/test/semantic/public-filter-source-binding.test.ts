@@ -360,7 +360,7 @@ test('native public Source configuration and immutable meaning/read definition r
 
 test('native Subject enrollment prepares disjoint ranges and rechecks the original ordered cut', async () => {
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture();
+  const f = await fixture({ isolated: true });
   const source = publicFilterSource(f.config);
   const consumer = await consumerFixture(f, source);
   try {
@@ -631,7 +631,7 @@ test('canonical retained observation execution joins preserve complete compiler 
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { parseText } = await import('../../src/search/text.ts');
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture();
+  const f = await fixture({ isolated: true });
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const index = `source-binding-${crypto.randomUUID()}`;
   const custody = createPublicFilterCustody(f.db.pool);
@@ -1215,7 +1215,7 @@ test('native Source repair receipts revalidate original steps, replay, and curre
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture();
+  const f = await fixture({ isolated: true });
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const index = `source-repair-${crypto.randomUUID()}`;
   const custody = createPublicFilterCustody(f.db.pool);
@@ -1463,7 +1463,7 @@ test('Native public Source repair step and complete original cut are durably rev
   const { readPublicFilterConsumerCustody, readPublicFilterRepairSettlement } =
     await import('../../src/search/public-filter-custody.ts');
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture();
+  const f = await fixture({ isolated: true });
   let consumer: Awaited<ReturnType<typeof consumerFixture>> | undefined;
   try {
     const source = publicFilterSource(f.config);
@@ -1718,7 +1718,7 @@ test('only a reconciled generation may extend and verify its private custody pop
     await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture(),
+  const f = await fixture({ isolated: true }),
     search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `private-population-${crypto.randomUUID().slice(0, 8)}-`,
     index = subjectIndexName(prefix, 1);
@@ -1889,7 +1889,7 @@ test('native Source replays its original creation window after the same home adv
     await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
-  const f = await fixture();
+  const f = await fixture({ isolated: true });
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `source-window-${crypto.randomUUID().slice(0, 8)}-`;
   const index = subjectIndexName(prefix, 1);
