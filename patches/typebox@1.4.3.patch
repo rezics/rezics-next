@@ -1,0 +1,107 @@
+diff --git a/build/schema/build.mjs b/build/schema/build.mjs
+--- a/build/schema/build.mjs
++++ b/build/schema/build.mjs
+@@ -110,6 +110,7 @@
+     Engine.ResetExternal();
+     Engine.ResetFunctions();
+     const stack = Engine.Stack(context, schema);
++    stack.referenceMatches = new WeakMap();
+     const build = new Engine.BuildContext(Engine.HasUnevaluated(context, schema));
+     const call = Engine.CreateFunction(stack, build, schema, 'value');
+     const functions = Engine.GetFunctions();
+diff --git a/build/schema/resolve/resolve.mjs b/build/schema/resolve/resolve.mjs
+--- a/build/schema/resolve/resolve.mjs
++++ b/build/schema/resolve/resolve.mjs
+@@ -152,8 +152,8 @@
+ // a resource root (carries its own $id). Used by FindResolvedResource
+ // to tell a boundary hit from a landing inside a resource.
+ // ------------------------------------------------------------------
+-function Resource(context, schema, base, ref) {
+-    const result = RefInternal(context, schema, base, ref);
++function Resource(stack, schema, base, ref) {
++    const result = RefInternal(stack, schema, base, ref);
+     return Schema.IsSchemaObject(result) && Schema.IsId(result) ? result : undefined;
+ }
+ // ------------------------------------------------------------------
+@@ -195,7 +195,7 @@
+ function FindResolvedResource(stack, canonical, schema) {
+     if (Schema.IsId(schema))
+         return undefined;
+-    const resource = Resource(stack.context, /* safe-object-root */ stack.schema, stack.referenceBase, canonical);
++    const resource = Resource(stack, /* safe-object-root */ stack.schema, stack.referenceBase, canonical);
+     if (!resource || stack.ids.includes(resource))
+         return undefined;
+     return { resource };
+@@ -212,23 +212,33 @@
+ function RefInternalWithContext(context, ref) {
+     return Guard.HasPropertyKey(context, ref) ? context[ref] : undefined;
+ }
+-function RefInternalWithLocal(schema, base, ref) {
+-    return Match(schema, base, ref);
+-}
+-function RefInternalWithRemote(context, base, ref) {
++function RefInternalWithLocal(matches, schema, base, ref) {
++    if (!matches || !Guard.IsObject(schema))
++        return Match(schema, base, ref);
++    let bases = matches.get(schema);
++    if (!bases)
++        matches.set(schema, bases = new Map());
++    let targets = bases.get(base.href);
++    if (!targets)
++        bases.set(base.href, targets = new Map());
++    if (!targets.has(ref.href))
++        targets.set(ref.href, Match(schema, base, ref));
++    return targets.get(ref.href);
++}
++function RefInternalWithRemote(stack, base, ref) {
+     const canonicalHref = CanonicalHref(ref);
+-    if (!Guard.HasPropertyKey(context, canonicalHref) || Guard.IsEqual(canonicalHref, CanonicalHref(base)))
+-        return undefined;
+-    const remoteSchema = context[canonicalHref];
++    if (!Guard.HasPropertyKey(stack.context, canonicalHref) || Guard.IsEqual(canonicalHref, CanonicalHref(base)))
++        return undefined;
++    const remoteSchema = stack.context[canonicalHref];
+     const remoteBase = RelativeBase(remoteSchema, new URL(canonicalHref));
+-    return Guard.IsEqual(ref.hash, '') ? remoteSchema : Match(remoteSchema, remoteBase, ref);
+-}
+-function RefInternal(context, schema, base, ref) {
++    return Guard.IsEqual(ref.hash, '') ? remoteSchema : RefInternalWithLocal(stack.referenceMatches, remoteSchema, remoteBase, ref);
++}
++function RefInternal(stack, schema, base, ref) {
+     const absoluteBase = AbsoluteBase(base);
+     const target = Stack.NextUri(ref, absoluteBase.href);
+-    return RefInternalWithContext(context, ref) ??
+-        RefInternalWithLocal(schema, absoluteBase, target) ??
+-        RefInternalWithRemote(context, absoluteBase, target);
++    return RefInternalWithContext(stack.context, ref) ??
++        RefInternalWithLocal(stack.referenceMatches, schema, absoluteBase, target) ??
++        RefInternalWithRemote(stack, absoluteBase, target);
+ }
+ // ------------------------------------------------------------------
+ // RefNextStack
+@@ -279,7 +289,7 @@
+ // subsequent evaluation.
+ // ------------------------------------------------------------------
+ export function Ref(stack, ref) {
+-    const schema = RefInternal(stack.context, RefRoot(stack, ref), stack.referenceBase, ref.$ref);
++    const schema = RefInternal(stack, RefRoot(stack, ref), stack.referenceBase, ref.$ref);
+     return Schema.IsSchemaObject(schema) ? RefResultFound(stack, ref, schema) : RefResultNotFound(stack, schema);
+ }
+ // ------------------------------------------------------------------
+@@ -294,7 +304,7 @@
+ }
+ export function RecursiveRef(stack, recursiveRef) {
+     const schema = IsRecursiveAnchorInScope(stack) ? stack.recursiveAnchor : stack.lexicalSchema;
+-    return RefInternal(stack.context, schema, stack.lexicalBase, recursiveRef.$recursiveRef);
++    return RefInternal(stack, schema, stack.lexicalBase, recursiveRef.$recursiveRef);
+ }
+ // ------------------------------------------------------------------
+ // DynamicRef: Draft 2020-12
+@@ -326,6 +336,6 @@
+ }
+ export function DynamicRef(stack, dynamicRef) {
+     const fragmentRoot = dynamicRef.$dynamicRef.startsWith('#') ? stack.lexicalSchema : stack.schema;
+-    const fragmentTarget = RefInternal(stack.context, fragmentRoot, stack.lexicalBase, dynamicRef.$dynamicRef);
++    const fragmentTarget = RefInternal(stack, fragmentRoot, stack.lexicalBase, dynamicRef.$dynamicRef);
+     return Guard.IsUndefined(fragmentTarget) ? DynamicRefWhenNotFound(stack, dynamicRef) : DynamicRefWhenFound(stack, dynamicRef, fragmentTarget);
+ }

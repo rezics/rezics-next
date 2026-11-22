@@ -20,7 +20,8 @@
     "@better-auth/oauth-provider@1.8.0-beta.3": "patches/@better-auth%2Foauth-provider@1.8.0-beta.3.patch",
     "@storybook/react@11.0.0-alpha.8": "patches/@storybook%2Freact@11.0.0-alpha.8.patch",
     "elysia@2.0.0-rc.1": "patches/elysia@2.0.0-rc.1.patch",
-    "reylo@0.7.0": "patches/reylo@0.7.0.patch"
+    "reylo@0.7.0": "patches/reylo@0.7.0.patch",
+    "typebox@1.4.3": "patches/typebox@1.4.3.patch"
   },
   "devDependencies": {
     "@go-task/cli": "3.54.0",
