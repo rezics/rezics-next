@@ -1,6 +1,11 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
-import { CommandUnavailableError, runCommand, type CommandEvent } from '../src/command/command.ts';
+import {
+  authoritativeTimeValue,
+  CommandUnavailableError,
+  runCommand,
+  type CommandEvent,
+} from '../src/command/command.ts';
 import { createPool, NestedPoolCheckoutError } from '../src/database/pool.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -10,14 +15,6 @@ const { pool, secondPool } = withoutPoolAcquireTimeout(() => ({
   secondPool: createPool(databaseUrl),
 }));
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const partitions = [7, 8, 9, 10, 11, 12, ...Array.from({ length: 11 }, (_, n) => 100 + n)];
-afterEach(async () => {
-  await admin.query(
-    "UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = ANY($1)",
-    [partitions],
-  );
-  await admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1)', [partitions]);
-});
 afterAll(async () => {
   await Promise.all([pool.end(), secondPool.end()]);
   await admin.end();
@@ -41,18 +38,24 @@ async function position(partition: number): Promise<number> {
 }
 
 test('a command runs serializable with its timeouts, takes the next position and appends one envelope', async () => {
-  const first = await runCommand(pool, { partition: 7 }, async (tx) => {
-    const { rows } = await tx.query(`SELECT current_setting('transaction_isolation') AS isolation,
+  const first = await runCommand(pool, { partition: 7 }, async (tx, { time }) => {
+    const { rows } =
+      await tx.query(`SELECT transaction_timestamp()::text AS at, current_setting('transaction_isolation') AS isolation,
       (SELECT setting::int FROM pg_settings WHERE name = 'lock_timeout') AS lock,
       (SELECT setting::int FROM pg_settings WHERE name = 'statement_timeout') AS statement,
       (SELECT setting::int FROM pg_settings WHERE name = 'idle_in_transaction_session_timeout') AS idle`);
+    expect(authoritativeTimeValue(time)).toBe(rows[0].at);
     return { value: rows[0], events: [event(1), event(2)] };
   });
   expect(first).toMatchObject({ value: { isolation: 'serializable', lock: 200, idle: 5000 }, partition: 7, epoch: 1 });
   expect(first.position).toBe(1n);
   expect(first.value.statement).toBeGreaterThan(1500);
   expect(first.value.statement).toBeLessThanOrEqual(2000);
-  const second = await runCommand(pool, { partition: 7 }, async () => ({ value: null, events: [event(3)] }));
+  const fixed = new Date('2026-01-31T11:12:13.456Z');
+  const second = await runCommand(pool, { partition: 7, clock: () => fixed }, async (_tx, { time }) => {
+    expect(new Date(authoritativeTimeValue(time))).toEqual(fixed);
+    return { value: null, events: [event(3)] };
+  });
   expect(second).toEqual({
     value: null,
     partition: 7,
@@ -128,8 +131,8 @@ test('commands that collide at the fence from two pools retry and both commit', 
   let release!: () => void;
   const bothStarted = new Promise<void>((resolve) => (release = resolve));
   const command = (commandPool: typeof pool, n: number) =>
-    runCommand(commandPool, { partition: 9 }, async (tx) => {
-      await tx.query('SELECT position FROM core.partition WHERE partition_no = 9');
+    runCommand(commandPool, { partition: 13 }, async (tx) => {
+      await tx.query('SELECT position FROM core.partition WHERE partition_no = 13');
       if (++started === 2) release();
       await bothStarted;
       return { value: n, events: [event(n)] };
@@ -137,7 +140,7 @@ test('commands that collide at the fence from two pools retry and both commit', 
   const results = await Promise.all([command(pool, 1), command(secondPool, 2)]);
   expect(started).toBe(3);
   expect(results.map((result) => result.position).sort()).toEqual([1n, 2n]);
-  expect(await position(9)).toBe(2);
+  expect(await position(13)).toBe(2);
 });
 
 test('contention is retried with backoff until the deadline and other failures are not retried', async () => {
@@ -216,15 +219,15 @@ test('a fenced partition is retried until it opens or the deadline passes', asyn
 });
 
 test('a moved partition fails at once and names its new node', async () => {
-  await admin.query("UPDATE core.partition SET write_state = 'moved', moved_to = 'a' WHERE partition_no = 11");
+  await admin.query("UPDATE core.partition SET write_state = 'moved', moved_to = 'a' WHERE partition_no = 14");
   let calls = 0;
-  const error = await runCommand(pool, { partition: 11 }, async () => {
+  const error = await runCommand(pool, { partition: 14 }, async () => {
     calls++;
     return { value: null, events: [event(1)] };
   }).catch((caught: unknown) => caught);
-  expect(error).toMatchObject({ reason: 'moved', partition: 11, movedTo: 'a' });
+  expect(error).toMatchObject({ reason: 'moved', partition: 14, movedTo: 'a' });
   expect(calls).toBe(1);
-  expect(await position(11)).toBe(0);
+  expect(await position(14)).toBe(0);
 });
 
 test('a statement still running at the deadline is cancelled', async () => {
@@ -247,12 +250,12 @@ test('a command cannot take a second connection from its pool', async () => {
   ).rejects.toBeInstanceOf(NestedPoolCheckoutError);
   await expect(
     runCommand(pool, { partition: 8 }, async () => {
-      await runCommand(pool, { partition: 9 }, async () => ({ value: null, events: [event(1)] }));
+      await runCommand(pool, { partition: 15 }, async () => ({ value: null, events: [event(1)] }));
       return { value: null, events: [event(2)] };
     }),
   ).rejects.toBeInstanceOf(NestedPoolCheckoutError);
   expect((await pool.query('SELECT 1 AS one')).rows).toEqual([{ one: 1 }]);
-  expect([await position(8), await position(9)]).toEqual([0, 0]);
+  expect([await position(8), await position(15)]).toEqual([0, 0]);
   expect(pool.options).toMatchObject({ max: 10, connectionTimeoutMillis: 200, idleTimeoutMillis: 30_000 });
 });
 

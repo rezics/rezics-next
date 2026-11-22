@@ -19,6 +19,7 @@ import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
+import initializeTime from './initialize-time.sql';
 import {
   discardConnection,
   withBoundedCommandConnection,
@@ -381,24 +382,32 @@ export function hasLiveCommandTransaction(tx: CommandTransaction): boolean {
   }
 }
 
+function configuredTime(clock?: () => Date): string {
+  const configured = clock?.();
+  if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
+  return configured?.toISOString() ?? '';
+}
+
+function retainTime(row: { at: string } | null | undefined): AuthoritativeTime {
+  if (!row) throw new TypeError('No authoritative database time');
+  const time = Object.freeze({}) as AuthoritativeTime;
+  times.set(time, row.at);
+  return time;
+}
+
 async function mintTime(
   client: CommandTransaction,
   clock?: () => Date,
   dispatch?: CommandDispatchLifetime,
   compiled = false,
 ): Promise<AuthoritativeTime> {
-  const configured = clock?.();
-  if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
-  const parameters = { at: configured?.toISOString() ?? '' };
+  const parameters = { at: configuredTime(clock) };
   const row = dispatch
     ? (await dispatch.control('time', () => client.query<{ at: string }>(COMMAND_DISPATCH_TIME_SQL))).rows[0]
     : compiled
       ? await runCompiledCommandControl(client, readTime, parameters)
       : await readTime.run(client, parameters);
-  if (!row) throw new TypeError('No authoritative database time');
-  const time = Object.freeze({}) as AuthoritativeTime;
-  times.set(time, row.at);
-  return time;
+  return retainTime(row);
 }
 
 /** Mints an authoritative time for a read outside a command, with no command context. */
@@ -876,14 +885,24 @@ async function executeCommand<T>(
               : undefined;
             checkBirthReceipt = (await beginIdentityBirthTransaction(client, partition, wait)) === 'receipt';
           } else await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-          if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
-          else await client.query("SET LOCAL lock_timeout = '200ms'");
-          if (dispatch)
-            await dispatch.control('statementTimeout', () =>
-              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
-            );
-          else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch, compiled));
+          if (!time && ordinary && !commandWork) {
+            time = await measureCommandPhase('time_mint', async () => {
+              const parameters = { at: configuredTime(options.clock), timeout: `${remaining(deadline)}ms` };
+              const row = compiled
+                ? await runCompiledCommandControl(client, initializeTime, parameters)
+                : await initializeTime.run(client, parameters);
+              return retainTime(row);
+            });
+          } else {
+            if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
+            else await client.query("SET LOCAL lock_timeout = '200ms'");
+            if (dispatch)
+              await dispatch.control('statementTimeout', () =>
+                client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
+              );
+            else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+            time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch, compiled));
+          }
           attempt ??= Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
           attemptDeadlines.set(attempt, deadline);
           attempts.set(tx, attempt);

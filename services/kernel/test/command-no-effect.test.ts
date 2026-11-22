@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import {
@@ -10,6 +10,8 @@ import {
   type CommandAuthorizationMode,
 } from '../src/command/command.ts';
 import { createPool } from '../src/database/pool.ts';
+import { encodeReceiptKey } from '../src/command/receipt-key.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from './support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -62,6 +64,13 @@ const tracedPool = new Proxy(pool, {
     return Reflect.get(target, property, target);
   },
 });
+
+configureTestReceiptKeys(pool);
+configureTestReceiptKeys(tracedPool);
+
+function storedKey(commandReceipt: ReturnType<typeof receipt>) {
+  return encodeReceiptKey(testReceiptKeys(), commandReceipt.kind, { kind: 'account', id: actor }, commandReceipt.key);
+}
 
 type Trace<T> = { value: T; statements: string[] };
 async function trace<T>(work: () => Promise<T>): Promise<Trace<T>> {
@@ -179,18 +188,6 @@ beforeAll(async () => {
   await admin.query('CREATE TABLE public.command_no_effect_fixture (id uuid PRIMARY KEY)');
 });
 
-afterEach(async () => {
-  const selected = Object.values(partitions);
-  await admin.query('DELETE FROM core.receipt WHERE partition_no = ANY($1::integer[])', [selected]);
-  await admin.query('DELETE FROM editorial.write_basis WHERE partition_no = ANY($1::integer[])', [selected]);
-  await admin.query('DELETE FROM core.outbox WHERE partition_no = ANY($1::integer[])', [selected]);
-  await admin.query(
-    "UPDATE core.partition SET write_state = 'active', moved_to = NULL, position = 0 WHERE partition_no = ANY($1::integer[])",
-    [selected],
-  );
-  await admin.query('TRUNCATE public.command_no_effect_fixture');
-});
-
 afterAll(async () => {
   await Promise.all([pool.end(), admin.end()]);
 });
@@ -208,7 +205,7 @@ test('a no-effect result commits its receipt without an outbox row write basis o
   );
   await admin.query('DELETE FROM core.receipt WHERE partition_no = $1 AND idempotency_key = $2', [
     partition,
-    warmupReceipt.key,
+    storedKey(warmupReceipt),
   ]);
   const before = await snapshot(partition);
   const commandReceipt = receipt();
@@ -234,13 +231,13 @@ test('a no-effect result commits its receipt without an outbox row write basis o
   expect(after.basis).toEqual(before.basis);
   expect(after.receipts).toHaveLength(before.receipts.length + 1);
   expect(after.receipts.at(-1)).toMatchObject({
-    idempotency_key: commandReceipt.key,
+    idempotency_key: storedKey(commandReceipt),
     position: before.partition[0]!.position,
     epoch: 1,
     transaction_id: traced.value.transactionId,
     response: { accepted: true },
   });
-  expect(traced.statements).toHaveLength(8);
+  expect(traced.statements).toHaveLength(6);
   expect(noEffectStatements(traced.statements)).toHaveLength(1);
 });
 
@@ -305,7 +302,7 @@ test('a no-effect result without a receipt commits nothing', async () => {
     replayed: false,
   });
   expect(await snapshot(partition)).toEqual(before);
-  expect(traced.statements).toHaveLength(7);
+  expect(traced.statements).toHaveLength(5);
   expect(noEffectStatements(traced.statements)).toHaveLength(1);
 });
 
@@ -435,7 +432,7 @@ test('a no-effect receipt on a partition at position 0 is stored and replayed at
   expect(after.basis).toEqual([]);
   expect(after.receipts).toMatchObject([
     {
-      idempotency_key: commandReceipt.key,
+      idempotency_key: storedKey(commandReceipt),
       position: '0',
       transaction_id: first.transactionId,
       response: { noop: true },
