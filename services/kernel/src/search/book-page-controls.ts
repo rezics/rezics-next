@@ -187,6 +187,14 @@ export const pageControls = {
 };
 
 export type ControlPhase = keyof typeof pageControls;
+// The single-page transitions have a fixed parameter layout on every request and physical connection.
+export const singlePageControls = Object.fromEntries(
+  Object.entries(pageControls).map(([phase, statement]) => [
+    phase,
+    { name: `search_page_${phase}_1_v1`, text: statement(1) },
+  ]),
+) as Record<ControlPhase, Readonly<{ name: string; text: string }>>;
+
 export type ControlRow = {
   id: string;
   rounds?: number;

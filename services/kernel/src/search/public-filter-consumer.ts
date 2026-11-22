@@ -20,7 +20,7 @@ import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
 import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
-import { pageControls, type ControlPhase, type ControlRow } from './book-page-controls.ts';
+import { pageControls, singlePageControls, type ControlPhase, type ControlRow } from './book-page-controls.ts';
 import type { BookIdentityRow } from './composed-book-identities.ts';
 import {
   composedBookControl,
@@ -996,13 +996,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return parameters;
     };
     const sql = async <T extends import('pg').QueryResultRow>(
-      query: string,
+      query: string | Readonly<{ name: string; text: string }>,
       values: unknown[] | (() => unknown[]) = [],
       countedRows = false,
     ) => {
-      const parameters = fundSql(query, values);
+      const text = typeof query === 'string' ? query : query.text;
+      const parameters = fundSql(text, values);
       const request: import('pg').QueryConfig & { query_timeout: number } = {
-        text: query,
+        ...(typeof query === 'string' ? {} : { name: query.name }),
+        text,
         values: parameters,
         query_timeout: remaining(context),
       };
@@ -1382,13 +1384,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function pageSql<T extends import('pg').QueryResultRow>(
     page: Page,
     footprint: { points: number; keys: number; writes: number },
-    text: string,
+    statement: string | Readonly<{ name: string; text: string }>,
     values: () => unknown[],
   ) {
     reservePageWork(page, footprint);
     // The returned row is the same keyed control already reserved above.
     // Keep this true even at the result-side budget check and on lost receipts.
-    return page.m.sql<T>(text, values, true);
+    return page.m.sql<T>(statement, values, true);
   }
   function groupControl(
     page: Page,
@@ -1432,7 +1434,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const grouped = groupControl(page, phase, observation, id, footprint, values);
     const row = grouped
       ? await grouped
-      : (await pageSql<ControlRow>(page, footprint, pageControls[phase](1), values)).rows[0];
+      : (await pageSql<ControlRow>(page, footprint, singlePageControls[phase], values)).rows[0];
     if (row?.id !== id) throw new ConsumerFailure('observation_lost');
     return row;
   }
