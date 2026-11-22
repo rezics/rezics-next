@@ -2,7 +2,9 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
+import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/standard-question.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -88,6 +90,61 @@ const position = async (partition: number) =>
       .rows[0].position,
   );
 const counted = async (id: string) => (await source.count(subjectPartition(id))).count;
+
+test('rated search reads the indexed body and rating on the same backend across a concurrent commit', async () => {
+  const { id } = await person('Concurrent rating');
+  const home = subjectPartition(id);
+  const route = routeOf(id)!;
+  const original = await position(home);
+  await admin.query(
+    `INSERT INTO rating.public_figure
+       (route, question_id, population_id, subject_id, count, mean, revision, as_of, position)
+     VALUES ($1, $2, $3, $4, 5, 6.5, 1, transaction_timestamp(), $5)`,
+    [route, STANDARD_QUESTION_ID, GLOBAL_CONTEXT, id, original.toString()],
+  );
+  const rated = createRatedSubjectSource(pool, new Uint8Array(32).fill(4)).source;
+  let connections = 0;
+  let changed = false;
+  const statements: string[] = [];
+  const snapshot = await withQueryAccounting(
+    {
+      connection(dispatch) {
+        connections++;
+        return dispatch();
+      },
+      async query(sql, _values, dispatch) {
+        statements.push(sql);
+        if (!changed && sql.includes('JOIN rating.public_figure')) {
+          changed = true;
+          await admin.query(
+            `WITH advanced AS (
+               UPDATE core.partition SET position = position + 1 WHERE partition_no = $1 RETURNING position
+             )
+             UPDATE rating.public_figure SET mean = 8, revision = 2, position = advanced.position
+             FROM advanced WHERE route = $2 AND question_id = $3 AND population_id = $4 AND subject_id = $5`,
+            [home, route, STANDARD_QUESTION_ID, GLOBAL_CONTEXT, id],
+          );
+        }
+        return dispatch();
+      },
+    },
+    () => rated.read(home, [id, newId(route)]),
+  );
+  expect(changed).toBe(true);
+  expect(connections).toBe(1);
+  expect(statements.filter((sql) => sql.startsWith('BEGIN'))).toHaveLength(1);
+  expect(statements.filter((sql) => sql === 'COMMIT')).toHaveLength(1);
+  expect(snapshot.position).toBe(original);
+  expect(snapshot.subjects).toHaveLength(1);
+  expect(snapshot.subjects[0]).toMatchObject({
+    id,
+    labels: [{ language: 'en', value: 'Concurrent rating' }],
+    publicRating: { subjectId: id, count: 5, mean: 6.5, revision: '1' },
+  });
+  const next = await rated.read(home, [id]);
+  expect(next.position).toBe(original + 1n);
+  expect(next.subjects[0]?.publicRating).toMatchObject({ subjectId: id, mean: 8, revision: '2' });
+});
 
 test('catalogue text candidates preserve current terms and defer adopted searchable names to full disclosure', async () => {
   const book = await ok(

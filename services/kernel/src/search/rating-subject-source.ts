@@ -20,6 +20,7 @@ export function withPublicRatings(
   source: SubjectSource,
   ratings: PublicRatingSource,
   binding: { questionId: string; populationId: string },
+  readBatch?: (partition: number, ids: readonly string[]) => Promise<readonly [SubjectSnapshot, PublicRatingSnapshot]>,
 ): SubjectSource {
   const { questionId, populationId } = binding;
   if (routeOf(questionId) === null || populationId !== GLOBAL_CONTEXT.id)
@@ -45,8 +46,14 @@ export function withPublicRatings(
         const semantic: SubjectSnapshot[] = [];
         const figures: PublicRatingSnapshot[] = [];
         for (const batch of batches) {
-          semantic.push(await source.read(partition, batch));
-          figures.push(await ratings.read(partition, batch));
+          if (readBatch) {
+            const [subjects, rating] = await readBatch(partition, batch);
+            semantic.push(subjects);
+            figures.push(rating);
+          } else {
+            semantic.push(await source.read(partition, batch));
+            figures.push(await ratings.read(partition, batch));
+          }
         }
         const position = semantic[0]!.position;
         mismatch = '';

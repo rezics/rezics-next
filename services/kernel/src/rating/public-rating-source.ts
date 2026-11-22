@@ -76,6 +76,39 @@ export async function readNativeSearchPublicRating(client: Pick<Pool, 'query'>, 
   return figure?.count ? toPublicFigure(figure) : undefined;
 }
 
+async function readSnapshot(client: Pick<Pool, 'query'>, partition: number, subjectIds: readonly string[]) {
+  const partitionResult = await client.query<{ position: string }>(
+    'SELECT "position"::text AS position FROM core.partition WHERE partition_no = $1',
+    [partition],
+  );
+  const partitionRow = partitionResult.rows[0];
+  if (!partitionRow) throw new Error('Rating source partition position is unavailable');
+
+  const current = await readPublicFigures(client, {
+    partition,
+    questionId: STANDARD_QUESTION_ID,
+    populationId: GLOBAL_CONTEXT.id,
+    subjectIds,
+  });
+  const figures = new Map<string, PublicRatingFigure>();
+  for (const figure of current) {
+    if (figure.count === 0) continue;
+    const publicFigure = toPublicFigure(figure);
+    figures.set(publicFigure.subjectId, publicFigure);
+  }
+  return { partition, position: BigInt(partitionRow.position), figures };
+}
+
+/** Read the Rating owner's figure and position using the Semantic reader's live repeatable-read transaction. */
+export function readPublicRatingSnapshotInTransaction(
+  client: Pick<Pool, 'query'>,
+  partition: number,
+  subjectIds: readonly string[],
+): Promise<PublicRatingSnapshot> {
+  validateRead(partition, subjectIds);
+  return readSnapshot(client, partition, subjectIds);
+}
+
 /** Compose the search rating source from current public figures for the standard question and Global population. */
 export function createPublicRatingSource(pool: Pool): PublicRatingSource {
   return {
@@ -84,28 +117,9 @@ export function createPublicRatingSource(pool: Pool): PublicRatingSource {
       return withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
-          const partitionResult = await client.query<{ position: string }>(
-            'SELECT "position"::text AS position FROM core.partition WHERE partition_no = $1',
-            [partition],
-          );
-          const partitionRow = partitionResult.rows[0];
-          if (!partitionRow) throw new Error('Rating source partition position is unavailable');
-
-          const current = await readPublicFigures(client, {
-            partition,
-            questionId: STANDARD_QUESTION_ID,
-            populationId: GLOBAL_CONTEXT.id,
-            subjectIds,
-          });
-          const figures = new Map<string, PublicRatingFigure>();
-          for (const figure of current) {
-            if (figure.count === 0) continue;
-            const publicFigure = toPublicFigure(figure);
-            figures.set(publicFigure.subjectId, publicFigure);
-          }
-
+          const snapshot = await readSnapshot(client, partition, subjectIds);
           await client.query('COMMIT');
-          return { partition, position: BigInt(partitionRow.position), figures };
+          return snapshot;
         } catch (error) {
           try {
             await client.query('ROLLBACK');

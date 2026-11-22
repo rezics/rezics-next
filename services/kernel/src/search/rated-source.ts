@@ -5,11 +5,11 @@ import type {
 import type { Pool } from 'pg';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ConfigError } from '../commerce/config.ts';
-import { createPublicRatingSource } from '../rating/public-rating-source.ts';
+import { createPublicRatingSource, readPublicRatingSnapshotInTransaction } from '../rating/public-rating-source.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { searchNativePorts } from './native-bindings.ts';
 import type { SearchNativePorts } from './native-ports.ts';
-import type { PublicRatingSource } from './rating-source.ts';
+import type { PublicRatingSnapshot, PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
@@ -28,10 +28,20 @@ export function createRatedSubjectSource(
   const ratings = createPublicRatingSource(pool);
   const semantic = nativePorts.subjectSource(pool, routeKey);
   const native = creditSearch === undefined ? semantic : { ...semantic, creditSearch };
-  const rated = withPublicRatings(native, ratings, {
-    questionId: STANDARD_QUESTION_ID,
-    populationId: GLOBAL_CONTEXT.id,
-  });
+  const rated = withPublicRatings(
+    native,
+    ratings,
+    { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id },
+    async (partition, ids) => {
+      let rating: PublicRatingSnapshot | undefined;
+      const subjects = await semantic.read(partition, ids, async (client) => {
+        if (nativePorts.currentReadSnapshot(pool) !== client) return;
+        rating = await readPublicRatingSnapshotInTransaction(client, partition, ids);
+      });
+      // Historical producers can deliver a complete snapshot without an in-transaction observer.
+      return [subjects, rating ?? (await ratings.read(partition, ids))];
+    },
+  );
   return {
     source: {
       ...rated,

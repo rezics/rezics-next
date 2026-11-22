@@ -170,11 +170,27 @@ async function resumeSelection(pool: Pool, deadline: number, pending: Pick<Subje
   );
 }
 
+type SubjectSnapshotObserver = (client: Pick<PoolClient, 'query'>) => Promise<void>;
+
+/** A second native reader can observe this same cut before the backend is released for foreign relation work. */
+function observeSubjectSnapshot<T extends SubjectSnapshot>(
+  read: (client: PoolClient) => Promise<T>,
+  observe?: SubjectSnapshotObserver,
+) {
+  if (!observe) return read;
+  return async (client: PoolClient) => {
+    const snapshot = await read(client);
+    if (!('pending' in snapshot)) await observe(client);
+    return snapshot;
+  };
+}
+
 export function subjectSource(
   pool: Pool,
   routeKey?: Uint8Array,
 ): SubjectSource &
   SubjectSourceKeyPages & {
+    read(partition: number, ids: readonly string[], observe?: SubjectSnapshotObserver): Promise<SubjectSnapshot>;
     canonicalNames: SubjectCanonicalNames;
     conceptBrowse: ReturnType<typeof relationSource>['conceptBrowse'];
     readConceptStatements: ConceptStatementReader;
@@ -204,7 +220,7 @@ export function subjectSource(
     readBookCandidateNames: bookCandidateNames(pool, routeKey, (deadline, subject) =>
       resumeSelection(pool, deadline, subject),
     ),
-    async read(partition, ids): Promise<SubjectSnapshot> {
+    async read(partition: number, ids: readonly string[], observe?: SubjectSnapshotObserver): Promise<SubjectSnapshot> {
       assertPartition(partition);
       if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH) throw new TypeError('A subject snapshot accepts at most 256 ids');
       const requested = new Map<string, number>();
@@ -220,7 +236,7 @@ export function subjectSource(
       const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       const snapshot = await withReadTransaction(
         pool,
-        async (client) => {
+        observeSubjectSnapshot(async (client) => {
           const positionRow = await readPosition.run(client, { partition_no: partition });
           if (!positionRow) throw new CommandUnavailableError('fenced', partition);
           if (positionRow.writeState === 'moved')
@@ -367,7 +383,7 @@ export function subjectSource(
             });
           }
           return { partition, position, subjects, relation };
-        },
+        }, observe),
         deadline,
       );
       if ('pending' in snapshot && snapshot.pending) {
