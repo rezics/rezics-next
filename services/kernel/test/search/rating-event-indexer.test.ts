@@ -3,7 +3,7 @@ import pg from 'pg';
 import { Compile } from 'typebox/compile';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId } from '../../src/route/route.ts';
@@ -94,6 +94,55 @@ test('the public figure proposal uses the registered production schema, includin
     true,
   );
   expect(validator.Check({ ...data, revision: 1 })).toBe(false);
+});
+
+test('a neutral Subject batch advances on the reading lease and still honors an independent coverage guard', async () => {
+  const partition = 153;
+  const foreignId = newId((partition + 1) * 16);
+  const position = await append(partition, [{ type: changed, subject: foreignId, data: figure(foreignId) }]);
+  const consumer = `neutral_${crypto.randomUUID().replaceAll('-', '')}`;
+  const guarded = `${consumer}_guarded`;
+  consumers.push({ consumer, partition }, { consumer: guarded, partition });
+  const unexpected = async () => {
+    throw new Error('Neutral envelopes have no Subject document work');
+  };
+  const options = {
+    pool,
+    source: { read: unexpected, count: unexpected },
+    search: { request: unexpected, bulk: unexpected },
+    listing: { read: unexpected },
+    index: 'unused',
+  };
+  const relay = createSubjectIndexer({ ...options, consumer });
+  let checkouts = 0;
+  const result = await withQueryAccounting(
+    {
+      query: (_sql, _operands, dispatch) => dispatch(),
+      connection(dispatch) {
+        checkouts++;
+        return dispatch();
+      },
+    },
+    () => relay.run(partition),
+  );
+  expect(result).toMatchObject({ status: 'read', envelopes: 1, position });
+  expect(checkouts).toBe(1);
+  expect(await checkpoint(consumer, partition)).toBe(String(position));
+
+  const blocked = createSubjectIndexer({
+    ...options,
+    consumer: guarded,
+    async aroundApply(_partition, envelopes, apply) {
+      expect(envelopes.map((envelope) => envelope.position)).toEqual([position]);
+      await apply();
+      throw new Error('Coverage guard rejected the batch');
+    },
+  });
+  await expect(blocked.run(partition)).rejects.toThrow('Coverage guard rejected the batch');
+  expect(await checkpoint(guarded, partition)).toBe('0');
+  const retry = createSubjectIndexer({ ...options, consumer: guarded });
+  expect(await retry.run(partition)).toMatchObject(result);
+  expect(await checkpoint(guarded, partition)).toBe(String(position));
 });
 
 test('registered rating events invalidate only the anchor once per batch, retry durably and replay harmlessly', async () => {

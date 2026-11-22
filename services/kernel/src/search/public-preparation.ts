@@ -246,10 +246,6 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         }
       });
     },
-    /** The actual ordinary writer checks the native publication gate inside its enrollment transaction. */
-    writer(_generation: number): import('./indexer.ts').SubjectApplyGuard {
-      return async (_partition, _envelopes, apply) => apply();
-    },
     initialize(generation: number, signal?: AbortSignal, deadline = deadlineFor(30_000)): Promise<string> {
       return track(deadline, async () => {
         const ensureLive = () => {

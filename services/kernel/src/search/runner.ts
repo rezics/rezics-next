@@ -279,7 +279,6 @@ export async function startSearchIndexing(options: {
                 index: subjectIndexName(options.prefix, generation),
                 recoverRelayEnrollment: true,
               }),
-              ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
             });
           }),
         );
