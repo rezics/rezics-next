@@ -24,6 +24,7 @@ export type RatingCursorResult = {
 };
 export declare function encodeRatingCursor(ring: KeyRing, binding: SearchCursorBinding, context: RatingCursorContext, cursor: {
     generation: number;
+    indexUuid?: string;
     phase: RatingPhase;
     after: readonly SearchSortValue[];
 }, now?: number): Promise<string>;

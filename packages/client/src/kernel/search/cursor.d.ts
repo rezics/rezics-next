@@ -11,6 +11,7 @@ export type SearchSortValue = string | number | null;
 export type SearchCursorResult = {
     ok: true;
     generation: number;
+    indexUuid?: string;
     after: SearchSortValue[];
 } | {
     ok: false;
@@ -18,6 +19,7 @@ export type SearchCursorResult = {
 };
 export declare function encodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, cursor: {
     generation: number;
+    indexUuid?: string;
     after: readonly SearchSortValue[];
 }, now?: number): Promise<string>;
 export declare function decodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, token: string, now?: number): Promise<SearchCursorResult>;
