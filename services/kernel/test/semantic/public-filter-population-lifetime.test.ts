@@ -34,6 +34,7 @@ type NativeResult = { rows: unknown[] };
 const encode = (value: unknown): string => JSON.stringify(value)!;
 const search = {
   encodeState: encode,
+  encodedStateByteLength: (value: unknown) => Buffer.byteLength(encode(value)),
   decodeState: <T>(value: string): T => JSON.parse(value) as T,
   encodeConsumer: encode,
   catalogue: () => undefined,
