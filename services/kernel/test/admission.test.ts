@@ -63,13 +63,16 @@ test('a configured normal queue preserves reserved permits and the shared waitin
   for (const normalQueue of [0, 2]) {
     const admission = new Admission({ permits: 2, reserved: 1, queue: 3, normalQueue });
     const blocker = gate();
-    const normal = Array.from({ length: 2 + normalQueue }, () => admission.run('normal', later(), () => blocker.opened));
+    const normal = Array.from({ length: 2 + normalQueue }, () =>
+      admission.run('normal', later(), () => blocker.opened),
+    );
     const reserved = [admission.run('reserved', later(), () => blocker.opened)];
     try {
-      expect(admission.running).toEqual({ normal: 2, reserved: 1 });
+      expect(admission.running).toEqual({ normal: 2, reserved: 1, bearer: 0 });
       expect(admission.waiting).toBe(normalQueue);
       await expect(admission.run('normal', later(), async () => {})).rejects.toMatchObject({
-        code: 'overloaded', headers: { 'retry-after': '1' },
+        code: 'overloaded',
+        headers: { 'retry-after': '1' },
       });
       for (let i = normalQueue; i < 3; i++) reserved.push(admission.run('reserved', later(), () => blocker.opened));
       expect(admission.waiting).toBe(3);
@@ -79,7 +82,7 @@ test('a configured normal queue preserves reserved permits and the shared waitin
       await Promise.all([...normal, ...reserved]);
     }
     expect(admission.waiting).toBe(0);
-    expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+    expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
   }
 });
 

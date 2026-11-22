@@ -647,6 +647,12 @@ const typed = [
   'PUT /v1/libraryYearlyCompletionGoal',
   'PUT /v1/libraryHostedReading',
   'POST /v1/libraryHostedReading/$clear',
+  'DELETE /v1/collections/:collectionId/members/:memberId/applications/:appliedSubjectId',
+  'GET /v1/collections/:collectionId/applications/:appliedSubjectId/members',
+  'GET /v1/collections/:collectionId/members/:memberId/applications',
+  'GET /v1/libraryEntries/:subjectId/applications',
+  'PUT /v1/collections/:collectionId/members/:memberId/applications/:appliedSubjectId',
+  'PUT /v1/libraryEntries/:subjectId/applications/:appliedSubjectId',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : `Unlisted route: ${Missing}` = true;

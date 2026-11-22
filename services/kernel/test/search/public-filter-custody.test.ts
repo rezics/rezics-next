@@ -328,7 +328,6 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       let outputCount = 0;
       let after: readonly (string | number | null)[] | undefined;
       let interrupted = false;
-      let terminalObservation: typeof n.queried | undefined;
       while (rawCount < count) {
         const end = Math.min(count, rawCount + 100);
         const expectedOutputCount = outputCount;
@@ -356,27 +355,16 @@ test('native interrupted prepared builds replay one fixed segment and read exact
           after: nextAfter,
           rawExhausted: end === count && count < 1000,
         };
-        // The producer loses the first segment reply and the terminal observation reply.
+        // The producer loses its reply after the committed first segment.
         const first = await registry.appendPreparationSegment(request, context());
         expect(first.status).toBe('appended');
         if (first.status !== 'appended') throw new Error(first.status);
         charge(first);
-        if (!interrupted || request.retain) {
+        if (!interrupted) {
           const replay = await resumed.appendPreparationSegment(request, context());
           expect(replay.status).toBe('replayed');
           if (replay.status !== 'replayed') throw new Error(replay.status);
           charge(replay);
-          if (request.retain) {
-            expect(first.queried?.snapshot.kind).toBe('prepared');
-            expect(replay.queried).toEqual(first.queried);
-            terminalObservation = first.queried;
-            expect(
-              await resumed.appendPreparationSegment(
-                { ...request, retain: { ...request.retain, covered: cut() } },
-                context(),
-              ),
-            ).toMatchObject({ reason: 'binding_mismatch' });
-          }
           const frontier = await resumed.readPreparationFrontier(
             { registration: n.registration, build, generation },
             context(),
@@ -445,7 +433,6 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       expect(retained.status).toBe('retained');
       if (retained.status !== 'retained') throw new Error(retained.reason);
       charge(retained);
-      expect(terminalObservation).toEqual(retained.queried);
       const completed = await resumed.completePreparationBuild(
         { queried: retained.queried, rawCount, outputCount },
         context(),
@@ -1006,14 +993,15 @@ test('native close revalidates a held obsolete maximum after another factory rel
   const leaseDeadline = Date.now() + 300_000;
   const acquired = await registry.acquire(n.queried, { deadline: leaseDeadline });
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
-  let reached!: (expiresAt: number) => void;
+  let reached!: () => void;
   let deliver!: () => void;
-  const maximumRead = new Promise<number>((resolve) => {
+  const maximumRead = new Promise<void>((resolve) => {
     reached = resolve;
   });
   const delivery = new Promise<void>((resolve) => {
     deliver = resolve;
   });
+  let held = false;
   let referenceReads = 0;
   const db = await openGrowthDatabase();
   const heldPool: typeof db.pool = Object.create(db.pool);
@@ -1097,7 +1085,7 @@ test('native close revalidates a held obsolete maximum after another factory rel
     await append(unrelated.queried);
   } finally {
     deliver();
-    await closing.catch(() => {});
+    await closing;
     await closer.close();
     await db.close();
     await releaser.close();

@@ -146,12 +146,12 @@ test('the reader answers each call from a read that began after the call', async
   held.open();
   const before = await first;
   const after = await Promise.all(waiting);
-  expect(statements).toBe(2);
+  expect(held.statements()).toBe(2);
   expect(before.asOf.getTime()).toBeGreaterThan(Date.parse('2025-12-31T00:00:00.000Z'));
   for (const result of after) expect(result.asOf.toISOString()).toBe('2025-12-31T00:00:00.000Z');
   expect(after[1]).toEqual(after[0]);
   expect(after[2]).toEqual(after[0]);
   await append(601, '2025-12-30T00:00:00.000Z');
-  expect((await current()).asOf.toISOString()).toBe('2025-12-30T00:00:00.000Z');
-  expect(statements).toBe(3);
+  expect((await reader.current()).asOf.toISOString()).toBe('2025-12-30T00:00:00.000Z');
+  expect(held.statements()).toBe(3);
 });

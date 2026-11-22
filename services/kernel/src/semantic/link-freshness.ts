@@ -135,6 +135,7 @@ export async function subjectLinksCovered(
     readLinkCheckpoint['~standard'].query.text,
     'semantic_subject_link_checkpoint_v2',
   );
+  const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
   const includePending = !anchor && requirements.partitions.length > 0;
   const checkpoint = (input: ReturnType<typeof linkRequirements>) =>
     readLinkCheckpoint.run(transport, {

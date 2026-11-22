@@ -27,7 +27,7 @@ test('publication settles a rejected ordinary bulk under its original receipt be
 }, 60000);
 
 async function verifyRecovery(url: string) {
-  const f = await fixture(url);
+  const f = await fixture({ url });
   const { pool } = f.db;
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = 'relay-recovery-' + crypto.randomUUID().slice(0, 8) + '-';

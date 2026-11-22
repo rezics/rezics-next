@@ -117,9 +117,9 @@ export const statement = (id: string, content: unknown, qualifiers: ReturnType<t
 });
 
 /** Isolate cases that change the shared catalogue or require a specific complete population. */
-export async function fixture(options: { isolated?: boolean } = {}) {
+export async function fixture(options: { isolated?: boolean; url?: string } = {}) {
   const isolated = options.isolated ? await openIsolatedGrowthDatabase() : undefined;
-  const db = isolated?.database ?? (await openGrowthDatabase());
+  const db = isolated?.database ?? (await openGrowthDatabase(options.url));
   const close = isolated?.close ?? (() => db.close());
   try {
     return { ...(await prepareFixture(db)), close };

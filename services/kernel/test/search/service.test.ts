@@ -15,6 +15,7 @@ import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { createMappedExecutedRequestSubject } from './support/executed-request-runtime.ts';
 import { epochFixture } from '../semantic/support/identity-epoch.ts';
 
 const missingFigure: PublicFigureView = {

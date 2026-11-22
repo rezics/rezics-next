@@ -44,7 +44,7 @@ test('the receiver commits the original all-home ACK over verified compact windo
 }, 180000);
 
 async function verifyPublication(url: string, verifyCompactWindow = false) {
-  const f = await fixture(url);
+  const f = await fixture({ url });
   const pool = f.db.pool;
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = 'source-held-' + randomUUID().slice(0, 8) + '-';
