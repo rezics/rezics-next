@@ -36,6 +36,39 @@ import {
 
 type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
 
+test('native public-filter decoding preserves ordered children and the last value for a repeated key', async () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  const decode = async (value: unknown) => {
+    const result = await pool.query<{ decoded: unknown }>(
+      'SELECT semantic.public_filter_native_json($1::jsonb) AS decoded',
+      [JSON.stringify(value)],
+    );
+    return result.rows[0]!.decoded;
+  };
+  try {
+    const wide = Array.from({ length: 256 }, (_, i) => i);
+    expect(
+      await decode([
+        'object',
+        [
+          ['items', ['scalar', 'earlier']],
+          ['empty', ['object', []]],
+          [
+            'items',
+            [
+              'array',
+              [...wide.map((i) => ['scalar', i]), ['value', null], ['undefined'], ['bigint', '9007199254740993']],
+            ],
+          ],
+        ],
+      ]),
+    ).toEqual({ empty: {}, items: [...wide, null, null, '9007199254740993'] });
+    await expect(decode(['array', [['invalid']]])).rejects.toMatchObject({ code: 'P0001' });
+  } finally {
+    await pool.end();
+  }
+});
+
 test.each([true, false])(
   'native enrollment groups new homes with accounts=%s and preserves each pinned receipt',
   async (accounts) => {
