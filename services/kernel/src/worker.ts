@@ -1,6 +1,7 @@
 import { composeRatingDependencies } from './composition/rating.ts';
 import { initializeEventTypes } from './events/catalogue.ts';
 import pg from 'pg';
+import { accountPoolQueries } from './database/pool.ts';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
@@ -126,6 +127,10 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
  * outcome children decorate this live list instead of importing a second composition. */
 export type KernelWorkModuleDecorator = (modules: readonly WorkModule[]) => readonly WorkModule[];
 
+export function workerShutdownDeadline(): number {
+  return Date.now() + 5000;
+}
+
 export async function startWorker(
   config: WorkerConfig,
   modules?: readonly WorkModule[] | KernelWorkModuleDecorator,
@@ -160,7 +165,7 @@ export async function startWorker(
   try {
     pool = config.kernelPool
       ? await config.kernelPool(config.databaseUrl)
-      : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+      : accountPoolQueries(new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize }));
   } catch (error) {
     content.stop();
     throw error;
@@ -199,7 +204,7 @@ export async function startWorker(
   let relays: ReturnType<typeof startRelays> | undefined;
   let starting: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
-  const stop = (): Promise<void> => {
+  const stop = (deadline?: number): Promise<void> => {
     return (stopping ??= (async () => {
       try {
         // A signal during registration or launch drains the runtime once startup settles.
@@ -207,7 +212,7 @@ export async function startWorker(
         try {
           await shutdownPhase('shutdown.relays').run(() => relays?.stop());
         } finally {
-          if (work) await shutdownPhase('shutdown.work').run(() => work!.shutdown());
+          if (work) await shutdownPhase('shutdown.work').run(() => work!.shutdown(deadline));
         }
       } finally {
         process.removeListener('SIGINT', signal);
@@ -225,10 +230,14 @@ export async function startWorker(
     })());
   };
   const signal = () => {
-    void stop().catch(() => {
-      console.error('Worker shutdown failed');
-      process.exitCode = 1;
-    });
+    void stop(workerShutdownDeadline())
+      .then(() => {
+        if (import.meta.main) process.exit(0);
+      })
+      .catch(() => {
+        console.error('Worker shutdown failed');
+        process.exitCode = 1;
+      });
   };
   if (config.handleSignals !== false) {
     process.on('SIGINT', signal);

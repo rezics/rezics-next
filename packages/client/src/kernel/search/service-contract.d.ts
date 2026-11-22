@@ -1,4 +1,5 @@
 import type { DiscoveryFilterDocument, FilterDocument, FilterRelease, SpoilerThreshold } from '@rezics/filter';
+import type { AdmissionYield } from '../http/request.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
@@ -94,6 +95,11 @@ export type BookPagePublication = {
 };
 export type PublicSearchReadContext = Readonly<{
     bookPage?: BookPagePublication;
+    /** The admitted HTTP reader can park while the public rank or other readers' summaries run. */
+    bookAdmission?: {
+        wait: AdmissionYield;
+        run<T>(work: (wait: AdmissionYield) => Promise<T>): Promise<T>;
+    };
     deadline: number;
     /** The verified request context used only by the service-bound native Scope. */
     scope?: LeafOptions;

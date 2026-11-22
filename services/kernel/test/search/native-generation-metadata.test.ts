@@ -179,6 +179,7 @@ test('activation preserves released calendar metadata through a lost mapping res
     };
     const activatedAt = new Date().toISOString();
     await publishSubjectActivationMetadata(search, index, activatedAt);
+    await publishSubjectActivationMetadata(search, index, activatedAt);
     expect(writes).toBe(1);
     const after = await native.request<typeof before.body>('GET', `/${index}/_mapping`);
     expect(after.body[index]!.mappings._meta).toEqual({

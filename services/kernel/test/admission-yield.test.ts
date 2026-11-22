@@ -34,7 +34,7 @@ test('a yielded normal permit admits queued work and reacquires before the reade
   pause.open();
   await holder;
   expect(order).toEqual(['before-wait', 'queued-reader', 'after-wait']);
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('an aborted yielded reader leaves no active permit', async () => {

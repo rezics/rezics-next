@@ -1,6 +1,8 @@
-import type { Pool } from 'pg';
+import type { PoolClient } from 'pg';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+
+type CreationReader = Pick<PoolClient, 'query'>;
 
 /** A finite original outbox interval. This is retained inside the existing
  * immutable Source repair-step state, never supplied by a public caller.
@@ -9,6 +11,7 @@ export type PublicFilterCreationWindow = Readonly<{
   partition: number;
   epoch: number;
   receipt: string;
+  heldBirth?: string;
   base: bigint;
   through: bigint;
   position: bigint;
@@ -31,6 +34,7 @@ function validWindow(w: PublicFilterCreationWindow): boolean {
     Number.isInteger(w.epoch) &&
     w.epoch > 0 &&
     /^[0-9a-f]{64}$/.test(w.receipt) &&
+    (w.heldBirth === undefined || /^[1-9][0-9]{0,18}$/.test(w.heldBirth)) &&
     typeof w.base === 'bigint' &&
     w.base >= 0n &&
     typeof w.through === 'bigint' &&
@@ -46,28 +50,38 @@ function validWindow(w: PublicFilterCreationWindow): boolean {
   );
 }
 
+// All three readers re-open the original authority in the event statement's
+// snapshot. The third parameter is the retained protocol's own identity.
+function creationAuthority(heldBirth: string | undefined) {
+  return heldBirth !== undefined
+    ? `SELECT epoch,command_head AS head,command_base AS base,receipt
+       FROM semantic.subject_access_cut_v1($2::uuid,$1::integer) WHERE birth=$3::bigint`
+    : `SELECT p.epoch,p.position AS head,e.creation_position AS base,e.receipt
+       FROM semantic.public_filter_home_enrollment e
+       JOIN core.partition p ON p.partition_no=e.partition_no
+       JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+       WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt IS NOT NULL
+         AND e.creation_consumer=$3 AND p.write_state='active' AND p.epoch=e.owner_epoch
+         AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)`;
+}
+
 /** The baseline receipt and its still-retained pin are resolved by native keys.
  * Capturing through does not extend the original baseline or any served cut.
  */
 export async function readPublicFilterCreationWindow(
-  pool: Pool,
-  input: Readonly<{ bootstrap: string; partition: number }>,
+  pool: CreationReader,
+  input: Readonly<{ bootstrap: string; partition: number; heldBirth?: string | undefined }>,
   context: Readonly<{ deadline: number }>,
   retained?: PublicFilterCreationWindow,
 ): Promise<PublicFilterCreationWindow> {
   requireAccessDeadline(context.deadline);
-  const consumer = publicFilterCreationConsumer(input.bootstrap);
+  const consumer = input.heldBirth ?? publicFilterCreationConsumer(input.bootstrap);
   if (!Number.isInteger(input.partition) || input.partition < 0 || input.partition > 4095)
     throw new TypeError('Creation windows require one exact native home');
   const row = (
     await pool.query<NativeWindow>(
-      `SELECT p.epoch,p.position::text AS head,e.creation_position::text AS base,e.receipt
-     FROM semantic.public_filter_home_enrollment e
-     JOIN core.partition p ON p.partition_no=e.partition_no
-     JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
-     WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt IS NOT NULL
-       AND e.creation_consumer=$3 AND p.write_state='active' AND p.epoch=e.owner_epoch
-       AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)`,
+      `${input.heldBirth === undefined ? '' : '/* semantic.native-keyed:89:89 */ '}
+       SELECT epoch,head::text,base::text,receipt FROM (${creationAuthority(input.heldBirth)}) cut`,
       [input.partition, input.bootstrap, consumer],
     )
   ).rows[0];
@@ -79,6 +93,7 @@ export async function readPublicFilterCreationWindow(
     if (
       !validWindow(retained) ||
       retained.partition !== input.partition ||
+      retained.heldBirth !== input.heldBirth ||
       retained.epoch !== row.epoch ||
       retained.receipt !== row.receipt ||
       retained.base !== base ||
@@ -91,6 +106,7 @@ export async function readPublicFilterCreationWindow(
   }
   return Object.freeze({
     partition: input.partition,
+    ...(input.heldBirth === undefined ? {} : { heldBirth: input.heldBirth }),
     epoch: row.epoch,
     receipt: row.receipt,
     base,
@@ -106,7 +122,7 @@ export async function readPublicFilterCreationWindow(
  * group is unknown; LIMIT/empty output cannot establish exhaustion.
  */
 export async function readPublicFilterCreationEvent(
-  pool: Pool,
+  pool: CreationReader,
   input: Readonly<{ bootstrap: string; window: PublicFilterCreationWindow }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<
@@ -119,9 +135,26 @@ export async function readPublicFilterCreationEvent(
   const w = input.window;
   if (!validWindow(w)) throw new TypeError('Invalid original creation window');
   if (w.position > w.through) {
-    await readPublicFilterCreationWindow(pool, { bootstrap: input.bootstrap, partition: w.partition }, context, w);
+    await readPublicFilterCreationWindow(
+      pool,
+      { bootstrap: input.bootstrap, partition: w.partition, heldBirth: w.heldBirth },
+      context,
+      w,
+    );
     return { event: null, next: w };
   }
+  if (w.heldBirth !== undefined)
+    return readPublicFilterCreationEvents(
+      pool,
+      {
+        ...input,
+        accounts: false,
+        inputLimit: 1,
+        subjectRange: false,
+      },
+      context,
+      { rows: 0, inputKeys: 0, dependencyPoints: 0 },
+    );
   const row = (
     await pool.query<{
       owner_epoch: number;
@@ -198,6 +231,8 @@ type CreationEnvelope = Readonly<{
   id: string;
   type: string;
   subject: string | null;
+  data_digest?: string;
+  transaction_id?: string | null;
 }>;
 
 type Meter = { inputKeys: number; rows: number; dependencyPoints: number };
@@ -207,7 +242,7 @@ type Meter = { inputKeys: number; rows: number; dependencyPoints: number };
  * Legacy replay remains capped at its original retained count.
  */
 export async function readPublicFilterCreationEvents(
-  pool: Pool,
+  pool: CreationReader,
   input: Readonly<{
     bootstrap: string;
     window: PublicFilterCreationWindow;
@@ -226,13 +261,16 @@ export async function readPublicFilterCreationEvents(
 }> {
   requireAccessDeadline(context.deadline);
   const w = input.window;
-  const limit = input.retainedCount ?? input.inputLimit;
+  const held = w.heldBirth !== undefined;
+  const inputLimit = held ? Math.min(input.inputLimit, 32) : input.inputLimit;
+  const limit = input.retainedCount ?? inputLimit;
   if (
     !validWindow(w) ||
     w.position > w.through ||
     !Number.isInteger(limit) ||
     limit < 1 ||
-    limit > input.inputLimit ||
+    limit > inputLimit ||
+    (held && input.accounts) ||
     (input.subjectRange && (input.accounts || input.retainedCount !== undefined))
   )
     throw new TypeError('Invalid creation event range');
@@ -242,20 +280,19 @@ export async function readPublicFilterCreationEvents(
     cost.rows += points;
     cost.dependencyPoints += points;
   };
-  charge(3 + limit);
+  // A held envelope seeks its command basis and checks the claimed group end. The cut
+  // also checks the original closure (at most 65 keys), both pages and the native owners.
+  const eventPoints = held ? 3 : 1;
+  charge((held ? 89 : 3) + eventPoints * limit);
   const { rows } = await pool.query<CreationEnvelope>(
     `/* semantic.native-keyed:0:0 */
      WITH RECURSIVE events AS (
        SELECT 0 AS ordinal,$4::bigint AS next_position,$5::integer AS next_seq,false AS stop,NULL::text AS repair_subject,
               NULL::bigint AS position,NULL::integer AS event_seq,NULL::integer AS event_count,
               NULL::integer AS epoch,NULL::uuid AS id,NULL::text AS type,NULL::text AS subject
-       FROM semantic.public_filter_home_enrollment e
-       JOIN core.partition p ON p.partition_no=e.partition_no
-       JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
-       WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt=$6
-         AND e.creation_consumer=$3 AND p.write_state='active' AND p.epoch=e.owner_epoch
-         AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
-         AND p.epoch=$7 AND e.creation_position=$8 AND p.position>=$9
+              ${held ? ',NULL::text AS data_digest,NULL::uuid AS transaction_id' : ''}
+       FROM (${creationAuthority(w.heldBirth)}) cut
+       WHERE cut.receipt=$6 AND cut.epoch=$7 AND cut.base=$8 AND cut.head>=$9
        UNION ALL
        SELECT e.ordinal+1,
               CASE WHEN o.event_seq+1<o.event_count THEN o.position
@@ -265,24 +302,45 @@ export async function readPublicFilterCreationEvents(
                 (e.repair_subject IS NOT NULL AND o.subject IS DISTINCT FROM e.repair_subject)),
               CASE WHEN action.repair THEN coalesce(e.repair_subject,o.subject) ELSE e.repair_subject END,
               o.position,o.event_seq,o.event_count,o.epoch,o.id,o.type,o.subject
+              ${held ? ',o.data_digest,basis.transaction_id' : ''}
        FROM events e
        JOIN LATERAL (
          SELECT o.position,o.event_seq,o.event_count,o.epoch,o.id,o.type,o.subject
+           ${held ? ",encode(sha256(convert_to(o.data::text,'UTF8')),'hex') AS data_digest" : ''}
          FROM core.outbox o
          WHERE (o.partition_no,o.position,o.event_seq)=($1,e.next_position,e.next_seq)
+           ${
+             held
+               ? `AND o.payload_state='present'
+             AND (o.event_seq+1<o.event_count OR NOT EXISTS (
+               SELECT 1 FROM core.outbox extra WHERE (extra.partition_no,extra.position)=(o.partition_no,o.position)
+                 AND extra.event_seq>=o.event_count
+             ))
+             AND (o.type NOT IN ('com.rezics.subject.created.v1','com.rezics.subject.visibility_changed.v1')
+               OR o.data->>'id'=o.subject)
+             AND (o.type<>'com.rezics.subject.visibility_changed.v1'
+               OR (o.data->>'visibility' IS NOT NULL AND o.data->>'security_revision' IS NOT NULL))`
+               : ''
+           }
          LIMIT 1
        ) o ON true
+       ${
+         held
+           ? `LEFT JOIN editorial.write_basis basis
+         ON (basis.partition_no,basis.position,basis.epoch)=($1,o.position,o.epoch)`
+           : ''
+       }
        CROSS JOIN LATERAL (
          SELECT starts_with(o.type,$11) OR starts_with(o.type,$12) OR o.type=ANY($13::text[]) AS repair
        ) action
        WHERE e.ordinal<$10 AND e.next_position<=$9 AND NOT e.stop
      )
-     SELECT position::text,event_seq,event_count,epoch,id,type,subject
+     SELECT position::text,event_seq,event_count,epoch,id,type,subject ${held ? ',data_digest,transaction_id' : ''}
      FROM events WHERE ordinal>0 ORDER BY ordinal`,
     [
       w.partition,
       input.bootstrap,
-      publicFilterCreationConsumer(input.bootstrap),
+      w.heldBirth ?? publicFilterCreationConsumer(input.bootstrap),
       String(w.position),
       w.sequence,
       w.receipt,
@@ -313,6 +371,9 @@ export async function readPublicFilterCreationEvents(
       row.event_seq !== next.sequence ||
       row.epoch !== w.epoch ||
       row.event_count <= next.sequence ||
+      (held &&
+        (row.type === 'com.rezics.subject.created.v1' || row.type === 'com.rezics.subject.visibility_changed.v1') &&
+        (row.transaction_id == null || row.subject === null)) ||
       (next.eventCount !== null && row.event_count !== next.eventCount)
     )
       throw new CommandUnavailableError('contention', w.partition);
@@ -326,6 +387,7 @@ export async function readPublicFilterCreationEvents(
         row.id,
         row.type,
         row.subject,
+        ...(held ? [row.data_digest, row.transaction_id] : []),
       ]);
       bytes += Buffer.byteLength(JSON.stringify(tuple)) - 1;
       if ((target && action && row.subject !== target.subject) || bytes > 12 * 1024) {
@@ -339,7 +401,7 @@ export async function readPublicFilterCreationEvents(
     next = creationEventSuccessor(next, row.event_count);
   }
   if (stopped && !envelopes.length) {
-    charge(rows.length - limit);
+    charge(eventPoints * (rows.length - limit));
     // A single oversized envelope still has the original digest-based replay.
     return readPublicFilterCreationEvents(pool, { ...input, subjectRange: false }, context, cost);
   }
@@ -348,16 +410,104 @@ export async function readPublicFilterCreationEvents(
     !event ||
     rows.length > limit ||
     (input.retainedCount !== undefined && rows.length !== input.retainedCount) ||
-    (rows.length < input.inputLimit &&
+    (rows.length < inputLimit &&
       next.position <= w.through &&
       (input.subjectRange ? !stopped && target?.subject !== null : !target))
   )
     throw new CommandUnavailableError('contention', w.partition);
-  charge(rows.length - limit);
+  charge(eventPoints * (rows.length - limit));
   return {
     event,
     next,
     envelopes,
     packed: input.subjectRange && (target || stopped) ? `[${packed.join(',')}]` : undefined,
   };
+}
+
+/** Read every slot of small single-event command groups inside the caller's
+ * held-page snapshot. A gap, extra slot, minimized payload or relevant event
+ * leaves that entire home to the ordinary creation bridge. */
+export async function readHeldQuietCommands(
+  db: CreationReader,
+  homes: readonly Readonly<{ partition: number; epoch: number; base: string; head: string }>[],
+  eventLimit: number,
+  meter?: Meter,
+) {
+  if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 128 || homes.length > 32)
+    throw new TypeError('Invalid held creation window allowance');
+  const ranges = [];
+  const quiet = new Map<number, string[]>();
+  let positions = 0;
+  for (const home of homes) {
+    const count = BigInt(home.head) - BigInt(home.base);
+    if (count < 0n || count > BigInt(eventLimit - positions)) break;
+    quiet.set(home.partition, []);
+    if (count) ranges.push({ ...home, count: Number(count) });
+    positions += Number(count);
+  }
+  if (!positions) return quiet;
+
+  // Each command and write-basis index is traversed once per finite home.
+  // One extra outbox slot detects a non-singleton group or a malformed tail.
+  const points = 2 * positions + 3 * ranges.length;
+  const result = await db.query<{
+    home: number;
+    events: [string, number, number, number, string, string, string | null, string | null][];
+    bases: [string, string, number][];
+  }>(
+    `/* semantic.native-keyed:${points}:${points} */
+    SELECT r.partition AS home,coalesce(o.events,'[]') AS events,coalesce(b.bases,'[]') AS bases
+    FROM jsonb_to_recordset($1) r(partition integer,base bigint,head bigint,count integer)
+    CROSS JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_array(position::text,event_seq,event_count,epoch,id,type,subject,digest)
+        ORDER BY position,event_seq) AS events FROM (
+        SELECT position,event_seq,event_count,epoch,id,type,subject,
+          CASE WHEN payload_state='present' THEN encode(sha256(convert_to(data::text,'UTF8')),'hex') END AS digest
+        FROM core.outbox WHERE partition_no=r.partition AND position>r.base AND position<=r.head
+        ORDER BY position,event_seq LIMIT r.count+1
+      ) slots
+    ) o CROSS JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_array(position::text,transaction_id,epoch) ORDER BY position) AS bases
+      FROM (SELECT position,transaction_id,epoch FROM editorial.write_basis
+        WHERE partition_no=r.partition AND position>r.base AND position<=r.head ORDER BY position LIMIT r.count) keys
+    ) b ORDER BY r.partition`,
+    [JSON.stringify(ranges)],
+  );
+  let visited = 2 * ranges.length;
+  for (const [index, row] of result.rows.entries()) {
+    const home = ranges[index]!;
+    if (row.home !== home.partition) throw new CommandUnavailableError('contention', home.partition);
+    visited += row.events.length + row.bases.length;
+    const bases = new Map(
+      row.bases.filter(([, , epoch]) => epoch === home.epoch).map(([position, id]) => [position, id]),
+    );
+    if (row.events.length !== home.count) {
+      quiet.delete(row.home);
+      continue;
+    }
+    for (const [offset, [position, sequence, count, epoch, id, type, subject, digest]] of row.events.entries()) {
+      if (
+        BigInt(position) !== BigInt(home.base) + BigInt(offset + 1) ||
+        sequence !== 0 ||
+        count !== 1 ||
+        epoch !== home.epoch ||
+        digest === null ||
+        publicFilterCreationAction(type, false) !== null
+      ) {
+        quiet.delete(row.home);
+        break;
+      }
+      quiet
+        .get(row.home)!
+        .push(JSON.stringify([position, epoch, id, type, subject, digest, bases.get(position) ?? null]));
+    }
+  }
+  if (result.rows.length !== ranges.length) throw new CommandUnavailableError('contention', ranges[0]!.partition);
+  if (meter) {
+    const unused = points - visited;
+    meter.rows -= unused;
+    meter.inputKeys -= unused;
+    meter.dependencyPoints -= unused;
+  }
+  return quiet;
 }

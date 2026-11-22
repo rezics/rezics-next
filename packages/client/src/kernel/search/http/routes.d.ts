@@ -4,6 +4,7 @@ import type { DiscoverySearch } from '../discovery-service.ts';
 import type { AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
 import type { createApp } from '../../http/app.ts';
+import { type AdmissionYield } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
@@ -91,7 +92,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -102,7 +103,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -113,7 +114,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -139,7 +140,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         status: number;
                         code: unknown;
                         retryable: unknown;
-                        effect_status: "applied" | "not_applicable" | "not_applied";
+                        effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
@@ -2045,7 +2046,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2056,7 +2057,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2067,7 +2068,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2078,7 +2079,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2089,7 +2090,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2109,7 +2110,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2167,7 +2168,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2178,7 +2179,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2189,7 +2190,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2200,7 +2201,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2211,7 +2212,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2231,7 +2232,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             status: number;
                             code: unknown;
                             retryable: unknown;
-                            effect_status: "applied" | "not_applicable" | "not_applied";
+                            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
@@ -2256,7 +2257,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
         readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -2368,7 +2369,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2382,7 +2383,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2396,7 +2397,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2410,7 +2411,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2424,7 +2425,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2448,7 +2449,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2589,7 +2590,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2600,7 +2601,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2611,7 +2612,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2622,7 +2623,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2633,7 +2634,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2653,7 +2654,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2757,7 +2758,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2768,7 +2769,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2779,7 +2780,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2790,7 +2791,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2801,7 +2802,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2821,7 +2822,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -2932,7 +2933,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2946,7 +2947,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2960,7 +2961,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2974,7 +2975,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -2988,7 +2989,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3012,7 +3013,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3060,7 +3061,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
             readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -3091,7 +3092,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     subjects: {
@@ -3288,7 +3289,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3302,7 +3303,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3316,7 +3317,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3330,7 +3331,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3344,7 +3345,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3368,7 +3369,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3433,7 +3434,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
         readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -3474,7 +3475,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3488,7 +3489,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3502,7 +3503,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3516,7 +3517,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3530,7 +3531,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3544,7 +3545,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3599,7 +3600,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3610,7 +3611,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3621,7 +3622,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3632,7 +3633,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3643,7 +3644,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3654,7 +3655,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3686,7 +3687,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3697,7 +3698,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3708,7 +3709,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3719,7 +3720,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3730,7 +3731,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3741,7 +3742,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: number;
             code: unknown;
             retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
+            effect_status: "applied" | "not_applicable" | "not_applied" | "unknown";
             request_id: string;
             detail: unknown;
             errors: unknown;
@@ -3781,7 +3782,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3795,7 +3796,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3809,7 +3810,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3823,7 +3824,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3837,7 +3838,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3851,7 +3852,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3885,7 +3886,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
             readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -3916,7 +3917,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<AccessCheck>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource, permit?: AdmissionYield) => Promise<AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<import("elysia").ElysiaStatus<200, {
     state: "ready";
@@ -3969,7 +3970,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3983,7 +3984,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -3997,7 +3998,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4011,7 +4012,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4025,7 +4026,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
@@ -4039,7 +4040,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{

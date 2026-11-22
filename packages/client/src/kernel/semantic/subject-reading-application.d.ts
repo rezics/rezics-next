@@ -9,7 +9,7 @@ export type { SubjectSummaryObservation } from './contract/summaries.ts';
 import type { SubjectReadingAuthorizationPort, SubjectReadingNativePort, SubjectReadingFenceTuple, SubjectReadingFence } from './contract/index.ts';
 import type { ContextRecord } from './context.ts';
 import { type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
-import { type Item } from './item.ts';
+import { type FactRow, type Item } from './item.ts';
 import { type SelectedSynopsisInput, type SelectedSynopsisResult } from './selected-synopsis.ts';
 import { type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
@@ -218,6 +218,28 @@ export type SummaryObservationOptions = {
  * native checks execute on that snapshot; no allow decision is retained.
  */
 export declare function summaryAuthorization(prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>, prepareBatch?: () => Promise<SubjectSummaryBatchAuthorizer>): SummaryAuthorize;
+export type SubjectReadRow = {
+    has_global_properties: boolean | null;
+    has_members: boolean;
+    native_revision: boolean | null;
+    id: string;
+    account: string | null;
+    redirect: string | null;
+    type: string;
+    revision: number;
+    security_revision: string;
+    release: string;
+    fact_revision: number | null;
+    fact_release: string | null;
+    slot_id: string | null;
+    log_seq: number | null;
+    operation: FactRow['operation'] | null;
+    kind: FactRow['kind'] | null;
+    language: string | null;
+    property: string | null;
+    statement_id: string | null;
+    body: unknown;
+};
 export type SubjectCorrectionActions = {
     state: 'available';
     actions: {

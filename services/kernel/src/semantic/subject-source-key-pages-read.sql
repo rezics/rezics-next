@@ -2,7 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :partition_no::integer AS home
 ), raw AS MATERIALIZED (
   SELECT s.route, s.subject_id, s.visibility
-  FROM semantic.subject s CROSS JOIN input
+  FROM semantic.search_subject s CROSS JOIN input
   WHERE s.route >= input.home * 16 AND s.route < (input.home + 1) * 16
     AND (s.route, s.subject_id) > (:after_route::integer, :after_id::uuid)
   ORDER BY s.route, s.subject_id

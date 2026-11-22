@@ -31,7 +31,7 @@ export const readContext = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLI
 
 /** Model the controlled native owner migration as one coherent partition/domain change. */
 export async function setNativePartitionEpochForFixture(
-  db: GrowthDatabase,
+  db: Pick<GrowthDatabase, 'admin'>,
   partition: number,
   epoch: number,
 ): Promise<void> {

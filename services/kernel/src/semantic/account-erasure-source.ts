@@ -50,15 +50,33 @@ import currentSql from './identity-terminal-closure-current.sql';
 export type { SubjectErasureSourceOverflow, SubjectErasureSourceProof } from './account-erasure-source-contract.ts';
 
 /** Advance a separate Source-owned cursor. Search discovery/consumption cannot mint this proof.
- * Each call transfers at most one native role or one sealed home under the same 100-input budget.
+ * Each call transfers at most one native role or a funded run of sealed empty homes under the same 100-input budget.
  */
 export async function readSubjectErasureSourceProof(
   deps: Readonly<{ pool: Pool; clock?: () => Date }>,
   barrier: HistoryBarrier,
   context: PublicFilterReadContext,
 ): Promise<SubjectErasureSourceProof | null> {
-  const page = await sourceFactory(deps, true).readPage({ barrier, context, frontier: null, inputLimit: 100 });
-  return page.status === 'complete' ? ({ id: page.receipt.id } as SubjectErasureSourceProof) : null;
+  const result = await advanceSubjectErasureSourceProof(deps, barrier, context);
+  return result.status === 'complete' ? result.proof : null;
+}
+
+/** A committed nonterminal transfer has another runnable page. Only a complete chain carries a proof. */
+export async function advanceSubjectErasureSourceProof(
+  deps: Readonly<{ pool: Pool; clock?: () => Date }>,
+  barrier: HistoryBarrier,
+  context: PublicFilterReadContext,
+): Promise<{ status: 'progress' | 'pending' } | { status: 'complete'; proof: SubjectErasureSourceProof }> {
+  const page = await sourceFactory(deps, true).readPage({
+    barrier,
+    context,
+    frontier: null,
+    inputLimit: 100,
+    coalesceEmptyHomes: true,
+  });
+  if (page.status === 'complete')
+    return { status: 'complete', proof: { id: page.receipt.id } as SubjectErasureSourceProof };
+  return { status: page.status === 'progress' ? 'progress' : 'pending' };
 }
 
 async function completedTransfer(
@@ -129,8 +147,10 @@ const BASIS_CHILD = 1;
 const SELECT_BODY = 2;
 const SEEK_BODY = 2;
 const HOLD_EOF_BODY = 3;
-const HOLD_ROLE_BODY = 6;
-const HOLD_OBSERVE_BODY = 7;
+// Three live transaction probes and up to three points for a minimized write basis.
+const ROLE_POSITION_KEYS = 6;
+const HOLD_ROLE_BODY = 6 + ROLE_POSITION_KEYS;
+const HOLD_OBSERVE_BODY = 7 + ROLE_POSITION_KEYS;
 const HOLD_CROSS_BODY = 4;
 const TRANSFER_BODY = 5;
 const READ_BODY = 1;
@@ -609,15 +629,65 @@ function sourceFactory(
           });
           if (!sought) return pendingPage(budget);
           const raw = sought.raw;
+          // An empty home's seal may already carry an EOF hold from its native command.
+          // Visit and release each home separately. Stop at the first missing or changed
+          // hold, reserving the account transfer before spending any lookahead.
+          let emptyHome = sourceHome;
+          let sealedCustody: NativeCustody | null = null;
+          const sealedKeys = 5; // seal, hold, native commit, current partition and role absence
+          const transferKeys = eofFence.keys + TRANSFER_BODY;
+          const transferBytes = eofFence.bytes + bodyBytes(TRANSFER_BODY);
+          if (!raw && input.coalesceEmptyHomes) {
+            for (let home = sourceHome; home < 4096; home++) {
+              // On a legacy seal the first probe can miss. Keep enough funding
+              // to acquire and resolve the ordinary single-home EOF hold.
+              const fallbackKeys = sealedCustody ? 0 : eofFence.keys + HOLD_EOF_BODY + READ_BODY;
+              const fallbackBytes = sealedCustody ? 0 : eofFence.bytes + bodyBytes(HOLD_EOF_BODY + READ_BODY);
+              if (
+                cost.inputKeys + sealedKeys + transferKeys + fallbackKeys > budget.funding ||
+                budget.bytes + bodyBytes(sealedKeys) + transferBytes + fallbackBytes > WIRE_BYTES
+              )
+                break;
+              budget.reserve(sealedKeys, bodyBytes(sealedKeys));
+              const held = await withReadTransaction(
+                pool,
+                async (tx) =>
+                  (
+                    await tx.query<{ epoch: number; position: string; transaction_id: string }>(
+                      `SELECT c.epoch,c.position::text,c.transaction_id FROM semantic.erasure_source_seal s
+                   JOIN semantic.erasure_source_hold h ON h.partition_no=s.partition_no AND h.id=s.account_id
+                     AND h.account_id=s.account_id AND h.version=s.version AND h.at=s.at AND h.xmin=s.xmin
+                   JOIN semantic.erasure_source_commit c ON (c.partition_no,c.transaction_id)=(h.partition_no,h.transaction_id)
+                     AND h.xmin=c.xmin
+                   JOIN core.partition p ON p.partition_no=c.partition_no AND p.write_state='active'
+                     AND p.epoch=c.epoch AND p.position>=c.position
+                   WHERE s.partition_no=$1 AND s.account_id=$2 AND s.version=$3 AND s.at=$4::timestamptz
+                     AND h.store='' AND h.record_key=0 AND h.role='' AND h.delivery_position=0 AND h.origin_key=''
+                     AND NOT EXISTS (SELECT 1 FROM semantic.erasure_source_record r
+                                     WHERE r.partition_no=s.partition_no AND r.account_id=s.account_id)`,
+                      [home, barrier.accountId, barrier.version, barrier.at],
+                    )
+                  ).rows[0],
+                deadline,
+              );
+              if (!held) break;
+              sealedCustody = {
+                epoch: held.epoch,
+                position: BigInt(held.position),
+                transactionId: held.transaction_id,
+              };
+              emptyHome = home;
+            }
+          }
           const next: Cursor = raw ?? {
-            source_partition: sourceHome,
+            source_partition: emptyHome,
             store: '',
             record_key: '0',
             role: '',
             delivery_position: '0',
             origin_key: '',
           };
-          const complete = !raw && sourceHome === 4095;
+          const complete = !raw && emptyHome === 4095;
           let record: SubjectErasureSourceRecord | null = null;
           let custody: NativeCustody | null = null;
           let roleCustody: NativeCustody | null = null;
@@ -637,7 +707,10 @@ function sourceFactory(
           const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
           if (raw) {
             // Exact native role/body proof. Read and release this home before any identity control home.
-            budget.reserve(READ_BODY, wireBytes(cursorValues(next)));
+            budget.reserve(
+              READ_BODY + ROLE_POSITION_KEYS,
+              wireBytes(cursorValues(next)) + bodyBytes(ROLE_POSITION_KEYS),
+            );
             const detail = await withReadTransaction(
               pool,
               async (tx) =>
@@ -648,7 +721,8 @@ function sourceFactory(
               (d.source_transaction_id IS NOT NULL AND NOT EXISTS(
                 SELECT 1 FROM semantic.erasure_shared_custody c WHERE c.partition_no=d.partition_no
                   AND c.account_id=d.account_id AND c.role=d.role AND c.transaction_id=d.source_transaction_id
-                  AND c.outbox_position IS NOT DISTINCT FROM d.source_position)) AS custody_pending
+                  AND c.outbox_position=semantic.erasure_retained_role_position(
+                    d.partition_no,d.source_transaction_id,d.source_position,d.delivery_position))) AS custody_pending
              FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
                USING(partition_no,account_id,role,store,record_key)
              JOIN semantic.erasure_source_disposition proof USING(partition_no,store,record_key)
@@ -667,14 +741,16 @@ function sourceFactory(
                 ).rows[0],
             );
             if (!detail?.native_present) return pendingPage(budget);
-            const refresh = () =>
-              refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
+            const refresh = () => {
+              budget.reserve(ROLE_POSITION_KEYS, bodyBytes(ROLE_POSITION_KEYS));
+              return refreshSemanticErasureSourceRecord(pool, barrier.accountId, next.source_partition, {
                 store: next.store,
                 recordKey: next.record_key,
                 role: next.role,
                 deliveryPosition: next.delivery_position,
                 originKey: next.origin_key,
               });
+            };
             if (detail.state !== 'minimized' || detail.custody_pending) {
               await refresh();
               return pendingPage(budget);
@@ -684,18 +760,21 @@ function sourceFactory(
             const mapping = detail.original ? await mappingOf(detail.original) : null;
             if (detail.original && mapping?.state !== 'mapped') return pendingPage(budget);
             const observe = !!detail.original && originalHome === next.source_partition;
-            const holdBody = observe ? HOLD_OBSERVE_BODY : HOLD_ROLE_BODY;
+            // Only derived (v8) originals can probe the native account-erasure index.
+            const erasurePoint = detail.original?.[14] === '8' ? 1 : 0;
+            const holdBody = observe ? HOLD_OBSERVE_BODY + erasurePoint : HOLD_ROLE_BODY;
+            const crossBody = HOLD_CROSS_BODY + erasurePoint;
             const fence = effectFence();
             budget.afford(
               fence.keys +
                 holdBody +
-                (cross ? fence.keys + HOLD_CROSS_BODY : 0) +
+                (cross ? fence.keys + crossBody : 0) +
                 READ_BODY * (cross ? 2 : 1) +
                 (detail.original ? READ_BODY : 0) +
                 fence.keys +
                 TRANSFER_BODY,
               fence.bytes * (cross ? 3 : 2) +
-                bodyBytes(holdBody + (cross ? HOLD_CROSS_BODY : 0) + TRANSFER_BODY) +
+                bodyBytes(holdBody + (cross ? crossBody : 0) + TRANSFER_BODY) +
                 bodyBytes(READ_BODY * (cross ? 2 : 1) + (detail.original ? READ_BODY : 0)),
             );
             const observeOriginal = async (
@@ -850,7 +929,8 @@ function sourceFactory(
                   AND EXISTS(SELECT 1 FROM semantic.erasure_source_disposition proof WHERE proof.partition_no=$1 AND proof.store=$4 AND proof.record_key=$5)
                   AND (d.source_transaction_id IS NULL OR EXISTS(SELECT 1 FROM semantic.erasure_shared_custody c
                     WHERE c.partition_no=d.partition_no AND c.account_id=d.account_id AND c.role=d.role
-                      AND c.transaction_id=d.source_transaction_id AND c.outbox_position IS NOT DISTINCT FROM d.source_position))
+                      AND c.transaction_id=d.source_transaction_id AND c.outbox_position=semantic.erasure_retained_role_position(
+                        d.partition_no,d.source_transaction_id,d.source_position,d.delivery_position) FOR SHARE OF c))
                 FOR SHARE OF d,l`,
                 [
                   next.source_partition,
@@ -883,7 +963,7 @@ function sourceFactory(
             roleCustody = { epoch: held.epoch, position: held.position, transactionId: held.transactionId };
             let sourceHeld = held;
             if (detail.original && originalHome !== next.source_partition) {
-              sourceHeld = await command<HeldRecord>(originalHome, HOLD_CROSS_BODY, async (tx) => {
+              sourceHeld = await command<HeldRecord>(originalHome, crossBody, async (tx) => {
                 const seal = await tx.query(
                   `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
                   [originalHome, barrier.accountId, barrier.version, barrier.at],
@@ -909,6 +989,8 @@ function sourceFactory(
               };
             if (detail.original && mapping?.state === 'mapped' && !(await mappingStill(detail.original, mapping)))
               return pendingPage(budget);
+          } else if (sealedCustody) {
+            custody = roleCustody = sealedCustody;
           } else {
             // A real native sealed EOF also needs held custody; it is not a caller's empty array.
             const eofFence = effectFence();
@@ -984,7 +1066,7 @@ function sourceFactory(
           if (
             !custody ||
             !roleCustody ||
-            !(await resolveHold(next.source_partition, roleCustody)) ||
+            (!sealedCustody && !(await resolveHold(next.source_partition, roleCustody))) ||
             (observedHome !== next.source_partition && !(await resolveHold(observedHome, custody)))
           )
             return pendingPage(budget);

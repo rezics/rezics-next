@@ -2,14 +2,7 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 
 /** A fresh process owns the real default WorkContext and DBOS singleton. */
 export async function accountErasureWorker(databaseUrl: string) {
-  const program = `
-    import { readWorkerConfig,startWorker } from './src/worker.ts';
-    console.log('erasure-worker-starting');
-    const worker=await startWorker(readWorkerConfig(process.env));
-    console.log('erasure-worker-ready');
-    process.stdin.once('data',async()=>{console.error('erasure-worker-stopping'); await worker.stop(); console.log('erasure-worker-stopped'); process.stdin.destroy();});
-  `;
-  const child = Bun.spawn([process.execPath, '-e', program], {
+  const child = Bun.spawn([process.execPath, 'src/worker.ts'], {
     cwd: `${import.meta.dir}/../../..`,
     env: {
       ...process.env,
@@ -21,19 +14,19 @@ export async function accountErasureWorker(databaseUrl: string) {
       CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
       CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
     },
-    stdin: 'pipe',
+    stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
   let output = '';
   const stdout = (async () => {
-    for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
+    for await (const chunk of child.stdout) output = (output + new TextDecoder().decode(chunk)).slice(-24_000);
   })();
   let errors = '';
   const stderr = (async () => {
     for await (const chunk of child.stderr) {
       const message = new TextDecoder().decode(chunk);
-      errors += message;
+      errors = (errors + message).slice(-24_000);
       console.error(message);
     }
     return errors;
@@ -49,7 +42,7 @@ export async function accountErasureWorker(databaseUrl: string) {
     }
   }
   try {
-    await until('erasure-worker-ready');
+    await until('Worker ready');
   } catch (error) {
     // A deliberately blocked native transaction cannot drain on SIGTERM. This fixture owns the process.
     child.kill('SIGKILL');
@@ -58,10 +51,24 @@ export async function accountErasureWorker(databaseUrl: string) {
   }
   return {
     async stop() {
-      child.stdin.write('stop\n');
-      const status = await child.exited;
-      await stdout;
-      if (status !== 0) throw new Error(`${output}\n${await stderr}`);
+      let expired = false;
+      const guard = setTimeout(() => {
+        expired = true;
+        child.kill('SIGKILL');
+      }, 10_000);
+      try {
+        if (child.exitCode === null) {
+          child.kill('SIGTERM');
+        }
+        const status = await child.exited;
+        await Promise.all([stdout, stderr]);
+        if (expired || status !== 0)
+          throw new Error(
+            `Erasure worker stop: exit=${status} signal=${child.signalCode} timeout=${expired}\n${output.slice(-8000)}\n${errors.slice(-16000)}`,
+          );
+      } finally {
+        clearTimeout(guard);
+      }
     },
     async crash() {
       child.kill('SIGKILL');

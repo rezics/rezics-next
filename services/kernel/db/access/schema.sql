@@ -220,10 +220,10 @@ BEGIN
       AND due_at=item.due_at AND interval_key=item.interval_key;
     IF NOT FOUND THEN CONTINUE; END IF;
     anchor := greatest(anchor,item.due_at);
-    DELETE FROM access.current_resource_role_key WHERE interval_key=item.interval_key;
+    DELETE FROM access.current_resource_role_key WHERE route=item.route AND interval_key=item.interval_key;
     INSERT INTO access.current_resource_role_key
       SELECT route,resource_id,grant_role,subject_kind,subject_id,subject_role,erasure_key
-      FROM access.resource_role_grant WHERE erasure_key=item.interval_key AND valid @> anchor
+      FROM access.resource_role_grant WHERE route=item.route AND erasure_key=item.interval_key AND valid @> anchor
       ON CONFLICT DO NOTHING;
     UPDATE access.current_resource_role_frontier SET processed_at=anchor,version=version+1
       WHERE route=item.route AND resource_id=item.resource_id;
@@ -5311,7 +5311,7 @@ CREATE INDEX committed_continuation_operator_latest ON access.committed_continua
 -- Name: current_resource_role_due_source; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due USING btree (interval_key);
+CREATE INDEX current_resource_role_due_source ON access.current_resource_role_due USING btree (route, interval_key);
 
 
 --
@@ -5325,7 +5325,7 @@ CREATE INDEX current_resource_role_due_work ON access.current_resource_role_due 
 -- Name: current_resource_role_key_source; Type: INDEX; Schema: access; Owner: -
 --
 
-CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key USING btree (interval_key);
+CREATE INDEX current_resource_role_key_source ON access.current_resource_role_key USING btree (route, interval_key);
 
 
 --
@@ -5728,6 +5728,13 @@ CREATE INDEX erasure_organization_member_organization_id ON access.organization_
 
 
 --
+-- Name: erasure_personal_agent; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX erasure_personal_agent ON access.erasure USING btree (route, semantic.personal_agent_id(account_id));
+
+
+--
 -- Name: erasure_previous_operator_id_approval; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -5816,13 +5823,6 @@ CREATE INDEX erasure_resource_grant_subject_id ON access.resource_grant USING bt
 --
 
 CREATE INDEX erasure_resource_initialization_creator_id ON access.resource_initialization USING btree (creator_id, route, resource_id);
-
-
---
--- Name: erasure_resource_initialization_resource_id; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX erasure_resource_initialization_resource_id ON access.resource_initialization USING btree (resource_id, route);
 
 
 --
@@ -6805,10 +6805,53 @@ CREATE TRIGGER resource_role_publication_authority AFTER INSERT OR DELETE OR UPD
 
 
 --
+-- Name: erasure search_agent_erasure; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER search_agent_erasure AFTER INSERT ON access.erasure FOR EACH ROW EXECUTE FUNCTION semantic.capture_search_agent_erasure();
+
+
+--
 -- Name: resource_role_grant semantic_resource_role_erasure; Type: TRIGGER; Schema: access; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE ON access.resource_role_grant DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_resource_role_erasure();
+
+
+--
+-- Name: account_discovery_population subject_access_range_change; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_change AFTER UPDATE ON access.account_discovery_population FOR EACH ROW WHEN ((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.revision IS DISTINCT FROM new.revision)) OR (old.claim_revision IS DISTINCT FROM new.claim_revision))) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_change;
+
+
+--
+-- Name: account_discovery_population subject_access_range_insert; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_insert AFTER INSERT ON access.account_discovery_population FOR EACH ROW EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_insert;
+
+
+--
+-- Name: account_discovery_population subject_access_range_remove; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_remove AFTER DELETE ON access.account_discovery_population FOR EACH ROW EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_remove;
+
+
+--
+-- Name: account_discovery_population subject_access_range_truncate; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_truncate AFTER TRUNCATE ON access.account_discovery_population FOR EACH STATEMENT EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE access.account_discovery_population ENABLE ALWAYS TRIGGER subject_access_range_truncate;
 
 
 --

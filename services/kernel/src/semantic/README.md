@@ -359,6 +359,9 @@ The checked-in native source example is the captured official response at `test/
 
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
+The Subject-home queue key keeps the proposal transaction and position. On the first new entry in a
+receiving batch, partition 0 enrolls its own Source commit. Its platform write basis, projected event,
+entries and copied roles commit together. Retrying source acknowledgement reuses those entries and origins.
 Provider queue pages retain `context:read` and `context:accept` admission. Their private BFF includes an independent current
 `actions` component. It projects only installed accept/reject/adopt operations through `readViewerActions` on the
 exact native Context anchor through the existing generated viewerActions endpoint, once per bounded page. A failed action read is explicitly unavailable; it never grants
@@ -2508,6 +2511,10 @@ The Source cursor orders `store, record_key, role, delivery_position, origin_key
 refresh read the exact directory origin, independently of the queue's most recent provenance.
 A physical row's completed minimization does not prove both origins' shared custody: the reader
 requires the exact transaction, role and source position, refreshing that origin when absent.
+Older inherited roles can carry the later delivery position in their stored key. The reader keeps that
+key and checks the shared position against the transaction's write basis, Source or Identity commit,
+or the retained Source record captured from its write basis before minimization. Refresh records
+the proven position in the pending shared obligation. Each lookup costs at most six indexed probes.
 Local holds, page keys and terminal traversal carry the discriminator. Existing transfers whose
 origin was never stored are unavailable; current locator state cannot reconstruct their proof.
 Sealed replay seeks an existing origin through its transaction/position index. A new origin at
@@ -2586,7 +2593,8 @@ collisions still refuse until complete Source support/copy closure is available.
   distinct copy prefixes. The fixed six rows/points/statements cover budget read and consume,
   partition, the original copy and source EOFs, and the original basis probe. A distinct
   native origin adds its own two EOFs and basis probe. Each visited copy/source role
-  still reserves rows/points/statements/bytes/empty-seeks `10/10/9/3072/5`, plus the
+  reserves rows/points/statements/bytes/empty-seeks `11/13/10/3328/8`, including an indexed
+  lookup of an inherited transaction’s position in its write basis, Source commit or Identity native commit, plus the
   planner's separate 512 bytes; the event adds 1024 planner bytes. Candidate, metadata
   and witness axes are zero for these operational bodies. The complete original preparation
   quote also covers the other work in the Source invocation.

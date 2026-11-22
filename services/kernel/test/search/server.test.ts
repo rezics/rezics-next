@@ -190,6 +190,20 @@ test('search is configured by OPENSEARCH_URL and KERNEL_SEARCH_PREFIX', () => {
   expect(
     readConfig({ ...env, OPENSEARCH_URL: 'https://search.internal:9200', KERNEL_SEARCH_PREFIX: 'staging-' }).search,
   ).toEqual({ url: 'https://search.internal:9200', prefix: 'staging-' });
+  const url = 'http://127.0.0.1:59200';
+  expect(readSearchConfig({ OPENSEARCH_URL: url, KERNEL_SEARCH_SUBJECT_SUBSCRIPTION_PROTOCOL: '0' })).toEqual({
+    url,
+    prefix: 'rezics-',
+  });
+  expect(readSearchConfig({ OPENSEARCH_URL: url, KERNEL_SEARCH_SUBJECT_SUBSCRIPTION_PROTOCOL: '1' })).toEqual({
+    url,
+    prefix: 'rezics-',
+    subjectSubscriptionProtocol: 1,
+  });
+  refusal(
+    { OPENSEARCH_URL: url, KERNEL_SEARCH_SUBJECT_SUBSCRIPTION_PROTOCOL: '2' },
+    'KERNEL_SEARCH_SUBJECT_SUBSCRIPTION_PROTOCOL',
+  );
   refusal({ OPENSEARCH_URL: 'search.internal' }, 'OPENSEARCH_URL');
   refusal({ OPENSEARCH_URL: 'ftp://search.internal' }, 'OPENSEARCH_URL');
   refusal({ OPENSEARCH_URL: 'http://127.0.0.1:59200', KERNEL_SEARCH_PREFIX: 'Bad Prefix' }, 'KERNEL_SEARCH_PREFIX');

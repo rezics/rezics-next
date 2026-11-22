@@ -13,7 +13,7 @@ LEFT JOIN LATERAL (
   WHERE partition_no = wanted.route / 16 LIMIT 1
 ) home ON true
 LEFT JOIN LATERAL (
-  SELECT route, subject_id, type, visibility, security_revision FROM semantic.subject
+  SELECT route, subject_id, type, visibility, security_revision FROM semantic.search_subject
   WHERE route = wanted.route AND subject_id = wanted.id AND home.write_state <> 'moved' LIMIT 1
 ) subject ON true
 LEFT JOIN LATERAL (

@@ -8,6 +8,7 @@ export declare function EVENT_TYPES(): Readonly<{
         accountId: Type.TString;
     }>;
     readonly 'com.rezics.search.trending.changed.v1': Type.TObject<{}>;
+    readonly "com.rezics.search.erasure.progress.v1": Type.TObject<{}>;
     readonly 'com.rezics.zone.created.v1': Type.TObject<{
         id: Type.TString;
         revision: Type.TString;
@@ -1738,7 +1739,7 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly "com.rezics.semantic.erasure.locator-advanced.v1": Type.TObject<{
         position: Type.TString;
     }>;
-    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
+    readonly "com.rezics.semantic.erasure.progress.v1": Type.TObject<{
         accountId: Type.TString;
     }>;
     readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{

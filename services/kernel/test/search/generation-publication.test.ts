@@ -1,3 +1,4 @@
+import { matchSparseSubjectKeys } from '../../src/search/generation-publication-sparse.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, activeRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -284,11 +285,16 @@ test('native keyed visibility rejects omissions, engine extras and stale externa
   );
   await writeIndexActions(search, index, expected);
   expect(await assertNativeGenerationActionsVisible(search, index, expected)).toBe(1);
+  const pages: number[] = [];
+  expect(await matchSparseSubjectKeys(search, index, new Set([id]), (size) => pages.push(size))).toBe(true);
+  expect(pages).toEqual([1, 0]);
+  expect(await matchSparseSubjectKeys(search, index, new Set(), () => {})).toBe(false);
   await expect(
     assertNativeGenerationActionsVisible(search, index, [{ op: 'delete', id, version: 3n }]),
   ).rejects.toBeInstanceOf(GenerationReconciliationMismatch);
   await writeIndexActions(search, index, [{ op: 'delete', id, version: 3n }]);
   expect(await assertNativeGenerationActionsVisible(search, index, [{ op: 'delete', id, version: 3n }])).toBe(0);
+  expect(await matchSparseSubjectKeys(search, index, new Set([id]), () => {})).toBe(false);
 });
 
 test('a lost native alias response is settled by exact alias readback without repeating the write', async () => {

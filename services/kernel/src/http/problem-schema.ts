@@ -54,7 +54,9 @@ function schemaFor(codes: readonly ProblemCode[], status: number) {
       retryable: schemaUnion(codes.map((code) => t.Literal(PROBLEMS[code].retryable))),
       effect_status: lastOwner
         ? t.Literal('not_applied')
-        : t.Union([t.Literal('not_applicable'), t.Literal('not_applied'), t.Literal('applied')]),
+        : codes.includes('deadline_exceeded') || codes.includes('internal_error')
+          ? t.Union([t.Literal('not_applicable'), t.Literal('not_applied'), t.Literal('applied'), t.Literal('unknown')])
+          : t.Union([t.Literal('not_applicable'), t.Literal('not_applied'), t.Literal('applied')]),
       request_id: t.String(),
       ...(lastOwner
         ? {}

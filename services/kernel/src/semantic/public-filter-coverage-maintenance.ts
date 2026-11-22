@@ -24,6 +24,7 @@ type Pending = {
   captured_through: string | null;
   captured_revision: string | null;
   captured_epoch: number | null;
+  captured_shared_v1: boolean;
   fanout_frontier: string | null;
   captured_enrollment_generation: string | null;
   captured_native_revision: string | null;
@@ -258,8 +259,8 @@ export async function maintainPublicFilterCoverageHome(
           [partition, pending.input_key, account, head.rows[0]!.enrollment_generation],
         )
       ).rows[0];
-      if (!saved) throw new Error('Coverage capture lost its locked home key');
-      return saved;
+      // The SQL capture guard leaves the key live if installed lineage cannot resolve.
+      return saved ?? null;
     }
     if (pending.captured_enrollment_generation === null) {
       // Existing intervals receive their installation cutoff in the migration,
@@ -299,8 +300,18 @@ export async function maintainPublicFilterCoverageHome(
     applied++;
     next = frontier(enrollment);
   }
-  const all = applied === enrollments.length && enrollments.length < limit;
-  await transaction(pool, context.deadline, async (client) => {
+  const legacyDone = applied === enrollments.length && enrollments.length < limit;
+  if (legacyDone && captured.captured_shared_v1) {
+    await transaction(pool, context.deadline, async (client) => {
+      await client.query('SELECT search.receive_subject_privacy_v1($1,$2,$3,$4)', [
+        partition,
+        captured.input_key,
+        captured.captured_revision,
+        limit - applied,
+      ]);
+    });
+  }
+  const more = await transaction(pool, context.deadline, async (client) => {
     const owner = (
       await client.query<{ epoch: number; write_state: string }>(
         'SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
@@ -308,14 +319,25 @@ export async function maintainPublicFilterCoverageHome(
       )
     ).rows[0];
     // A move never adopts an old owner's receipt or retires its pending interval.
-    if (!owner || owner.write_state !== 'active' || owner.epoch !== captured.owner_epoch) return;
+    if (!owner || owner.write_state !== 'active' || owner.epoch !== captured.owner_epoch) return false;
     const head = await client.query(
       'SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE',
       [partition],
     );
-    if (head.rowCount !== 1) return;
+    if (head.rowCount !== 1) return false;
     const account = captured.input_key === PUBLIC_FILTER_ACCOUNT_DOMAIN;
     const settled = account ? captured.native_captured_enqueue : captured.captured_revision;
+    const shared =
+      legacyDone && captured.captured_shared_v1
+        ? (
+            await client.query<{ status: 'complete' | 'progress' | 'pending' }>(
+              'SELECT semantic.advance_subject_privacy_fanout_v1($1,$2,$3,$4) AS status',
+              [partition, captured.input_key, settled, limit - applied],
+            )
+          ).rows[0]?.status
+        : 'complete';
+    const all = legacyDone && shared === 'complete';
+    if (captured.captured_shared_v1 && !all && applied === 0) return shared === 'progress';
     const changed = await client.query(
       `UPDATE semantic.public_filter_privacy_pending SET fanout_frontier=$3,
         live=CASE WHEN $4 AND enqueue_revision=$5::bigint THEN false ELSE live END,
@@ -333,7 +355,8 @@ export async function maintainPublicFilterCoverageHome(
        WHERE (partition_no,input_key)=($1,$2) AND live
          AND coalesce(native_captured_enqueue,captured_revision)=$5::bigint
          AND fanout_frontier IS NOT DISTINCT FROM $7
-         AND captured_enrollment_generation=$8::bigint`,
+         AND captured_enrollment_generation=$8::bigint
+         AND owner_epoch=$9`,
       [
         partition,
         captured.input_key,
@@ -343,11 +366,12 @@ export async function maintainPublicFilterCoverageHome(
         account,
         captured.fanout_frontier,
         captured.captured_enrollment_generation,
+        captured.owner_epoch,
       ],
     );
     // A concurrent maintainer won the same retained interval. Its committed
     // frontier is authoritative; do not create another traversal or clear it.
-    if (changed.rowCount !== 1) return;
+    return changed.rowCount === 1 && (applied > 0 || all || shared === 'progress');
   });
-  return { applied, more: applied > 0 || all };
+  return { applied, more };
 }

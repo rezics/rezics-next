@@ -21,7 +21,7 @@ import {
 } from '../request/access.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { Admission } from './admission.ts';
+import { Admission, ADMISSION_LIMITS, type AdmissionYield } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
 import { logInternalError, PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
@@ -46,7 +46,6 @@ import {
   MAX_BODY_LIMIT,
   IngressBodyBudget,
 } from './body.ts';
-import { ADMISSION_LIMITS } from './admission.ts';
 
 export function REQUEST_DEADLINE_MS() {
   return memoizedValue(REQUEST_DEADLINE_MS, () => DEFAULT_REQUEST_DEADLINE_MS);
@@ -54,6 +53,7 @@ export function REQUEST_DEADLINE_MS() {
 
 export function createApp({
   pool,
+  healthPool = pool,
   requestDeadlineMs = REQUEST_DEADLINE_MS(),
   admission = new Admission(),
   access = createAccess,
@@ -64,6 +64,7 @@ export function createApp({
   clock,
 }: {
   pool: Pool;
+  healthPool?: Pool;
   requestDeadlineMs?: number;
   admission?: Admission;
   access?: Access | AccessFactory;
@@ -245,7 +246,7 @@ export function createApp({
       const actor =
         request.headers.get('authorization') === null || invalidJsonBodies.has(request)
           ? { kind: 'anonymous' as const }
-          : await admission.run('reserved', job, async () => {
+          : await admission.verify(job, mountedFor(request, route)?.requiresNormal === true, async () => {
               try {
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {
@@ -268,7 +269,7 @@ export function createApp({
         },
       };
 
-      const permission = () => {
+      const permission = (permit?: AdmissionYield) => {
         const currentAccess = accessForApp();
         const action = actionOfMountedRoute(mountedFor(request, route));
         const context = { pool, deadline: job.deadline };
@@ -277,8 +278,10 @@ export function createApp({
           ...(prepare
             ? {
                 prepare: (preparedActor, preparedAction, preparedResource, received) =>
-                  admission.run('normal', job, () =>
-                    prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                  admission.prepare(
+                    job,
+                    () => prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                    permit,
                   ),
               }
             : {}),
@@ -290,8 +293,8 @@ export function createApp({
         job,
         actor,
         session,
-        authorize: (resource: Resource) => {
-          const { checkedAccess, action, context } = permission();
+        authorize: (resource: Resource, permit?: AdmissionYield) => {
+          const { checkedAccess, action, context } = permission(permit);
           return accessCheck(checkedAccess, actor, action, resource, context);
         },
         authorizeCommand: (resource: Resource, denied: () => Error) => {
@@ -345,7 +348,7 @@ export function createApp({
     .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {
         await lanes.run('reserved', job, () =>
-          withConnection(pool, async (client) => {
+          withConnection(healthPool, async (client) => {
             await healthCheck.run(client, {});
           }),
         );

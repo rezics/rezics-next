@@ -29,6 +29,8 @@ export type SubjectErasureSourceRequest = Readonly<{
     barrier: HistoryBarrier;
     frontier: string | null;
     inputLimit: number;
+    /** Transfer consecutive verified empty homes within the same funded page. */
+    coalesceEmptyHomes?: true;
     context: PublicFilterReadContext;
 }>;
 /** Financial receiving's overflow operands: the refused bound, the quoted count and the caller's funding. */

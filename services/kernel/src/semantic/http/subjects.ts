@@ -1,3 +1,4 @@
+import { requireLiveJob } from '../../http/admission.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { parseSelectedSynopsis } from '../selected-synopsis.ts';
 import {
@@ -56,8 +57,19 @@ import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { HistoryReceiptTooLargeError } from '../../history/contract/errors.ts';
 import { isImportCatalogueWalk, ProblemError, problemSchema } from '../../http/problem.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { relatedReadDecisionEligibility, relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
+import {
+  IDEMPOTENCY_HEADER,
+  idempotencyKeyOf,
+  requestDigest,
+  requiresNativeAdmission,
+  SESSION_HEADER,
+} from '../../http/request.ts';
+import {
+  relatedReadDecisionEligibility,
+  relatedReadEligibility,
+  prepareSubjectDetailCheck,
+  subjectReadEligibility,
+} from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
 import { listSubjectGraph } from '../graph.ts';
 import { readSubjectRelationCounts, type SubjectRelationCountResponse } from '../counts.ts';
@@ -1240,6 +1252,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.get',
+          [requiresNativeAdmission]: true,
           'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
@@ -1297,15 +1310,16 @@ function subjectRoutes(
           context: query.context ?? GLOBAL_CONTEXT,
           languages,
           authorization: {
-            prepareDetail: (id) => {
+            prepareDetail: (id, permit) =>
+              prepareSubjectDetailCheck(
+                { route: routeOf(id)!, id },
+                actor.kind === 'account' && (query.context ?? GLOBAL_CONTEXT) === GLOBAL_CONTEXT,
+                (resource) => authorize(resource, permit),
+              ),
+            prepareSummary: (id, related, permit) => {
               const route = routeOf(id)!;
               const resource = { route, id };
-              return authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
-            },
-            prepareSummary: (id, related) => {
-              const route = routeOf(id)!;
-              const resource = { route, id };
-              return authorize({ ...resource, eligibility: relatedReadEligibility(resource, related) });
+              return authorize({ ...resource, eligibility: relatedReadEligibility(resource, related) }, permit);
             },
             prepareSummaryBatch: () => {
               preparedSummaryBatch ??= (async () => {
@@ -1351,6 +1365,7 @@ function subjectRoutes(
           set.headers.location = `/v1/subjects/${result.to}${new URL(request.url).search}`;
           return { redirect: { from: result.from, to: result.to } };
         }
+        requireLiveJob(job);
         for (const anchor of result.anchors) session.record(anchor);
         set.headers.etag = `"${result.revision}"`;
         set.headers['cache-control'] = result.private ? 'private, no-store' : 'no-cache';
@@ -2437,7 +2452,7 @@ function subjectRoutes(
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () =>
+          const { component, ...result } = await admission.run('normal', job, (permit) =>
             readStatementAs(pool, access(), actor, job.deadline, (refreshAudience) =>
               listCandidates(pool, tokens, {
                 subject: params.id,
@@ -2453,7 +2468,8 @@ function subjectRoutes(
                   actor,
                   deadline: job.deadline,
                   refreshAudience,
-                  prepareSource: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
+                  prepareSource: () =>
+                    authorize({ ...resource, eligibility: subjectReadEligibility(resource) }, permit),
                 },
               }),
             ),
@@ -2484,7 +2500,7 @@ function subjectRoutes(
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () =>
+          const { component, ...result } = await admission.run('normal', job, (permit) =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               readRevisionDetail(pool, {
                 subject: params.id,
@@ -2503,7 +2519,7 @@ function subjectRoutes(
                 },
                 authorizeRelated: async (id) => {
                   const target = { route: routeOf(id)!, id };
-                  return authorize({ ...target, eligibility: subjectReadEligibility(target) });
+                  return authorize({ ...target, eligibility: subjectReadEligibility(target) }, permit);
                 },
               }),
             ),
@@ -2624,7 +2640,7 @@ function subjectRoutes(
         await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () =>
+          const { component, ...result } = await admission.run('normal', job, (permit) =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectGraph(pool, tokens, {
                 routeKey,
@@ -2637,7 +2653,7 @@ function subjectRoutes(
                 release: active.release,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
-                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) }, permit);
                 }),
                 authorize: check,
               }),
@@ -2803,7 +2819,7 @@ function subjectRoutes(
         );
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () =>
+          const { component, ...result } = await admission.run('normal', job, (permit) =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectLinks(pool, tokens, {
                 routeKey,
@@ -2821,7 +2837,7 @@ function subjectRoutes(
                 includeLabels: true,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
-                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) }, permit);
                 }),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 authorize: check,
@@ -2926,7 +2942,7 @@ function subjectRoutes(
         );
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () =>
+          const { component, ...result } = await admission.run('normal', job, (permit) =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectRelations(pool, tokens, {
                 routeKey,
@@ -2943,7 +2959,7 @@ function subjectRoutes(
                 deadline: job.deadline,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
-                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) }, permit);
                 }),
                 authorize: check,
                 seen,

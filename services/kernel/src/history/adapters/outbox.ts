@@ -81,11 +81,13 @@ export async function minimizeHistoryOutbox(
       [key.partitionNo, key.position.toString(), key.eventSeq],
     );
     if (open.rows.length) return 'outbox-effect-consumer-open';
-    await tx.query(
+    const minimized = await tx.query(
       `UPDATE core.outbox SET data='{}'::jsonb,subject=NULL,payload_state='minimized'
-       WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
+       WHERE partition_no=$1 AND position=$2 AND event_seq=$3
+         AND core.subject_cleanup_allowed_v1(partition_no,epoch,position,'command')`,
       [key.partitionNo, key.position.toString(), key.eventSeq],
     );
+    if (minimized.rowCount !== 1) return 'outbox-subject-retention-pending';
   } else if (row.payload_state !== 'minimized') throw new TypeError('Unknown outbox payload state');
   if (!record)
     await tx.query(

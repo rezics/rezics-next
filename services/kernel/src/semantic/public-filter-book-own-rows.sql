@@ -5,8 +5,7 @@ WITH withdrawal AS (SELECT $5::jsonb AS proof), keys AS MATERIALIZED (
   SELECT k.home,n.owner_epoch,n.population_fenced,b.source_epoch,b.source_position
   FROM (SELECT DISTINCT home FROM keys) k
   LEFT JOIN LATERAL (
-    SELECT b.source_epoch,b.source_position FROM search.public_filter_coverage_baseline b
-    WHERE (b.partition_no,b.registration,b.bootstrap,b.source_home)=(0,$3,$4,k.home) LIMIT 1
+    SELECT b.source_epoch,b.source_position FROM search.public_filter_original_home(0,$3,$4,k.home) b LIMIT 1
   ) b ON true
   LEFT JOIN LATERAL (
     SELECT n.owner_epoch,n.population_fenced FROM semantic.public_filter_privacy_head n WHERE n.partition_no=k.home LIMIT 1

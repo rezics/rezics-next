@@ -44,11 +44,11 @@ type Connect = Pool['connect'];
 
 export function createPool(
   url: string,
-  options: { connectionTimeoutMillis?: number; idleTimeoutMillis?: number; min?: number } = {},
+  options: { connectionTimeoutMillis?: number; idleTimeoutMillis?: number; min?: number; max?: number } = {},
 ): Pool {
   const pool = new pg.Pool({
     connectionString: url,
-    max: KERNEL_POOL_MAX,
+    max: options.max ?? KERNEL_POOL_MAX,
     ...(options.min === undefined ? {} : { min: options.min }),
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? readPoolAcquireTimeoutMillis(),
     idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,
@@ -76,6 +76,11 @@ export function createPool(
     }
     return callback ? connect(callback) : connect();
   }) as Connect;
+  return accountPoolQueries(pool);
+}
+
+/** Direct pool queries and checked-out commands charge the same active owner meter. */
+export function accountPoolQueries(pool: Pool): Pool {
   const originalQuery = pool.query;
   pool.query = ((...args: unknown[]) => {
     const accounting = queryAccounting.getStore();
@@ -108,11 +113,29 @@ function accountQuery<T>(accounting: QueryAccounting, args: unknown[], dispatch:
   return accounting.query(sql, operands, dispatch);
 }
 
-export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+const checkoutQueues = new WeakMap<Pool, Map<string, Promise<void>>>();
+
+/** Writers serialized by a native session lock can queue locally before reserving a pool slot. */
+export function withConnection<T>(
+  pool: Pool,
+  work: (client: PoolClient) => Promise<T>,
+  serializeOn?: string,
+): Promise<T> {
   const accounting = queryAccounting.getStore();
   const dispatch = () => {
     if (heldPools.getStore()?.has(pool)) return Promise.reject(new NestedPoolCheckoutError());
-    return checkedOutConnection(pool, work, accounting);
+    const checkout = () => checkedOutConnection(pool, work, accounting);
+    if (serializeOn === undefined) return checkout();
+    let queues = checkoutQueues.get(pool);
+    if (!queues) checkoutQueues.set(pool, (queues = new Map()));
+    const prior = queues.get(serializeOn);
+    const result = prior ? prior.then(checkout) : checkout();
+    const release = () => {
+      if (queues.get(serializeOn) === tail) queues.delete(serializeOn);
+    };
+    const tail = result.then(release, release);
+    queues.set(serializeOn, tail);
+    return result;
   };
   return accounting ? accounting.connection(dispatch) : dispatch();
 }

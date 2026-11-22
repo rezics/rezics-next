@@ -396,7 +396,7 @@ disclosure. Search neither starts a second restore clock nor preserves hidden da
 Search's account-erasure inventory follows the actual stores and producers:
 The version-1 `search` account-erasure wakeup is registered in the existing work module before the optional
 indexing-config return. It validates native envelopes, rereads the exact Access obligation, persists Search's
-account-home progress and enqueues the stable maintenance workflow. Missing configuration stays pending even
+account-home progress and enqueues the participant on the effects queue. Missing configuration stays pending even
 when indexing is disabled. This is not final participant closure. The
 [implementation contract](../../../../docs/search-index-erasure-plan.md#brief-actual-account-erasure-participation-and-all-copy-closure)
 requires owner inventory with source-disposition and receiving receipts, plus the existing identity
@@ -436,6 +436,15 @@ Search stores distinct record classes:
 | Cursors                      | Search/rating continuations are stateless encrypted, principal/request/generation-bound tokens held by the caller. There is no server-side stored cursor payload deletion job. Disclosure and continuation fences still apply at use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Future preparation/retention | No Search-owned saved personal query, prepared result population or retained personal observation store currently exists. Inventory a physically introduced store and its producer-owned locators before release; do not claim deletion of hypothetical stores. Existing progress metadata is covered above.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Shared artifacts             | Receipts, outbox events, editorial provenance and DBOS workflow/step payloads belong to shared-store minimizers under [Deletion item 4](../../../../docs/deletion.md#account-erasure) and their native exact-locator contract. Search producers must enroll exact personal-copy locators atomically; Search cannot attest those shared payloads erased, scan their JSON or replace their owner's minimizer.                                                                                                                                                                                                                                                                                                                                                        |
+
+Semantic excludes the original personal agent from Search as soon as Access commits the account erasure.
+The ordinary writer, rebuild key pages and Source receipt observations use the same indexed decision.
+Verification can move a backlink to an independent catalogue subject, so the lookup uses the original
+derived agent ID. Eligible contributions keep their public terms and unrelated statements. Relation targets,
+credited names, descriptive item values and qualifiers omit attribution to the erased agent.
+A partition counter tracks visible excluded originals for count reads. Statement projection checks only
+the native item IDs in its admitted window, in batches of at most 256. The physical cleanup and receipt
+contract below still applies to every affected generation.
 
 ### Native account participant
 
@@ -1663,6 +1672,8 @@ population completeness, or expand the existing preview's disclosure guarantees.
   Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
   callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
   the deadline (default one hour).
+- [Native position tests](../../test/search/freshness-positions.test.ts) cover concurrent homes, retained
+  positions beyond JavaScript integer precision, replay, withdrawal and a dense 4,096-home generation.
 - Growth check: [test/search/freshness.test.ts](../../test/search/freshness.test.ts): “the reader answers each call
   from a read that began after the call”; SQL: [test/search/growth-query.test.ts](../../test/search/growth-query.test.ts):
   “Freshness stays within its bound as H grows” (rows/blocks, also P/N).
@@ -1838,6 +1849,11 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
   last. Book lists use this physical order for a bounded hit window and a total-hit threshold of one. First reads
   on older layouts use preparation. Native cost checks compare a profiled replay on the same PIT with the actual
   serving response and report the two transport byte counts separately.
+- Book text relevance keeps prepared execution. Even two required terms with one common Book can have long,
+  interleaved posting lists. A short ranked window and a low total-hit threshold cannot bound that work.
+  Preparation and serving each read current original and terminal identity witnesses for their raw Book hits.
+  The opening query can reuse the immutable cut returned by native adoption after transfer to the observation.
+  The page still requires current text and type disclosure, the execution join, alias verification and final Source observation.
 - Growth check: [growth-query](../../test/search/growth-query.test.ts), [growth-indexing](../../test/search/growth-indexing.test.ts),
   [growth-facets](../../test/search/growth-facets.test.ts) and [growth-rating-query](../../test/search/growth-rating-query.test.ts)
   record the Cost counters at three scales. Filter+source+order pages measure native iterator steps on the existing
@@ -2162,9 +2178,9 @@ then passes the returned consumer to `prepare`. It retains only the publication 
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
 callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
 not repeat the retired fixed-cut scan or register a replacement consumer on restart.
-Generation population uses the existing workflows queue and remains eligible for delivery during whole-catalogue
-maintenance sweeps. Request-specific repair stays on maintenance. A population
-delivery and any queued legacy delivery still compete for the same retained revision and lease. Discovery
+Generation population and request-specific repair use the workflows queue. Both remain eligible for delivery
+while whole-catalogue sweeps occupy the maintenance slots. A queued legacy delivery and a workflows delivery
+compete for the same retained revision and lease. Discovery
 enqueues only available revisions and can recover an expired lease. Job recovery also covers interruption
 after native prepare commits and before the scheduler saves its locator.
 Native complete key pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
@@ -2251,16 +2267,31 @@ certify reconciliation. A native repair invalidates the affected home's witness 
 Subject engine page interrupted by a changed home re-enumerates that home's native keys from the beginning
 and resumes the retained engine page. An unfenced turn can finish that replay inline when a complete current
 Source home page matches the engine group exactly and the settled writer versions and bodies are visible.
-That check uses one lookahead key and charges the existing page meter. Interrupted pages repeat their actual
-work before committing the frontier. An owner move or pending identity invalidates the affected home, and
-physical recreation invalidates the entire old job. An unfenced Subject reconciliation turn can advance that
-candidate's retained Source enrollment with the remaining input budget. It records only native home receipts.
+That check uses one lookahead key and charges the existing page meter. The shared first pass records the
+complete Source page's own position. A later same-epoch command still owes validation at its new position.
+If a subsequent home needs replay, Search can retain the verified prefix by reopening the same PIT and
+matching its ordered keys and multiplicities through an engine-issued composite cursor. An owner move or
+pending identity invalidates the affected home, and physical recreation invalidates the entire old job. An
+unfenced Subject reconciliation turn can advance that candidate's retained Source enrollment with the
+remaining input budget. It records only native home receipts.
 Physical observation, materialization, and original repair still begin after reconciliation in activation.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
-barrier. Source evidence comes from `readNativePublicFilterPublicationCompletion` for the original persisted
-job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
+barrier. For a cold shared Subject job with a committed receiver manifest, the drained writer may fund a
+bounded physical comparison under the same fence. The raw Subject primary-key scan admits at most 32 keys plus a
+lookahead. Source must return complete pages for their homes. The ordinary writer supplies current actions, bodies
+and external versions. Search refreshes the physical UUID and exhausts its composite key enumeration. The shard
+checkpoints, occupied home heads, placement, receiver and writer clocks must match across that work. A larger
+population or a physical mismatch continues on the paged pass. An inconclusive read or changed cut retains the
+fence for one more bounded comparison. Activation rechecks the original Source completion and drain on that
+turn. A second inconclusive comparison resumes the paged pass. Activation rechecks the retained digest against
+the live fence before alias intent, switch and confirmation. If the alias is still absent and that digest has moved,
+a funded activation can refresh it by repeating the complete sparse comparison on the original drained fence.
+A separate offer verifies Source and the new digest before switching. Another crossing resumes the paged proof on
+the same fence. When a command advances an occupied home during a paged engine comparison, Search replays that
+home and resumes the same PIT if the fenced owner epoch still matches. Source evidence comes from
+`readNativePublicFilterPublicationCompletion` for the original persisted job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
 dispatch or adoption, and resumes the same repair after restart. Changed-since-start remains a disclosure fact;
 verified original repair, current ACK, independent settlement and no pending or unresolved homes still gate
 maintenance completion. Missing custody, routing, Source or native
@@ -2432,7 +2463,13 @@ The native Account Discovery purge remains separate; its local cleanup no longer
 Personal recent/trending cleanup records its own progress; only the all-copy worker can send the final ACK.
 
 Physical reconciliation uses current Source through the same ordinary Search writer, then its publication
-fence/drain/adopt extension before compaction. Fence strings are persisted locators and are revalidated by that
+fence/drain/adopt extension before compaction. Search writes each affected live target before waiting for
+terminal proof to drain the page. Consecutive historical roles can reuse a single-key physical effect after
+compaction and release. Each target must still have the same settled native writer transaction, current
+owner and incarnation. Search compares that writer's fresh projected action and version with the
+search-visible engine result and rechecks settlement. A changed or missing witness takes the ordinary repair
+path. Each historical role still supplies its own held Source page and receives independent verification.
+Fence strings are persisted locators and are revalidated by that
 native guard. Active, building and retiring physical UUIDs remain required. Unregistered native generations,
 incomplete population, missing deployment configuration, producer or native guard remain pending. The existing native Search writer supplies its extended guard through
 `SearchErasureRuntime.writerGuard`; no callback can certify completion.
@@ -2560,10 +2597,9 @@ preferences, separately from pending form edits. Language preferences select res
 predicate. Count evidence retains exact/lower-bound/unavailable semantics. Empty and terminal pages prove neither
 index completeness nor permission; current final native disclosure still removes stale or concealed results.
 
-Cost: reuse one coalesced `createFreshness` observation per pinned generation. The existing SQL aggregates at most
-4,096 fixed partition rows, left-joins checkpoints by full `(partition_no, consumer)` key and does at most 4,096
-outbox seeks by `(partition_no, position, event_seq=0)` with `LIMIT 1`, returning one aggregate row. No new outbox
-scan or request polling exists. One read runs per reader; arrivals share the following read. Catalogue retains its
+Cost: reuse one coalesced `createFreshness` observation per pinned generation. The indexed freshness query
+returns one aggregate row. Each behind home contributes one native checkpoint lookup and one outbox lookup.
+One read runs per reader; arrivals share the following read. Catalogue retains its
 bounded reader cache; mixed likewise retains four generation readers by LRU (in-flight readers keep their generation). The public addition
 is at most 36 UTF-8 JSON bytes (`freshness` object plus separator), constant per page, without consumer, partition,
 backlog, raw event time or relay detail. Existing request deadlines and result fan-out limits are unchanged.

@@ -1,4 +1,5 @@
-import { type CommandTransaction } from '../command/command.ts';
+import type { Pool } from 'pg';
+import { type CommandResult, type CommandTransaction, type LegacyCommandOptions } from '../command/command.ts';
 import { type IdentityJobRef } from './identity-adapters/identity-epoch-contract.ts';
 export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 /** Explicit account input of a native platform producer, in the producer's own home/transaction.
@@ -32,6 +33,10 @@ export declare function bindSearchIdentityJobRoles(tx: CommandTransaction, job: 
  * checks the same-transaction write basis after the executor appends its commit.
  */
 export declare function recordSemanticSourceCommit(tx: CommandTransaction, transactionId: string): Promise<void>;
+/** Fence newly received copies under their own transaction, leaving inherited origins intact. */
+export declare function runSemanticCopyCommand<T>(pool: Pool, options: Pick<LegacyCommandOptions, 'partition' | 'clock'> & {
+    clientId: string;
+}, body: (tx: CommandTransaction, transactionId: string) => Promise<CommandResult<T>>): Promise<import("../command/command.ts").CommandOutcome<T>>;
 /** Recheck real payload and minimizer custody in the actual same-home command. Missing
  * payload is accepted only with its real native removal receipt, never by absence alone.
  */

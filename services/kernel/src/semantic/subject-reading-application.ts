@@ -857,7 +857,7 @@ async function projectSummaries(
 }
 
 // Native Subject projection and related identity reads moved behind the supplied-port application.
-type SubjectReadRow = {
+export type SubjectReadRow = {
   has_global_properties: boolean | null;
   has_members: boolean;
   native_revision: boolean | null;

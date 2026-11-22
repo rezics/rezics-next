@@ -129,7 +129,6 @@ export async function subjectLinksCovered(
   anchor?: SessionComponent,
   observe?: (reason: SubjectLinkWaitReason) => void,
 ): Promise<boolean> {
-  const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
   observe?.('checkpoint-deadline');
   const transport = preparedStatementClient(
     client,
@@ -189,7 +188,6 @@ export async function linksCaughtUp(
   observeMissing = false,
   anchor?: SessionComponent,
 ): Promise<boolean> {
-  const requirements = linkRequirements(anchor ? [...seen, anchor] : seen, observeMissing);
   const pollingStarted = Date.now();
   let requestedPriority = false;
   let lastObservation: SubjectLinkWaitReason = 'deadline';
@@ -219,7 +217,7 @@ export async function linksCaughtUp(
         requestedPriority = await withBoundedCommandConnection(
           pool,
           Math.min(deadline, Date.now() + FRESHNESS_POLL_MS),
-          (client) => prioritizeReads.run(client, requirements),
+          (client) => prioritizeReads.run(client, linkRequirements([...seen, anchor], observeMissing)),
         ).then(
           () => true,
           () => false,

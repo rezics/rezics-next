@@ -8,9 +8,7 @@ import {
   runCommand,
   DEFAULT_REQUEST_DEADLINE_MS,
   type CommandTransaction,
-  type CommandBasis,
-  type CommandReceipt,
-  type CommandAuthorization,
+  type LegacyCommandOptions,
   type CommandOutcome,
   type CommandResult,
 } from '../command/command.ts';
@@ -105,19 +103,11 @@ export async function admitIdentityTerminalCapture(
  * contention policy, including any enclosing single-attempt maintenance scope.
  */
 type PrincipalOptions = Parameters<typeof runCommand>[1];
-type LegacyOptions = {
-  partition: number;
-  deadline?: number;
-  basis?: CommandBasis;
-  receipt?: CommandReceipt;
-  authorization?: CommandAuthorization | undefined;
-  clock?: (() => Date) | undefined;
-};
 type Context = Parameters<Parameters<typeof runCommand>[2]>[1];
 type Body<T> = (tx: CommandTransaction, context: Context) => Promise<CommandResult<T>>;
 export function runIdentityTerminalCommand<T>(
   pool: Pool,
-  options: LegacyOptions,
+  options: LegacyCommandOptions,
   body: Body<T>,
 ): Promise<CommandOutcome<T>>;
 export function runIdentityTerminalCommand<T>(
@@ -127,7 +117,7 @@ export function runIdentityTerminalCommand<T>(
 ): Promise<CommandOutcome<T>>;
 export async function runIdentityTerminalCommand<T>(
   pool: Pool,
-  options: LegacyOptions | PrincipalOptions,
+  options: LegacyCommandOptions | PrincipalOptions,
   body: Body<T>,
 ): Promise<CommandOutcome<T>> {
   const scope: Scope = {

@@ -2,12 +2,13 @@ import type { Pool } from 'pg';
 import { type Access, type AccessFactory, type Resource } from '../request/access.ts';
 import { type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { Admission } from './admission.ts';
+import { Admission, type AdmissionYield } from './admission.ts';
 import { type WriteRateLimiter } from '../access/write-rate.ts';
 import { type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 export declare function REQUEST_DEADLINE_MS(): number;
-export declare function createApp({ pool, requestDeadlineMs, admission, access, tokens, writeRate, rateAttribution, ratePeer, clock, }: {
+export declare function createApp({ pool, healthPool, requestDeadlineMs, admission, access, tokens, writeRate, rateAttribution, ratePeer, clock, }: {
     pool: Pool;
+    healthPool?: Pool;
     requestDeadlineMs?: number;
     admission?: Admission;
     access?: Access | AccessFactory;
@@ -48,7 +49,7 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
             readonly components: SessionComponent[];
             record(component: SessionComponent): void;
         };
-        readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
+        readonly authorize: (resource: Resource, permit?: AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
@@ -88,7 +89,7 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
                 readonly components: SessionComponent[];
                 record(component: SessionComponent): void;
             };
-            readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
+            readonly authorize: (resource: Resource, permit?: AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
             readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
@@ -114,7 +115,7 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
         readonly components: SessionComponent[];
         record(component: SessionComponent): void;
     };
-    readonly authorize: (resource: Resource) => Promise<import("../request/access.ts").AccessCheck>;
+    readonly authorize: (resource: Resource, permit?: AdmissionYield) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     status: 'ok';

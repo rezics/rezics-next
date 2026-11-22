@@ -267,7 +267,7 @@ test('real worker-check starts the generated acceptance command once and its ret
     devTree = join(disposable.path, 'dev');
     mkdirSync(join(devTree, 'scripts'), { recursive: true });
     runGit(root, ['init', '--quiet', devTree]);
-    checkScriptFixture(`refs/heads/${settings.integrationBranch}`).install(devTree);
+    checkScriptFixture(settings.integrationBranch).install(devTree);
 
     const script = join(devTree, 'scripts/worker-check.ts');
     const marker = join(disposable.path, 'command-starts.txt');

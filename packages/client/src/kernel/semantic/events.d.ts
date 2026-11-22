@@ -6,6 +6,7 @@ export declare const CATALOGUE_PROGRESS: 'com.rezics.definitions.catalogue.progr
 export declare const CATALOGUE_ACTIVATED: 'com.rezics.definitions.catalogue.activated.v1';
 export declare const SUBJECT_MERGED: 'com.rezics.subject.merged.v1';
 export declare const SUBJECT_REVISED: 'com.rezics.subject.revised.v1';
+export declare const SEMANTIC_ERASURE_PROGRESS: 'com.rezics.semantic.erasure.progress.v1';
 export declare const CANONICAL_GENERATION_COMMITTED: 'com.rezics.semantic.canonical-generation.committed.v1';
 export declare const CANONICAL_GENERATION_CONTINUATION: 'com.rezics.semantic.canonical-generation.continuation.v1';
 export declare const CANONICAL_GENERATION_REBUILD_CONTINUED: 'com.rezics.semantic.canonical-generation.rebuild-continued.v1';
@@ -125,7 +126,7 @@ export declare const SEMANTIC_EVENTS: {
     readonly "com.rezics.semantic.erasure.locator-advanced.v1": Type.TObject<{
         position: Type.TString;
     }>;
-    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
+    readonly "com.rezics.semantic.erasure.progress.v1": Type.TObject<{
         accountId: Type.TString;
     }>;
     readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{

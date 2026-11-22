@@ -41,6 +41,7 @@ test('deleted community Context cannot disclose its adopted overlay while consum
     }),
     200,
   );
+  await fixture.caughtUp(record.subject);
   const read = () => call('GET', `/v1/subjects/${record.subject}?context=${context}`, 'owner');
   expect(JSON.stringify((await read()).body)).toContain(record.payload);
   status(await call('DELETE', `/v1/contexts/${context}`, 'owner'), 200);
@@ -48,6 +49,7 @@ test('deleted community Context cannot disclose its adopted overlay while consum
   status(withheld, 404);
   expect(JSON.stringify(withheld.body)).not.toContain(record.payload);
   status(await call('POST', `/v1/contexts/${context}:restore`, 'owner', {}), 200);
+  await fixture.caughtUp(record.subject);
   expect(JSON.stringify((await read()).body)).toContain(record.payload);
 });
 

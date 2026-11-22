@@ -1,26 +1,36 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
+import { canonicalGenerationAnnouncement } from './canonical-generation-delivery.ts';
 import { minimizeSemanticRecordPayload } from './retention-payload.ts';
 import type { Pool } from 'pg';
 import {
   authoritativeTimeValue,
   currentCommand,
+  registerCommandCallback,
   noEffect,
   runCommand,
   type CommandTransaction,
+  type CommandEvent,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { minimizeAccountErasureZone } from '../zones/account-erasure-zone.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
-import { CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION, SEMANTIC_EVENTS } from './events.ts';
+import {
+  CANONICAL_GENERATION_COMMITTED,
+  CANONICAL_GENERATION_CONTINUATION,
+  IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED,
+  SEMANTIC_ERASURE_PROGRESS,
+  SEMANTIC_EVENTS,
+} from './events.ts';
 import { SEMANTIC_LOCATOR_ADMITTED, SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 import type { Effect } from '../events/effects.ts';
-import { recordSemanticSourceDisposition } from './erasure-producer.ts';
+import { recordSemanticSourceCommit, recordSemanticSourceDisposition } from './erasure-producer.ts';
 
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
 export { SEMANTIC_LOCATOR_ADVANCED };
-export const SEMANTIC_ERASURE_PROGRESS = 'com.rezics.semantic.erasure.progress.v1';
+export { SEMANTIC_ERASURE_PROGRESS };
 const platform = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',
   clientId: 'internal-semantic-erasure',
@@ -259,6 +269,7 @@ async function minimizePayload(
   locator: Locator,
   retain: boolean,
   nativePresent: boolean,
+  events: CommandEvent[],
 ): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
   const { store, record_key: key, role } = locator;
   if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
@@ -285,8 +296,11 @@ async function minimizePayload(
   if (locator.source_transaction_id) {
     await tx.query(
       `INSERT INTO semantic.erasure_shared_custody(partition_no,account_id,role,transaction_id,outbox_position)
-      VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-      [partition, accountId, role, locator.source_transaction_id, locator.source_position],
+      SELECT $1,$2,$3,$4,position FROM semantic.erasure_retained_role_position($1,$4,$5,$6) AS position
+      ON CONFLICT(partition_no,account_id,role,transaction_id) DO UPDATE SET outbox_position=EXCLUDED.outbox_position
+        WHERE EXCLUDED.outbox_position IS NOT NULL
+          AND semantic.erasure_shared_custody.outbox_position IS DISTINCT FROM EXCLUDED.outbox_position`,
+      [partition, accountId, role, locator.source_transaction_id, locator.source_position, locator.delivery_position],
     );
   }
   if (store === 'identity_epoch_mapping_generation') return;
@@ -294,10 +308,15 @@ async function minimizePayload(
   if (store === 'record_source_set' || store === 'record_source_set_member') return;
   if (store === 'write_basis') {
     const original = await tx.query(
-      'SELECT transaction_id FROM semantic.erasure_provenance WHERE partition_no=$1 AND record_key=$2',
-      [partition, key],
+      `SELECT p.transaction_id, $3 <> 'acting-human' AND EXISTS (
+         SELECT FROM editorial.write_basis b WHERE (b.partition_no,b.transaction_id)=(p.partition_no,p.transaction_id)
+           AND b.principal_kind='account' AND b.principal_id=$4
+           AND NOT core.subject_cleanup_allowed_v1(b.partition_no,b.epoch,b.position,'command')
+       ) AS held FROM semantic.erasure_provenance p WHERE p.partition_no=$1 AND p.record_key=$2`,
+      [partition, key, role, accountId],
     );
     if (!original.rowCount) return;
+    if (original.rows[0].held) return { defer: true, rawKeys: 1, bytes: 0 };
     const transactionId = original.rows[0].transaction_id;
     if (role === 'acting-human') {
       await tx.query(
@@ -356,12 +375,12 @@ async function minimizePayload(
     });
   } else if (store === 'fact') {
     // Historical values are removed; a private latest slot keeps an empty retract marker so older values cannot reappear.
-    await tx.query(
+    const removed = await tx.query(
       `DELETE FROM semantic.fact f WHERE ${where} AND EXISTS
       (SELECT 1 FROM semantic.fact newer WHERE newer.route=f.route AND newer.subject_id=f.subject_id AND newer.slot_id=f.slot_id AND newer.log_seq>f.log_seq)`,
       values,
     );
-    await tx.query(
+    const retracted = await tx.query(
       `WITH changed AS (
       UPDATE semantic.fact f SET body='{}',operation='retract',release=NULL WHERE ${where} AND f.operation='assert' AND (
        NOT EXISTS(SELECT 1 FROM semantic.subject s WHERE s.route=f.route AND s.subject_id=f.subject_id AND s.visibility='visible')
@@ -372,6 +391,9 @@ async function minimizePayload(
       UPDATE semantic.subject s SET current_facts=greatest(0,current_facts-1) FROM changed c WHERE s.route=c.route AND s.subject_id=c.subject_id`,
       [...values, accountId],
     );
+    // Fact triggers can change the canonical name, and retraction also updates the Subject.
+    if (removed.rowCount || retracted.rowCount)
+      events.push(...(await canonicalGenerationAnnouncement(tx, partition, true)));
   } else if (store === 'revision') {
     await minimizeSemanticRecordPayload(tx, 'revision', { low, high, recordKey: key });
   } else if (store === 'moderation') {
@@ -489,7 +511,17 @@ async function minimizePayload(
   } else if (store === 'account_agent_moved_link') {
     await tx.query(`DELETE FROM semantic.account_agent_moved_link WHERE ${where}`, values);
   } else if (store === 'account_agent_subject') {
+    const backlink = (
+      await tx.query<{ subject_id: string }>(
+        `SELECT subject_id FROM semantic.account_agent_subject WHERE ${where} FOR UPDATE`,
+        values,
+      )
+    ).rows[0];
+    if (!backlink) return;
+    await admitIdentityTerminalCapture(tx, [backlink.subject_id]);
     await tx.query(`UPDATE semantic.account_agent_subject SET verified=false,receipt_id=NULL WHERE ${where}`, values);
+    // The backlink trigger advances the source head. Its worker wake must commit with this mutation.
+    events.push({ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } });
   } else if (store === 'acceptance' || store === 'acceptance_current') {
     if (store === 'acceptance') {
       const child = (
@@ -558,7 +590,8 @@ async function minimize(
   partition: number,
   accountId: string,
   locator: Locator,
-  retain = false,
+  retain: boolean,
+  events: CommandEvent[],
 ): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
   const { store, record_key: key } = locator;
   if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
@@ -585,7 +618,7 @@ async function minimize(
     );
     if (!removed.rowCount) return { defer: true, rawKeys: 1, bytes: 0 };
   }
-  const result = await minimizePayload(tx, partition, accountId, locator, retain, nativePresent);
+  const result = await minimizePayload(tx, partition, accountId, locator, retain, nativePresent, events);
   if (!result?.defer)
     recordSemanticSourceDisposition(tx, store, key, (await exists()) ? 'retained-nonpersonal' : 'removed');
   return result;
@@ -619,7 +652,7 @@ export async function refreshSemanticErasureSourceRecord(
   );
   if (!locator) return;
   const retain = await retainProjection(pool, partition, locator);
-  await runCommand(pool, { partition, basis: platform }, async (tx) => {
+  await runIdentityTerminalCommand(pool, { partition, basis: platform }, async (tx) => {
     const seal = await tx.query(
       'SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 FOR SHARE',
       [partition, accountId],
@@ -658,7 +691,8 @@ export async function refreshSemanticErasureSourceRecord(
       "UPDATE semantic.erasure_locator SET state='pending' WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5",
       [partition, accountId, locator.store, locator.record_key, locator.role],
     );
-    const child = await minimize(tx, partition, accountId, locator, retain);
+    const events: CommandEvent[] = event(accountId);
+    const child = await minimize(tx, partition, accountId, locator, retain, events);
     if (!child?.defer) {
       await tx.query(
         "UPDATE semantic.erasure_locator SET state='minimized' WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5",
@@ -669,7 +703,7 @@ export async function refreshSemanticErasureSourceRecord(
         accountId,
       ]);
     }
-    return { value: null, events: event(accountId) };
+    return { value: null, events };
   });
 }
 
@@ -700,7 +734,7 @@ export async function stepSemanticErasure(
   // Local discovery can outrun the source relay. Commit this exact child's late obligation before its payload.
   if (probe) await recordLocatorObligations(pool, partition, accountId, [probe]);
   const retain = await retainProjection(pool, partition, probe);
-  const result = await runCommand(pool, { partition, basis: platform }, async (tx) => {
+  const result = await runIdentityTerminalCommand(pool, { partition, basis: platform }, async (tx) => {
     await tx.query('SET LOCAL enable_seqscan=off');
     await tx.query('SET LOCAL enable_bitmapscan=off');
     await tx.query('SET LOCAL enable_sort=off');
@@ -766,7 +800,8 @@ export async function stepSemanticErasure(
         rawKeys: 1,
         bytes,
       });
-    const child = await minimize(tx, partition, accountId, locator, retain);
+    const events: CommandEvent[] = event(accountId);
+    const child = await minimize(tx, partition, accountId, locator, retain, events);
     if (!child?.defer)
       await tx.query(
         `UPDATE semantic.erasure_locator SET state='minimized'
@@ -785,7 +820,7 @@ export async function stepSemanticErasure(
         rawKeys: 1 + (child?.rawKeys ?? 0),
         bytes: bytes + (child?.bytes ?? 0),
       },
-      events: event(accountId),
+      events,
     };
   });
   if ('settle' in result.value && result.value.settle && probe)
@@ -858,12 +893,27 @@ async function advanceEmptyHome(
         [partition, accountId],
       );
       if (pending.rowCount) return noEffect(false);
-      if (progress.sourceProtocol === 1)
-        await tx.query(
+      if (progress.sourceProtocol === 1) {
+        const seal = await tx.query(
           `INSERT INTO semantic.erasure_source_seal(partition_no,account_id,version,at)
            VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
           [partition, accountId, progress.sourceVersion, progress.at],
         );
+        // Retain EOF in the sealing command only for a genuinely empty role directory.
+        // Both Source cursors can resolve this hold independently in its owning home.
+        if (seal.rowCount)
+          registerCommandCallback(tx, async (transactionId) => {
+            const held = await tx.query(
+              `INSERT INTO semantic.erasure_source_hold
+                 (partition_no,id,account_id,version,at,store,record_key,role,delivery_position,transaction_id,origin_key)
+               SELECT $1,$2,$2,$3,$4,'',0,'',0,$5,''
+               WHERE NOT EXISTS (SELECT 1 FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2)
+               ON CONFLICT DO NOTHING`,
+              [partition, accountId, progress.sourceVersion, progress.at, transactionId],
+            );
+            if (held.rowCount) await recordSemanticSourceCommit(tx, transactionId);
+          });
+      }
       await tx.query(
         `INSERT INTO semantic.erasure_home(partition_no,account_id,at,state,applied)
           VALUES($1,$2,$3,'complete',$4) ON CONFLICT(partition_no,account_id)
@@ -996,7 +1046,7 @@ async function settleLateLocator(pool: Pool, partition: number, accountId: strin
     await recordLocatorObligations(pool, partition, accountId, [probe]);
   const retain = await retainProjection(pool, partition, probe);
   const minimized = (
-    await runCommand(pool, { partition, basis: platform }, async (tx) => {
+    await runIdentityTerminalCommand(pool, { partition, basis: platform }, async (tx) => {
       await tx.query('SET LOCAL enable_seqscan=off');
       await tx.query('SET LOCAL enable_bitmapscan=off');
       await tx.query('SET LOCAL enable_sort=off');
@@ -1036,7 +1086,8 @@ async function settleLateLocator(pool: Pool, partition: number, accountId: strin
         probe.delivery_position !== child.delivery_position
       )
         return noEffect(false);
-      const deferred = await minimize(tx, partition, accountId, child, retain);
+      const events: CommandEvent[] = event(accountId);
+      const deferred = await minimize(tx, partition, accountId, child, retain, events);
       if (!deferred?.defer)
         await tx.query(
           `UPDATE semantic.erasure_locator SET state='minimized' WHERE partition_no=$1 AND account_id=$2 AND role=$3 AND store=$4 AND record_key=$5`,
@@ -1052,7 +1103,7 @@ async function settleLateLocator(pool: Pool, partition: number, accountId: strin
           child.role === locator.role &&
           child.store === locator.store &&
           child.record_key === locator.record_key,
-        events: event(accountId),
+        events,
       };
     })
   ).value;

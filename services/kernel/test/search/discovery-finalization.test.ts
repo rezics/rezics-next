@@ -291,17 +291,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(checks.slice(5).every((row) => row.state === 'current')).toBe(true);
 
     // A real Semantic notification at a certified empty home advances every native cut.
-    const untouched = await pool.query<{ partition_no: number }>(
-      `SELECT p.partition_no FROM core.partition p JOIN semantic.partition_subjects s USING(partition_no)
-       WHERE p.partition_no>0 AND p.partition_no<$1 AND p.position=0
-         AND s.canonical_announced_generation<s.canonical_generation
-       ORDER BY p.partition_no LIMIT 1`,
-      [homes],
+    // Model a lost generation-1 notification from a pre-upgrade sender.
+    const noticeHome = 1;
+    await pool.query(
+      'UPDATE semantic.partition_subjects SET canonical_announced_generation=canonical_generation WHERE partition_no=$1',
+      [noticeHome],
     );
-    const noticeHome = untouched.rows[0]!.partition_no;
     const initial = cuts.find(({ partition }) => partition === noticeHome)!;
     expect(initial.position).toBe('0');
-    await resumeCanonicalGenerationDelivery(pool, { after: noticeHome - 1, limit: 1, unannouncedOnly: true });
+    await resumeCanonicalGenerationDelivery(pool, { after: noticeHome - 1, limit: 1 });
     const readsBefore = indexedReads;
     await advanceDiscovery(options);
     expect(indexedReads).toBe(readsBefore);

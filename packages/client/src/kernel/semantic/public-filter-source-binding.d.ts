@@ -255,6 +255,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        /** Also fund one bounded scan of immutable held cut pages. */
+        compactSubjectCuts?: true;
         scanOnly?: true;
     }>, context: PublicFilterConsumerContext): Promise<PublicSourceRepairPage>;
     settleMixed?(request: Readonly<{
@@ -337,6 +339,7 @@ type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['be
     inputLimit?: number;
     subjectEnrollment?: SubjectEnrollment;
     coldEnrollment?: ColdEnrollmentRequest;
+    recovery?: PublicSourceBootstrapRecovery;
 }>;
 type FreshPitTransfer = (queried: PublicFilterQueriedObservation, previousWork: string, adoptedWork: string) => Promise<{
     transferred: boolean;
@@ -447,6 +450,7 @@ export declare function advanceNativePublicFilterPreparation(binding: PublicFilt
 }> | {
     bootstrap: string;
     inputLimit?: number;
+    recovery?: PublicSourceBootstrapRecovery;
 }, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
 type BindingCost = {
     -readonly [K in keyof PublicFilterCost]: number;
@@ -456,6 +460,14 @@ type BindingCost = {
     bytes: number;
     engineRequests: number;
 };
+/** Claim the ordinary prepared request identity in the membership transaction.
+ * A concurrent old-format begin uses the same unique capturing index.
+ */
+export declare function reserveHeldSubjectBootstrap(db: CommandTransaction, member: {
+    birth: string;
+    bootstrap: string;
+    consumer: PublicFilterConsumer;
+}): Promise<void>;
 export declare class PublicFilterSourceDefinitionError extends Error {
     readonly reason: PublicFilterBindingFailure['reason'];
     constructor(reason: PublicFilterBindingFailure['reason']);

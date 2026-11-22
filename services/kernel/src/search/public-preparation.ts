@@ -14,7 +14,9 @@ import type { DiscoveryTarget } from './account-discovery.ts';
 import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
+  claimDuePublicClose,
   createPublicPreparationStore,
+  readPublicClose,
   PUBLIC_PREPARATION_BUDGET_MS,
   type PopulationFrontier,
   type PreparationLocator,
@@ -89,8 +91,9 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   const running = new Set<Promise<unknown>>();
   type PublicationPhase = 'prepare' | 'step' | 'activate';
   const unavailable = new Map<PublicationPhase, string>();
-  const failures = new Map<PreparationLocator['kind'], string>();
-  const reportFailure = (kind: PreparationLocator['kind'], error: unknown) => {
+  let recoveringClose = false;
+  const failures = new Map<PreparationLocator['kind'] | 'close', string>();
+  const reportFailure = (kind: PreparationLocator['kind'] | 'close', error: unknown) => {
     const name = error instanceof Error ? error.name : 'Error';
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 1000);
     const state = `${name}:${message}`;
@@ -100,7 +103,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       JSON.stringify({ event: 'search.public_preparation.failed', prefix: options.prefix, kind, name, message }),
     );
   };
-  const reportUnavailable = (phase: PublicationPhase, generation: number, result: PublicFilterConsumerUnavailable) => {
+  const reportUnavailable = (
+    phase: PublicationPhase,
+    generation: number,
+    result: Pick<PublicFilterConsumerUnavailable, 'reason'>,
+  ) => {
     const state = `${generation}:${result.reason}`;
     if (unavailable.get(phase) === state) return;
     unavailable.set(phase, state);
@@ -158,7 +165,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           databaseLifetimeOptions,
         )
       ).rows[0];
-      if (existing) return advance({ ...state, publication: existing.job, phase: 'native' });
+      if (existing) return advance({ ...state, publication: existing.job, phase: 'native' }, 0, true);
       const release = await readRelease(context.deadline);
       if (!release) return advance(state, 5000);
       if (release.digest !== state.meaning) {
@@ -182,14 +189,14 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         return advance(state, 1000);
       }
       unavailable.delete('prepare');
-      return advance({ ...state, publication: prepared.job.job, phase: 'native' });
+      return advance({ ...state, publication: prepared.job.job, phase: 'native' }, 0, true);
     }
     const retained = await withBoundedReadConnection(
       options.pool,
       context.deadline,
       (client) =>
-        client.query<{ consumer: GenerationPublicationJob['consumer'] }>(
-          `SELECT consumer FROM search.generation_publication
+        client.query<{ consumer: GenerationPublicationJob['consumer']; subscription_protocol: number }>(
+          `SELECT consumer,subscription_protocol FROM search.generation_publication
        WHERE partition_no=0 AND job=$1 AND physical_target=$2`,
           [state.publication, index],
         ),
@@ -200,7 +207,12 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
-      const reconciliation = await options.runtime.publication.step(job, context, { enrollSource: true });
+      // The claimed revision already points to this native job. Its independently
+      // committed Source and receiver cursors are the recovery point after each step.
+      const reconciliation =
+        retained.rows[0]!.subscription_protocol === 1
+          ? await options.runtime.enrollPublication(job, context, () => !paused && !stopped)
+          : await options.runtime.publication.step(job, context, { enrollSource: true });
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';
@@ -346,7 +358,29 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       });
     },
     discover(deadline = deadlineFor(30_000)) {
-      return paused || stopped ? Promise.resolve() : track(deadline, () => store.due(deadline));
+      if (paused || stopped) return Promise.resolve();
+      return track(deadline, async () => {
+        await store.due(deadline);
+        if (paused || stopped || recoveringClose) return;
+        // Closing can wait for a live reference. Keep that wait off the generation
+        // discovery turn, but drain the worker-owned task on pause and shutdown.
+        recoveringClose = true;
+        const closeDeadline = Date.now() + PUBLIC_PREPARATION_BUDGET_MS;
+        void track(closeDeadline, async () => {
+          while (!paused && !stopped && Date.now() < closeDeadline) {
+            const receipt = await claimDuePublicClose(options.pool, options.prefix, closeDeadline);
+            if (!receipt) break;
+            const queried = await readPublicClose(options.pool, receipt.locator, closeDeadline);
+            if (queried) await options.runtime.closeRetainedObservation(queried, { deadline: closeDeadline });
+            await receipt.complete();
+            failures.delete('close');
+          }
+        })
+          .catch((error) => reportFailure('close', error))
+          .finally(() => {
+            recoveringClose = false;
+          });
+      });
     },
     async pause() {
       paused = true;

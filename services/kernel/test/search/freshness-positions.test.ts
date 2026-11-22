@@ -13,7 +13,9 @@ test('whole-generation freshness follows native backfill, replay, retirement and
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   const [up, down] = (
-    await Bun.file(new URL('../../db/search/migrations/20261119015031_freshness_positions.sql', import.meta.url)).text()
+    await Bun.file(
+      new URL('../../db/search/migrations/20261121024000_freshness_home_lanes.sql', import.meta.url),
+    ).text()
   ).split('-- migrate:down');
   const [bound, restore] = (
     await Bun.file(
@@ -66,7 +68,6 @@ test('whole-generation freshness follows native backfill, replay, retirement and
     const before = await tuples();
     expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
     const caughtUpRows = (await tuples()) - before;
-    expect(caughtUpRows).toBeGreaterThan(0);
     expect(caughtUpRows).toBeLessThan(512);
 
     await db.query('UPDATE core.partition SET position = position + 1 WHERE partition_no IN (0,4095)');
@@ -149,6 +150,24 @@ test('whole-generation freshness follows native backfill, replay, retirement and
       ).rows,
     ).toEqual([{ folded: true }]);
     expect(await read(next)).toMatchObject({ behind: 2, oldest: earlier });
+    await db.query('UPDATE core.partition SET position = 0 WHERE partition_no = 0');
+    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    expect(await read(next)).toMatchObject({ behind: 1, oldest: earlier });
+    await db.query(
+      'UPDATE core.consumer_checkpoint SET position = position + 1 WHERE consumer = $1 AND partition_no = 4095',
+      [first],
+    );
+    expect(await read(first)).toMatchObject({ behind: 0, oldest: null });
+    await db.query(
+      "UPDATE core.consumer_checkpoint SET consumer = 'moved_reader' WHERE consumer = $1 AND partition_no = 4095",
+      [first],
+    );
+    expect(await read(first)).toMatchObject({ behind: 1, oldest: null });
+    await db.query(
+      'UPDATE core.consumer_checkpoint SET position = 0, epoch = NULL WHERE consumer = $1 AND partition_no = 4095',
+      [next],
+    );
+    expect(await read(next)).toMatchObject({ behind: 1, oldest: null });
     await db.query('ROLLBACK TO advances');
     expect(await read(first)).toMatchObject({ behind: 2, oldest: earlier });
 

@@ -12,7 +12,10 @@ export declare function createPool(url: string, options?: {
     connectionTimeoutMillis?: number;
     idleTimeoutMillis?: number;
     min?: number;
+    max?: number;
 }): Pool;
+/** Direct pool queries and checked-out commands charge the same active owner meter. */
+export declare function accountPoolQueries(pool: Pool): Pool;
 /** Accounting only: the executor retains its original client and cleanup custody. */
 export type QueryAccounting = Readonly<{
     query<T>(sql: string, operands: readonly unknown[], dispatch: () => Promise<T>): Promise<T>;
@@ -21,7 +24,8 @@ export type QueryAccounting = Readonly<{
 export declare function withQueryAccounting<T>(accounting: QueryAccounting, run: () => Promise<T>): Promise<T>;
 /** An owner with its own query meter returns its measured cost to the caller. */
 export declare function withoutQueryAccounting<T>(run: () => Promise<T>): Promise<T>;
-export declare function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
+/** Writers serialized by a native session lock can queue locally before reserving a pool slot. */
+export declare function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>, serializeOn?: string): Promise<T>;
 type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction' | 'mode'>;
 export declare function hasPretransactionReadSession(pool: Pool): boolean;
 /** Before writer BEGIN, bounded native point reads on this exact pool may use

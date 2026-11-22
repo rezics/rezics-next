@@ -34,7 +34,7 @@ export declare function bulkWriteUnavailableSchema(): import("typebox").TObject<
     status: import("typebox").TLiteral<number>;
     code: import("typebox").TSchema;
     retryable: import("typebox").TSchema;
-    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unknown">]>;
     request_id: import("typebox").TString;
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{

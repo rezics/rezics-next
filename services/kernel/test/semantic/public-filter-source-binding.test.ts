@@ -699,9 +699,35 @@ test('canonical retained observation execution joins preserve complete compiler 
       [begun.bootstrap.id.slice(2)],
     );
     expect(enrollment.rows).toEqual([{ homes: 4096, first: 0, last: 4095 }]);
-    const retained = await custody.retainPrepared(
+    // Recovery matches the indexed prepared build to the original Source bootstrap.
+    const build = {
+      registration: registered.registration,
+      build: begun.bootstrap.id,
+      generation: 1n,
+    };
+    const after = ['Native public filter', book];
+    expect(
+      await custody.appendPreparationSegment(
+        {
+          ...build,
+          consumer: registered.consumer,
+          expected: { rawCount: 0, outputCount: 0, after: undefined },
+          entries: [
+            {
+              rawOrdinal: 0,
+              outputOrdinal: 0,
+              payload: { hit: { id: book, sort: after }, owner: { original: book, terminal: book } },
+            },
+          ],
+          after,
+          rawExhausted: true,
+        },
+        readContext(),
+      ),
+    ).toMatchObject({ status: 'appended' });
+    const retained = await custody.retainPreparedSegments(
       {
-        registration: registered.registration,
+        ...build,
         covered: begun.bootstrap.covered,
         build: begun.bootstrap.id,
         generation: 1n,

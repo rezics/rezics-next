@@ -42,7 +42,7 @@ export type WorkOptions = {
 export type ComposedWork = {
   effects: ReturnType<typeof registerEffects>;
   launch(): Promise<void>;
-  shutdown(): Promise<void>;
+  shutdown(deadline?: number): Promise<void>;
 };
 
 /** Registration owns the process-global SDK once. Pools and clients belong to the caller. */

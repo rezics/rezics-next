@@ -2,7 +2,7 @@
 -- The complete durable cursor is also the identity of a Source occurrence.
 ALTER TABLE semantic.erasure_source_record DROP CONSTRAINT erasure_source_record_pkey,
   ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY USING INDEX erasure_source_record_cursor_primary;
-DROP INDEX semantic.erasure_source_record_key;
+DROP INDEX IF EXISTS semantic.erasure_source_record_key;
 
 -- migrate:down
 ALTER TABLE semantic.erasure_source_record DROP CONSTRAINT erasure_source_record_pkey,

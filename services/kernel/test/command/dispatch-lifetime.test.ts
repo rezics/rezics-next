@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { DatabaseError, Pool } from 'pg';
 import {
+  AppliedCommandResponseError,
   CommandUnavailableError,
   CommandCommitUncertainError,
   authoritativeTimeValue,
@@ -12,6 +13,7 @@ import {
   hasLiveCommandTransaction,
   hasOwnCommandCompletion,
   noEffect,
+  preflightCommandReceipt,
   registerCommandCallback,
   runCommand,
   withSingleCommandAttempt,
@@ -28,7 +30,7 @@ import {
   type CommandDispatchAllowance,
   type CommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withQueryAccounting } from '../../src/database/pool.ts';
 import { readLiveCopyLineage } from '../../src/access/live-copy-lineage.ts';
 import { newId } from '../../src/route/route.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
@@ -869,6 +871,69 @@ test('a subsequent server error on the same backend cannot undo its acknowledged
 });
 
 // Literal derivation assertions are authored alongside native outcomes, not physical proof.
+test('a failed checkout exit preserves only a confirmed command effect or receipt', async () => {
+  const options = {
+    partition,
+    receipt: {
+      actorAccountId: randomUUID(),
+      kind: 'test.checkout.exit',
+      key: randomUUID(),
+      digest: new Uint8Array(32),
+    },
+    authorization: {
+      action: 'test',
+      resource: { route: partition << 4, id: randomUUID() },
+      authorize: async () => 'execute' as const,
+      denied: () => new Error('denied'),
+    },
+  };
+  const deadline = new CommandUnavailableError('deadline', partition);
+  const exitFailure = (run: () => Promise<unknown>) =>
+    failed(
+      withQueryAccounting(
+        {
+          query: (_text, _operations, execute) => execute(),
+          async connection(checkout) {
+            await checkout();
+            throw deadline;
+          },
+        },
+        run,
+      ),
+    );
+  const preflight = () => preflightCommandReceipt(pool, options);
+  expect(await exitFailure(preflight)).toBe(deadline);
+  expect(await exitFailure(() => runCommand(pool, { partition }, async () => noEffect(1)))).toBe(deadline);
+  for (const operation of [() => runCommand(pool, options, async () => noEffect(1)), preflight]) {
+    const error = await exitFailure(operation);
+    expect(error).toBeInstanceOf(AppliedCommandResponseError);
+    expect(error).toMatchObject({ cause: deadline });
+  }
+  expect(await preflight()).toMatchObject({ replayed: true, value: 1 });
+});
+
+test('ordinary lost COMMIT response stays uncertain without retry after the real effect commits', async () => {
+  const observer = observe();
+  const error = Object.assign(new Error('lost response'), { code: '40001' });
+  observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error });
+  const id = randomUUID();
+  let bodies = 0;
+  const failure = await failed(
+    runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
+      bodies++;
+      await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+      return noEffect(id);
+    }),
+  );
+  expect(failure).toBeInstanceOf(CommandCommitUncertainError);
+  expect(failure).toMatchObject({ cause: error });
+  expect(bodies).toBe(1);
+  expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(1);
+  expect((await admin.query('SELECT id FROM public.dispatch_lifetime_probe WHERE id=$1', [id])).rows).toEqual([{ id }]);
+});
+
+// Literal derivation assertions are authored alongside native outcomes, not physical proof.
+
 test('complete allowance includes the independent cleanup slot, scalar projections and empty partition seek', () => {
   expect(COMMAND_DISPATCH_ALLOWANCE.effect.work).toEqual({
     candidateKeys: 0,

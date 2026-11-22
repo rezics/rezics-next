@@ -4,7 +4,7 @@ import { createPool } from '../src/database/pool.ts';
 import { Admission } from '../src/http/admission.ts';
 import { createApp } from '../src/http/app.ts';
 import { defineRateLimit } from '../src/http/rate-limit.ts';
-import { actionCatalogue, SESSION_HEADER } from '../src/http/request.ts';
+import { actionCatalogue, requiresNativeAdmission, SESSION_HEADER } from '../src/http/request.ts';
 import {
   anonymousAccess,
   AuthenticationError,
@@ -49,7 +49,7 @@ type Seen = { authenticated: number[]; checks: unknown[][]; prepared: number[] }
 function recorder(seen: Seen, admission: Admission, prepare = false): Access {
   return {
     async authenticate(token) {
-      seen.authenticated.push(admission.running.reserved);
+      seen.authenticated.push(admission.running.bearer);
       if (token === 'refused') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
       return account;
     },
@@ -88,8 +88,12 @@ function thingApp(dependencies: Partial<Parameters<typeof createApp>[0]> = {}) {
     .get('/v1/quiet', { detail: { ...read, operationId: 'thing.quiet' } }, () => ({ ok: true }));
 }
 
-const call = (app: ReturnType<typeof thingApp>, method: string, path: string, headers: Record<string, string> = {}) =>
-  app.handle(new Request(`http://kernel.test${path}`, { method, headers }));
+const call = (
+  app: Pick<ReturnType<typeof thingApp>, 'handle'>,
+  method: string,
+  path: string,
+  headers: Record<string, string> = {},
+) => app.handle(new Request(`http://kernel.test${path}`, { method, headers }));
 
 test('the action catalogue comes from the route declarations', () => {
   expect(actionCatalogue(thingApp())).toEqual(
@@ -117,7 +121,7 @@ test('a route without a well-formed action, operation id or security is refused'
   expect(() => actionCatalogue(mixed)).toThrow('POST /v1/y: thing:read is declared with different security');
 });
 
-test('a request without credentials is anonymous, and a bearer token is verified on a reserved permit', async () => {
+test('a request without credentials is anonymous, and a bearer token uses a verification permit', async () => {
   const seen: Seen = { authenticated: [], checks: [], prepared: [] };
   const admission = new Admission();
   const app = thingApp({ admission, access: recorder(seen, admission) });
@@ -126,7 +130,7 @@ test('a request without credentials is anonymous, and a bearer token is verified
   const signed = await call(app, 'GET', `/v1/things/${thing.id}`, { authorization: 'Bearer good' });
   expect(await signed.json()).toMatchObject({ actor: 'account' });
   expect(seen.authenticated).toEqual([1]);
-  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+  expect(admission.running).toEqual({ normal: 0, reserved: 0, bearer: 0 });
 });
 
 test('a refused or malformed credential is a problem document with its challenge', async () => {
@@ -226,4 +230,65 @@ test('without configured keys, session tokens are signed with a key of the app',
     new Request('http://kernel.test/v1/write', { headers: { [SESSION_HEADER]: token } }),
   );
   expect(await elsewhere.json()).toEqual({ seen: 0 });
+});
+
+test('public read metadata needs no normal permit and nested authorization uses the handler permit', async () => {
+  const admission = new Admission({ permits: 1, reserved: 2, queue: 0 });
+  const seen: Seen = { authenticated: [], checks: [], prepared: [] };
+  const blocker = Promise.withResolvers<void>();
+  const held = admission.run('normal', { deadline: Date.now() + 5000 }, () => blocker.promise);
+  const app = thingApp({ admission, access: recorder(seen, admission, true) }).get(
+    '/v1/nested',
+    { detail: read },
+    ({ admission, job, authorize }) =>
+      admission.run('normal', job, async (permit) => {
+        const check = await authorize(thing, permit);
+        return { allowed: await check(pool) };
+      }),
+  );
+  try {
+    expect((await app.handle(new Request('http://kernel.test/v1/quiet'))).status).toBe(200);
+    expect((await app.handle(new Request('http://kernel.test/v1/nested'))).status).toBe(503);
+  } finally {
+    blocker.resolve();
+    await held;
+  }
+  const response = await app.handle(new Request('http://kernel.test/v1/nested'));
+  expect(await response.json()).toEqual({ allowed: true });
+  expect(seen.prepared).toEqual([1]);
+});
+
+test('a full native queue sheds signed native reads and rate charges before the live account checkout', async () => {
+  const admission = new Admission({ permits: 1, bearer: 1, reserved: 1, queue: 1 });
+  const seen: Seen = { authenticated: [], checks: [], prepared: [] };
+  const nativeRead = { ...read, [requiresNativeAdmission]: true };
+  const app = thingApp({ admission, access: recorder(seen, admission, true) }).get(
+    '/v1/native',
+    { detail: nativeRead },
+    ({ admission, job }) => admission.run('normal', job, async () => ({ ok: true })),
+  );
+  const blocker = Promise.withResolvers<void>();
+  const job = { deadline: Date.now() + 5000 };
+  const held = admission.run('normal', job, () => blocker.promise);
+  const queued = admission.run('normal', job, async () => {});
+  const headers = { authorization: 'Bearer good' };
+  try {
+    for (const [method, path] of [
+      ['GET', '/v1/native'],
+      ['POST', '/v1/things'],
+    ] as const) {
+      const response = await call(app, method, path, headers);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('retry-after')).toBe('1');
+      expect(await response.json()).toMatchObject({ code: 'overloaded' });
+    }
+    expect(seen.authenticated).toEqual([]);
+    expect((await call(app, 'GET', '/v1/quiet', headers)).status).toBe(200);
+    expect(seen.authenticated).toEqual([1]);
+  } finally {
+    blocker.resolve();
+    await Promise.all([held, queued]);
+  }
+  expect((await call(app, 'GET', '/v1/native', headers)).status).toBe(200);
+  expect(seen.authenticated).toEqual([1, 1]);
 });

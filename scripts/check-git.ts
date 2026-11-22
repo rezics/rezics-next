@@ -18,7 +18,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from '../tools/goal/src/lease.ts';
 
 const MANIFEST_FILE = 'manifest.json';
@@ -192,6 +192,8 @@ flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pru
 
 const CHECK_REF = /^refs\/checks\/[a-zA-Z0-9-]+$/;
 const RELEASE_TIMEOUT_MS = 10_000;
+const PUBLICATION_AUTHORITY_TIMEOUT_MS = 10_000;
+const RAW_GIT_GRAPH = { GIT_NO_REPLACE_OBJECTS: '1', GIT_GRAFT_FILE: '' };
 export const CHECK_GIT_RELEASE_RETRY_MS = 60_000;
 type GitPushOutcome = {
   kind: 'deadline' | 'exit' | 'signal' | 'execution';
@@ -236,17 +238,19 @@ type PublicationOptions = {
 function publicationRecord(workspace: string, ref: string): string {
   return join(resolve(workspace), '.temp/check-git-publications', `${ref.slice('refs/checks/'.length)}.json`);
 }
-function originPushUrl(workspace: string, timeoutMs = 2000): string | null {
+function originUrl(workspace: string, direction: 'fetch' | 'push', timeoutMs = 2000): string | null {
   if (timeoutMs <= 0) return null;
   try {
-    const result = Bun.spawnSync(['git', 'remote', 'get-url', '--push', 'origin'], {
+    const flags = direction === 'push' ? ['--push', '--all'] : ['--all'];
+    const result = Bun.spawnSync(['git', 'remote', 'get-url', ...flags, 'origin'], {
       cwd: workspace,
-      env: environment(),
+      env: transportEnvironment({}),
       stdout: 'pipe',
       stderr: 'ignore',
       timeout: Math.min(2000, timeoutMs),
     });
-    return result.exitCode === 0 ? result.stdout.toString().trim() : null;
+    const url = result.stdout.toString().replace(/\n$/, '');
+    return result.exitCode === 0 && url && !/[\r\n]/.test(url) ? url : null;
   } catch {
     return null;
   }
@@ -316,7 +320,7 @@ export async function releaseCheckGit(
       record.remote.commit !== manifest.remote.commit ||
       !validObjectId(record.remote.commit, record.objectFormat) ||
       record.ownership.origin === null ||
-      record.ownership.origin !== originIdentity(originPushUrl(workspace, deadlineMs - Date.now()))
+      record.ownership.origin !== originIdentity(originUrl(workspace, 'push', deadlineMs - Date.now()))
     )
       return;
     if (record.ownership.state === 'retained' && !options.settled) return;
@@ -393,7 +397,7 @@ export async function sweepCheckGit(
   try {
     const info = lstatSync(directory);
     if (!info.isDirectory() || info.isSymbolicLink()) return { visited, remaining: true };
-    if (httpsExcludedByGitPolicy() && originPushUrl(workspace, deadlineMs - Date.now())?.startsWith('https://'))
+    if (httpsExcludedByGitPolicy() && originUrl(workspace, 'push', deadlineMs - Date.now())?.startsWith('https://'))
       return { visited, remaining: readdirSync(directory).some((name) => pattern.test(name)) };
     lease = acquireDirectoryLease(join(directory, '.sweep.lease'));
     const names = readdirSync(directory)
@@ -464,6 +468,61 @@ async function observeRemoteRef(workspace: string, ref: string, deadlineMs: numb
   return commit;
 }
 
+async function publicCheckOrigin(
+  workspace: string,
+  { objectFormat, head, dev, indexTree }: Pick<Manifest, 'objectFormat' | 'head' | 'dev' | 'indexTree'>,
+  deadlineMs: number,
+  now: () => number,
+): Promise<string> {
+  const authorityDeadline = Math.min(deadlineMs, now() + PUBLICATION_AUTHORITY_TIMEOUT_MS);
+  const origin = originUrl(workspace, 'push', authorityDeadline - now());
+  if (origin?.startsWith('https://') && httpsExcludedByGitPolicy())
+    throw new Error('check-git: Git protocol policy excludes the HTTPS origin');
+  const localFixture = origin && process.env.NODE_ENV === 'test' && isAbsolute(origin) && isDirectory(origin);
+  if (
+    !origin ||
+    (origin !== CHECK_GIT_ORIGIN && !localFixture) ||
+    originUrl(workspace, 'fetch', authorityDeadline - now()) !== origin
+  )
+    throw new Error('check-git: public origin authority is unavailable');
+
+  const inspect = async (args: string[]) =>
+    (await gitTransport(workspace, args, RAW_GIT_GRAPH, authorityDeadline, now)).stdout.trim();
+  const branches = await inspect(['ls-remote', '--exit-code', '--refs', '--heads', 'origin']);
+  const tips = branches.split('\n').map((line) => {
+    const [oid, ref, extra] = line.split('\t');
+    if (!validObjectId(oid, objectFormat) || !ref?.startsWith('refs/heads/') || extra !== undefined)
+      throw new Error('check-git: public origin branch advertisement is invalid');
+    return oid;
+  });
+  // An advertised tip can be ahead of this clone. Only locally available commits can prove ancestry.
+  const known = await inspect(['rev-list', '--no-walk', '--ignore-missing', ...new Set(tips)]);
+  if (!known) throw new Error('check-git: public origin branch tips are unavailable locally');
+  const publicTips = known.split('\n');
+  if (await inspect(['rev-list', '--max-count=1', head, ...(dev ? [dev] : []), '--not', ...publicTips]))
+    throw new Error('check-git: selected commit lineage is outside public origin branches');
+
+  if ((await inspect(['rev-parse', `${head}^{tree}`])) !== indexTree) {
+    // A newly composed tree only exists in staging. For existing trees, check exact reachability.
+    const tree = await gitTransport(
+      workspace,
+      ['cat-file', '-e', indexTree],
+      RAW_GIT_GRAPH,
+      authorityDeadline,
+      now,
+      [0, 1],
+    );
+    if (
+      tree.code !== 0 ||
+      !(await inspect(['rev-list', '--objects', '--no-object-names', '--filter=blob:none', ...publicTips]))
+        .split('\n')
+        .includes(indexTree)
+    )
+      throw new Error('check-git: staged tree is outside public origin branches');
+  }
+  return origin;
+}
+
 async function pushCheckGit(
   workspace: string,
   refspecs: string[],
@@ -480,6 +539,16 @@ async function pushCheckGit(
   );
   const bytes = result.stderr.match(/Writing objects: 100%[^\r\n]*/g)?.at(-1);
   if (bytes) console.error(`check-git: ${bytes}`);
+}
+
+function transportEnvironment(overrides: Record<string, string>): Record<string, string> {
+  const env = environment(overrides);
+  // Authentication remains local; it is never part of the published manifest or host repository.
+  for (const key of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']) {
+    if (process.env[key] === undefined) delete env[key];
+    else env[key] = process.env[key]!;
+  }
+  return env;
 }
 
 async function gitTransport(
@@ -502,15 +571,9 @@ async function gitTransport(
       operation: args[0]!,
       stderr: 'publication preparation deadline exceeded before Git started',
     });
-  const env = environment(overrides);
-  // Authentication remains local; it is never part of the published manifest or host repository.
-  for (const key of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']) {
-    if (process.env[key] === undefined) delete env[key];
-    else env[key] = process.env[key]!;
-  }
   const pushed = Bun.spawn(['git', ...args], {
     cwd: workspace,
-    env,
+    env: transportEnvironment(overrides),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -845,14 +908,13 @@ export async function stageCheckGit(
       shallow,
     };
     if (publication !== undefined) {
-      if (!/^refs\/checks\/[a-zA-Z0-9-]+$/.test(publication.ref))
-        throw new Error('check-git: publication must use a check-only ref');
+      if (!CHECK_REF.test(publication.ref)) throw new Error('check-git: publication must use a check-only ref');
       // Scan the actual staged tree as well as check-run's working inputs, before any Git object is pushed.
       const scanned = Bun.spawnSync(
         ['git', 'grep', '-I', '-l', '-E', '--', '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----', indexTree],
         {
           cwd: source,
-          env: environment(isolatedObjects),
+          env: environment({ ...isolatedObjects, ...RAW_GIT_GRAPH }),
           stdout: 'pipe',
           stderr: 'pipe',
           timeout: GIT_OPERATION_TIMEOUT_MS,
@@ -867,33 +929,33 @@ export async function stageCheckGit(
           .some((path) => path !== `${indexTree}:scripts/check-run.test.ts`)
       )
         throw new Error('check-git: candidate contains private key material');
-      const commit = git(
-        source,
-        [
-          'commit-tree',
-          indexTree,
-          '-p',
-          head,
-          ...(devCommit && devCommit !== head ? ['-p', devCommit] : []),
-          '-m',
-          'Remote check candidate',
-        ],
-        {
-          ...isolatedObjects,
-          GIT_AUTHOR_NAME: 'Remote check',
-          GIT_AUTHOR_EMAIL: 'check@rezics.invalid',
-          GIT_COMMITTER_NAME: 'Remote check',
-          GIT_COMMITTER_EMAIL: 'check@rezics.invalid',
-        },
-      );
-      const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
       const recordPath = publicationRecord(source, publication.ref);
+      let commit: string | undefined;
       let firstFailure: string | undefined;
       let intentRecorded = false;
       try {
-        const origin = originPushUrl(source);
-        if (origin?.startsWith('https://') && httpsExcludedByGitPolicy())
-          throw new Error('check-git: Git protocol policy excludes the HTTPS origin');
+        const origin = await publicCheckOrigin(source, identity, deadlineMs, now);
+        const publishObjects = { ...isolatedObjects, ...RAW_GIT_GRAPH };
+        commit = git(
+          source,
+          [
+            'commit-tree',
+            indexTree,
+            '-p',
+            head,
+            ...(devCommit && devCommit !== head ? ['-p', devCommit] : []),
+            '-m',
+            'Remote check candidate',
+          ],
+          {
+            ...publishObjects,
+            GIT_AUTHOR_NAME: 'Remote check',
+            GIT_AUTHOR_EMAIL: 'check@rezics.invalid',
+            GIT_COMMITTER_NAME: 'Remote check',
+            GIT_COMMITTER_EMAIL: 'check@rezics.invalid',
+          },
+        );
+        const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
         mkdirSync(dirname(recordPath), { recursive: true, mode: 0o700 });
         if (!isDirectory(join(source, '.temp')) || !isDirectory(dirname(recordPath)))
           throw new Error('check-git: publication journal directory is unsafe');
@@ -910,7 +972,7 @@ export async function stageCheckGit(
         intentRecorded = true;
         for (let attempt = 0; ; attempt++) {
           try {
-            await pushCheckGit(source, [`${commit}:${publication.ref}`], isolatedObjects, deadlineMs, now);
+            await pushCheckGit(source, [`${commit}:${publication.ref}`], publishObjects, deadlineMs, now);
             break;
           } catch (error) {
             firstFailure ??= transportDiagnostic(error);
@@ -927,7 +989,7 @@ export async function stageCheckGit(
         return manifestPath;
       } catch (error) {
         console.error(
-          `check-git: GitHub publication unavailable; using full snapshot upload for ${commit}:${publication.ref}: ${firstFailure ? `first: ${firstFailure}; ` : ''}final: ${transportDiagnostic(error)}`,
+          `check-git: GitHub publication unavailable; using full snapshot upload for ${commit ? `${commit}:` : ''}${publication.ref}: ${firstFailure ? `first: ${firstFailure}; ` : ''}final: ${transportDiagnostic(error)}`,
         );
         // Failed or interrupted publication may already exist remotely; cleanup must not gate fallback delivery.
         if (intentRecorded) void releaseCheckGit(source, recordPath);

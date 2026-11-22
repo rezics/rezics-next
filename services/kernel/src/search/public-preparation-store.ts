@@ -1,12 +1,13 @@
 import type { Pool, PoolClient } from 'pg';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { DBOS_SCHEMA, enqueueWorkIntent, WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import { TERMINAL_WORKFLOW_STATUSES } from '../work/contract/index.ts';
 import { SearchUnavailableError } from './opensearch.ts';
-import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
+import { decode, encode } from './public-filter-codec.ts';
+import type { PublicFilterQueriedObservation, PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 
 export const PUBLIC_PREPARATION_WORKFLOW = 'search.publicPreparation';
 export type PopulationFrontier = {
@@ -24,6 +25,8 @@ export type PopulationFrontier = {
   pending: { keys: string[]; after: { route: number; id: string } | null; complete: boolean; position: string } | null;
 };
 export type PreparationLocator = PopulationFrontier | { kind: 'repair'; key: string; job: PublicFilterConsumerJob };
+
+type CloseLocator = { kind: 'close'; key: string; observation: string };
 export type PreparationRecord = {
   id: string;
   revision: string;
@@ -37,6 +40,110 @@ const lifetimeOptions = {
   isUncertainSettledQueryError: () => true,
 };
 
+// ':' cannot occur in a configured Search prefix. Released scanners and workflow
+// handlers both scope claims to that configured prefix.
+const closePrefix = (prefix: string) => `close:${prefix}`;
+
+function publicCloseLease(pool: Pool, prefix: string, id: string, revision: string, deadline: number) {
+  return {
+    deadline,
+    async complete() {
+      await withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) =>
+          client.query(
+            `DELETE FROM search.public_preparation WHERE partition_no=0 AND prefix=$1 AND id=$2 AND revision=$3`,
+            [closePrefix(prefix), id, revision],
+          ),
+        lifetimeOptions,
+      );
+    },
+  };
+}
+
+/** The serving factory holds the first lease. Its death leaves a due preparation revision. */
+export async function retainPublicClose(
+  pool: Pool,
+  prefix: string,
+  queried: PublicFilterQueriedObservation,
+  deadline: number,
+) {
+  const { observation } = queried.snapshot;
+  const encoded = encode(queried);
+  const locator: CloseLocator = { kind: 'close', observation, key: createHash('sha256').update(encoded).digest('hex') };
+  const id = randomUUID();
+  const lease = Date.now() + PUBLIC_PREPARATION_BUDGET_MS;
+  const result = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) =>
+      client.query<{ id: string }>(
+        `INSERT INTO search.public_preparation AS stored
+       (partition_no,prefix,id,kind,locator,due_at,lease_until,expires_at)
+     SELECT 0,$1,$2,'close',$3,$4,$4,$5 FROM search.public_filter_observation
+     WHERE (partition_no,observation,queried)=($6,$7,$8)
+     ON CONFLICT (partition_no,prefix,kind,(locator ->> 'key')) DO UPDATE SET id=stored.id
+     RETURNING id`,
+        [
+          closePrefix(prefix),
+          id,
+          JSON.stringify(locator),
+          lease,
+          Number.MAX_SAFE_INTEGER,
+          Number(observation.split(':', 1)[0]),
+          observation,
+          encoded,
+        ],
+      ),
+    lifetimeOptions,
+  );
+  if (!result.rowCount) return { status: 'changed' } as const;
+  if (result.rows[0]!.id !== id) return { status: 'retained' } as const;
+  return { status: 'claimed' as const, ...publicCloseLease(pool, prefix, id, '1', lease) };
+}
+
+/** Only a close-aware discovery turn can recover this lease. No shared workflow is enqueued. */
+export async function claimDuePublicClose(pool: Pool, prefix: string, deadline: number) {
+  const result = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) =>
+      client.query<{ id: string; revision: string; locator: CloseLocator }>(
+        `UPDATE search.public_preparation SET revision=revision+1, lease_until=$3, due_at=$3
+       WHERE partition_no=0 AND id=(
+         SELECT id FROM search.public_preparation
+         WHERE partition_no=0 AND prefix=$1 AND kind='close' AND due_at<=$2 AND lease_until<=$2
+         ORDER BY due_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+       ) RETURNING id,revision::text,locator`,
+        [closePrefix(prefix), Date.now(), deadline],
+      ),
+    lifetimeOptions,
+  );
+  const row = result.rows[0];
+  return row && { locator: row.locator, ...publicCloseLease(pool, prefix, row.id, row.revision, deadline) };
+}
+
+export async function readPublicClose(pool: Pool, locator: CloseLocator, deadline: number) {
+  const { observation } = locator;
+  const result = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) =>
+      client.query<{ queried: string }>(
+        `SELECT queried FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2)`,
+        [Number(observation.split(':', 1)[0]), observation],
+      ),
+    lifetimeOptions,
+  );
+  // Native erasure removes the observation only after draining its references and physical copies.
+  // A renewed PIT belongs to the successor tuple. The old native close cannot claim it.
+  const encoded = result.rows[0]?.queried;
+  return encoded && createHash('sha256').update(encoded).digest('hex') === locator.key
+    ? decode<PublicFilterQueriedObservation>(encoded)
+    : null;
+}
+
 /** One scalar operational frontier. It never stores public rows, permissions, cuts or coverage. */
 export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefix: string) {
   // The sweep position is a scheduling hint. The native lease, revision and workflow remain authoritative.
@@ -45,15 +152,14 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     locator.kind === 'repair' && locator.job.consumer.physicalTarget.startsWith(`${prefix}discovery-g`)
       ? 'discovery'
       : locator.kind;
-  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = 0) => {
-    const maintenance = kind === 'repair';
-    return {
-      queue: maintenance ? ('maintenance' as const) : ('workflows' as const),
-      workflowName: PUBLIC_PREPARATION_WORKFLOW,
-      workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${maintenance ? '' : ':' + kind}`,
-      input: { accounts: [], id, prefix, revision, notBefore },
-    };
-  };
+  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = 0) => ({
+    queue: 'workflows' as const,
+    workflowName: PUBLIC_PREPARATION_WORKFLOW,
+    // A queued maintenance delivery from an older worker retains its DBOS identity.
+    // Both deliveries must still claim the same revision before they can run.
+    workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}:${kind}`,
+    input: { accounts: [], id, prefix, revision, notBefore },
+  });
   async function transaction<T>(deadline: number, run: (client: PoolClient) => Promise<T>) {
     let closed = true;
     return withBoundedReadLifetime(
@@ -101,6 +207,39 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       // bootstrap or observation locator is stable across the read and worker.
       if (locator.kind === 'repair' && kind === 'discovery')
         locator = { ...locator, key: JSON.stringify([locator.job.consumer.physicalTarget, locator.job.job]) };
+      if (locator.kind === 'repair') {
+        // Repeated pending pages can observe the same committed delivery. The write path owns
+        // new, delayed, claimed and recovering revisions, including any missing SDK input.
+        const delivery = intent('%s', '%s', kind);
+        const retained = await withBoundedReadConnection(
+          pool,
+          deadline,
+          (client) =>
+            client.query<{ id: string }>(
+              `SELECT p.id FROM search.public_preparation p
+               JOIN ${DBOS_SCHEMA}.workflow_status w ON w.workflow_uuid=format($5,p.id,p.revision)
+               JOIN ${DBOS_SCHEMA}.workflow_input i USING(workflow_uuid)
+               WHERE (p.partition_no,p.prefix,p.kind,p.locator->>'key')=(0,$1,'repair',$2)
+                 AND p.locator=$3::jsonb AND p.lease_until=0 AND p.due_at<=$4 AND p.expires_at>$4
+                 AND w.name=$6 AND w.application_name=$7 AND w.queue_name=$8 AND w.status IN ('ENQUEUED','PENDING')
+                 AND i.inputs::jsonb #>> '{json,0,id}'=p.id::text
+                 AND i.inputs::jsonb #>> '{json,0,prefix}'=p.prefix
+                 AND i.inputs::jsonb #>> '{json,0,revision}'=p.revision::text`,
+              [
+                prefix,
+                locator.key,
+                JSON.stringify(locator),
+                Date.now(),
+                delivery.workflowId,
+                delivery.workflowName,
+                WORK_APPLICATION,
+                delivery.queue,
+              ],
+            ),
+          lifetimeOptions,
+        );
+        if (retained.rows[0]) return retained.rows[0].id;
+      }
       return transaction(deadline, async (client) => {
         const result = await client.query<{ id: string; revision: string; lease_until: string }>(
           `

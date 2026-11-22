@@ -51,6 +51,11 @@ mixed and suggestion capture union. Derived batch size/frontier belong to execut
 Mixed `captureDiscovery`/`queryDiscovery` methods share the same factory, physical custody and required windows;
 Account own-row authority never derives from a Subject projection.
 
+An ordinary Subject request can start a new prepared capture after its materializing PIT closes. Search and
+Source release the registration claim only when the closed PIT belongs to that exact unadopted serving cut,
+the physical incarnation still matches, and no open prepared observation exists for the build. The next request
+takes a fresh cut and runs normal disclosure. Redelivery of the retired repair can settle against the closed PIT.
+
 ### Retained consumed windows
 
 Capture accepts optional `pageSize` so useful-page callers can set the requested public size `s` and receive the

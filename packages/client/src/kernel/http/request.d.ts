@@ -3,12 +3,15 @@ export { requestDigest, anonymousCommandTarget, anonymousRequestDigest } from '.
 import type { ActionCatalogue } from '../request/access.ts';
 export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 export type { Admission, AdmissionYield, JobContext } from './admission.ts';
+/** Marks public uncharged handlers that enter the normal lane after authentication. */
+export declare const requiresNativeAdmission: unique symbol;
 export type MountedRoute = {
     method: string;
     path: string;
     hooks?: {
         detail?: unknown;
     };
+    requiresNormal?: boolean;
 };
 type RouteApp = {
     routes: readonly MountedRoute[];

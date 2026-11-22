@@ -356,7 +356,10 @@ NOT yet supply complete scoped observations or registration/summary custody:
 
 The generic published identity basis uses 64 committed shards on the physical pool that owns the partition map.
 `identity_home` starts with each home's actual group-version and redirect-sequence sum. Group and redirect
-changes then advance its structural generation in their own transactions. Group claims and pending controls
+changes then advance its structural generation in their own transactions. An initial ready singleton with
+same-transaction revision-1, self mapping, gate and membership at its active home adds a new Subject without
+changing any existing mapping. Its insertion preserves both the home generation and the global basis.
+An insertion without that birth evidence advances the generation, even with the same header shape. Group claims and pending controls
 contribute independently to the pending count. Topology changes retain the native epoch, writer, state and
 move destination. Ordinary position advances have no effect. Each home updates only its shard (partition
 modulo 64). Each shard binds its initialized home tuples and committed structural changes in order.

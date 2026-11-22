@@ -252,14 +252,21 @@ function enter(child: Child, stage: object) {
 const active = new AsyncLocalStorage<Child>();
 const catalogue = new AsyncLocalStorage<{ child: Child; yieldPermit: AdmissionYield; admit: AdmissionYield }>();
 
-export function runBookCatalogueRead<T>(admission: Admission, job: JobContext, run: () => Promise<T>) {
+export function runBookCatalogueRead<T>(
+  admission: Admission,
+  job: JobContext,
+  run: (permit: AdmissionYield) => Promise<T>,
+) {
   const child = active.getStore();
   return admission.run('normal', job, (yieldPermit) =>
     child
       ? catalogue.run({ child, yieldPermit, admit: (work) => admission.run('normal', job, work) }, () =>
-          withBookBindingSteps((step, offer) => bookReadStages().bindingStages[step].offer(offer), run),
+          withBookBindingSteps(
+            (step, offer) => bookReadStages().bindingStages[step].offer(offer),
+            () => run(yieldPermit),
+          ),
         )
-      : run(),
+      : run(yieldPermit),
   );
 }
 

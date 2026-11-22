@@ -1,3 +1,7 @@
+import { withCompiledPermissionChecks } from '../access/permission.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { currentReadSnapshot } from './read.ts';
+import readSubjectIdentity from './read-subject-identity.sql';
 import { globalReadPreparation } from '../access/global-read-preparation.ts';
 import { createResourcePublicEligibility, type ResourceEligibility } from '../access/eligibility.ts';
 import type {
@@ -6,14 +10,15 @@ import type {
 } from '../access/public-eligibility.ts';
 import { addAccessWork, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../access/work.ts';
 import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
-import type { PoolClient, QueryResultRow } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
-import type { ReadDecisionEligibility } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import type { AccessCheck, ReadDecisionEligibility, Resource } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import detailEligibility from './detail-eligibility.sql';
 import subjectPublicEvidence from './scope-leaf-evidence-eligibility.sql';
 import readSubjectRelatedStates from './read-subject-related-states.sql';
 
@@ -256,25 +261,95 @@ export function relatedReadEligibility(
   });
 }
 
+const identityReads = new AsyncLocalStorage<{ pool: Pool; client: PoolClient; subject: string; revision: string }>();
+
+/** The detail reader owns this repeatable-read snapshot. Its identity row supplies the
+ * same visibility and security revision as the public-floor point on this client. */
+export async function readAuthorizedSubjectIdentity(
+  pool: Pool,
+  client: PoolClient,
+  route: number,
+  subject: string,
+  authorize: (client: PoolClient) => Promise<boolean>,
+) {
+  const identity = await readSubjectIdentity.run(client, {
+    route,
+    subject_id: subject,
+    partition_no: partitionOf(route),
+  });
+  if (identity?.visibility !== 'visible') return null;
+  const allowed = await identityReads.run({ pool, client, subject, revision: identity.securityRevision }, () =>
+    authorize(client),
+  );
+  return allowed ? identity : null;
+}
+
+export type SubjectDetailCheck = AccessCheck & { readonly termCandidate?: boolean };
+
+/** Planning a signed Global detail can share its visibility preparation with the statement-presence probe.
+ * The resource snapshot checks the hint before any statement audience is used. */
+export async function prepareSubjectDetailCheck(
+  resource: Identity,
+  planTerms: boolean,
+  prepare: (resource: Resource) => Promise<AccessCheck>,
+): Promise<SubjectDetailCheck> {
+  if (!planTerms) return prepare({ ...resource, eligibility: subjectReadEligibility(resource) });
+  let termCandidate = false;
+  const eligibility = subjectReadEligibility(resource, 'subject:read', (candidate) => {
+    termCandidate = candidate;
+  });
+  const check = await withCompiledPermissionChecks(() => prepare({ ...resource, eligibility }), 'subject-detail');
+  if (!termCandidate) return check;
+  const verify: AccessCheck = (client, time) =>
+    withCompiledPermissionChecks(() => check(client, time), 'subject-detail');
+  return Object.assign(verify, check, { termCandidate });
+}
+
 export function subjectReadEligibility(
   resource: { route: number; id: string },
   action = 'subject:read',
+  observeTermCandidate?: (candidate: boolean) => void,
 ): ResourceEligibility {
   const prepare = measured<Prepare, PublicState>(
     ({ resource }) => pointWork(resource, publicStateBytes, true),
-    ({ pool, resource, deadline }) =>
+    ({ pool, resource, deadline, work }) =>
       withBoundedReadConnection(
         pool,
         deadline,
-        (client) => publicState(client, resource, true),
+        async (client) => {
+          if (!observeTermCandidate || work) return publicState(client, resource, true);
+          const row = await point(client, detailEligibility, { route: resource.route, subject_id: resource.id });
+          observeTermCandidate(row?.no_statements === true);
+          const pointUsage = pointWork(resource, bytes(row), true);
+          return {
+            value: row,
+            usage: {
+              ...pointUsage,
+              keys: row ? 2 : 1,
+              points: row ? 3 : 2,
+              rows: (row ? 1 : 0) + (row?.no_statements === false ? 1 : 0),
+              emptySeeks: row?.no_statements === false ? 0 : 1,
+            },
+          };
+        },
         eligibilityReadOptions(deadline),
       ),
   );
   const verify = measured<Verify<PublicState>, boolean>(
     ({ resource, evidence }) =>
       evidence?.visibility === 'visible' ? pointWork(resource, publicStateBytes, false) : EMPTY_ACCESS_WORK,
-    async ({ client, resource, evidence }) => {
+    async ({ client, resource, evidence, work }) => {
       if (evidence?.visibility !== 'visible') return { value: false, usage: EMPTY_ACCESS_WORK };
+      const observed = !work && identityReads.getStore();
+      // Deadline facades inherit the exact source client. Other checkouts do their own point read.
+      if (
+        observed &&
+        observed.subject === resource.id &&
+        currentReadSnapshot(observed.pool) === observed.client &&
+        (observed.client === client || Object.prototype.isPrototypeOf.call(observed.client, client))
+      ) {
+        return { value: observed.revision === evidence.security_revision, usage: EMPTY_ACCESS_WORK };
+      }
       const current = await publicState(client, resource, false);
       return {
         value:

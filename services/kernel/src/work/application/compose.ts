@@ -130,11 +130,12 @@ export function createComposer(
       let launching: Promise<void> | undefined;
       let stopping: Promise<void> | undefined;
       let draining: Promise<void> | undefined;
-      const drain = (): Promise<void> =>
+      const drain = (deadline?: number): Promise<void> =>
         (draining ??= (async () => {
           // The Auth-bound process has a 20 s shutdown boundary. Leave time for
           // SDK teardown, the retained workflow dependencies, IPC and pool closure.
-          const drainUntil = performance.now() + 10_000;
+          const drainBudget = Math.min(10_000, deadline === undefined ? Infinity : deadline - Date.now());
+          const drainUntil = performance.now() + drainBudget;
           let failure: unknown;
           try {
             if (ports.sdkRuntime.isInitialized()) await ports.sdkRuntime.deactivateEventReceivers();
@@ -170,13 +171,13 @@ export function createComposer(
             }
           })());
         },
-        shutdown(): Promise<void> {
+        shutdown(deadline?: number): Promise<void> {
           return (stopping ??= (async () => {
             // A failed registrar/launch still owns any initialized SDK resources.
             try {
               await launching;
             } finally {
-              await drain();
+              await drain(deadline);
             }
           })());
         },

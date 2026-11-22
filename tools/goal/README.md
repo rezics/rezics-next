@@ -60,8 +60,9 @@ ordinary edits.
 Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
 integration split. Cloned fixtures set a local `user.name`/`user.email` and ignore `node_modules`, so a check host
 without a global Git identity or gitignore can still commit and recreate a task worktree from its branch.
-Decision: historical reader fixtures fetch the producer checkout's exact `HEAD` commit object and the explicit
-historical producer SHA, preserving complete captured-closure validation while supporting detached checkouts.
+Decision: check-script fixtures use the local integration ref when available and the captured `HEAD` on shallow,
+originless snapshots without `dev`. Historical proof and publication fixtures unpack their exact public Git objects
+inside disposable repositories, preserving historical checks on snapshots with no older Git objects.
 Decision: check-wake timing fixtures use the complete configured pool identity when adding alternate pools; the
 runtime pacing behavior and existing assertions remain unchanged.
 

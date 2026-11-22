@@ -9,6 +9,8 @@ LEFT JOIN LATERAL (
   WHERE outbox.partition_no = partition.partition_no
     AND outbox.position = COALESCE(checkpoint.position, 0) + 1
     AND outbox.event_seq = 0
+  -- The full primary key selects one envelope. Keep the lookup local to each lagging home.
+  LIMIT 1
 ) AS pending ON true
 WHERE partition.position > COALESCE(checkpoint.position, 0)
 ORDER BY pending.recorded_at ASC NULLS FIRST, partition.partition_no;

@@ -1,3 +1,4 @@
+import { createBookCaptureReads, createBookRelevanceReads, type CompleteBookReads } from './book-relevance-reads.ts';
 import {
   admitFilter,
   admitDiscoveryFilter,
@@ -104,6 +105,7 @@ import { completeSuggestionWorkContext, type SuggestionWorkContextReader } from 
 import {
   containsRealmPredicate,
   hasPublicBookSearchShape,
+  isBasicSearchText,
   invalid,
   unsupported,
   type SearchRequestPlanner,
@@ -887,6 +889,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       now = clock().getTime(),
       active?: { digest: string; head?: number; release: FilterRelease } | null,
       readContext?: PublicSearchReadContext,
+      capturedBook?: () => void,
+      completeBooks?: CompleteBookReads,
     ) {
       const deadline = readContext?.deadline ?? deadlineFor(10_000);
       request = ownSubjectRequest(request);
@@ -1623,30 +1627,31 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             // physical index. Its first page need not materialize the whole type.
             const indexedTypeList =
               !readContext?.savedCollection && !text && sort === 'name' && filter && 'type' in filter;
-            // A released type and a single relevance term are both evaluated in the retained PIT.
-            // Its useful-page reader owns current disclosure and the score/id continuation.
-            const indexedText =
-              !readContext?.savedCollection &&
-              !preparedScope &&
-              text?.kind === 'term' &&
-              sort === 'relevance' &&
-              hasPublicBookSearchShape(request);
             const readNameOrder = () => indexRequest(() => hasSubjectNameOrder(client, prefix, generation!));
             const boundedOrder =
               !capturePlan.bookTypeList ||
               (await (bookPage ? (bookPage.nameOrdered ??= readNameOrder()) : readNameOrder()));
-            const bound = await indexRequest(async () => {
-              const opened = await runtime.bindRequest(
-                { plan: capturePlan, snapshot: (indexedTypeList && boundedOrder) || indexedText ? 'pit' : 'prepared' },
+            const boundedRelevance =
+              !readContext?.savedCollection &&
+              !preparedScope &&
+              text &&
+              isBasicSearchText(text) &&
+              sort === 'relevance' &&
+              hasPublicBookSearchShape(request);
+            const snapshot =
+              indexedTypeList && boundedOrder ? 'pit' : boundedRelevance ? 'bounded-relevance' : 'prepared';
+            const bind = () =>
+              runtime.bindRequest(
+                { plan: capturePlan, snapshot },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
                 bookPage,
               );
-              if (opened.capture.status === 'captured') firstPagePit = opened.capture;
-              return opened;
-            });
+            const bound = await indexRequest(() => (capturedBook ? bookCapture(bind) : bind()));
+            if (bound.capture.status === 'captured') firstPagePit = bound.capture;
             operations = bound.operations;
             capture = bound.capture;
+            if (capture.status === 'captured') capturedBook?.();
           }
         }
         const installed = operations;
@@ -1657,6 +1662,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 context,
                 plan: capturePlan,
                 ...(capture ? { capture } : {}),
+                ...(runtime && { releaseExhausted: runtime.releaseExhausted }),
                 ...(preparePublic ? { prepare: preparePublic } : {}),
                 ...(retained ? { continuation: retained } : {}),
                 check: checkCandidates,
@@ -1786,7 +1792,22 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }).page;
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.
-        await requestStep(async () => readContext?.complete(response));
+        await requestStep(async () =>
+          completeBooks
+            ? completeBooks(response, async (reader) =>
+                metadata?.after
+                  ? cursorPlanner.encodeKind(
+                      cursors,
+                      { ...binding, principal: reader.principal },
+                      generation!,
+                      kinds!.digest,
+                      metadata.after,
+                      reader.now,
+                    )
+                  : null,
+              )
+            : readContext?.complete(response),
+        );
         if (scope && preparedScope && shown.length) {
           const finalValues = await evaluateScope(shown.map((subject) => subject.id));
           if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
@@ -2232,8 +2253,53 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     },
   };
   const search = service.search;
+  const bookReads = createBookRelevanceReads();
+  const bookCapture = createBookCaptureReads();
   service.search = (principal, request, now, active, context) =>
-    executeRequest(context, (bounded) => search(principal, request, now, active, bounded));
+    executeRequest(context, (bounded) => {
+      const permits = bounded?.bookAdmission;
+      if (
+        !publicFilters ||
+        !bounded ||
+        !permits ||
+        !active ||
+        bounded.savedCollection ||
+        bounded.bookPage ||
+        bounded.realmAuthority ||
+        request.cursor !== undefined ||
+        !request.text ||
+        (request.sort ?? 'relevance') !== 'relevance' ||
+        !hasPublicBookSearchShape(request)
+      )
+        return search(principal, request, now, active, bounded);
+      const owned = ownSubjectRequest(request);
+      const admitted = requestPlanner.admit(owned);
+      if (!admitted.text || !isBasicSearchText(admitted.text)) return search(principal, owned, now, active, bounded);
+      const time = now ?? clock().getTime();
+      return permits.wait(() =>
+        bookReads(
+          canonicalize([active.digest, active.head ?? null, owned])!,
+          {
+            principal,
+            now: time,
+            deadline: bounded.deadline,
+            complete: (page) => permits.run(() => bounded.complete(page)),
+          },
+          (captured, complete) =>
+            permits.run((wait) =>
+              search(
+                principal,
+                owned,
+                time,
+                active,
+                bounded,
+                captured,
+                complete && ((page, cursor) => wait(() => complete(page, cursor))),
+              ),
+            ),
+        ),
+      );
+    });
   service.releaseGroups = (principal, request, now, active, context) =>
     executeRequest(context, (bounded) => groupedReleaseSearch(principal, request, now, active, bounded));
   const facets = service.facets;

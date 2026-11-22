@@ -67,6 +67,7 @@ export type PrincipalCommandReceipt = {
 export type PrincipalCommandOptions = PrincipalCommandIdentity & {
     partition: number;
     deadline?: number;
+    serializationRetryGroup?: symbol;
     receipt?: PrincipalCommandReceipt;
     authorization?: CommandAuthorization | undefined;
     /** Trusted service configuration only, never a request timestamp. */
@@ -203,6 +204,9 @@ export declare class IdempotencyConflictError extends Error {
 export declare class CommandResultErasedError extends Error {
     constructor();
 }
+export declare class AppliedCommandResponseError extends Error {
+    constructor(cause: unknown);
+}
 /** A sent COMMIT may be durable even when its native response is lost. */
 export declare class CommandCommitUncertainError extends Error {
     readonly partition: number;
@@ -218,6 +222,7 @@ export declare class TooManyEventsError extends Error {
 export type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
+    serializationRetryGroup?: symbol;
     basis?: CommandBasis;
     receipt?: CommandReceipt;
     authorization?: CommandAuthorization | undefined;

@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { RECENT_SEARCH_EVENTS, TRENDING_SEARCH_EVENTS } from '../search/query-events.ts';
+import { RECENT_SEARCH_EVENTS, TRENDING_SEARCH_EVENTS, SEARCH_ERASURE_EVENTS } from '../search/query-events.ts';
 import { Type, type TSchema } from 'typebox';
 import { ZONE_EVENTS } from '../zones/events.ts';
 import { Compile, type Validator } from 'typebox/compile';
@@ -30,6 +30,7 @@ function productEventTypes() {
         'com.rezics.history.minimized.v1': Type.Object({}, { additionalProperties: false }),
         'com.rezics.economy.market.repair_accepted.v1': Type.Object({}, { additionalProperties: false }),
         ...RECENT_SEARCH_EVENTS,
+        ...SEARCH_ERASURE_EVENTS,
         ...TRENDING_SEARCH_EVENTS,
         ...ZONE_EVENTS,
         ...ACCESS_EVENTS(),

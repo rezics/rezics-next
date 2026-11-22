@@ -17,6 +17,7 @@ import type { Runtime } from './config.ts';
 import { sameProcess, groupMembers, waitForProcess, waitForProcessGroup, type ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 import { dependencyKey, dependencyStoreMatches } from './shared-dependencies.ts';
+import { installHistoricalGitFixture } from '../test-support/historical-git-fixture.ts';
 
 const OPERATIONS = 'control-plane';
 const OWNER = 'web';
@@ -82,8 +83,7 @@ function git(root: string, args: string[]): string {
   return result.stdout.trim();
 }
 
-function retainedBlob(blob: string): string {
-  const repository = resolve(import.meta.dir, '../../..');
+function retainedBlob(repository: string, blob: string): string {
   const result = spawnSync('git', ['cat-file', 'blob', blob], { cwd: repository, encoding: 'utf8', timeout: 10_000 });
   if (result.status !== 0 || result.error) throw new Error(`retained workflow blob ${blob} is unavailable`);
   return result.stdout;
@@ -103,6 +103,7 @@ function createFixture(options: { staleAuthority?: boolean; alterSmoke?: boolean
   const mainCheckout = join(temporary.path, 'repo');
   mkdirSync(mainCheckout, { recursive: true });
   git(mainCheckout, ['init', '-b', 'dev']);
+  installHistoricalGitFixture(mainCheckout);
   git(mainCheckout, ['config', 'user.email', 'goal-publication@example.invalid']);
   git(mainCheckout, ['config', 'user.name', 'Goal publication fixture']);
   writeFileSync(join(mainCheckout, '.gitignore'), '.temp/\n');
@@ -115,7 +116,7 @@ function createFixture(options: { staleAuthority?: boolean; alterSmoke?: boolean
   for (const entry of WORKFLOW_BLOBS) {
     const path = join(mainCheckout, entry.path);
     mkdirSync(join(path, '..'), { recursive: true });
-    writeFileSync(path, retainedBlob(entry.blob));
+    writeFileSync(path, retainedBlob(mainCheckout, entry.blob));
   }
   git(mainCheckout, ['add', '.']);
   git(mainCheckout, ['commit', '-m', 'Fixture immutable Storybook workflow']);
@@ -746,8 +747,8 @@ test('Authenticated retained authority reaches one exclusive managed workflow an
     for (const workflow of WORKFLOW_BLOBS)
       expect(
         readFileSync(join(fixture.worktreeRoot, 'storybook-publications', invocation!.id, workflow.path), 'utf8'),
-      ).toBe(retainedBlob(workflow.blob));
-    const smoke = retainedBlob(WORKFLOW_BLOBS[2].blob);
+      ).toBe(retainedBlob(fixture.mainCheckout, workflow.blob));
+    const smoke = retainedBlob(fixture.mainCheckout, WORKFLOW_BLOBS[2].blob);
     for (const requiredSmoke of [
       'Signed out, account menu open',
       'Member, account menu open',

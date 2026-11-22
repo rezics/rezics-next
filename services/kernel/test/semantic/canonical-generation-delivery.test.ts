@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { runCommand } from '../../src/command/command.ts';
 import { withQueryAccounting } from '../../src/database/pool.ts';
 import type { Effect, NativeEffect } from '../../src/events/effects.ts';
@@ -26,10 +27,37 @@ import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { fixture, readContext } from './support/public-filter-source.ts';
 
+async function insertSubjects(pool: Pool, partitions: number[]) {
+  const routes = partitions.map((partition) => partition * 16);
+  const subjects = routes.map((route) => newId(route));
+  await pool.query(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id)
+     SELECT route,id,'schema:Person',gen_random_uuid() FROM unnest($1::int[],$2::uuid[]) AS input(route,id)`,
+    [routes, subjects],
+  );
+  return subjects;
+}
+
 test('canonical delivery recovery yields after 32 native homes even with a retained wide request', async () => {
   const f = await fixture();
   try {
     const pool = f.db.openPool({ max: 5 });
+    const blank = { after: null, limit: CANONICAL_GENERATION_PAGE_SIZE };
+    expect((await readCanonicalGenerationDeliveryPage(pool, blank, readContext())).homes).toEqual([]);
+    await resumeCanonicalGenerationDelivery(pool, blank);
+    const blankState = await pool.query(
+      `SELECT count(*)::int AS untouched,
+              (SELECT count(*)::int FROM rating.realm_rank_canonical_state) AS coverage,
+              (SELECT count(*)::int FROM core.outbox WHERE type IN ($1,$2)) AS notices
+       FROM semantic.partition_subjects WHERE canonical_generation=1
+         AND canonical_announced_generation=0 AND canonical_delivered_generation=0`,
+      [CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION],
+    );
+    expect(blankState.rows).toEqual([{ untouched: 4096, coverage: 0, notices: 0 }]);
+    await insertSubjects(
+      f.db.admin,
+      Array.from({ length: 33 }, (_, i) => i + 1),
+    );
     const request = { after: 0, limit: CANONICAL_GENERATION_PAGE_SIZE };
     const { homes } = await readCanonicalGenerationDeliveryPage(
       pool,
@@ -56,6 +84,7 @@ test('overlapping canonical wakes announce a home once and startup can recover a
   const f = await fixture();
   try {
     const home = 4095;
+    await insertSubjects(f.db.admin, [home]);
     const request = { after: home - 1, limit: 1 };
     const pool = f.db.openPool({ max: 2 });
     const wake = () => resumeCanonicalGenerationDelivery(pool, { ...request, unannouncedOnly: true });
@@ -249,6 +278,18 @@ test('default Content dispatch requires a complete native rebuild before acknowl
            WHERE route=$1 AND subject_id=$2`,
           [route, subject],
         );
+        const home = await tx.query(
+          `SELECT canonical_count::text AS count, canonical_generation::text AS generation,
+              (SELECT n_tup_upd::int FROM pg_stat_xact_user_tables
+               WHERE relid='semantic.partition_subjects'::regclass) AS writes
+           FROM semantic.partition_subjects WHERE partition_no=$1`,
+          [partition],
+        );
+        expect(home.rows[0]).toEqual({
+          count: initial.count,
+          generation: String(BigInt(initial.generation) + 2n),
+          writes: 1,
+        });
         throw new Error('abort canonical change');
       }),
     ).rejects.toThrow('abort canonical change');
@@ -351,17 +392,21 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     await receiver.run(newer);
     expect((await counter(partition)).delivered).toBe(later.generation);
 
-    // The migrated inventory includes empty homes with an outstanding generation.
+    // A retained home still owes delivery after its last Subject is deleted.
     const emptyHome = (
       await f.db.admin.query<{ partition: number }>(
-        `SELECT home.partition_no AS partition FROM core.partition AS home
-         JOIN semantic.partition_subjects AS population USING (partition_no)
-         WHERE home.write_state='active' AND population.canonical_count=0
-           AND population.canonical_delivered_generation<population.canonical_generation
-           AND NOT EXISTS (SELECT 1 FROM semantic.subject WHERE route/16=home.partition_no)
-         ORDER BY home.partition_no LIMIT 1`,
+        `SELECT partition_no AS partition FROM semantic.partition_subjects
+         WHERE canonical_empty_seed AND canonical_generation=1 ORDER BY partition_no LIMIT 1`,
       )
     ).rows[0]!.partition;
+    const [removed] = await insertSubjects(f.db.admin, [emptyHome]);
+    await runCommand(pool, { partition: emptyHome }, async (tx) => {
+      await tx.query("SET LOCAL semantic.erasure_cleanup='on'");
+      const key = [emptyHome * 16, removed];
+      await tx.query('DELETE FROM semantic.search_selection_state WHERE route=$1 AND subject_id=$2', key);
+      await tx.query('DELETE FROM semantic.subject WHERE route=$1 AND subject_id=$2', key);
+      return { value: null, events: [{ type: 'com.rezics.test.updated.v1', data: {} }] };
+    });
     expect((await counter(emptyHome)).count).toBe('0');
     await resumeCanonicalGenerationDelivery(pool, request(emptyHome));
     const lost = committed(await notifications(emptyHome));

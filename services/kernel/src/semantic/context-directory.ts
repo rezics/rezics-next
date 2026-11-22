@@ -5,6 +5,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import { authorizedContextMetadata } from './context-lifecycle-read.ts';
+import { runSemanticCopyCommand } from './erasure-producer.ts';
 import {
   contextAccess,
   ContextDirectoryPreparingError,
@@ -309,7 +310,8 @@ export async function stepContextDirectory(
       row.roles = row.roles.filter((role) => !fenced.has(role.account_id));
     }
   }
-  await runCommand(pool, { partition: 0, clock }, async (tx, { transactionId }) => {
+  const options = { partition: 0, clientId: 'internal-semantic-context-directory', clock };
+  await runSemanticCopyCommand(pool, options, async (tx, transactionId) => {
     for (const row of source.rows) {
       const old = (
         await tx.query<{ erasure_key: string }>(

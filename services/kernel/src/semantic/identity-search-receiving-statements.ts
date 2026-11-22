@@ -135,7 +135,7 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [retireProjectionHeadSql, [2, 2, 1, 1024, 1]],
         [invalidateProjectionBuildSql, [1, 1, 1, 1024, 1]],
         [lockProjectionBuildForHeadsSql, [1, 1, 1, 512, 1]],
-        [verifyCompletedPublicFilterProjectionSql, [6, 6, 1, 2048, 1]],
+        [verifyCompletedPublicFilterProjectionSql, [7, 7, 1, 2048, 1]],
         [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
         [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
         [projectionCurrentHead.sql, [2, 2, 1, 1024, 1]],

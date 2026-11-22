@@ -28,7 +28,7 @@ import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { problemSchema } from '../../http/problem.ts';
 import type { createApp } from '../../http/app.ts';
-import { actionCatalogue } from '../../http/request.ts';
+import { actionCatalogue, requiresNativeAdmission, type AdmissionYield } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
@@ -147,11 +147,14 @@ export function searchRoutes<App>(
       },
       async ({ query, authorize, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        const check = await authorize({
-          ...resource(),
-          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
-        });
-        return admission.run('normal', job, async () => {
+        return admission.run('normal', job, async (permit) => {
+          const check = await authorize(
+            {
+              ...resource(),
+              ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+            },
+            permit,
+          );
           if (
             !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
               deadlineError: () => new ProblemError('deadline_exceeded'),
@@ -254,6 +257,7 @@ export function searchRoutes<App>(
         },
         detail: {
           operationId: 'subject.search',
+          [requiresNativeAdmission]: true,
           'x-exposure': 'public',
           'x-action': 'subject:read',
           description: 'Exact Book, Book Series and Edition searches are public. Other requests use Search grants.',
@@ -287,28 +291,32 @@ export function searchRoutes<App>(
           set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
-        async function prepare(): Promise<AccessCheck> {
-          if (
-            !publicBook &&
-            (body.representation === 'discovery-v1'
-              ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' })
-              : requiresAdvancedSearch(body))
-          )
-            await admitGroup({
-              pool,
-              access: gateAccess ?? (() => routeAccess()!),
-              actor,
-              group: 'search_advanced',
-              clientAction: 'subject:read',
-              deadline: job.deadline,
-              clock,
-            });
-          return authorize({
-            ...resource(),
-            ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+        if (
+          !publicBook &&
+          (body.representation === 'discovery-v1'
+            ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' })
+            : requiresAdvancedSearch(body))
+        )
+          await admitGroup({
+            pool,
+            access: gateAccess ?? (() => routeAccess()!),
+            actor,
+            group: 'search_advanced',
+            clientAction: 'subject:read',
+            deadline: job.deadline,
+            clock,
           });
+        function prepare(permit: AdmissionYield): Promise<AccessCheck> {
+          return authorize(
+            {
+              ...resource(),
+              ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+            },
+            permit,
+          );
         }
         async function recoveryForPage(
+          permit: AdmissionYield,
           page: { count: number; next: string | null; as_of: string },
           scope: NonNullable<Parameters<SearchService['search']>[4]>['scope'],
           active?: Awaited<ReturnType<typeof activeRelease>>,
@@ -343,7 +351,12 @@ export function searchRoutes<App>(
                 ...(body.filter === undefined ? {} : { filter: body.filter }),
                 ...(scope ? { scope } : {}),
                 async complete(suggestions) {
-                  const current = await fill(suggestions, authorize, body.languages ?? [], active);
+                  const current = await fill(
+                    suggestions,
+                    (resource) => authorize(resource, permit),
+                    body.languages ?? [],
+                    active,
+                  );
                   completed = {
                     asOf: current.as_of,
                     candidates: current.subjects.flatMap((subject) => {
@@ -360,8 +373,8 @@ export function searchRoutes<App>(
         }
         async function mixed(): Promise<DiscoveryHttpPage> {
           set.headers['cache-control'] = 'private, no-store';
-          const check = await prepare();
-          return admission.run('normal', job, async () => {
+          return admission.run('normal', job, async (permit) => {
+            const check = await prepare(permit);
             if (
               !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
                 deadlineError: () => new ProblemError('deadline_exceeded'),
@@ -402,6 +415,7 @@ export function searchRoutes<App>(
               ),
             );
             const emptyRecovery = await recoveryForPage(
+              permit,
               { count: page.hits.length, next: page.next, as_of: page.as_of },
               ownerAccess ? { access: ownerAccess, actor, deadline: job.deadline, routeKey } : undefined,
             );
@@ -409,8 +423,8 @@ export function searchRoutes<App>(
           });
         }
         async function catalogue(): Promise<SearchHttpResponse> {
-          const check = await prepare();
-          return runBookCatalogueRead(admission, job, async () => {
+          return runBookCatalogueRead(admission, job, async (permit) => {
+            const check = await prepare(permit);
             if (
               !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
                 deadlineError: () => new ProblemError('deadline_exceeded'),
@@ -436,15 +450,21 @@ export function searchRoutes<App>(
               now: clock().getTime(),
               actor,
               active,
-              authorize,
+              authorize: (resource) => authorize(resource, permit),
               catalogue: catalogueResponses,
               context: {
                 deadline: job.deadline,
                 ...(scopeOptions ? { scope: scopeOptions } : {}),
+                ...(publicBook && scopeAccess?.prepareReadDecisions
+                  ? {
+                      bookAdmission: { wait: permit, run: (work) => admission.run('normal', job, work) },
+                    }
+                  : {}),
                 ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
               },
             });
             const emptyRecovery = await recoveryForPage(
+              permit,
               { count: completed.subjects.length, next: completed.next, as_of: completed.as_of },
               scopeOptions,
               active,
@@ -454,8 +474,8 @@ export function searchRoutes<App>(
           });
         }
         async function grouped() {
-          const check = await prepare();
-          return admission.run('normal', job, async () => {
+          return admission.run('normal', job, async (permit) => {
+            const check = await prepare(permit);
             set.headers['cache-control'] = 'private, no-store';
             if (
               !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
@@ -485,7 +505,13 @@ export function searchRoutes<App>(
               ),
             );
             await trending.submitted(actor, body);
-            return releaseResponse(page, catalogueResponses, authorize, body.languages ?? [], active);
+            return releaseResponse(
+              page,
+              catalogueResponses,
+              (resource) => authorize(resource, permit),
+              body.languages ?? [],
+              active,
+            );
           });
         }
         if (body.prepareShare) {
@@ -576,11 +602,14 @@ export function searchRoutes<App>(
         },
       },
       async ({ body, authorize, admission, job, actor }) => {
-        const check = await authorize({
-          ...resource(),
-          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
-        });
-        return admission.run('normal', job, async () => {
+        return admission.run('normal', job, async (permit) => {
+          const check = await authorize(
+            {
+              ...resource(),
+              ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+            },
+            permit,
+          );
           if (
             !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
               deadlineError: () => new ProblemError('deadline_exceeded'),
@@ -640,11 +669,14 @@ export function searchRoutes<App>(
             throw new ProblemError('invalid_request', { errors: [{ pointer: '/filter', code: 'invalid_format' }] });
           }
         }
-        const check = await authorize({
-          ...resource(),
-          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
-        });
-        return admission.run('normal', job, async () => {
+        return admission.run('normal', job, async (permit) => {
+          const check = await authorize(
+            {
+              ...resource(),
+              ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+            },
+            permit,
+          );
           if (
             !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
               deadlineError: () => new ProblemError('deadline_exceeded'),
@@ -664,7 +696,7 @@ export function searchRoutes<App>(
               ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
               ...(suggestionWorkContext ? { suggestionWorkContext } : {}),
               async complete(page) {
-                completed = await fill(page, authorize, query.languages);
+                completed = await fill(page, (resource) => authorize(resource, permit), query.languages);
               },
             }),
           );

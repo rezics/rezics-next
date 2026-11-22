@@ -132,13 +132,6 @@ export async function admitMergeSubjects(
   const survivor = requestedSurvivor ?? defaultSurvivor;
   const redirected = options.subjects.find((subject) => subject !== survivor) ?? defaultRedirected;
   if (survivor === redirected) throw new EditorialConflictError();
-  // The reviewed admission checks live identities on first execution. A completed
-  // receipt must remain replayable after its original has been redirected.
-  if (!options.expectedIdentity) {
-    const kept = await withConnection(pool, (client) => mergeSubject(client, survivor));
-    const gone = await withConnection(pool, (client) => mergeSubject(client, redirected));
-    if (kept.type !== gone.type) throw new EditorialConflictError();
-  }
   const route = routeOf(redirected);
   if (route === null) throw new SubjectNotFoundError();
   const receipt = {
@@ -173,7 +166,13 @@ export async function admitMergeSubjects(
               release: options.release.release,
             },
           }
-        : {}),
+        : {
+            validateNewMerge: async () => {
+              const kept = await withConnection(pool, (client) => mergeSubject(client, survivor));
+              const gone = await withConnection(pool, (client) => mergeSubject(client, redirected));
+              if (kept.type !== gone.type) throw new EditorialConflictError();
+            },
+          }),
     },
   );
   const command = await runIdentityTerminalCommand(

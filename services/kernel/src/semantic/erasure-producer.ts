@@ -1,4 +1,12 @@
-import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
+import type { Pool } from 'pg';
+import {
+  currentCommand,
+  registerCommandCallback,
+  runCommand,
+  type CommandResult,
+  type CommandTransaction,
+  type LegacyCommandOptions,
+} from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
 import { identityJobPartition, type IdentityJobRef } from './identity-adapters/identity-epoch-contract.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
@@ -148,6 +156,20 @@ export async function recordSemanticSourceCommit(tx: CommandTransaction, transac
      ON CONFLICT DO NOTHING`,
     [partition, transactionId],
   );
+}
+
+/** Fence newly received copies under their own transaction, leaving inherited origins intact. */
+export function runSemanticCopyCommand<T>(
+  pool: Pool,
+  options: Pick<LegacyCommandOptions, 'partition' | 'clock'> & { clientId: string },
+  body: (tx: CommandTransaction, transactionId: string) => Promise<CommandResult<T>>,
+) {
+  const { clientId, ...command } = options;
+  const basis = { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId, requestedBy: null };
+  return runCommand(pool, { ...command, basis }, async (tx, { transactionId }) => {
+    await recordSemanticSourceCommit(tx, transactionId);
+    return body(tx, transactionId);
+  });
 }
 
 /** The owner's native row version, independent of both partition position and identity epoch. */

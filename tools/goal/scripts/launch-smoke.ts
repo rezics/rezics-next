@@ -216,14 +216,14 @@ async function runFakeSmoke(
   };
   try {
     try {
-      // Control-plane candidates do not carry the check runner. Exercise the version on dev, as the real smoke does.
+      // The fake smoke uses the check runner from the fixture's captured source.
       // The fake-agent path uses package defaults and must not depend on operator-local account notes or pool data.
       const localFile = join(directory, 'local.json');
       writeFileSync(localFile, `${JSON.stringify({ version: 1, pools: [] })}\n`);
       const sourceSettings = loadSettings({ cwd: root, localFile });
       git(directory, 'init', '--quiet');
       const { checkScriptFixture } = await import('../test-support/check-script-fixture.ts');
-      checkScriptFixture(`refs/heads/${sourceSettings.integrationBranch}`).install(directory);
+      checkScriptFixture(sourceSettings.integrationBranch).install(directory);
       const workerCheckScript = requireWorkerCheck(join(directory, 'scripts/worker-check.ts'));
 
       // The fake agent protocol still receives a real worker-check UUID and result record.

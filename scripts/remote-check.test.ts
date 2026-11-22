@@ -35,6 +35,7 @@ import { stopSpawned } from './walk-stack.ts';
 import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
 import { processGroupMembers, processIdentity, sameProcess } from './check-custody.ts';
+import { stageCheckGit } from './check-git.ts';
 import {
   DEFAULT_PREPARATION_TIMEOUT_MS,
   dependencyPreparationProgram,
@@ -4105,8 +4106,8 @@ test.each(['push', 'fetch'])('a disposable worktree remains removable after Git 
   };
   git('init', '--bare', '-q', origin);
   git('remote', 'add', 'origin', origin);
-  if (failure === 'push')
-    writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+  git('push', '-q', 'origin', 'HEAD:refs/heads/dev');
+  if (failure === 'push') writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
   git('worktree', 'add', '--detach', frozen, 'HEAD');
   writeFileSync(join(frozen, '.gitignore'), '/.temp/\n');
   const cache = join(frozen, '.temp/remote-check-git-cache/rezics-native-git-snapshot-v1');
@@ -4155,6 +4156,38 @@ test('a duplicate remote Git identity fails without fallback upload or run clean
   expect(fixture.events().filter((event) => event.kind === 'rsync')).toHaveLength(0);
   expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(0);
   expect(fixture.events().filter((event) => event.kind === 'cleanup')).toHaveLength(0);
+});
+
+test('a private staged tree goes straight to the check host with its native pack', async () => {
+  const fixture = scenario({ a: { available: 8e9 } });
+  const directory = workspace();
+  const origin = join(directory, '.temp/origin.git');
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+  };
+  git('init', '--bare', '-q', origin);
+  git('remote', 'add', 'origin', origin);
+  git('push', '-q', 'origin', 'HEAD:refs/heads/dev');
+  await stageCheckGit(directory, join(directory, '.temp/publication-fixture'), { ref: 'refs/checks/pending' });
+  const journal = join(directory, '.temp/check-git-publications/pending.json');
+  const record = JSON.parse(readFileSync(journal, 'utf8'));
+  record.ownership.state = 'releasable';
+  record.ownership.createdAt = 0;
+  writeFileSync(journal, JSON.stringify(record));
+  writeFileSync(join(directory, 'src/tracked.ts'), 'export const privateStagedSource = 1;\n');
+  git('add', 'src/tracked.ts');
+
+  const trace = join(directory, '.temp/git-trace');
+  const result = await remote({ ...fixture.env, GIT_TRACE: trace }, directory);
+  expect(result.code, result.stderr).toBe(0);
+  expect(readFileSync(trace, 'utf8')).not.toMatch(/built-in: git push\b/);
+  expect(existsSync(journal)).toBe(true);
+  expect(fixture.events().filter((event) => event.kind === 'github-fetch')).toHaveLength(0);
+  const upload = fixture.events().find((event) => event.kind === 'rsync')!;
+  expect(upload.destination).toContain('ops@a.test:');
+  expect(upload.files).toContain('src/tracked.ts');
+  expect((upload.files as string[]).filter((file) => file.endsWith('/snapshot.pack'))).toHaveLength(1);
 });
 
 test("a host without zstd support uses rsync's default compression", async () => {

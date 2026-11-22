@@ -2,13 +2,13 @@ import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import read from './account-erasure-custody-read.sql';
-import { readSubjectErasureSourceProof } from './account-erasure-source.ts';
+import { advanceSubjectErasureSourceProof } from './account-erasure-source.ts';
 import { readHistoryOwnerCoverage } from '../history/application/index.ts';
 
 /** A pending observation, never a receiving receipt or permission to acknowledge. */
 export type SemanticErasureCustody = Readonly<{
   state: 'pending';
-  reason: 'local-cleanup' | 'late-locator' | 'producer-contract-unavailable';
+  reason: 'local-cleanup' | 'late-locator' | 'source-progress' | 'producer-contract-unavailable';
 }>;
 
 /** Inspect only this participant's native home, without a global-completion dependency.
@@ -57,8 +57,9 @@ export async function readSemanticErasureCustody(pool: Pool, accountId: string):
   // Their agreed declarations are provisionally unavailable until the producer implementations land.
   const barrier = { accountId, accountRoute: route, version: current.version, at: current.at } as const;
   const context = { deadline: Date.now() + 5_000 } as const;
-  const source = await readSubjectErasureSourceProof({ pool }, barrier, context);
-  if (!source) return { state: 'pending', reason: 'producer-contract-unavailable' };
+  const source = await advanceSubjectErasureSourceProof({ pool }, barrier, context);
+  if (source.status === 'progress') return { state: 'pending', reason: 'source-progress' };
+  if (source.status === 'pending') return { state: 'pending', reason: 'producer-contract-unavailable' };
   const semantic = await readHistoryOwnerCoverage({ pool }, barrier, 'semantic', context);
   if (semantic.state !== 'complete') return { state: 'pending', reason: 'producer-contract-unavailable' };
   const zones = await readHistoryOwnerCoverage({ pool }, barrier, 'zones', context);

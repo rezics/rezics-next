@@ -47,10 +47,7 @@ WITH input AS (SELECT $5::text[] AS text_keys,$6::jsonb AS withdrawals,$7::bigin
 ), changed AS MATERIALIZED (
   SELECT h.source_home,h.source_epoch FROM population b
   CROSS JOIN LATERAL (
-    SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
-    WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration)
-      AND h.last_change_generation>b.since
-    ORDER BY last_change_generation,source_home LIMIT 1
+    SELECT source_home,source_epoch FROM search.public_filter_first_change_v1(b.coverage_registration,b.since) h
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
     AND NOT EXISTS(SELECT 1 FROM behind)
 ), heads AS MATERIALIZED (

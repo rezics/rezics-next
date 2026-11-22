@@ -73,7 +73,7 @@ A guarded 409 rejects. The live relay retains compact original bulk items and th
 the dispatch token before checking the allocation again and settling. A relay replay may consume those committed
 items under the same owner, physical UUID and write alias, and then apply its full current Source obligation
 before advancing its checkpoint. Settlement clears the temporary items and retains the last visible native
-receipt and Source position. No Subject body is stored in the temporary receipt.
+receipt and Source position.
 An existing proof can drain under a closed gate. A replay batch that needs new Source writes still requires admission
 before those writes can advance its checkpoint.
 

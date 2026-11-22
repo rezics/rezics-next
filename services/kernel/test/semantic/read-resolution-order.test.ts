@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { createAccess } from '../../src/access/index.ts';
+import { termDetailSql } from '../../src/semantic/term-detail-snapshot.ts';
 import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -20,7 +22,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { accessCommandAuthorization, actorOf, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
-import { encodeSession } from '../../src/tokens/session.ts';
+import { decodeSession, encodeSession } from '../../src/tokens/session.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createRealAccess } from './real-access.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
@@ -30,7 +32,9 @@ import readPartitionBatch from '../../src/partition/read-batch.sql';
 import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
 import readSubjectReference from '../../src/semantic/read-subject-reference.sql';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
+import readPropertySources from '../../src/semantic/read-subject-property-sources.sql';
 import readSummaries from '../../src/semantic/summaries-read.sql';
+import readPermissionTimeEmptyInverse from '../../src/access/permission-time-empty-inverse.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
 
 const checkpointSql = readLinkCheckpoint['~standard'].query.text;
@@ -38,6 +42,7 @@ const pendingMemberSql = readPendingMember['~standard'].query.text;
 const identitySql = readSubjectIdentity['~standard'].query.text;
 const subjectSql = readSubjectStatement['~standard'].query.text;
 const permissionTimeSql = readPermissionTime['~standard'].query.text;
+const detailTimeStatements = new Set([permissionTimeSql, readPermissionTimeEmptyInverse.sql]);
 const partitionBatchSql = readPartitionBatch['~standard'].query.text;
 const referenceSql = readSubjectReference['~standard'].query.text;
 const summarySql = readSummaries['~standard'].query.text;
@@ -472,15 +477,178 @@ test('Subject GET sees the applied relation while the link checkpoint trails its
   const position = BigInt(home!.position);
   expect(position).toBeGreaterThan(book.component.position);
   const session = encodeSession(tokens, `account:${accounts.reader}`, [{ ...book.component, position }]);
-  const current = await read(session);
-  expect(current.response.status).toBe(200);
-  expect(current.body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+  const observer = observeSql(pool);
+  try {
+    const current = await read(session);
+    expect(current.response.status).toBe(200);
+    expect(current.body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+    const identity = observer.records.findIndex(({ statement }) => statement === identitySql);
+    const detail = observer.records.findIndex(({ statement }) => statement === subjectSql);
+    expect(identity).toBeGreaterThanOrEqual(0);
+    expect(detail).toBeGreaterThan(identity);
+    const backend = observer.records[identity]!.connectionId;
+    expect(observer.records[detail]!.connectionId).toBe(backend);
+    const snapshot = observer.records
+      .slice(identity, detail)
+      .filter(({ connectionId }) => connectionId === backend)
+      .map(({ statement }) => statement);
+    expect(snapshot).toContain(checkpointSql);
+    expect(snapshot).toContain(pendingMemberSql);
+    expect(snapshot).not.toContain('COMMIT');
+  } finally {
+    await observer.close();
+  }
   const foreign = await createFixed((partition + 1) % 4096, 'schema:Person', 'Pending foreign Subject');
   const pending = encodeSession(tokens, `account:${accounts.reader}`, [
     { ...book.component, position },
     foreign.component,
   ]);
   expect((await read(pending)).body.code).toBe('semantic_not_ready');
+}, 60_000);
+
+test('a term-only Book summary reuses its original labels and checks final Access and home changes', async () => {
+  const partition = freshPartition();
+  const book = await createFixed(partition, 'schema:Book', 'A term-only Book');
+  await realAccess.grant(book, 'reader', 'subject:read');
+  await catchUpLinks(partition);
+  const native = createKernel({
+    pool,
+    tokens,
+    routeKey,
+    receiptKeys: testReceiptKeys(),
+    writeRate: realAccess.writeRate,
+    access: (config) => createAccess({ ...config, auth: realAccess.auth }),
+  });
+  const read = async (session?: string) => {
+    const response = await native.handle(
+      new Request(`http://kernel.test/v1/subjects/${book.id}`, {
+        headers: {
+          authorization: `Bearer ${realAccess.bearer('reader')}`,
+          ...(session ? { [SESSION_HEADER]: session } : {}),
+        },
+      }),
+    );
+    return { response, body: (await response.json()) as Record<string, any> };
+  };
+  const observer = observeSql(pool);
+  const denial = randomUUID();
+  async function changeAfterDetail(change: () => Promise<void>) {
+    const barrier = observer.hold({ statement: termDetailSql() }, 'after');
+    const response = read();
+    try {
+      await Promise.race([
+        barrier.entered,
+        response.then(() => {
+          throw new Error('Detail witness was not read');
+        }),
+      ]);
+      await change();
+    } finally {
+      barrier.release();
+    }
+    return response;
+  }
+  try {
+    const current = await read();
+    expect(current.response.status).toBe(200);
+    expect(current.body.summary).toMatchObject({
+      id: book.id,
+      type: 'schema:Book',
+      label: { language: 'en', value: 'A term-only Book' },
+      cover: null,
+    });
+    expect(observer.records.map(({ statement }) => statement)).not.toContain(summarySql);
+    expect(observer.records.map(({ statement }) => statement)).not.toContain(
+      readPropertySources['~standard'].query.text,
+    );
+
+    expect(observer.records.filter(({ statement }) => statement === termDetailSql())).toHaveLength(1);
+    expect(observer.records.some(({ statement }) => statement.includes('one permission formula'))).toBe(false);
+    expect(current.response.headers.get('etag')).toBe('"1"');
+    const session = current.response.headers.get(SESSION_HEADER)!;
+    expect(session).toBeTruthy();
+    const ordinary = await call('GET', `/v1/subjects/${book.id}`, { token: 'reader', session });
+    const nativeSession = await read(session);
+    const components = (token: string) => decodeSession(tokens, `account:${accounts.reader}`, token);
+    expect(components(nativeSession.response.headers.get(SESSION_HEADER)!)).toEqual(
+      components(ordinary.response.headers.get(SESSION_HEADER)!),
+    );
+    expect(nativeSession.body).toEqual(ordinary.body);
+    observer.armFault({
+      match: { statement: termDetailSql() },
+      boundary: 'before',
+      error: Object.assign(new Error('serialization retry'), { code: '40001' }),
+    });
+    expect((await read()).response.status).toBe(503);
+
+    try {
+      const moved = await changeAfterDetail(async () => {
+        await admin.query("UPDATE core.partition SET write_state='moved',moved_to='other-home' WHERE partition_no=$1", [
+          partition,
+        ]);
+      });
+      expect(moved.response.status).toBe(503);
+      expect(moved.body.code).toBe('partition_unavailable');
+      expect(moved.body).not.toHaveProperty('subject');
+    } finally {
+      await admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [
+        partition,
+      ]);
+    }
+
+    try {
+      const incomplete = await changeAfterDetail(async () => {
+        await admin.query(
+          'UPDATE access.account SET membership_inverse_complete=false WHERE route=$1 AND account_id=$2',
+          [routeOf(accounts.reader), accounts.reader],
+        );
+      });
+      expect(incomplete.response.status).toBe(503);
+      expect(incomplete.body.code).toBe('overloaded');
+    } finally {
+      await admin.query('UPDATE access.account SET membership_inverse_complete=true WHERE route=$1 AND account_id=$2', [
+        routeOf(accounts.reader),
+        accounts.reader,
+      ]);
+    }
+
+    await realAccess.grant(book, 'writer', 'subject:read');
+    const revised = await changeAfterDetail(async () => {
+      const write = await call('PATCH', `/v1/subjects/${book.id}/terms`, {
+        token: 'writer',
+        key: `"${randomUUID()}"`,
+        ifMatch: '"1"',
+        body: { labels: { en: 'Revised Book' } },
+      });
+      expect(write.response.status).toBe(200);
+    });
+    expect(revised.response.status).toBe(200);
+    expect(revised.body.subject.labels.en).toBe('A term-only Book');
+    expect(revised.body.summary.label.value).toBe('Revised Book');
+    await catchUpLinks(partition);
+
+    const denied = await changeAfterDetail(async () => {
+      await admin.query(
+        `INSERT INTO access.resource_denial
+           (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+         VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+        [book.route, book.id, accounts.reader, denial],
+      );
+    });
+    expect(denied.response.status).toBe(200);
+    expect(denied.body.summary).toBeNull();
+    expect((await read()).response.status).toBe(404);
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+
+    const hidden = await changeAfterDetail(() => hide(book.id));
+    expect(hidden.response.status).toBe(200);
+    expect(hidden.body.summary).toBeNull();
+    expect((await read()).response.status).toBe(404);
+    expect(observer.records.map(({ statement }) => statement)).toContain(summarySql);
+  } finally {
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await observer.close();
+  }
 }, 60_000);
 
 test('live subject construction preserves projection freshness and final authorization', async () => {
@@ -664,7 +832,7 @@ test('live subject authorization is freshly prepared after an actual projection 
       const identityRead = observer.records.findIndex(({ statement }) => statement === identitySql);
       const initial = observer.records
         .slice(0, identityRead)
-        .findLast(({ statement }) => statement === permissionTimeSql);
+        .findLast(({ statement }) => detailTimeStatements.has(statement));
       expect(initial).toBeDefined();
       await catchUpLinks(partition);
       await Bun.sleep(Math.max(0, accessExpiryWitness(initial!.executedAt) - Date.now()));
@@ -685,7 +853,7 @@ test('live subject authorization is freshly prepared after an actual projection 
     expect(detail).toBeGreaterThan(checkpoint);
     expect(checkpoint).toBeGreaterThan(0);
     expect(
-      observer.records.slice(checkpoint + 1, detail).filter(({ statement }) => statement === permissionTimeSql),
+      observer.records.slice(checkpoint + 1, detail).filter(({ statement }) => detailTimeStatements.has(statement)),
     ).toHaveLength(2);
   } finally {
     await observer.close();

@@ -40,6 +40,10 @@ An ordinary command propagates the original class 23 server error after observin
 its leased connection before a terminal command tag. Serialization and deadlock rejections
 at this same boundary retain their ordinary transaction retry policy.
 
+When checkout fails after a confirmed command effect or authorized receipt replay, the problem response
+retains the checkout failure code and reports `effect_status=applied`. A receipt preflight miss and a
+receipt-free `noEffect` command establish no applied effect.
+
 A lost or timed-out `COMMIT` response is an uncertain durable outcome. It must not be
 reported as success or as a proven rollback, and it must not be retried as a fresh effect.
 Owners settle receipt-bearing commands by reading their existing receipt under current

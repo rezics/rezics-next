@@ -1540,16 +1540,19 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         } catch {
           throw new ProblemError('not_found');
         }
-        const current = await admission.run('normal', job, async () => {
+        const current = await admission.run('normal', job, async (permit) => {
           const claim = await withConnection(dependencies.pool, (client) => readSpaceAddress(client, normalized));
           if (!claim) return null;
           const route = routeOf(claim.spaceId);
           if (route === null) return null;
           const resource = { route, id: claim.spaceId };
-          const check = await authorize({
-            ...resource,
-            eligibility: spaceReadEligibility(resource, dependencies.clock),
-          });
+          const check = await authorize(
+            {
+              ...resource,
+              eligibility: spaceReadEligibility(resource, dependencies.clock),
+            },
+            permit,
+          );
           return withConnection(dependencies.pool, async (client) => {
             if (!(await check(client))) return null;
             const space = await readSpace(client, claim.spaceId, observedAt());
@@ -2451,11 +2454,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         if (route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run('normal', job, async () => {
+          return await admission.run('normal', job, async (permit) => {
             const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!current) throw new ProblemError('not_found');
             if (current.visibility !== 'public') throw new ProblemError('forbidden');
-            const allowed = await authorize({ route, id: realmId });
+            const allowed = await authorize({ route, id: realmId }, permit);
             if (!(await withConnection(dependencies.pool, (client) => allowed(client))))
               throw new ProblemError('forbidden');
             const result = await enqueueRealmJoin(await membershipDependencies(), {
@@ -2540,8 +2543,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         if (route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run('normal', job, async () => {
-            const allowed = await authorize({ route, id: realmId });
+          return await admission.run('normal', job, async (permit) => {
+            const allowed = await authorize({ route, id: realmId }, permit);
             const granted = await withConnection(dependencies.pool, (client) => allowed(client));
             const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!granted) {
@@ -2618,7 +2621,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const route = routeOf(realmId);
         if (route === null) throw new ProblemError('not_found');
         try {
-          return await admission.run('normal', job, async () => {
+          return await admission.run('normal', job, async (permit) => {
             const currentRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!currentRealm) throw new ProblemError('not_found');
             const mapUnavailable = (error: unknown): unknown => {
@@ -2631,7 +2634,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             };
             const withPermissionRead = <T>(read: (client: PoolClient) => Promise<T>) =>
               withBoundedReadConnection(dependencies.pool, job.deadline, read, { mapError: mapUnavailable });
-            const managerCheck = await authorize({ route, id: realmId });
+            const managerCheck = await authorize({ route, id: realmId }, permit);
             const managerAllowed = await withPermissionRead((client) =>
               managerCheck(deadlineClient(client, job.deadline)),
             );
@@ -2761,7 +2764,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
 
             const finalRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
             if (!finalRealm) throw new ProblemError('not_found');
-            const finalManagerCheck = await authorize({ route, id: realmId });
+            const finalManagerCheck = await authorize({ route, id: realmId }, permit);
             const finalManagerAllowed = await withPermissionRead((client) =>
               finalManagerCheck(deadlineClient(client, job.deadline)),
             );

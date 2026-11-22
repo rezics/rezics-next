@@ -1,30 +1,44 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
+import type { SubjectDocument } from '../../src/search/document.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
-import { linkProjection } from '../../src/semantic/links.ts';
+import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../src/semantic/identity-epoch-coordinator.ts';
+import selectJobById from '../../src/semantic/identity-epoch-store-select-job-by-id.sql';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { startWorker } from '../../src/worker.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import '../support/native-history-composition.ts';
+
+setDefaultTimeout(90_000);
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const openSearchUrl = process.env.OPENSEARCH_URL;
+if (!openSearchUrl) throw new Error('Native Subject merge publication requires OPENSEARCH_URL');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
+const routeKey = new Uint8Array(32).fill(4);
+let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+let workerPool: pg.Pool;
 afterAll(async () => {
-  await relays.stop();
-  await pool.end();
-  await admin.end();
+  try {
+    await worker?.stop();
+  } finally {
+    await Promise.all([pool.end(), admin.end()]);
+  }
 });
 
 const accounts = {
@@ -41,6 +55,8 @@ const actions = [
   'context:adopt',
   'subject:merge',
   'gate:subject_identity',
+  'exposure:open',
+  'exposure:close',
 ];
 const realAccess = await createRealAccess(admin, accounts, actions);
 beforeAll(async () => {
@@ -54,7 +70,23 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:read');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
   await installIdentityEpochBootstrap(pool);
-});
+  worker = await startWorker(
+    {
+      databaseUrl,
+      poolSize: 32,
+      handleSignals: false,
+      // Start each retained job explicitly so pending readback cannot race the admission effect.
+      effectsRelay: false,
+      kernelPool: (url) => (workerPool = new pg.Pool({ connectionString: url, max: 32 })),
+    },
+    undefined,
+    workerTestEnv({
+      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      KERNEL_SEARCH_PREFIX: `merge-${randomUUID()}-`,
+      OPENSEARCH_URL: openSearchUrl,
+    }),
+  );
+}, 180_000);
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
 const kernel = createKernel({
@@ -62,7 +94,7 @@ const kernel = createKernel({
   access: realAccess.access,
   tokens,
   receiptKeys: testReceiptKeys(),
-  routeKey: new Uint8Array(32).fill(4),
+  routeKey,
   writeRate: realAccess.writeRate,
 });
 
@@ -145,6 +177,19 @@ const merge = (body: unknown, options: { as?: string | null; key?: string } = {}
     key: options.key ?? key(),
     body,
   });
+async function publishMerge(jobId: string, survivor: string, redirected: string, revision = 2) {
+  const { rows } = await admin.query<{ epoch: string }>(selectJobById.sql, [partitionOf(routeOf(jobId)!), jobId]);
+  const saved = rows[0];
+  if (!saved) throw new Error(`Native Subject merge job ${jobId} was not retained`);
+  const job = { jobId, epoch: BigInt(saved.epoch) };
+  await resumeIdentityEpochJob(workerPool, job);
+  await waitIdentityEpochPublished(workerPool, job);
+  // Readback can report publication before the coordinator releases the admission holds.
+  await stepIdentityEpochAdmission(workerPool, job);
+  const completed = await call('GET', `/v1/subjectIdentityOperations/${jobId}`, { as: 'acceptor' });
+  expect(completed.response.status).toBe(200);
+  expect(completed.body).toEqual({ operation: { id: jobId, done: true, result: { survivor, redirected, revision } } });
+}
 async function links(id: string, persona: string) {
   const answer = await call('GET', `/v1/subjects/${id}/links`, { as: persona });
   expect(answer.response.status).toBe(200);
@@ -156,6 +201,79 @@ async function revisions(id: string) {
     [id],
   );
   return rows;
+}
+
+type ReviewedClaim = { source: string; externalId: string; property: string; value: string };
+
+async function createReviewedPeople(claims: readonly ReviewedClaim[], label: (claim: ReviewedClaim) => string) {
+  const tuple = ({ source, externalId }: ReviewedClaim) => ({
+    source,
+    external_id: externalId,
+    record_revision: '1',
+    digest: 'c'.repeat(64),
+    converter_revision: 'review@1',
+    field_group: 'facts',
+  });
+  // Imported identifiers become reviewed facts through proposal, acceptance and Global adoption.
+  const batch = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: claims.map((claim) => ({
+        op: 'create',
+        key: randomUUID(),
+        source: tuple(claim),
+        subject: { type: 'schema:Person', labels: { en: label(claim) } },
+      })),
+    },
+  });
+  expect(batch.response.status).toBe(200);
+  expect(batch.body.results).toEqual(
+    claims.map(() => expect.objectContaining({ status: 201, value: { id: expect.any(String), revision: 1 } })),
+  );
+  const ids = batch.body.results.map((result: { value: { id: string } }) => result.value.id) as string[];
+  const proposed = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: claims.map((claim, index) => ({
+        op: 'propose',
+        key: randomUUID(),
+        source: tuple(claim),
+        subject: ids[index],
+        statement: { ...statement(claim.property, claim.value), references: [reference] },
+      })),
+    },
+  });
+  expect(proposed.response.status).toBe(200);
+  expect(proposed.body.results).toEqual(
+    claims.map(() =>
+      expect.objectContaining({ status: 201, value: { candidate: expect.any(String), revision: expect.any(Number) } }),
+    ),
+  );
+  const reviewed = [];
+  for (const [index, claim] of claims.entries()) {
+    const id = ids[index]!;
+    const candidate = proposed.body.results[index].value.candidate as string;
+    const accepted = await call('POST', `/v1/subjects/${id}/candidates/${candidate}:accept`, {
+      as: 'acceptor',
+      key: key(),
+      body: { context: GLOBAL_CONTEXT, expected_head: null },
+    });
+    expect(accepted.response.status).toBe(200);
+    const adopted = await call('POST', `/v1/subjects/${id}:adopt`, {
+      as: 'acceptor',
+      key: key(),
+      body: {
+        context: GLOBAL_CONTEXT,
+        property: claim.property,
+        mode: 'replace',
+        expected_head: null,
+        selection: [{ candidate, rank: 'normal' }],
+      },
+    });
+    expect(adopted.response.status).toBe(200);
+    reviewed.push({ id, revision: adopted.body.revision as number });
+  }
+  return reviewed;
 }
 
 test('a merge redirects the larger id to the smallest with one revision in the redirected partition', async () => {
@@ -178,6 +296,7 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   const pending = await call('GET', `/v1/subjectIdentityOperations/${merged.body.operation.id}`, { as: 'acceptor' });
   expect(pending.response.status).toBe(200);
   expect(pending.body).toEqual({ operation: { id: merged.body.operation.id, done: false } });
+  await publishMerge(merged.body.operation.id, survivor.id, redirected.id);
   const redirect = await call('GET', `/v1/subjects/${redirected.id}?context=${GLOBAL_CONTEXT}`);
   expect(redirect.response.status).toBe(308);
   expect(redirect.response.headers.get('location')).toBe(`/v1/subjects/${survivor.id}?context=${GLOBAL_CONTEXT}`);
@@ -220,7 +339,10 @@ test('merges are refused for redirected, identical, mismatched and unknown subje
     body: { statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference] } },
   });
   expect(proposal.response.status).toBe(201);
-  expect((await merge({ subjects: [survivor.id, redirected.id] })).response.status).toBe(202);
+  const expectedRevision = (await revisions(redirected.id)).at(-1)!.revision + 1;
+  const merged = await merge({ subjects: [survivor.id, redirected.id] });
+  expect(merged.response.status).toBe(202);
+  await publishMerge(merged.body.operation.id, survivor.id, redirected.id, expectedRevision);
   const subjects = [survivor, redirected, third, book];
   const before = await Promise.all(subjects.map((subject) => revisions(subject.id)));
   for (const [pair, status, code] of [
@@ -240,13 +362,27 @@ test('merges are refused for redirected, identical, mismatched and unknown subje
   const malformed = await merge({ subjects: [third.id, 'not-an-id'] });
   expect(malformed.response.status).toBe(400);
   expect(malformed.body.errors).toContainEqual({ pointer: '/subjects/1', code: 'invalid_format' });
-  for (const [as, status, code] of [
-    [null, 401, 'authentication_required'],
-    ['editor', 403, 'forbidden'],
-    ['outsider', 403, 'forbidden'],
-  ] as const) {
-    const answer = await merge({ subjects: [survivor.id, third.id] }, { as });
-    expect([as, answer.response.status, answer.body.code]).toEqual([as, status, code]);
+  const otherMerge = { subjects: [survivor.id, third.id] };
+  for (const as of [null, 'editor', 'outsider']) {
+    const answer = await merge(otherMerge, { as });
+    expect([as, answer.response.status, answer.body.code]).toEqual([as, 403, 'platform_closed']);
+  }
+  await realAccess.grant(PLATFORM_RESOURCE, 'acceptor', 'exposure:open');
+  await realAccess.grant(PLATFORM_RESOURCE, 'acceptor', 'exposure:close');
+  const exposure = (operation: 'open' | 'close') =>
+    call('POST', `/v1/platform/exposure/subject_identity:${operation}`, { as: 'acceptor', key: key() });
+  expect((await exposure('open')).response.status).toBe(200);
+  try {
+    for (const [as, status, code] of [
+      [null, 401, 'authentication_required'],
+      ['editor', 403, 'forbidden'],
+      ['outsider', 403, 'forbidden'],
+    ] as const) {
+      const answer = await merge(otherMerge, { as });
+      expect([as, answer.response.status, answer.body.code]).toEqual([as, status, code]);
+    }
+  } finally {
+    expect((await exposure('close')).response.status).toBe(200);
   }
   const candidate = proposal.body.candidate as string;
   const writes = [
@@ -292,7 +428,9 @@ test('the survivor gathers the links of the redirected subject, whose own links 
   expect((await links(soseki.id, 'editor')).links).toEqual(
     sorted([linkOf(kept, 'schema:author'), linkOf(gone, 'schema:author')]),
   );
-  expect((await merge({ subjects: [gone.id, kept.id] })).response.status).toBe(202);
+  const merged = await merge({ subjects: [gone.id, kept.id] });
+  expect(merged.response.status).toBe(202);
+  await publishMerge(merged.body.operation.id, kept.id, gone.id);
   const later = await edition('Kokoro, Vintage', gone.id);
   expect(later.statements['schema:exampleOfWork'][0].value.content).toBe(gone.id);
   expect(await links(soseki.id, 'acceptor')).toEqual({
@@ -346,9 +484,11 @@ test('merging a survivor again repoints every redirect to the final survivor', a
   const firstMerge = await merge({ subjects: [largest.id, middle.id] });
   expect(firstMerge.response.status).toBe(202);
   expect(firstMerge.body).toEqual({ operation: { id: expect.any(String) } });
+  await publishMerge(firstMerge.body.operation.id, middle.id, largest.id);
   const secondMerge = await merge({ subjects: [middle.id, smallest.id] });
   expect(secondMerge.response.status).toBe(202);
   expect(secondMerge.body).toEqual({ operation: { id: expect.any(String) } });
+  await publishMerge(secondMerge.body.operation.id, smallest.id, middle.id);
   expect(await links(smallest.id, 'acceptor')).toEqual({
     links: [linkOf(book, 'schema:author')],
     freshness: fresh,
@@ -369,7 +509,11 @@ test('merging a survivor again repoints every redirect to the final survivor', a
     types: ['schema:Person', 'schema:Thing'],
     cover: null,
   });
-  expect((await revisions(largest.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
+  expect((await revisions(largest.id)).map((row) => [row.revision, row.kind, row.route])).toEqual([
+    [1, 'create', routeOf(largest.id)],
+    [2, 'merge', routeOf(largest.id)],
+    [3, 'merge', routeOf(largest.id)],
+  ]);
   const refused = await merge({ subjects: [largest.id, smallest.id] });
   expect([refused.response.status, refused.body.code]).toEqual([409, 'conflict']);
 });
@@ -404,67 +548,11 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
   expect(sources[1]!.externalId).not.toBe('');
   const properties = ['wdt:P6298', 'wdt:P3180'];
   const values = [number, sources[1]!.externalId];
-  const tuple = (source: { source: string; externalId: string }) => ({
-    source: source.source,
-    external_id: source.externalId,
-    record_revision: '1',
-    digest: 'c'.repeat(64),
-    converter_revision: 'review@1',
-    field_group: 'facts',
-  });
-  // Creation takes labels and the claim only; each identifier is a sourced candidate until it is accepted and adopted.
-  const batch = await call('POST', '/v1/subjects:batchWrite', {
-    as: 'editor',
-    body: {
-      commands: sources.map((source) => ({
-        op: 'create',
-        key: randomUUID(),
-        source: tuple(source),
-        subject: { type: 'schema:Person', labels: { en: 'Reviewed Person' } },
-      })),
-    },
-  });
-  expect(batch.response.status).toBe(200);
-  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201]);
-  const subjects = batch.body.results.map((result: any) => result.value.id) as [string, string];
-  const proposed = await call('POST', '/v1/subjects:batchWrite', {
-    as: 'editor',
-    body: {
-      commands: sources.map((source, index) => ({
-        op: 'propose',
-        key: randomUUID(),
-        source: tuple(source),
-        subject: subjects[index],
-        statement: {
-          property: { id: properties[index]! },
-          value: { type: 'value', content: values[index] },
-          references: [reference],
-        },
-      })),
-    },
-  });
-  expect(proposed.response.status).toBe(200);
-  const candidates = proposed.body.results.map((result: any) => result.value.candidate) as [string, string];
-  for (const [index, candidate] of candidates.entries()) {
-    const accepted = await call('POST', `/v1/subjects/${subjects[index]}/candidates/${candidate}:accept`, {
-      as: 'acceptor',
-      key: key(),
-      body: { context: GLOBAL_CONTEXT, expected_head: null },
-    });
-    expect(accepted.response.status).toBe(200);
-    const adopted = await call('POST', `/v1/subjects/${subjects[index]}:adopt`, {
-      as: 'acceptor',
-      key: key(),
-      body: {
-        context: GLOBAL_CONTEXT,
-        property: properties[index],
-        mode: 'replace',
-        expected_head: null,
-        selection: [{ candidate, rank: 'normal' }],
-      },
-    });
-    expect(adopted.response.status).toBe(200);
-  }
+  const reviewed = await createReviewedPeople(
+    sources.map((source, index) => ({ ...source, property: properties[index]!, value: values[index]! })),
+    () => 'Reviewed Person',
+  );
+  const subjects = reviewed.map(({ id }) => id);
   const query = (index: number) =>
     new URLSearchParams({
       reviewIdentitySource: sources[index]!.source,
@@ -525,11 +613,6 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
   const changed = structuredClone(body);
   changed.expectedIdentity.endpoints[0].revision++;
   expect((await merge(changed, { key: token })).response.status).toBe(422);
-  const [, redirectedId] = [...subjects].sort();
-  const redirectedIndex = subjects.indexOf(redirectedId!);
-  const redirected = await call('GET', `/v1/subjects/${subjects[redirectedIndex]}?${query(redirectedIndex)}`);
-  expect(redirected.response.status).toBe(308);
-  expect(redirected.body.reviewedIdentity).toBeUndefined();
   const poll = await call('GET', `/v1/subjectIdentityOperations/${result.body.operation.id}`, { as: 'acceptor' });
   expect(poll.response.status).toBe(200);
   expect(poll.body.operation.id).toBe(result.body.operation.id);
@@ -544,6 +627,44 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
   } finally {
     await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
   }
+  const [survivor, redirectedId] = [...subjects].sort() as [string, string];
+  const redirectedIndex = subjects.indexOf(redirectedId);
+  const survivorIndex = subjects.indexOf(survivor);
+  const jobId = result.body.operation.id as string;
+  await publishMerge(jobId, survivor, redirectedId, reviewed[redirectedIndex]!.revision + 1);
+  const redirected = await call('GET', `/v1/subjects/${redirectedId}?${query(redirectedIndex)}`);
+  expect(redirected.response.status).toBe(308);
+  expect(redirected.body).toEqual({ redirect: { from: redirectedId, to: survivor } });
+  expect(redirected.body.reviewedIdentity).toBeUndefined();
+  expect((await merge(body, { key: token })).body).toEqual(result.body);
+
+  const { rows: writers } = await admin.query<{ physical_target: string; closed_position: string }>(
+    `SELECT physical_target, closed_position FROM search.identity_writer
+     WHERE partition_no = $1 AND original_id = $2 AND closed_job = $3 AND dispatch_state = 'settled'`,
+    [partition, survivor, jobId],
+  );
+  expect(writers).toHaveLength(1);
+  const { physical_target: index, closed_position: version } = writers[0]!;
+  const search = createOpenSearch(openSearchUrl);
+  const stored = await search.request<{ _index: string; _version: number; _source: SubjectDocument }>(
+    'GET',
+    `/${index}/_doc/${survivor}`,
+  );
+  expect(stored.body).toMatchObject({
+    _index: index,
+    _version: Number(version),
+    _source: {
+      id: survivor,
+      partition,
+      type: 'schema:Person',
+      names: ['Reviewed Person'],
+      statements: [`${properties[survivorIndex]}=${values[survivorIndex]}`],
+    },
+  });
+  await expect(search.request('GET', `/${index}/_doc/${redirectedId}`)).rejects.toMatchObject({
+    status: 404,
+    body: { _index: index, _id: redirectedId, found: false },
+  });
 });
 
 test('reviewed Person merge refuses absent claims, wrong types, malformed selection and writes nothing', async () => {
@@ -606,31 +727,9 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
     { source: 'vndb', externalId: vndbId, property: 'wdt:P3180', value: vndbId },
     { source: 'vndb_cross_media', externalId: vndbId, property: 'wdt:P3180', value: vndbId },
   ] as const;
-  const batch = await call('POST', '/v1/subjects:batchWrite', {
-    as: 'editor',
-    body: {
-      commands: claims.map((claim) => ({
-        op: 'create',
-        key: randomUUID(),
-        source: {
-          source: claim.source,
-          external_id: claim.externalId,
-          record_revision: '1',
-          digest: 'c'.repeat(64),
-          converter_revision: 'review@1',
-          field_group: 'facts',
-        },
-        subject: {
-          type: 'schema:Person',
-          labels: { en: `Reviewed ${claim.source}` },
-          statements: { [claim.property]: [statement(claim.property, claim.value)] },
-        },
-      })),
-    },
-  });
-  expect(batch.response.status).toBe(200);
-  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201, 201, 201]);
-  const ids: string[] = batch.body.results.map((result: { value: { id: string } }) => result.value.id);
+  const reviewed = await createReviewedPeople(claims, ({ source }) => `Reviewed ${source}`);
+  const ids = reviewed.map(({ id }) => id);
+  expect(new Set(ids).size).toBe(4);
   const read = (id: string, claim: (typeof claims)[number]) =>
     call(
       'GET',
@@ -645,7 +744,7 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
     expect(answer.response.status).toBe(200);
     expect(answer.body.reviewedIdentity).toEqual({
       subject: ids[index],
-      revision: 1,
+      revision: reviewed[index]!.revision,
       securityRevision: '0',
       ...claims[index]!,
       claimTransactionId: expect.any(String),
@@ -685,10 +784,16 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
   const poll = await call('GET', `/v1/subjectIdentityOperations/${admitted.body.operation.id}`, { as: 'acceptor' });
   expect(poll.response.status).toBe(200);
   expect(poll.body.operation).toEqual({ id: admitted.body.operation.id, done: false });
-  const [, redirectedId] = [ids[0]!, ids[1]!].sort();
+  const [survivor, redirectedId] = [ids[0]!, ids[1]!].sort() as [string, string];
+  await publishMerge(
+    admitted.body.operation.id,
+    survivor,
+    redirectedId,
+    reviewed[ids.indexOf(redirectedId)]!.revision + 1,
+  );
   const publicRead = await call('GET', `/v1/subjects/${redirectedId}`);
   expect(publicRead.response.status).toBe(308);
-  const survivor = publicRead.body.redirect.to as string;
+  expect(publicRead.body).toEqual({ redirect: { from: redirectedId, to: survivor } });
   const canonical = await call('GET', `/v1/subjects/${survivor}`);
   expect(canonical.response.status).toBe(200);
   expect(canonical.body.subject.id).toBe(survivor);
@@ -795,28 +900,47 @@ test('Account Context epochs are observed independently of the catalogue identit
   }
 });
 
-test('a held subject lock times out competing merge and leaves no effect until release', async () => {
-  const people = [await person('Lock A'), await person('Lock B')].sort(byId) as [
-    Record<string, any>,
-    Record<string, any>,
-  ];
+test('a held subject lock queues the merge and leaves no effect until release', async () => {
+  const people = [await person('Lock A'), await person('Lock B')].sort(byId);
+  const subjects = people.map(({ id }) => id as string);
+  const [survivor, redirected] = subjects as [string, string];
+  const before = await Promise.all([revisions(survivor), revisions(redirected)]);
+  const request = { subjects };
+  const token = key();
   const held = await admin.connect();
-  let open = true;
+  let operationId: string;
   try {
     await held.query('BEGIN');
-    await held.query('SET LOCAL lock_timeout = 200');
-    await held.query('SELECT subject_id FROM semantic.subject WHERE subject_id = $1 FOR UPDATE', [people[1]!.id]);
-    const started = Date.now();
-    const blocked = await merge({ subjects: [people[0]!.id, people[1]!.id] });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
-    expect(blocked.response.status).toBe(503);
-    expect(await revisions(people[1]!.id)).toEqual(expect.arrayContaining([expect.objectContaining({ revision: 1 })]));
-    await held.query('ROLLBACK');
-    open = false;
-    expect((await merge({ subjects: [people[0]!.id, people[1]!.id] })).response.status).toBe(202);
-    expect((await revisions(people[1]!.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
+    await held.query('SELECT subject_id FROM semantic.subject WHERE subject_id = $1 FOR UPDATE', [redirected]);
+    const queued = await merge(request, { key: token });
+    expect(queued.response.status).toBe(202);
+    expect(queued.body).toEqual({ operation: { id: expect.any(String) } });
+    operationId = queued.body.operation.id as string;
+    const location = `/v1/subjectIdentityOperations/${operationId}`;
+    expect(queued.response.headers.get('location')).toBe(location);
+    const pending = await call('GET', location, { as: 'acceptor' });
+    expect(pending.response.status).toBe(200);
+    expect(pending.body).toEqual({ operation: { id: operationId, done: false } });
+    expect(await Promise.all(subjects.map(revisions))).toEqual(before);
+    const original = await call('GET', `/v1/subjects/${redirected}`);
+    expect(original.response.status).toBe(200);
+    expect(original.body.subject.id).toBe(redirected);
   } finally {
-    if (open) await held.query('ROLLBACK');
-    held.release();
+    try {
+      await held.query('ROLLBACK');
+    } finally {
+      held.release();
+    }
   }
+  const replay = await merge(request, { key: token });
+  expect(replay.response.status).toBe(202);
+  expect(replay.response.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${operationId}`);
+  expect(replay.body).toEqual({ operation: { id: operationId } });
+  await publishMerge(operationId, survivor, redirected);
+  const redirect = await call('GET', `/v1/subjects/${redirected}`);
+  expect(redirect.response.status).toBe(308);
+  expect(redirect.response.headers.get('location')).toBe(`/v1/subjects/${survivor}`);
+  expect(redirect.body).toEqual({ redirect: { from: redirected, to: survivor } });
+  expect(await revisions(survivor)).toEqual(before[0]);
+  expect((await revisions(redirected)).map((row) => row.kind)).toEqual(['create', 'merge']);
 });

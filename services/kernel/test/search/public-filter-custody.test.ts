@@ -4,6 +4,7 @@ import { pageControls } from '../../src/search/book-page-controls.ts';
 import { readPopulationTerminals } from '../../src/search/public-filter-preparation-segment.ts';
 import { explainPlanEntries, walkPlanTree } from '../support/growth-plan-walk.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { claimDuePublicClose, readPublicClose, retainPublicClose } from '../../src/search/public-preparation-store.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
   createPublicFilterCustody,
@@ -183,6 +184,57 @@ test('publication retires only confirmed, expired, childless PIT receipts on its
   }
 });
 
+test('close recovery fences the serving lease and deletes only the retained native PIT', async () => {
+  const { queried } = await setup();
+  if (queried.snapshot.kind !== 'pit') throw new Error('Expected native PIT');
+  const { observation, pit } = queried.snapshot;
+  const enginePits = async () =>
+    (await search.request<{ pits: { pit_id: string }[] }>('GET', '/_search/point_in_time/_all')).body.pits.map(
+      (row) => row.pit_id,
+    );
+  try {
+    const serving = await retainPublicClose(pool, prefix, queried, context().deadline);
+    if (serving.status !== 'claimed') throw new Error('Expected first close lease');
+    expect((await retainPublicClose(pool, prefix, queried, context().deadline)).status).toBe('retained');
+    expect(await claimDuePublicClose(pool, prefix, context().deadline)).toBeUndefined();
+    const expired = await pool.query(
+      `UPDATE search.public_preparation SET due_at=0,lease_until=0
+       WHERE partition_no=0 AND kind='close' AND locator->>'observation'=$1 RETURNING prefix,id`,
+      [observation],
+    );
+    expect(expired.rows[0].prefix).not.toBe(prefix);
+    const winners = (
+      await Promise.all([
+        claimDuePublicClose(pool, prefix, context().deadline),
+        claimDuePublicClose(pool, prefix, context().deadline),
+      ])
+    ).filter((receipt) => receipt !== undefined);
+    expect(winners).toHaveLength(1);
+    await serving.complete();
+    const row = await pool.query('SELECT revision FROM search.public_preparation WHERE partition_no=0 AND id=$1', [
+      expired.rows[0].id,
+    ]);
+    expect(row.rows[0]?.revision).toBe('2');
+    const receipt = winners[0]!;
+    const original = await readPublicClose(pool, receipt.locator, context().deadline);
+    expect(original).toEqual(queried);
+    expect(await enginePits()).toContain(pit);
+    expect((await registry.closeObservation(original!, search, context())).status).toBe('closed');
+    await receipt.complete();
+    expect(await enginePits()).not.toContain(pit);
+    expect(
+      (await pool.query('SELECT 1 FROM search.public_preparation WHERE partition_no=0 AND id=$1', [expired.rows[0].id]))
+        .rowCount,
+    ).toBe(0);
+  } finally {
+    await registry.closeObservation(queried, search, context());
+    await pool.query(
+      "DELETE FROM search.public_preparation WHERE partition_no=0 AND kind='close' AND locator->>'observation'=$1",
+      [observation],
+    );
+  }
+}, 60_000);
+
 test('expired preparation custody is usable only inside the original native repair', async () => {
   const { registration, queried } = await setup('-discovery-g3');
   const bootstrap = `0:${crypto.randomUUID()}`;
@@ -276,6 +328,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       let outputCount = 0;
       let after: readonly (string | number | null)[] | undefined;
       let interrupted = false;
+      let terminalObservation: typeof n.queried | undefined;
       while (rawCount < count) {
         const end = Math.min(count, rawCount + 100);
         const expectedOutputCount = outputCount;
@@ -303,16 +356,27 @@ test('native interrupted prepared builds replay one fixed segment and read exact
           after: nextAfter,
           rawExhausted: end === count && count < 1000,
         };
-        // The producer loses its reply after the committed first segment.
+        // The producer loses the first segment reply and the terminal observation reply.
         const first = await registry.appendPreparationSegment(request, context());
         expect(first.status).toBe('appended');
         if (first.status !== 'appended') throw new Error(first.status);
         charge(first);
-        if (!interrupted) {
+        if (!interrupted || request.retain) {
           const replay = await resumed.appendPreparationSegment(request, context());
           expect(replay.status).toBe('replayed');
           if (replay.status !== 'replayed') throw new Error(replay.status);
           charge(replay);
+          if (request.retain) {
+            expect(first.queried?.snapshot.kind).toBe('prepared');
+            expect(replay.queried).toEqual(first.queried);
+            terminalObservation = first.queried;
+            expect(
+              await resumed.appendPreparationSegment(
+                { ...request, retain: { ...request.retain, covered: cut() } },
+                context(),
+              ),
+            ).toMatchObject({ reason: 'binding_mismatch' });
+          }
           const frontier = await resumed.readPreparationFrontier(
             { registration: n.registration, build, generation },
             context(),
@@ -381,6 +445,7 @@ test('native interrupted prepared builds replay one fixed segment and read exact
       expect(retained.status).toBe('retained');
       if (retained.status !== 'retained') throw new Error(retained.reason);
       charge(retained);
+      expect(terminalObservation).toEqual(retained.queried);
       const completed = await resumed.completePreparationBuild(
         { queried: retained.queried, rawCount, outputCount },
         context(),
@@ -453,6 +518,12 @@ test('native interrupted prepared builds replay one fixed segment and read exact
 
 test('real migrated durable custody preserves immutable definition observation cut and each exact execution across process recovery and rejects tuple mutation unknown execution expiry closed or replaced registrations without borrowing live coverage', async () => {
   const n = await setup();
+  expect(await registry.register(n.input, search, context())).toMatchObject({
+    status: 'registered',
+    registration: n.registration,
+    consumerWork: null,
+    cost: { engineRequests: 1, resultWrites: 0 },
+  });
   const a = await append(n.queried);
   const b = await append(n.queried, [{ original: 'other-original', terminal: 'other-terminal' }]);
   const c = await append(n.queried, []);
@@ -935,15 +1006,14 @@ test('native close revalidates a held obsolete maximum after another factory rel
   const leaseDeadline = Date.now() + 300_000;
   const acquired = await registry.acquire(n.queried, { deadline: leaseDeadline });
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
-  let reached!: () => void;
+  let reached!: (expiresAt: number) => void;
   let deliver!: () => void;
-  const maximumRead = new Promise<void>((resolve) => {
+  const maximumRead = new Promise<number>((resolve) => {
     reached = resolve;
   });
   const delivery = new Promise<void>((resolve) => {
     deliver = resolve;
   });
-  let held = false;
   let referenceReads = 0;
   const db = await openGrowthDatabase();
   const heldPool: typeof db.pool = Object.create(db.pool);
@@ -1027,7 +1097,7 @@ test('native close revalidates a held obsolete maximum after another factory rel
     await append(unrelated.queried);
   } finally {
     deliver();
-    await closing;
+    await closing.catch(() => {});
     await closer.close();
     await db.close();
     await releaser.close();

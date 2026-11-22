@@ -30,10 +30,10 @@ export function registerSubjectPagePublicationWork(context: WorkContext, publica
             workflowName: WORKFLOW,
             workflowID: randomUUID(),
           });
-          // A tick can enqueue just before the SDK stops dequeueing. The durable
-          // workflow stays queued for a successor while this local observer drains.
+          // A maintenance workflow can still be queued when its worker starts draining.
+          // Bound the actual SDK poll so shutdown can release this observer and leave the job durable.
           while (!stopped) {
-            const done = await DBOS.getResult<boolean>(handle.workflowID, { timeoutSeconds: 2 });
+            const done = await DBOS.getResult<boolean>(handle.workflowID, { timeoutSeconds: 1 });
             if (done !== null) {
               delay = done ? 100 : 1;
               break;

@@ -39,7 +39,7 @@ test('proof metadata requires explicit originals and a captured commit instead o
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
@@ -641,7 +641,8 @@ test('authoritative custody after model cancellation releases its owned permit w
 });
 
 import { nativeProofBinding, receiveProofStart, PROOF_PRODUCER_COMMIT } from './verification.ts';
-import { checkScriptFixture, temporaryDirectory } from './test-support.ts';
+import { temporaryDirectory } from './test-support.ts';
+import { installHistoricalGitFixture } from '../test-support/historical-git-fixture.ts';
 import { pathToFileURL } from 'node:url';
 
 const wireBinding = (): ProofBinding => ({
@@ -664,7 +665,13 @@ test('delivered proof ABI retains canonical binding, started/replayed identity a
   const directory = temporaryDirectory();
   try {
     const path = join(directory.path, 'check-custody.ts');
-    writeFileSync(path, checkScriptFixture(PROOF_PRODUCER_COMMIT).read('scripts/check-custody.ts'));
+    git(directory.path, ['init', '--quiet']);
+    installHistoricalGitFixture(directory.path);
+    const source = Bun.spawnSync(['git', 'show', `${PROOF_PRODUCER_COMMIT}:scripts/check-custody.ts`], {
+      cwd: directory.path,
+    });
+    expect(source.exitCode).toBe(0);
+    writeFileSync(path, source.stdout);
     const custody = await import(pathToFileURL(path).href);
     expect(custody.validateControllerProofBinding(wire)).toEqual(wire);
     expect(() =>
@@ -2108,10 +2115,8 @@ test('historical reader validates the complete captured closure before importing
   const directory = temporaryDirectory();
   try {
     // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
-    const producerRoot = resolve(import.meta.dir, '../../..');
-    const producerObjects = git(producerRoot, ['rev-parse', '--path-format=absolute', '--git-path', 'objects']);
     git(directory.path, ['init', '--quiet']);
-    writeFileSync(join(directory.path, '.git/objects/info/alternates'), `${producerObjects}\n`);
+    installHistoricalGitFixture(directory.path);
     expect(git(directory.path, ['cat-file', '-t', PROOF_PRODUCER_COMMIT])).toBe('commit');
     // The fixture needs the exact producer commit as its ancestry boundary, with no older history traversal.
     writeFileSync(join(directory.path, '.git/shallow'), `${PROOF_PRODUCER_COMMIT}\n`);

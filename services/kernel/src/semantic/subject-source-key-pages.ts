@@ -380,7 +380,7 @@ export function createSubjectSourceKeyPages(pool: Pool, routing: Uint8Array, acc
             // Reserve the admitted bound before I/O, so cancellation cannot report free raw work.
             cost.inputKeys = inputLimit;
             cost.candidates = inputLimit;
-            cost.dependencyPoints += inputLimit * 4 + 1;
+            cost.dependencyPoints += inputLimit * 5 + 1;
             const rows = await pageStatement.run(client, {
               partition_no: partition,
               after_route: after?.route ?? partition * 16,
@@ -390,7 +390,7 @@ export function createSubjectSourceKeyPages(pool: Pool, routing: Uint8Array, acc
             cost.inputKeys = rows.length;
             cost.candidates = rows.length;
             // Successful reads settle to all actual fetched rows, including rejects and unused suffixes.
-            cost.dependencyPoints -= (inputLimit - rows.length) * 4;
+            cost.dependencyPoints -= (inputLimit - rows.length) * 5;
             return { owner, rows };
           });
           const { owner, rows } = snapshot;

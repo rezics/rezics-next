@@ -5,6 +5,7 @@ import { facetProperties } from '@rezics/filter';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import { prepareReadDecisions } from '../request/access.ts';
+import { withCompiledPermissionChecks } from '../access/permission.ts';
 import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
@@ -662,12 +663,24 @@ async function readPublicIdentities(
   config: Configuration,
   accessPort: PublicFilterAccessBindingPort,
   ids: readonly string[],
+  meaning: PublicFilterProjectionMeaning,
   time: AuthoritativeTime,
   deadline: number,
   cost: MutableCost,
   root?: Readonly<{ state: IdentityState; head: PrivacyReductionHead }>,
   inputLimit?: number,
 ): Promise<IdentityRead> {
+  if (!identitySourceSupportJob() && !root && config.access.prepareReadDecisions && inputLimit === undefined) {
+    // Each original has at most one successor at each of the eight redirect depths.
+    const window = identityWindow(ids, 8 * ids.length);
+    const ready = await withCompiledPermissionChecks(() =>
+      readIdentityWindows(config, accessPort, [window], meaning, deadline, time),
+    );
+    cost.accessPoints += window.cost.accessPoints;
+    cost.dependencyPoints += window.cost.dependencyPoints;
+    if (!ready) window.observed.complete = false;
+    return window.observed;
+  }
   const states = new Map<string, IdentityState>();
   const heads = new Map<number, PrivacyReductionHead>();
   let complete = true;
@@ -765,7 +778,7 @@ async function readPublicIdentities(
 }
 
 function identityWindow(ids: readonly string[], inputLimit: number) {
-  const observed: Pick<IdentityRead, 'states' | 'heads' | 'complete'> = {
+  const observed: IdentityRead = {
     states: new Map(),
     heads: new Map(),
     complete: true,
@@ -1046,6 +1059,7 @@ export async function readPublicFilterSubjectIdentityWindows(
           config,
           accessPort,
           subjects,
+          meaning,
           time,
           deadline,
           window.cost,
@@ -2084,6 +2098,7 @@ export async function readPublicFilterProjectionPage(
         config,
         accessPort,
         [...targetIds],
+        meaning,
         snapshot.time,
         deadline,
         cost,
@@ -2352,14 +2367,25 @@ export async function readPublicFilterProjectionPage(
     if (nextCursor.phase === 'selection' || identitySourceSupportJob()) {
       return { status: 'progress', source: observation, records, repairLocators, frontier, cost };
     }
-    const page = await readProjectionDependencyHeads(
-      config.pool,
-      retained.build_id,
-      nextCursor.partition,
-      request.inputLimit,
-      deadline,
-      cost,
-    );
+    // The establishing transaction checked every new head. Reuse that bounded page when it fits.
+    const established =
+      !request.frontier && heads.size > 0 && heads.size < request.inputLimit
+        ? [...heads.values()].sort((a, b) => a.partition - b.partition)
+        : null;
+    const page = established
+      ? { heads: established, after: established.at(-1)!.partition, complete: true }
+      : await readProjectionDependencyHeads(
+          config.pool,
+          retained.build_id,
+          nextCursor.partition,
+          request.inputLimit,
+          deadline,
+          cost,
+        );
+    if (established) {
+      cost.inputKeys = Math.max(cost.inputKeys, established.length);
+      cost.dependencyPoints += established.length;
+    }
     if (!page)
       return request.frontier
         ? { status: 'changed', frontier: request.frontier, cost }

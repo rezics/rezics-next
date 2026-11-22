@@ -1,4 +1,5 @@
-SELECT p.epoch,p.position::text,s.subject_id::text,s.visibility,s.security_revision::text,s.current_release,
+SELECT p.epoch,p.position::text,s.subject_id::text,
+  CASE WHEN semantic.search_agent_erased(s.route,s.subject_id) THEN 'hidden' ELSE s.visibility END AS visibility,s.security_revision::text,s.current_release,
   s.projection_pending,r.revision,m.terminal::text,m.epoch::text AS identity_epoch,m.origin,m.owner_epoch,
   g.pending_job::text,coalesce(d.revision,0)::text AS dirty_revision,coalesce(d.captured_revision,0)::text AS captured_revision
 FROM semantic.subject s

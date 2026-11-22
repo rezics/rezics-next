@@ -19,7 +19,8 @@ export type CanonicalGenerationReceiver = (tx: CommandTransaction, generation: C
     complete: boolean;
 }>>;
 /** One keyset seek over the existing <=4096 home counters, including retained empty homes.
- * This is delivery inventory, not a second name/population observer or a coverage certificate.
+ * The pending view excludes the installation seed and stays writable so announcement
+ * rechecks the same eligibility under the home command.
  * The connection is released before the caller starts any command or foreign work.
  */
 export declare function readCanonicalGenerationDeliveryPage(pool: Pool, input: CanonicalGenerationPageRequest, { deadline }: Readonly<{
@@ -28,6 +29,15 @@ export declare function readCanonicalGenerationDeliveryPage(pool: Pool, input: C
     homes: readonly CanonicalGenerationDelivery[];
     after: number | null;
 }>>;
+/** Announce the retained native generation in the same command as its marker. Recovery also
+ * redelivers announced generations until the receiver commits the delivered watermark. */
+export declare function canonicalGenerationAnnouncement(tx: CommandTransaction, partition: number, unannouncedOnly: boolean): Promise<{
+    type: "com.rezics.semantic.canonical-generation.committed.v1";
+    data: {
+        partition: number;
+        generation: string;
+    };
+}[]>;
 /** Source-only recovery entry. Each emitted notification uses runCommand's real home envelope.
  * The generation is re-read under that command; a sequence increment or an old event cannot
  * supply it. The native log retains the keyset continuation, so there is no second cursor table.

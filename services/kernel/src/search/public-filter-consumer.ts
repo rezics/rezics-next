@@ -48,7 +48,7 @@ import {
   type PublicFilterConsumerCaptureInput,
 } from './public-filter-consumer-contract.ts';
 import { compileFilter } from './filter.ts';
-import { hasPublicBookSearchShape } from './request.ts';
+import { hasPublicBookSearchShape, isBasicSearchText } from './request.ts';
 import { compileText, TEXT_LIMITS, type TextNode } from './text.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectIndexName, discoveryIndexName, readSubjectCreditMappingFormatForIndex } from './indices.ts';
@@ -883,6 +883,19 @@ function retainedBootstrap(bootstrap: PublicSourceBootstrap): Omit<PublicSourceB
     ...(bootstrap.coveragePublication ? { coveragePublication: bootstrap.coveragePublication } : {}),
   };
 }
+function isTextBookCapture(plan: PublicCanonicalCaptureInput, sort?: 'relevance'): boolean {
+  return (
+    !('representation' in plan) &&
+    'sort' in plan &&
+    plan.text !== undefined &&
+    (sort === undefined ||
+      (plan.sort === sort &&
+        isBasicSearchText(plan.text) &&
+        !plan.overflowProperties?.length &&
+        plan.rating === undefined)) &&
+    hasPublicBookSearchShape({ filter: plan.filterDocument })
+  );
+}
 function locatorHome(locator: string): number {
   const matched = /^(0|[1-9][0-9]{0,3}):/.exec(locator);
   if (!matched || Number(matched[1]) > 4095) throw new ConsumerFailure('observation_lost');
@@ -1342,6 +1355,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   type Page = {
     context: PublicFilterConsumerContext;
     bookBinding?: boolean;
+    capturedCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'> & {
+      queried: PublicFilterQueriedObservation;
+    };
     captureWitness?: PublicFilterCaptureWitness;
     bookPopulation?: string;
     bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'>;
@@ -2304,6 +2320,56 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     },
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
+    const consumer = work.bootstrap.consumer;
+    const job: PublicFilterConsumerJob = {
+      consumer,
+      job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
+    };
+    const readMaterializing = async (q: PublicFilterQueriedObservation) =>
+      (
+        await m.sql<{ state: string; queried: string; registration: string }>(
+          `SELECT state,queried,registration FROM search.public_filter_observation
+         WHERE (partition_no,observation)=($1,$2)`,
+          [locatorHome(q.snapshot.observation), q.snapshot.observation],
+        )
+      ).rows[0];
+    const resumedPit =
+      !publication &&
+      !config.discoveryTarget &&
+      work.bootstrap.coveragePublication &&
+      !work.adopted &&
+      !work.queried &&
+      work.materializing
+        ? await readMaterializing(work.materializing)
+        : undefined;
+    if (resumedPit?.state === 'closed' && work.materializing) {
+      if (
+        resumedPit.registration !== work.registration.id ||
+        !isDeepStrictEqual(work.materializing.consumer, work.bootstrap.consumer)
+      )
+        return m.unavailable('observation_lost');
+      await physical(work.materializing, m, context);
+      const retired = m.takePreparation(
+        await binding.abort(
+          {
+            bootstrap: work.bootstrap.id,
+            closedPreparation: {
+              registration: work.registration.id,
+              observation: work.materializing.snapshot.observation,
+              work: encoded,
+            },
+          },
+          context,
+        ),
+      );
+      if (retired.status === 'aborted') {
+        owned.delete(work.materializing.snapshot.observation);
+        return { status: 'preparing', repair: job, cost: m.cost };
+      }
+      // A competing capture may already have retained the prepared observation.
+      // Recover its original adoption before deciding whether this turn can serve.
+      if ('reason' in retired && retired.reason !== 'binding_mismatch') return m.unavailable('source_pending');
+    }
     // Publication resumes its exact Source cut and this registration's Search materialization.
     // Source adopts the prepared observation after the original execution has been retained.
     // A resumed capture has no candidates yet. Its native bootstrap lookups
@@ -2313,16 +2379,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       : publication
         ? null
         : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
-    const consumer = work.bootstrap.consumer;
-    const job: PublicFilterConsumerJob = {
-      consumer,
-      job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
-    };
     if (recovery === null || recovery.status === 'pending') {
       const native = await advanceNativePublicFilterPreparation(
         binding,
         {
           bootstrap: work.bootstrap.id,
+          ...(recovery ? { recovery } : {}),
           inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
         },
         context,
@@ -2578,7 +2640,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             let checked: Awaited<ReturnType<typeof ownRows>> | Awaited<ReturnType<typeof ownMixedRows>>;
             try {
               checked =
-                'representation' in recovery.bootstrap.definition.capture
+                'representation' in plan
                   ? await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context)
                   : await ownRows(
                       raw as readonly SearchResult['hits'][number][],
@@ -2674,7 +2736,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             exhausted = fullyChecked && result.exhausted;
             work.materializing = result.queried;
             own(result.queried, context, m);
+            if (appended.queried) work.queried = appended.queried;
             encoded = await save(work, encoded, true, m);
+            if (appended.queried) own(appended.queried, context, m);
           } finally {
             await releaseUse(acquired.use, context, m);
           }
@@ -2722,7 +2786,30 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m);
     }
     const q = work.queried!;
-    await physical(q, m, context);
+    const plan = recovery.bootstrap.definition.capture;
+    const preparedBook =
+      page &&
+      inlinePublishedPreparation &&
+      work.bootstrap.coveragePublication &&
+      q.snapshot.kind === 'prepared' &&
+      isTextBookCapture(plan);
+    const relevancePage =
+      page && inlinePublishedPreparation && work.bootstrap.coveragePublication && isTextBookCapture(plan, 'relevance');
+    if (preparedBook && work.materializing) {
+      // Segment retention and its registration CAS have committed the prepared tuple.
+      // Its input PIT can drain independently of checking the serving incarnation.
+      const pit = work.materializing;
+      const [incarnation, closed] = await Promise.allSettled([
+        physical(q, m, context),
+        custody.closeObservation(pit, config.search, context),
+      ]);
+      if (closed.status === 'rejected') throw closed.reason;
+      const retirement = m.take(closed.value);
+      if (retirement.status !== 'closed') return m.unavailable('observation_lost');
+      owned.delete(pit.snapshot.observation);
+      work.materializing = null;
+      if (incarnation.status === 'rejected') throw incarnation.reason;
+    } else await physical(q, m, context);
     let transferred = false;
     const servingSubject = !publication && !config.discoveryTarget && work.bootstrap.coveragePublication !== undefined;
     if (!work.adopted && !publication) {
@@ -2755,21 +2842,30 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (adopted.status !== 'adopted') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(adopted.queried, q) ||
-        !isDeepStrictEqual(retainedBootstrap(adopted.bootstrap), work.bootstrap)
+        !isDeepStrictEqual(retainedBootstrap(adopted.bootstrap), work.bootstrap) ||
+        (relevancePage &&
+          (!isDeepStrictEqual(adopted.bootstrap.definition, recovery.bootstrap.definition) ||
+            adopted.bootstrap.definition.readDefinition !== q.consumer.readDefinition ||
+            adopted.bootstrap.definition.meaning.digest !== meaning.digest))
       )
         return m.unavailable('observation_lost');
       work.adopted = true;
-      const transfer =
+      const transferValues = () => [
+        work.registration.partition,
+        work.registration.id,
+        encoded,
+        work.bootstrap.id,
+        q.snapshot.observation,
+        encodeWork(work),
+      ];
+      const grouped =
         bookCut &&
         page &&
-        groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, () => [
-          work.registration.partition,
-          work.registration.id,
-          encoded,
-          work.bootstrap.id,
-          q.snapshot.observation,
-          encodeWork(work),
-        ]);
+        groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, transferValues);
+      const transfer =
+        grouped ||
+        ((preparedBook || relevancePage) &&
+          m.sql(pageControls.transfer(1), transferValues()).then((result) => result.rows[0]));
       if (transfer) {
         if (!(await transfer)) return m.unavailable('source_pending');
         m.cost.frontierWrites += 2;
@@ -2874,6 +2970,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     try {
       const joined = await join(q, undefined, m, context);
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
+      if (preparedBook)
+        page.capturedCut = { definition: joined.definition, covered: joined.covered, queried: structuredClone(q) };
       // An enclosing page starts once, after its complete native plan and cursor
       // boundary are closed. Baseline preparation cannot manufacture that start.
       if (!page) {
@@ -3007,7 +3105,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const registered = m.take(
         await custody.register(
           {
-            definition: resolved.definition,
+            definition: { ...resolved.definition, meaning },
             physicalTarget: target,
             consumerGeneration: publication?.consumer.consumerGeneration ?? resolved.definition.source.configuration,
             projectionGeneration: resolved.definition.readDefinition,
@@ -3854,6 +3952,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
                 ...(scanOnly && { scanOnly: true as const }),
                 ...((subjectPublication || mixedPreparation) && { homeLimit: PUBLIC_FILTER_REPAIR_HOME_LIMIT }),
+                ...(subjectPublication && { compactSubjectCuts: true as const }),
               },
               context,
             ),
@@ -4087,7 +4186,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { status: 'settled' as const, job, cost: m.cost };
     };
     try {
-      const loaded = await load(job, m);
+      const loaded = await load(job, m).catch(async (error: unknown) => {
+        const match = /^(0|[1-9][0-9]{0,3}):bootstrap:(.+)$/.exec(job.job);
+        if (
+          publication ||
+          config.discoveryTarget ||
+          !match ||
+          !(error instanceof ConsumerFailure) ||
+          error.reason !== 'observation_lost'
+        )
+          throw error;
+        // Only a repair delivery can consume the terminal marker. The original
+        // observation remains closed for page reads and signed continuations.
+        const row = (
+          await m.sql<{ queried: string }>(
+            `SELECT queried FROM search.public_filter_observation
+           WHERE partition_no=$1 AND consumer_bootstrap=$2 AND state='closed'
+             AND consumer_work IS NULL AND prepared_build IS NULL`,
+            [Number(match[1]), decodeURIComponent(match[2]!)],
+          )
+        ).rows[0];
+        if (!row) throw error;
+        const pit = decodeNative<PublicFilterQueriedObservation>(row.queried);
+        if (pit.snapshot.kind !== 'pit' || !isDeepStrictEqual(pit.consumer, job.consumer))
+          throw new ConsumerFailure('registration_missing');
+        await physical(pit, m, context);
+        return null;
+      });
+      if (!loaded) return { status: 'settled' as const, job, cost: m.cost };
       const execute = () =>
         run(loaded).finally(async () => {
           if (use) await releaseUse(use, context, m);

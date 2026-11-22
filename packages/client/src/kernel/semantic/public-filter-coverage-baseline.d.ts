@@ -22,6 +22,10 @@ export declare function beginPublicFilterCoverageBaseline(pool: Pool, input: Pub
  * both cursor advances with the original receipt chain and per-home effects.
  */
 export declare function adoptPublicFilterCoverageBaselinePage<T = void>(pool: Pool, input: PublicFilterBaselineBinding, enrollments: readonly AccountDiscoveryEnrollment[], deadline: number, readCommitted?: (client: PoolClient) => Promise<T>): Promise<T | undefined>;
+/** Adopt an ordinary registration page. Recheck the committed receipts and pins
+ * in a single statement transaction, releasing all home locks before adoption.
+ */
+export declare function adoptPublicFilterRegistrationBaselinePage(pool: Pool, input: PublicFilterBaselineBinding, enrollments: readonly AccountDiscoveryEnrollment[], deadline: number): Promise<void>;
 type HomeRange = Readonly<{
     start: number;
     end: number;
@@ -55,6 +59,9 @@ export declare function coldEnrollmentFunding(request: ColdEnrollmentRequest, ke
     inputs: number;
     bytes: number;
 };
+export declare function readPublicFilterRegistrationReceiptPrefix(pool: Pool, binding: PublicFilterBaselineBinding & Readonly<{
+    keys: readonly string[];
+}>, range: HomeRange, deadline: number): Promise<AccountDiscoveryEnrollment[]>;
 export declare function prepareColdEnrollment(pool: Pool, binding: ColdEnrollmentBinding, ranges: readonly HomeRange[], enroll: (range: HomeRange) => Promise<void>): Promise<{
     ranges: {
         start: number;

@@ -6,9 +6,8 @@ import { type AuthoritativeTime } from '../command/command.ts';
 import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from './check.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
 import { type KindOriginalProducer } from './kind-audience-original.ts';
-/** The enclosing native ledger funds these exact checks. Keep the compiled wire
- * text and codecs, and leave schema freshness verification to the compiler. */
-export declare function withCompiledPermissionChecks<T>(body: () => T): T;
+/** Use compiled wire text and codecs. The signed detail reader also prepares its repeated point statement. */
+export declare function withCompiledPermissionChecks<T>(body: () => T, plan?: 'subject-detail'): T;
 /** Exact compiled dispatch literals for callers that include Access checks in an outer SQL work envelope.
  * Lazy properties retain the public object seam without evaluating SQL imports during module loading.
  * This exposes no prepared evidence, evaluator or authorization result.

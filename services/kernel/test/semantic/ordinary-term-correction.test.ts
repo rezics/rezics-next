@@ -1,11 +1,10 @@
 import { revisionResource } from '../../src/semantic/authorship.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
 import { accountAgentId, ensureAccountAgent } from '../../src/semantic/index.ts';
-import { newId } from '../../src/route/route.ts';
 import { patchTerms, termRevision } from '../../src/semantic/terms.ts';
 import { readSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 
@@ -80,8 +79,30 @@ test('Ordinary multilingual term correction and safe change explanation connect 
   });
   expect(current.labels).not.toHaveProperty('ja');
   expect((await patch(subject, 1, { descriptions: { en: null } })).status).toBe(412);
-  expect((await patch(subject, 2, {})).body).toEqual({ subject, revision: 2 });
+  const custody = async () =>
+    (
+      await f.admin.query(
+        `SELECT
+          (SELECT count(*)::int FROM core.outbox WHERE partition_no=$1 AND subject=$2) AS events,
+          (SELECT count(*)::int FROM core.history_locator
+           WHERE partition_no=$1 AND account_id=$3 AND artifact_type='command-receipt/v1') AS receipts`,
+        [partitionOf(routeOf(subject)!), subject, f.accounts.owner],
+      )
+    ).rows[0];
+  const beforeNoEffect = await custody();
+  const beforeRevisions = await f.revisions(subject);
+  const unchangedKey = `"${randomUUID()}"`;
+  const unchanged = await patch(subject, 2, {}, unchangedKey);
+  f.status(unchanged, 200);
+  expect(unchanged.body).toEqual({ subject, revision: 2 });
+  expect(unchanged.headers.get('etag')).toBe('"2"');
+  expect(await custody()).toEqual({ ...beforeNoEffect, receipts: beforeNoEffect.receipts + 1 });
+  expect(await f.revisions(subject)).toEqual(beforeRevisions);
   expect((await patch(subject, 2, { descriptions: { en: null } })).body).toEqual({ subject, revision: 3 });
+  const beforeReplay = await custody();
+  const unchangedReplay = await patch(subject, 2, {}, unchangedKey);
+  expect([unchangedReplay.status, unchangedReplay.body]).toEqual([200, unchanged.body]);
+  expect(await custody()).toEqual(beforeReplay);
   const replay = await patch(subject, 1, body, key);
   expect([replay.status, replay.body]).toEqual([200, { subject, revision: 2 }]);
   expect((await patch(subject, 1, { labels: { en: 'Conflict' } }, key)).status).toBe(422);
@@ -96,6 +117,13 @@ test('Ordinary multilingual term correction and safe change explanation connect 
       { field: 'aliases', languages: ['en'] },
     ],
   });
+  await f.real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  try {
+    expect((await patch(subject, 2, {}, unchangedKey)).status).toBe(403);
+    expect(await custody()).toEqual(beforeReplay);
+  } finally {
+    await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  }
 });
 
 test('term correction conceals nonvisible subjects, rejects derived Account terms and reauthorizes replay', async () => {
@@ -141,7 +169,7 @@ test('The real terms PATCH command updates multilingual current terms and safe r
     f.admin.query(
       `SELECT r.revision,r.kind,r.term_changes,
        (SELECT count(*)::int FROM semantic.subject_page_change c WHERE c.route=r.route AND c.subject_id=r.subject_id
-        AND c.change_id=r.recorded_transaction_id::text) AS published
+        AND starts_with(c.change_id, r.recorded_transaction_id::text || ':')) AS published
      FROM semantic.revision r WHERE r.route=$1 AND r.subject_id=$2 ORDER BY revision`,
       [route, subject],
     );
@@ -255,10 +283,18 @@ test('The mounted native terms write enrolls exact old and current field-languag
   await f.caughtUp(subject);
   expect(await f.current(subject)).toMatchObject({ revision: 2, labels: { en: 'Corrected', fr: 'Livre' } });
   const published = await f.admin.query(
-    'SELECT count(*)::int n FROM semantic.subject_page_change WHERE route=$1 AND subject_id=$2 AND change_id=$3',
+    `SELECT component_kind, component_key, (before_state->>'shown')::boolean AS was_shown,
+        (after_state->>'shown')::boolean AS shown
+     FROM semantic.subject_page_change
+     WHERE route=$1 AND subject_id=$2 AND starts_with(change_id, $3 || ':')
+     ORDER BY component_kind, component_key`,
     [routeOf(subject), subject, enrolled.set.transaction_id],
   );
-  expect(published.rows).toEqual([{ n: 3 }]);
+  expect(published.rows).toEqual([
+    { component_kind: 'label', component_key: 'en', was_shown: true, shown: true },
+    { component_kind: 'label', component_key: 'fr', was_shown: false, shown: true },
+    { component_kind: 'label', component_key: 'ja', was_shown: true, shown: false },
+  ]);
 });
 
 test('native terms deletion and restoration retain the real original imported field support without inventing a deleted payload', async () => {
@@ -336,8 +372,25 @@ test('a native term fact-bound failure rolls back the command SourceSet allocati
   });
   f.status(created, 201);
   const subject = created.body.subject.id as string;
+  const snapshot = async () =>
+    (
+      await f.admin.query(
+        `SELECT s.current_facts, p.change_position,
+          (SELECT count(*)::int FROM core.outbox WHERE partition_no=s.route/16 AND subject=s.subject_id::text) AS events
+         FROM semantic.subject s JOIN semantic.subject_page_publication p USING (route, subject_id)
+         WHERE s.route=$1 AND s.subject_id=$2`,
+        [routeOf(subject), subject],
+      )
+    ).rows;
   const before = await termSourceSets(subject);
-  expect((await patch(subject, 1, { descriptions: { en: 'Exceeds the native fact cap' } })).status).toBe(400);
+  const beforePublication = await snapshot();
+  expect(beforePublication).toMatchObject([{ current_facts: 512 }]);
+  const overflow = await patch(subject, 1, {
+    labels: { en: 'Would publish' },
+    descriptions: { en: 'Exceeds the native fact cap' },
+  });
+  f.status(overflow, 400);
+  expect(await snapshot()).toEqual(beforePublication);
   expect(await termSourceSets(subject)).toEqual(before);
   expect(await f.revisions(subject)).toEqual([{ revision: 1, kind: 'create' }]);
   expect(

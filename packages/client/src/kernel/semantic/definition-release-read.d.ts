@@ -2,12 +2,14 @@ import { type Extension } from '@rezics/definitions/extension';
 import { type Release } from '@rezics/definitions';
 import { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
+/** Reuse a verified base body after the caller observes its stored digest or active pointer in its snapshot. */
+export declare function verifiedBaseRelease(digest: string): Release | undefined;
 /** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
 export declare function readRelease(pool: Pool | CommandTransaction, digest: string, options?: {
     composed?: boolean;
 }): Promise<Release | null>;
 /** Observe each base digest on the caller's snapshot. Only uncached immutable bodies cross the wire. */
-export declare function readBaseReleases(db: Db, digests: readonly string[]): Promise<Map<string, Release | null>>;
+export declare function readBaseReleases(db: Db, digests: readonly string[], requireActiveHome?: boolean): Promise<Map<string, Release | null>>;
 type ActiveRelease = {
     digest: string;
     head: number;

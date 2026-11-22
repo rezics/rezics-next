@@ -1,3 +1,5 @@
+import { retainPublicClose } from './public-preparation-store.ts';
+import { bookRelevanceBound } from './book-relevance-bound.ts';
 import { bookPageRelease } from './book-page-publication.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { forwardPublicFilterCoveragePage, openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
@@ -13,10 +15,11 @@ import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-o
 import { discoveryAliasMatches, discoveryCapabilityMatches } from './generations.ts';
 import { nativeDiscoveryRegistry, type DiscoveryTarget } from './account-discovery.ts';
 import { discoveryIndexName, discoveryPhysicalTargetMatches } from './indices.ts';
-import type { SearchGenerationPublication } from './generation-publication.ts';
+import type { GenerationPublicationJob, SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { KernelClock } from '../clock.ts';
+import { retainNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -57,6 +60,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
   clock: KernelClock;
   creditSearch?: CreditSearchSource;
   subjectAckProtocol?: 1;
+  subjectSubscriptionProtocol?: 1;
   discoveryProducers?: DiscoveryProducerEntry;
   /** Composition-bound Access observation; omitted fixtures keep throwing through. */
   facetAccess?: FacetAccessObservationPort;
@@ -80,12 +84,20 @@ export type DefaultPublicFilterRuntime = Readonly<{
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerJob | undefined>;
   publication: SearchGenerationPublication;
+  enrollPublication(
+    job: GenerationPublicationJob,
+    context: PublicFilterConsumerContext,
+    active: () => boolean,
+  ): Promise<
+    | { status: 'progress' | 'reconciled'; sourceAdvanced?: boolean }
+    | Pick<PublicFilterConsumerUnavailable, 'status' | 'reason'>
+  >;
   preparePublication(
     generation: number,
     context: PublicFilterConsumerContext,
   ): ReturnType<SearchGenerationPublication['prepare']>;
   bindRequest(
-    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
+    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' | 'bounded-relevance' }>,
     context: PublicFilterConsumerContext,
     acceptedRelease?: string,
     bookPage?: object,
@@ -105,6 +117,16 @@ export type DefaultPublicFilterRuntime = Readonly<{
     job: PublicFilterConsumerJob,
     context: PublicFilterConsumerContext,
   ): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+  releaseExhausted(
+    operations: PublicFilterConsumerOperations,
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    dispose: () => Promise<void>,
+  ): Promise<void>;
+  closeRetainedObservation(
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+  ): Promise<void>;
   /** Typed currentness and aggregate proofs over retained capture/query/repair. */
   privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
   /** Trusted native facet composition; omitted generation or meaning stays closed. */
@@ -204,6 +226,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   // Subject factories use the same native close contract. The runtime retains one current
   // factory so request cleanup cannot drain a continuation or a bounded repair.
   const subjects = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
+  const closingObservations = new Set<Promise<void>>();
   let closed = false;
   let closing: Promise<void> | undefined;
   let cleanupFailure: { error: unknown } | undefined;
@@ -253,6 +276,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       clock: config.clock,
       meaning: { digest, release },
       binding,
+      ...(config.subjectSubscriptionProtocol === 1 ? { subjectSubscriptionProtocol: 1 } : {}),
       ...(config.subjectAckProtocol === undefined ? {} : { subjectAckProtocol: config.subjectAckProtocol }),
       writer: {
         index: consumer.physicalTarget,
@@ -277,7 +301,26 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       return track(async () => {
         const native = await publicationFor(job.consumer, context);
         try {
-          return await native.step(job, context, options);
+          // The worker holds the delivery lease. Each native step still locks and
+          // checks the job, commits its own frontier and spends its own allowance.
+          let started = Date.now();
+          let result = await native.step(job, context, options);
+          if (!options?.batchSource) return result;
+          const previous = [];
+          let longest = Date.now() - started;
+          while (result.status === 'progress' && result.sourceAdvanced && previous.length < 15) {
+            started = Date.now();
+            if (started + 2 * longest >= context.deadline) break;
+            const spent = [result.cost, ...(result.additionalEnrollmentCosts ?? [])];
+            const remaining = (options.heldOffers ?? 16) - previous.length - spent.length;
+            if (remaining <= 0 || (spent.length >= 5 && remaining < 5)) break;
+            previous.push(...spent);
+            result = await native.step(job, context, { ...options, heldOffers: remaining });
+            longest = Math.max(longest, Date.now() - started);
+          }
+          if (!previous.length) return result;
+          const additional = 'additionalEnrollmentCosts' in result ? result.additionalEnrollmentCosts : undefined;
+          return { ...result, additionalEnrollmentCosts: [...previous, ...(additional ?? [])] };
         } finally {
           await native.close();
         }
@@ -315,7 +358,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       clock: config.clock,
       context,
       physicalTarget,
-      meaning: { digest: meaning.digest, release: meaning.release },
+      meaning: retainNativePublicFilterMeaning(
+        { digest: meaning.digest, release: meaning.release },
+        sourcePublication.hasVerifiedReleaseDigest,
+      ),
       ...(registry === undefined ? {} : { registry, discoveryAccess: config.access }),
       ...(scope && { discoveryTarget: scope }),
       ...(preparation && { discoveryPreparation: preparation }),
@@ -493,6 +539,60 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       });
     },
     publication,
+    enrollPublication(job: GenerationPublicationJob, context: PublicFilterConsumerContext, active: () => boolean) {
+      return track(async () => {
+        const native = await publicationFor(job.consumer, context);
+        // Delivery consumes scheduling progress. Each native invocation owns and
+        // checks its own offers, including the turns overlapped by the other owner.
+        const progress = (result: Awaited<ReturnType<typeof native.step>>) =>
+          'reason' in result
+            ? { status: result.status, reason: result.reason }
+            : { status: result.status, sourceAdvanced: result.sourceAdvanced === true };
+        try {
+          const options = { enrollSource: true, batchSource: true };
+          const started = Date.now();
+          const first = await native.step(job, context, options);
+          if (first.status !== 'progress' || !first.sourceAdvanced) return progress(first);
+          let longest = Date.now() - started;
+          let capturing: ReturnType<typeof native.step> | undefined;
+          const ready = () => active() && Date.now() + 2 * longest < context.deadline;
+          const advance = async (heldLane: 'capture' | 'source') => {
+            while (ready()) {
+              const start = Date.now();
+              const turn = native.step(job, context, { ...options, heldLane });
+              if (heldLane === 'capture') capturing = turn;
+              const result = await turn;
+              longest = Math.max(longest, Date.now() - start);
+              if (result.status === 'progress' && result.sourceAdvanced) continue;
+              // A Source that has caught the producer waits for its committed
+              // successor. An occupied writer never holds the producer here.
+              if (
+                heldLane === 'source' &&
+                result.status === 'unready' &&
+                result.reason === 'source_pending' &&
+                capturing
+              ) {
+                const producer = await capturing;
+                if (producer.status === 'progress' && producer.sourceAdvanced) continue;
+              }
+              return result;
+            }
+          };
+          const producer = advance('capture').finally(() => {
+            capturing = undefined;
+          });
+          const turns = await Promise.allSettled([producer, advance('source')]);
+          for (const turn of turns) {
+            if (turn.status === 'rejected') throw turn.reason;
+            if (turn.value?.status === 'unavailable') return progress(turn.value);
+          }
+          // The ordinary exclusive step owns phase changes and torn handoffs.
+          return progress(ready() ? await native.step(job, context, options) : first);
+        } finally {
+          await native.close();
+        }
+      });
+    },
     preparePublication(generation, context) {
       return track(async () => {
         checkDeadline(context);
@@ -562,7 +662,23 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (request.plan.generation !== undefined && request.plan.generation !== active)
           throw new ProblemError('search_restart_required');
         const operations = requestHandle(await subjectOperations(target, release, context));
-        const capture = await operations.capture(structuredClone(request), context);
+        const bounded = request.snapshot === 'bounded-relevance';
+        const readBound = () => bookRelevanceBound(requestSearch(context), target, request.plan.pageSize);
+        const opening = bounded ? await readBound() : null;
+        const snapshot = request.snapshot === 'bounded-relevance' ? (opening ? 'pit' : 'prepared') : request.snapshot;
+        const capture = await operations.capture({ plan: structuredClone(request.plan), snapshot }, context);
+        if (bounded && capture.status === 'captured' && capture.queried.snapshot.kind === 'pit') {
+          let verified = false;
+          try {
+            verified =
+              opening !== null &&
+              capture.queried.consumer.incarnation === opening.uuid &&
+              isDeepStrictEqual(opening, await readBound());
+          } finally {
+            if (!verified) await operations.closeObservation(capture.queried, context);
+          }
+          if (!verified) notReady();
+        }
         if (capture.status === 'captured' && Date.now() >= context.deadline)
           finishPublicFilterPit(capture.queried, false);
         checkDeadline(context);
@@ -577,6 +693,46 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           throw new ProblemError('search_restart_required');
         // Native query resolves incarnation, Source registration and the exact retained execution.
         return requestHandle(await subjectOperations(queried.consumer.physicalTarget, release, context));
+      });
+    },
+    releaseExhausted(operations, queried, context, dispose) {
+      return track(async () => {
+        const receipt = await retainPublicClose(config.pool, config.prefix, queried, context.deadline);
+        await dispose();
+        // A changed tuple gets the native stale-observation result with its original deadline.
+        if (receipt.status === 'changed') return operations.closeObservation(queried, context);
+        if (receipt.status === 'retained') return;
+        // Use the factory that holds this observation in memory. Its durable lease
+        // funds cleanup only. Final disclosure and lease disposal retain the request deadline.
+        const backpressure = closingObservations.size >= (config.pool.options.max ?? 10);
+        const deadline = backpressure ? Math.min(receipt.deadline, context.deadline) : receipt.deadline;
+        const close = operations
+          .closeObservation(queried, { deadline })
+          .then(() => receipt.complete())
+          .catch(() => {
+            /* The preparation worker reclaims this exact observation after lease expiry. */
+          });
+        closingObservations.add(close);
+        void close.finally(() => closingObservations.delete(close));
+        if (backpressure) await close;
+      });
+    },
+    closeRetainedObservation(queried, context) {
+      return track(async () => {
+        const target = queried.consumer.physicalTarget;
+        const generation = Number(/subjects-g([1-9][0-9]*)$/.exec(target)?.[1]);
+        const digest = queried.consumer.meaningDigest;
+        if (!digest || !Number.isSafeInteger(generation) || target !== subjectIndexName(config.prefix, generation))
+          notReady();
+        const meaning = await requestMeaning(context, digest);
+        if (!meaning) notReady();
+        // Cleanup follows the retained meaning and physical allocation across alias switches.
+        const operations = await create(target, meaning, context);
+        try {
+          await operations.closeObservation(queried, context);
+        } finally {
+          await operations.close(context);
+        }
       });
     },
     bindSuggestion(request, context) {
@@ -722,6 +878,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       const retirement = { deadline: context?.deadline ?? deadlineFor(10_000) };
       closing = (async () => {
         await Promise.allSettled([...pending]);
+        await Promise.allSettled([...closingObservations]);
         const results = await Promise.allSettled([
           ...pending,
           ...[...owned].map((operations) => operations.close(retirement)),
@@ -785,6 +942,7 @@ export async function readPublicSearchPage<T>(options: {
   capture?: PublicFilterConsumerCapture;
   /** Existing durable preparation delivery, when installed by the host. */
   prepare?: (job: PublicFilterConsumerJob) => Promise<void>;
+  releaseExhausted?: DefaultPublicFilterRuntime['releaseExhausted'];
   /** A trusted planner choice. Prepared is the conservative default, not a claim of readiness. */
   snapshot?: 'pit' | 'prepared';
   check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;
@@ -941,6 +1099,7 @@ export async function readPublicSearchPage<T>(options: {
         if (page.status !== 'exhausted') return dispose();
         try {
           if (coverage.closeExhausted) await coverage.closeExhausted();
+          else if (options.releaseExhausted) await options.releaseExhausted(operations, queried, context, dispose);
           else {
             await dispose();
             await operations.closeObservation(queried, context);

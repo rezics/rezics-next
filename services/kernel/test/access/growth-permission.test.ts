@@ -1,7 +1,11 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess as createPermissionAccess, permissionEvidenceDeadline } from '../../src/access/permission.ts';
+import {
+  createAccess as createPermissionAccess,
+  permissionEvidenceDeadline,
+  withCompiledPermissionChecks,
+} from '../../src/access/permission.ts';
 import { creationCapability, parentCreationAuthorization } from '../../src/access/parent-creation.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -527,9 +531,13 @@ test('Permission preparation stays within its bound as O grows', async () => {
   await resetSeededRows();
   const report = await checkGrowth(
     db!,
-    growth('Permission preparation stays within its bound as O grows', async (growthDb) => prepare(growthDb.pool)),
+    growth('Permission preparation stays within its bound as O grows', async (growthDb) => {
+      await prepare(growthDb.pool);
+      await withCompiledPermissionChecks(() => prepare(growthDb.pool), 'subject-detail');
+    }),
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+  // Ordinary preparation reads time and inverse separately. The signed detail plan reads both in one statement.
   expect(report.samples.every(({ cost }) => cost.statements === 3)).toBe(true);
 }, 85_000);
 

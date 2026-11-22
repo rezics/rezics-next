@@ -24,6 +24,25 @@ CREATE SCHEMA semantic;
 
 
 --
+-- Name: accept_subject_receiver_page_v1(uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.accept_subject_receiver_page_v1(job_id uuid) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE accepted integer;
+BEGIN
+  UPDATE semantic.public_filter_bootstrap b SET account_after=p.end_home,coverage_after=p.end_home,
+    coverage_root=p.root,coverage_sealed=(p.end_home=4096),state=CASE WHEN p.end_home=4096 THEN 'begun' ELSE 'capturing' END
+    FROM core.subject_subscription_v1 s JOIN search.subject_receiver_page_v1 p USING(birth)
+    WHERE s.job=job_id AND (b.partition_no,b.bootstrap,b.coverage_after,b.coverage_root)=(0,s.bootstrap,p.first_home,p.predecessor)
+      AND b.subscription_protocol=1 AND b.state='capturing' AND p.adopted_by<>pg_current_xact_id()
+    RETURNING p.end_home-p.first_home INTO accepted;
+  RETURN coalesce(accepted,0);
+END $$;
+
+
+--
 -- Name: ack_identity_epoch_empty_bootstrap(integer, uuid, uuid, integer, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -250,6 +269,58 @@ END $$;
 
 
 --
+-- Name: advance_subject_privacy_fanout_v1(integer, text, bigint, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.advance_subject_privacy_fanout_v1(home integer, key text, captured bigint, page_limit integer) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE pending semantic.public_filter_privacy_pending; f semantic.subject_privacy_fanout_v1;
+  native record; member_birth bigint; base bigint; frontier bigint; visited integer:=0; exhausted boolean:=true;
+BEGIN
+  IF page_limit IS NULL OR page_limit NOT BETWEEN 1 AND 100 THEN RAISE EXCEPTION 'Invalid Subject fanout limit'; END IF;
+  SELECT * INTO pending FROM semantic.public_filter_privacy_pending p
+    WHERE (p.partition_no,p.input_key,p.captured_revision)=(home,key,captured) AND p.live FOR UPDATE;
+  IF NOT FOUND THEN RETURN 'pending'; END IF;
+  IF NOT pending.captured_shared_v1 THEN RETURN 'pending'; END IF;
+
+  IF core.subject_membership_revision_v1() IS NULL THEN RETURN 'pending'; END IF;
+  SELECT * INTO native FROM core.subject_retention_heads_v1(home);
+  IF (pending.owner_epoch,pending.captured_epoch) IS DISTINCT FROM (native.epoch,native.epoch)
+    OR native.privacy_base<pending.captured_through THEN RETURN 'pending'; END IF;
+  SELECT * INTO f FROM semantic.subject_privacy_fanout_v1
+    WHERE (partition_no,input_key,enqueue_revision)=(home,key,captured);
+  IF NOT FOUND OR f.captured_by=pg_current_xact_id()
+    OR (f.owner_epoch,f.home_generation,f.first_position,f.through_position) IS DISTINCT FROM
+      (native.epoch,native.generation,pending.first_position,pending.captured_through) THEN RETURN 'pending'; END IF;
+  IF f.complete THEN RETURN 'complete'; END IF;
+
+  frontier:=f.after_birth;
+  FOR member_birth IN SELECT k.birth FROM core.subject_subscription_key_v1 k
+    WHERE k.input_key=key AND k.birth>f.after_birth AND k.birth<=f.membership_revision
+    ORDER BY k.birth LIMIT page_limit+1
+  LOOP
+    visited:=visited+1;
+    IF visited>page_limit THEN exhausted:=false; EXIT; END IF;
+    base:=semantic.subject_privacy_member_base_v1(f,member_birth);
+    IF base IS NULL OR base>native.privacy_base OR (base<f.through_position AND NOT EXISTS (
+      SELECT FROM search.subject_privacy_intake_v1 i
+      WHERE (i.birth,i.partition_no,i.input_key,i.enqueue_revision,i.privacy_base)=
+        (member_birth,f.partition_no,f.input_key,f.enqueue_revision,base)
+        AND i.received_by<>pg_current_xact_id()))
+    THEN exhausted:=false; EXIT; END IF;
+    frontier:=member_birth;
+  END LOOP;
+
+  IF exhausted OR frontier>f.after_birth THEN
+    UPDATE semantic.subject_privacy_fanout_v1 SET after_birth=frontier,complete=exhausted
+      WHERE (partition_no,input_key,enqueue_revision)=(home,key,captured);
+  END IF;
+  RETURN CASE WHEN exhausted THEN 'complete' WHEN frontier>f.after_birth THEN 'progress' ELSE 'pending' END;
+END $$;
+
+
+--
 -- Name: append_record_source_set(integer, uuid, integer, jsonb); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -390,6 +461,72 @@ BEGIN
    AND b.consumer_terminal_custody IS NULL;
  IF NOT FOUND THEN RAISE EXCEPTION 'identity_consumer_terminal_binding_changed'; END IF;
  RETURN NEW;
+END $$;
+
+
+--
+-- Name: bind_subject_access_page_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bind_subject_access_page_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE original jsonb; homes_locked integer;
+BEGIN
+  IF NEW.first_home IS NULL OR NEW.end_home IS NULL OR NEW.first_home<0 OR NEW.end_home>4096
+     OR NEW.end_home-NEW.first_home NOT BETWEEN 1 AND 32 THEN
+    RAISE EXCEPTION 'Invalid Subject Access page interval'; END IF;
+  PERFORM FROM core.subject_retention_domain WHERE singleton FOR SHARE;
+  PERFORM FROM core.subject_subscription_v1 WHERE birth=NEW.birth FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Missing Subject membership'; END IF;
+  IF EXISTS (SELECT FROM core.subject_retention_page_v1 WHERE (birth,first_home)=(NEW.birth,NEW.first_home))
+    THEN RAISE EXCEPTION 'Core cut predates Subject Access page'; END IF;
+  IF NEW.first_home<>coalesce((SELECT end_home FROM semantic.subject_access_page_v1
+    WHERE birth=NEW.birth ORDER BY first_home DESC LIMIT 1),0)
+    THEN RAISE EXCEPTION 'Subject Access page gap'; END IF;
+
+  NEW.definition_digest:=semantic.subject_access_definition_v1(NEW.birth);
+  IF NEW.definition_digest IS NULL THEN RAISE EXCEPTION 'Missing original Subject definition or membership keys'; END IF;
+
+  -- Once these heads are held, ordinary Account and claim writers cannot
+  -- change either revision or enqueue until the Core and Source pages commit.
+  PERFORM FROM generate_series(NEW.first_home,NEW.end_home-1) h
+    CROSS JOIN LATERAL (SELECT partition_no FROM access.account_discovery_population
+      WHERE partition_no=h LIMIT 1 FOR SHARE) a;
+  GET DIAGNOSTICS homes_locked = ROW_COUNT;
+  IF homes_locked<>NEW.end_home-NEW.first_home THEN RAISE EXCEPTION 'Missing Subject Access population'; END IF;
+
+  original:=core.capture_subject_retention_page_v1(NEW.birth,NEW.first_home,NEW.end_home);
+  SELECT jsonb_agg(tuple || jsonb_build_object('receipt',
+    encode(sha256(convert_to(jsonb_build_array('subject-access-v1',NEW.birth,NEW.first_home,NEW.end_home,NEW.definition_digest,tuple)::text,
+      'UTF8')),'hex')) ORDER BY ordinal) INTO NEW.cuts
+  FROM jsonb_array_elements(original) WITH ORDINALITY c(cut,ordinal)
+  CROSS JOIN LATERAL semantic.subject_access_heads_v1((cut->>'home')::integer,(cut->>'epoch')::integer) a
+  CROSS JOIN LATERAL (SELECT cut || jsonb_build_object('account',a.account_revision::text,
+    'claim',a.claim_revision::text,'enqueue',a.enqueue_revision::text) AS tuple) t;
+  IF jsonb_array_length(NEW.cuts) IS DISTINCT FROM homes_locked THEN RAISE EXCEPTION 'Stale Subject Access carry'; END IF;
+  NEW.captured_xid:=pg_current_xact_id();
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: bind_subject_quiet_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bind_subject_quiet_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.quiet_digest:=NULL;
+  IF NEW.first_home%32=0 AND NEW.end_home=NEW.first_home+32
+    AND NOT EXISTS (SELECT FROM semantic.subject WHERE route>=16*NEW.first_home AND route<16*NEW.end_home)
+    AND NOT EXISTS (SELECT FROM jsonb_array_elements(NEW.cuts) e WHERE (e->>'command')::bigint<>0)
+  THEN
+    NEW.quiet_digest:=encode(sha256(convert_to(jsonb_build_array(NEW.birth,NEW.first_home,NEW.end_home,
+      NEW.definition_digest,NEW.cuts)::text,'UTF8')),'hex');
+  END IF;
+  RETURN NEW;
 END $$;
 
 
@@ -589,7 +726,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'acceptance_current',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -606,7 +743,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'acceptance',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -657,7 +794,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'adoption',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -674,7 +811,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'candidate',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -709,6 +846,13 @@ BEGIN
       originals := array_append(originals,previous_target);
     END IF;
   ELSE
+    -- An inserted self mapping is already its own terminal. The row's route
+    -- constraint binds the original UUID to the same home as its control.
+    IF TG_OP='INSERT' AND NEW.original=NEW.terminal AND NEW.control_partition=NEW.route/16 THEN
+      INSERT INTO semantic.partition_subjects(partition_no,canonical_generation) VALUES(NEW.control_partition,1)
+        ON CONFLICT(partition_no) DO UPDATE SET canonical_generation=partition_subjects.canonical_generation+1;
+      RETURN NULL;
+    END IF;
     IF TG_OP<>'INSERT' THEN
       originals := originals || ARRAY[OLD.original,OLD.terminal];
       controls := array_append(controls,OLD.control_partition);
@@ -745,6 +889,30 @@ $$;
 
 
 --
+-- Name: capture_canonical_label_batch(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_canonical_label_batch() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE owner record;
+BEGIN
+  FOR owner IN SELECT route,subject_id,count(*) AS changes FROM changed_labels WHERE kind='label'
+    GROUP BY route,subject_id ORDER BY route,subject_id
+  LOOP
+    PERFORM semantic.refresh_canonical_subject_name(owner.route,owner.subject_id);
+    -- Each original label mutation signals Subject writers. Preserve their exact
+    -- generations without joining and sorting the same final heads a second time.
+    FOR i IN 2..owner.changes LOOP
+      UPDATE semantic.subject SET canonical_name=canonical_name WHERE route=owner.route AND subject_id=owner.subject_id;
+    END LOOP;
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: capture_canonical_subject_name(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -752,18 +920,10 @@ CREATE FUNCTION semantic.capture_canonical_subject_name() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    IF OLD.kind='label' THEN
-      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
-    END IF;
-  ELSIF TG_OP = 'INSERT' THEN
-    IF NEW.kind='label' THEN
-      PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
-    END IF;
-  ELSIF OLD.kind='label' OR NEW.kind='label' THEN
-    IF (OLD.route,OLD.subject_id) IS DISTINCT FROM (NEW.route,NEW.subject_id) THEN
-      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
-    END IF;
+  IF (OLD.route,OLD.subject_id) IS DISTINCT FROM (NEW.route,NEW.subject_id) THEN
+    PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
+  END IF;
+  IF NEW.kind<>'label' THEN
     PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
   END IF;
   RETURN NULL;
@@ -779,6 +939,13 @@ CREATE FUNCTION semantic.capture_canonical_subject_population() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  -- Updating a Subject within its home used to remove and re-add its count.
+  -- Both generation increments remain visible at commit, with one row write.
+  IF TG_OP='UPDATE' AND OLD.route/16=NEW.route/16 THEN
+    UPDATE semantic.partition_subjects SET canonical_generation=canonical_generation+2
+      WHERE partition_no=NEW.route/16 AND canonical_count>0;
+    IF FOUND THEN RETURN NULL; END IF;
+  END IF;
   IF TG_OP <> 'INSERT' THEN
     UPDATE semantic.partition_subjects
       SET canonical_count=canonical_count-1,canonical_generation=canonical_generation+1
@@ -849,7 +1016,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'context',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -868,7 +1035,7 @@ BEGIN
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension_activation',NEW.erasure_key,native_tx);
  SELECT recorded_transaction_id INTO native_tx FROM semantic.context_extension WHERE route=NEW.route AND context_id=NEW.context_id AND digest=NEW.digest;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension_activation',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -885,7 +1052,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -916,40 +1083,6 @@ BEGIN
   INSERT INTO semantic.erasure_copy_role(partition_no,store,record_key,transaction_id,account_id,role) VALUES(NEW.route/16,TG_TABLE_NAME,NEW.erasure_key,NEW.recorded_transaction_id,r.account_id,r.role) ON CONFLICT DO NOTHING;
  END LOOP;
  NEW.erasure_roles:='[]';
- RETURN NEW;
-END; $$;
-
-
---
--- Name: capture_definition_activation_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.capture_definition_activation_erasure() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE native_tx uuid;
-BEGIN
- IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
- native_tx:=NEW.recorded_transaction_id;
- PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_activation',NEW.erasure_key,native_tx);
- 
- RETURN NEW;
-END; $$;
-
-
---
--- Name: capture_definition_release_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.capture_definition_release_erasure() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE native_tx uuid;
-BEGIN
- IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
- native_tx:=NEW.recorded_transaction_id;
- PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_release',NEW.erasure_key,native_tx);
- 
  RETURN NEW;
 END; $$;
 
@@ -1036,6 +1169,57 @@ END; $_$;
 
 
 --
+-- Name: capture_definition_activation_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_definition_activation_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_activation',NEW.erasure_key,native_tx);
+
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_definition_release_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_definition_release_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_release',NEW.erasure_key,native_tx);
+
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_erased_search_count(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erased_search_count() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP<>'INSERT' AND (TG_OP='DELETE' OR (OLD.route,OLD.subject_id)<>(NEW.route,NEW.subject_id)) THEN
+    PERFORM semantic.refresh_erased_search_count(OLD.route,OLD.subject_id);
+  END IF;
+  IF TG_OP<>'DELETE' THEN PERFORM semantic.refresh_erased_search_count(NEW.route,NEW.subject_id); END IF;
+  RETURN NULL;
+END
+$$;
+
+
+--
 -- Name: capture_erasure_roles(integer, text, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1095,7 +1279,7 @@ BEGIN
     RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
    END IF;
    copy_identity:=encode(sha256(convert_to(copy_identity||'|copy|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
-   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,CASE WHEN source_tx=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,source_tx) END);
    previous_account:=r.account_id; previous_role:=r.role;
   END LOOP;
  END LOOP;
@@ -1120,7 +1304,7 @@ BEGIN
     RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
    END IF;
    source_identity:=encode(sha256(convert_to(source_identity||'|source|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
-   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,CASE WHEN source_tx=native_tx THEN native_position ELSE semantic.erasure_original_role_position(p_home,source_tx) END);
    previous_account:=r.account_id; previous_role:=r.role;
   END LOOP;
  END LOOP;
@@ -1280,8 +1464,8 @@ BEGIN
  WHEN 'identity_epoch_prearm_custody' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_custody WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_prearm_claim' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_claim WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_prearm_decision' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_decision WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
- WHEN 'record_source_set' THEN SELECT true INTO v_present FROM semantic.record_source_set WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
- WHEN 'record_source_set_member' THEN SELECT true,subject_id,candidate_id INTO v_present,v_original,v_candidate FROM semantic.record_source_set_member WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'record_source_set' THEN SELECT true INTO v_present FROM semantic.record_source_set WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
+ WHEN 'record_source_set_member' THEN SELECT true,subject_id,candidate_id INTO v_present,v_original,v_candidate FROM semantic.record_source_set_member WHERE route=NEW.partition_no*16 AND erasure_key=NEW.record_key;
  ELSE v_present:=false;
  END CASE;
  IF v_candidate IS NOT NULL AND v_original IS NOT NULL AND
@@ -1356,7 +1540,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'external_claim',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1373,7 +1557,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'fact',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1390,7 +1574,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.moderation WHERE route=NEW.route AND subject_id=NEW.subject_id AND security_revision=NEW.security_revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'hidden_candidate',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1480,7 +1664,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_ack',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1497,7 +1681,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_attempt',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1514,7 +1698,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_plan',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1531,7 +1715,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_receipt',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1548,7 +1732,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_admission_source',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1565,7 +1749,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_change',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1582,7 +1766,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_effect_receipt',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1599,7 +1783,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_home_gate',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1616,7 +1800,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_input',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1633,7 +1817,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_job',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1679,7 +1863,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_mapping',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1904,7 +2088,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'inbound_link',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -1938,7 +2122,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'outbound_link',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -2072,7 +2256,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'redirect',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -2127,7 +2311,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'retraction',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -2144,9 +2328,24 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'revision',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
+
+
+--
+-- Name: capture_search_agent_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_search_agent_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM semantic.refresh_erased_search_count(NEW.route,semantic.personal_agent_id(NEW.account_id));
+  PERFORM nextval('semantic.search_canonical_generation');
+  RETURN NULL;
+END
+$$;
 
 
 --
@@ -2161,7 +2360,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=(SELECT r.recorded_transaction_id FROM semantic.candidate c JOIN semantic.revision r USING(route,subject_id,revision) WHERE c.route=NEW.route AND c.subject_id=NEW.subject_id AND c.candidate_id=NEW.candidate_id);
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'source_candidate',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -2184,6 +2383,60 @@ END; $$;
 
 
 --
+-- Name: capture_subject_access_page_v1(bigint, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_subject_access_page_v1(member_birth bigint, lo integer, hi integer) RETURNS jsonb
+    LANGUAGE plpgsql
+    AS $$
+DECLARE saved semantic.subject_access_page_v1; original jsonb;
+BEGIN
+  -- Serialize both fresh calls and uncertain-commit retries with Core capture.
+  PERFORM FROM core.subject_retention_domain WHERE singleton FOR SHARE;
+  PERFORM FROM core.subject_subscription_v1 WHERE birth=member_birth FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Missing Subject membership'; END IF;
+  SELECT * INTO saved FROM semantic.subject_access_page_v1 WHERE (birth,first_home)=(member_birth,lo);
+  IF NOT FOUND THEN
+    INSERT INTO semantic.subject_access_page_v1(birth,first_home,end_home)
+      VALUES(member_birth,lo,hi) RETURNING * INTO saved;
+  ELSE
+    IF saved.end_home IS DISTINCT FROM hi THEN RAISE EXCEPTION 'Original Subject Access interval mismatch'; END IF;
+    IF semantic.subject_access_definition_v1(member_birth) IS DISTINCT FROM saved.definition_digest
+      THEN RAISE EXCEPTION 'Original Subject definition or membership keys changed'; END IF;
+    -- The domain and membership are locked above. Reopen shared registration,
+    -- store and restore lineage once, then compare the two original pages
+    -- against the current native owner, privacy head and cleanup of every home.
+    SELECT c.cuts INTO STRICT original FROM core.subject_retention_page_v1 c
+      JOIN core.subject_subscription_v1 m USING(birth)
+      JOIN core.subject_retention_domain d ON d.singleton AND NOT d.fenced AND
+        (d.restore_generation,d.registration_generation)=(m.restore_generation,m.registration_generation)
+      CROSS JOIN LATERAL core.subject_retention_heads_v1(lo) anchor
+      WHERE (c.birth,c.first_home,c.end_home)=(member_birth,lo,hi) AND anchor.restore=m.restore_generation
+        AND m.opened_xid<>pg_current_xact_id();
+    -- The stamp binds the original comparison. Membership, definition and
+    -- store/restore lineage above are still reopened on each receiver call.
+    IF semantic.subject_quiet_page_current_v1(saved) THEN RETURN saved.cuts; END IF;
+    IF NOT semantic.subject_access_range_current_v1(saved,lo,hi) OR
+      (SELECT count(*) FROM jsonb_array_elements(saved.cuts) WITH ORDINALITY s(cut,ordinal)
+       CROSS JOIN LATERAL (SELECT lo+ordinal::integer-1 AS home) i
+       CROSS JOIN LATERAL (SELECT epoch,position FROM core.partition WHERE partition_no=i.home AND write_state='active' LIMIT 1) h
+       CROSS JOIN LATERAL (SELECT generation FROM core.publication_authority_epoch WHERE home_no=i.home LIMIT 1) g
+       CROSS JOIN LATERAL (SELECT position FROM semantic.public_filter_privacy_head WHERE partition_no=i.home
+         AND owner_epoch=h.epoch AND NOT population_fenced LIMIT 1) n
+       LEFT JOIN core.subject_cleanup_v1 permit ON permit.home=i.home
+       WHERE cut @> (original->(ordinal::integer-1)) AND
+         (cut->>'home',cut->>'epoch',cut->>'generation')=(i.home::text,h.epoch::text,g.generation::text)
+         AND (cut->>'command')::bigint<=h.position AND (cut->>'privacy')::bigint<=n.position
+         AND (permit.home IS NULL OR ((permit.owner_epoch,permit.home_generation,permit.restore_generation)=
+           (h.epoch,g.generation,(SELECT restore_generation FROM core.subject_subscription_v1 WHERE birth=member_birth))
+           AND permit.command_through<=(cut->>'command')::bigint AND permit.privacy_through<=(cut->>'privacy')::bigint)))<>hi-lo
+      THEN RAISE EXCEPTION 'Original Subject Access authority changed'; END IF;
+  END IF;
+  RETURN saved.cuts;
+END $$;
+
+
+--
 -- Name: capture_subject_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2195,7 +2448,7 @@ BEGIN
  IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
  native_tx:=NEW.recorded_transaction_id;
  PERFORM semantic.capture_erasure_roles(NEW.route/16,'subject',NEW.erasure_key,native_tx);
- 
+
  RETURN NEW;
 END; $$;
 
@@ -2207,17 +2460,28 @@ END; $$;
 CREATE FUNCTION semantic.capture_term_head() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE batch semantic.fact[];
 BEGIN
- IF NEW.kind='statement' THEN RETURN NEW; END IF;
- INSERT INTO semantic.term_head(route,subject_id,kind,language,slot_id,first_seq,support_transaction_id)
- VALUES(NEW.route,NEW.subject_id,NEW.kind,NEW.language,NEW.slot_id,
-   CASE WHEN NEW.kind='alias' THEN 1 ELSE NEW.log_seq END,NEW.recorded_transaction_id)
- ON CONFLICT(route,subject_id,kind,language) DO UPDATE
- SET slot_id=EXCLUDED.slot_id,first_seq=EXCLUDED.first_seq,active=true
- WHERE term_head.slot_id=EXCLUDED.slot_id OR EXISTS (
-   SELECT 1 FROM semantic.revision r WHERE r.route=NEW.route AND r.subject_id=NEW.subject_id
-     AND r.recorded_transaction_id=NEW.recorded_transaction_id AND r.kind='identity');
- RETURN NEW;
+ FOR batch IN
+   WITH arrivals AS (
+     SELECT f::semantic.fact AS fact,row_number() OVER () AS position FROM inserted_facts f WHERE kind<>'statement'
+   ), heads AS (
+     SELECT fact,position,row_number() OVER (
+       PARTITION BY (fact).route,(fact).subject_id,(fact).kind,(fact).language ORDER BY position
+     ) AS occurrence FROM arrivals
+   )
+   SELECT array_agg(fact ORDER BY position) FROM heads GROUP BY occurrence ORDER BY occurrence
+ LOOP
+   INSERT INTO semantic.term_head(route,subject_id,kind,language,slot_id,first_seq,support_transaction_id)
+   SELECT f.route,f.subject_id,f.kind,f.language,f.slot_id,CASE WHEN f.kind='alias' THEN 1 ELSE f.log_seq END,
+     f.recorded_transaction_id FROM unnest(batch) f
+   ON CONFLICT(route,subject_id,kind,language) DO UPDATE
+   SET slot_id=EXCLUDED.slot_id,first_seq=EXCLUDED.first_seq,active=true
+   WHERE term_head.slot_id=EXCLUDED.slot_id OR EXISTS (
+     SELECT 1 FROM semantic.revision r WHERE r.route=EXCLUDED.route AND r.subject_id=EXCLUDED.subject_id
+       AND r.recorded_transaction_id=EXCLUDED.support_transaction_id AND r.kind='identity');
+ END LOOP;
+ RETURN NULL;
 END; $$;
 
 
@@ -2249,6 +2513,27 @@ CREATE FUNCTION semantic.catalogue_work_valid(admitted bigint[], spent bigint[])
   WHERE admitted[n] IS NULL OR spent[n] IS NULL OR spent[n]<0 OR admitted[n]<spent[n]
    OR admitted[n]>9007199254740991)
 $$;
+
+
+--
+-- Name: change_subject_access_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.change_subject_access_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE old_home integer; new_home integer;
+BEGIN
+  IF TG_OP='TRUNCATE' THEN
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid();
+  ELSE
+    IF TG_OP<>'INSERT' THEN old_home:=OLD.partition_no/32*32; END IF;
+    IF TG_OP<>'DELETE' THEN new_home:=NEW.partition_no/32*32; END IF;
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid()
+      WHERE first_home IN (old_home,new_home);
+  END IF;
+  RETURN NULL;
+END $$;
 
 
 --
@@ -2557,6 +2842,53 @@ CREATE FUNCTION semantic.erasure_mutation_allowed(p_store text, p_route integer,
  SELECT 1 FROM semantic.erasure_locator l JOIN semantic.erasure_home h USING(partition_no,account_id)
  WHERE l.partition_no=p_route/16 AND l.account_id=nullif(current_setting('semantic.erasure_account',true),'')::uuid
  AND l.store=p_store AND l.record_key=p_key AND l.state='pending' AND h.state='local')
+$$;
+
+
+--
+-- Name: erasure_original_role_position(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.erasure_original_role_position(p_home integer, p_tx uuid) RETURNS bigint
+    LANGUAGE plpgsql STABLE STRICT
+    AS $$
+DECLARE original_position bigint;
+BEGIN
+ SELECT coalesce(
+   (SELECT position FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.erasure_source_commit WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.identity_epoch_native_commit WHERE partition_no=p_home AND transaction_id=p_tx)
+ ) INTO original_position;
+ IF original_position IS NULL THEN
+  RAISE EXCEPTION 'Semantic erased Source role lacks its original transaction position' USING ERRCODE='23514';
+ END IF;
+ RETURN original_position;
+END; $$;
+
+
+--
+-- Name: erasure_retained_role_position(integer, uuid, bigint, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.erasure_retained_role_position(p_home integer, p_tx uuid, p_recorded bigint, p_delivery bigint) RETURNS bigint
+    LANGUAGE sql STABLE STRICT
+    AS $$
+ WITH original AS MATERIALIZED (SELECT coalesce(
+   (SELECT position FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.erasure_source_commit WHERE partition_no=p_home AND transaction_id=p_tx),
+   (SELECT position FROM semantic.identity_epoch_native_commit WHERE partition_no=p_home AND transaction_id=p_tx),
+   -- Only the write_basis producer captures this key, always from the original basis position.
+   (SELECT CASE WHEN r.native_present THEN r.source_position END FROM semantic.erasure_provenance p
+     CROSS JOIN LATERAL (
+       SELECT account_id,role FROM semantic.erasure_locator
+       WHERE partition_no=p_home AND source_transaction_id=p_tx AND store='write_basis' AND record_key=p.record_key
+       LIMIT 1
+     ) l JOIN semantic.erasure_source_record r ON r.partition_no=p_home AND r.account_id=l.account_id AND r.role=l.role
+       AND r.store='write_basis' AND r.record_key=p.record_key AND coalesce(r.source_transaction_id::text,'')=p_tx::text
+     WHERE p.partition_no=p_home AND p.transaction_id=p_tx AND p.minimized
+     LIMIT 1)
+ ) AS position)
+ SELECT position FROM original WHERE position=p_recorded OR (p_recorded=p_delivery AND position<p_delivery);
 $$;
 
 
@@ -3096,6 +3428,84 @@ END; $$;
 
 
 --
+-- Name: guard_subject_privacy_intake_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_privacy_intake_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE f semantic.subject_privacy_fanout_v1; base bigint;
+BEGIN
+  SELECT * INTO STRICT f FROM semantic.subject_privacy_fanout_v1
+    WHERE (partition_no,input_key,enqueue_revision)=(NEW.partition_no,NEW.input_key,NEW.enqueue_revision);
+  base:=semantic.subject_privacy_member_base_v1(f,NEW.birth);
+  IF f.captured_by=pg_current_xact_id() OR base IS NULL OR base IS DISTINCT FROM NEW.privacy_base
+    OR base>=f.through_position OR core.subject_membership_revision_v1() IS NULL OR NOT EXISTS (
+      SELECT FROM core.subject_retention_heads_v1(f.partition_no) h
+      WHERE (h.epoch,h.generation)=(f.owner_epoch,f.home_generation))
+  THEN
+    RAISE EXCEPTION 'Invalid Subject privacy intake' USING ERRCODE='23514';
+  END IF;
+  NEW.received_by:=pg_current_xact_id();
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_subject_privacy_pending_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_privacy_pending_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE installed boolean; revision bigint; native record;
+BEGIN
+  SELECT restore_generation IS NOT NULL INTO STRICT installed
+    FROM core.subject_retention_domain WHERE singleton FOR SHARE;
+  IF NOT installed THEN RETURN NEW; END IF;
+
+  IF (NEW.partition_no,NEW.input_key,NEW.owner_epoch,NEW.through_position,NEW.enqueue_revision)
+    IS DISTINCT FROM (OLD.partition_no,OLD.input_key,OLD.owner_epoch,OLD.through_position,OLD.enqueue_revision)
+  THEN RAISE EXCEPTION 'Subject privacy capture changed its native queue' USING ERRCODE='23514'; END IF;
+
+  revision:=core.subject_membership_revision_v1();
+  SELECT * INTO native FROM core.subject_retention_heads_v1(OLD.partition_no);
+  IF OLD.captured_revision IS NULL AND NEW.captured_revision IS NOT NULL AND OLD.live AND NEW.live THEN
+    IF revision IS NULL OR native.epoch IS DISTINCT FROM OLD.owner_epoch THEN RETURN NULL; END IF;
+    IF (NEW.captured_epoch,NEW.first_position,NEW.captured_through,NEW.captured_revision)
+      IS DISTINCT FROM (OLD.owner_epoch,OLD.first_position,OLD.through_position,OLD.enqueue_revision)
+      OR native.privacy_base<OLD.through_position THEN
+      RAISE EXCEPTION 'Invalid Subject privacy capture' USING ERRCODE='23514';
+    END IF;
+    INSERT INTO semantic.subject_privacy_fanout_v1
+      (partition_no,input_key,enqueue_revision,owner_epoch,home_generation,first_position,through_position,membership_revision)
+      VALUES (OLD.partition_no,OLD.input_key,OLD.enqueue_revision,OLD.owner_epoch,native.generation,
+        OLD.first_position,OLD.through_position,revision);
+    NEW.captured_shared_v1:=true;
+    RETURN NEW;
+  END IF;
+
+  IF revision IS NULL OR NOT OLD.live OR OLD.captured_revision IS NULL OR NEW.captured_revision IS NOT NULL
+    OR (OLD.owner_epoch,OLD.captured_epoch) IS DISTINCT FROM (native.epoch,native.epoch)
+    OR native.privacy_base<OLD.captured_through
+    OR NEW.live IS DISTINCT FROM (OLD.enqueue_revision<>OLD.captured_revision)
+    OR NEW.first_position IS DISTINCT FROM (CASE WHEN NEW.live THEN OLD.next_first_position ELSE OLD.first_position END)
+    OR (OLD.captured_shared_v1 AND NOT EXISTS (
+      SELECT FROM semantic.subject_privacy_fanout_v1 f
+      WHERE (f.partition_no,f.input_key,f.enqueue_revision)=(OLD.partition_no,OLD.input_key,OLD.captured_revision)
+        AND (f.owner_epoch,f.home_generation,f.first_position,f.through_position)=
+            (native.epoch,native.generation,OLD.first_position,OLD.captured_through)
+        AND f.complete))
+  THEN
+    RAISE EXCEPTION 'Subject privacy interval has no current disposition' USING ERRCODE='23514';
+  END IF;
+  -- An interval already captured at activation predates the first birth.
+  NEW.captured_shared_v1:=false;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: guard_subject_security(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3109,6 +3519,115 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: guard_subject_source_cursor_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_subject_source_cursor_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE saved jsonb; page_end integer;
+BEGIN
+  IF TG_OP='INSERT' THEN
+    IF (NEW.next_home,NEW.next_ordinal) IS DISTINCT FROM (0,0) OR NOT EXISTS (
+      SELECT FROM core.subject_subscription_v1 m
+      JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap,b.read_definition)=
+        (0,m.bootstrap,m.definition) AND b.snapshot_kind='prepared' AND b.state='capturing'
+      JOIN semantic.public_filter_read_definition d ON (d.partition_no,d.read_definition,d.source_id,d.configuration,
+        d.release_digest)=(b.partition_no,b.read_definition,m.source_id,m.configuration,m.meaning)
+      JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration,s.owner_epoch)=
+        (d.partition_no,d.source_id,d.configuration,b.owner_epoch)
+      JOIN core.partition p ON p.partition_no=s.partition_no AND p.epoch=b.owner_epoch AND p.write_state='active'
+      WHERE (m.birth,b.partition_no,b.bootstrap)=(NEW.birth,NEW.partition_no,NEW.bootstrap)
+        AND b.consumer::jsonb=semantic.subject_source_consumer_v1(m.consumer))
+      THEN RAISE EXCEPTION 'Missing original held Subject Source bootstrap' USING ERRCODE='23514'; END IF;
+    RETURN NEW;
+  END IF;
+
+  IF (NEW.birth,NEW.partition_no,NEW.bootstrap) IS DISTINCT FROM (OLD.birth,OLD.partition_no,OLD.bootstrap)
+    THEN RAISE EXCEPTION 'Held Subject Source identity is immutable' USING ERRCODE='23514'; END IF;
+  SELECT step.evidence,page.end_home INTO saved,page_end
+    FROM semantic.subject_source_step_v1 step JOIN semantic.subject_access_page_v1 page USING(birth,first_home)
+    WHERE (step.birth,step.first_home,step.ordinal)=(OLD.birth,OLD.next_home,OLD.next_ordinal);
+  IF FOUND AND saved->'ordinal'=to_jsonb(OLD.next_ordinal) THEN
+    IF saved->'complete'='true'::jsonb AND saved->'next'='null'::jsonb AND
+      (NEW.next_home,NEW.next_ordinal)=(page_end,0) THEN RETURN NEW; END IF;
+    IF saved->'complete'='false'::jsonb AND jsonb_typeof(saved->'next')='object' AND
+      (NEW.next_home,NEW.next_ordinal::bigint)=(OLD.next_home,OLD.next_ordinal::bigint+1) THEN RETURN NEW; END IF;
+  END IF;
+  RAISE EXCEPTION 'Missing exact held Subject Source successor' USING ERRCODE='23514';
+END $$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: identity_epoch_group; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_group (
+    partition_no integer DEFAULT 0 NOT NULL,
+    terminal uuid NOT NULL,
+    observed_count bigint NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_epoch integer,
+    version bigint DEFAULT 1 NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    published_epoch bigint DEFAULT 1 NOT NULL,
+    pending_job uuid,
+    pending_epoch bigint,
+    closure_incarnation uuid DEFAULT gen_random_uuid() NOT NULL,
+    closure_state text DEFAULT 'open'::text NOT NULL,
+    closure_claim uuid,
+    closure_after uuid,
+    closure_close_transaction uuid,
+    closure_seal_transaction uuid,
+    closure_cleanup_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_group_closure_state_check CHECK ((closure_state = ANY (ARRAY['open'::text, 'closing'::text, 'drained'::text]))),
+    CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0))
+);
+
+
+--
+-- Name: identity_basis_birth(semantic.identity_epoch_group); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.identity_basis_birth(g semantic.identity_epoch_group) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT g.version=1 AND g.published_epoch=1 AND g.ready AND g.observed_count=1
+    AND g.pending_job IS NULL AND g.pending_epoch IS NULL
+    AND g.closure_state='open' AND g.closure_claim IS NULL AND g.closure_after IS NULL
+    AND g.closure_close_transaction IS NULL AND g.closure_seal_transaction IS NULL AND NOT g.closure_cleanup_complete
+    AND EXISTS (
+      SELECT 1 FROM semantic.subject s
+      JOIN semantic.revision r ON (r.route,r.subject_id,r.revision)=(s.route,s.subject_id,1)
+      JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(s.route,s.subject_id)
+      JOIN semantic.identity_epoch_home_gate h ON (h.route,h.destination,h.original)=(s.route,s.subject_id,s.subject_id)
+      JOIN semantic.identity_epoch_original o ON (o.partition_no,o.generation,o.original)=(g.partition_no,g.generation,s.subject_id)
+      JOIN core.partition p ON p.partition_no=g.partition_no
+      WHERE s.route=get_byte(uuid_send(g.terminal),10)*256+get_byte(uuid_send(g.terminal),11)
+        AND s.subject_id=g.terminal AND s.route/16=g.partition_no
+        AND p.write_state='active' AND p.epoch=g.owner_epoch AND m.owner_epoch=p.epoch
+        AND s.xmin=pg_current_xact_id()::xid AND r.xmin=s.xmin AND m.xmin=s.xmin AND h.xmin=s.xmin AND o.xmin=s.xmin
+        AND r.kind='create' AND r.recorded_transaction_id=s.recorded_transaction_id
+        AND m.recorded_transaction_id=r.recorded_transaction_id AND h.recorded_transaction_id=r.recorded_transaction_id
+        AND m.origin='creation' AND m.terminal=g.terminal AND m.control_group=g.terminal AND m.control_partition=p.partition_no
+        AND m.epoch=g.published_epoch AND h.terminal=g.terminal AND h.epoch=m.epoch
+        AND h.pending_job IS NULL AND h.pending_epoch IS NULL
+        AND o.present AND o.terminal=g.terminal AND o.source_partition=p.partition_no AND o.source_generation=0
+        AND o.closure_state='legacy' AND m.closure_state='legacy'
+        AND NOT EXISTS (SELECT 1 FROM semantic.identity_epoch_original peer
+          WHERE peer.partition_no=g.partition_no AND peer.generation=g.generation AND peer.original<>g.terminal)
+        AND NOT EXISTS (SELECT 1 FROM semantic.revision later
+          WHERE later.route=s.route AND later.subject_id=s.subject_id AND later.revision>1)
+        AND NOT EXISTS (SELECT 1 FROM semantic.redirect d WHERE (d.route,d.subject_id)=(s.route,s.subject_id))
+    );
 $$;
 
 
@@ -3213,10 +3732,6 @@ CREATE SEQUENCE semantic.erasure_record_key
     NO MAXVALUE
     CACHE 1;
 
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
 
 --
 -- Name: identity_epoch_mapping; Type: TABLE; Schema: semantic; Owner: -
@@ -3519,6 +4034,29 @@ END; $$;
 
 
 --
+-- Name: invalidate_subject_cut_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.invalidate_subject_cut_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE lo integer; hi integer;
+BEGIN
+  IF TG_OP='TRUNCATE' THEN
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid();
+  ELSE
+    IF TG_OP<>'INSERT' THEN lo:=(to_jsonb(OLD)->>TG_ARGV[0])::integer/32*32; END IF;
+    IF TG_OP<>'DELETE' THEN hi:=(to_jsonb(NEW)->>TG_ARGV[0])::integer/32*32; END IF;
+    UPDATE semantic.subject_access_range_revision_v1 SET revision=gen_random_uuid() WHERE first_home IN (lo,hi);
+  END IF;
+  IF TG_TABLE_NAME <> 'subject_cleanup_v1' THEN
+    PERFORM search.advance_public_filter_repair_authority('@ack-retention',coalesce(lo,hi,0)/32);
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: keep_identity_epoch_accepted_binding(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3734,6 +4272,25 @@ BEGIN
   END IF;
   RETURN marked;
 END;
+$$;
+
+
+--
+-- Name: personal_agent_id(uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.personal_agent_id(account uuid) RETURNS uuid
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  WITH seed AS (
+    SELECT substring(sha256(uuid_send('fb3a9d35-804c-4d22-b317-260c05382a41'::uuid)
+                            || account::text::bytea) FROM 1 FOR 16) AS bytes
+  )
+  SELECT encode(set_byte(set_byte(set_byte(set_byte(bytes,
+    6, (get_byte(bytes,6) & 15) | 128),
+    8, (get_byte(bytes,8) & 63) | 128),
+    10, get_byte(uuid_send(account),10)),
+    11, get_byte(uuid_send(account),11)), 'hex')::uuid FROM seed
 $$;
 
 
@@ -4047,16 +4604,13 @@ $$;
 
 CREATE FUNCTION semantic.public_filter_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
     LANGUAGE plpgsql STABLE ROWS 9
-    SET enable_seqscan TO 'off'
     AS $$
 BEGIN
-  IF EXISTS (SELECT FROM search.public_filter_coverage_home h JOIN search.public_filter_coverage_preparation c
-      ON (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap)
-      WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,0) AND c.ack_protocol=1) THEN
+  IF EXISTS (SELECT FROM search.public_filter_coverage_preparation c
+      WHERE (c.partition_no,c.registration)=(0,registration_id) AND c.subscription_protocol=1 AND NOT c.ack_retired) THEN
     RAISE EXCEPTION 'A manifest ACK requires its original bootstrap' USING ERRCODE='40001';
   END IF;
-  RETURN QUERY SELECT h.* FROM search.public_filter_coverage_home h
-    WHERE h.partition_no=0 AND h.registration=registration_id AND h.behind ORDER BY h.source_home LIMIT 9;
+  RETURN QUERY SELECT * FROM semantic.public_filter_legacy_book_dirty_homes(registration_id);
 END $$;
 
 
@@ -4082,6 +4636,7 @@ $$;
 
 CREATE FUNCTION semantic.public_filter_committed_ack(original_bootstrap uuid, original_execution text, original_step uuid, original_binding text) RETURNS boolean
     LANGUAGE sql
+    SET join_collapse_limit TO '1'
     AS $$
   SELECT EXISTS (
     SELECT FROM search.public_filter_ack_manifest m
@@ -4117,6 +4672,68 @@ $$;
 --
 
 CREATE FUNCTION semantic.public_filter_effective_homes(registration_id text, original uuid, point integer DEFAULT NULL::integer, home_limit integer DEFAULT 9) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE plpgsql STABLE ROWS 9
+    AS $$
+DECLARE m bigint; original_generation bigint; origin record; h search.public_filter_coverage_home; item record;
+BEGIN
+  IF home_limit IS NULL OR home_limit NOT BETWEEN 1 AND 9 OR point NOT BETWEEN 0 AND 4095 THEN
+    RAISE EXCEPTION 'Invalid effective ACK home range' USING ERRCODE='22023'; END IF;
+  SELECT s.birth,c.generation INTO m,original_generation FROM core.subject_subscription_v1 s
+    LEFT JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=(0,registration_id,original)
+    WHERE s.bootstrap=original AND search.shared_subject_job_v1(s.job);
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT * FROM semantic.public_filter_legacy_effective_homes(registration_id,original,point,home_limit);
+    RETURN;
+  END IF;
+  h.partition_no:=0; h.registration:=registration_id; h.source_home:=point; h.behind:=true;
+  SELECT * INTO origin FROM semantic.public_filter_ack_origin(registration_id,original);
+  IF NOT FOUND THEN RETURN NEXT h; RETURN; END IF;
+  FOR item IN WITH wanted AS (
+    (SELECT d.home FROM search.subject_receiver_dirty_v1 d WHERE point IS NULL AND d.birth=m ORDER BY home LIMIT home_limit)
+    UNION ALL SELECT point WHERE point IS NOT NULL
+  )
+  SELECT w.home,b.cut,d.through_position,d.change_generation FROM wanted w
+    LEFT JOIN LATERAL search.subject_receiver_cut_v1(original,w.home) b ON b.registration=registration_id
+    LEFT JOIN search.subject_receiver_dirty_v1 d ON (d.birth,d.home)=(m,w.home)
+    ORDER BY w.home
+  LOOP
+    h.source_home:=item.home; h.source_epoch:=(item.cut->>'epoch')::integer;
+    h.baseline_bootstrap:=original; h.acknowledged_baseline:=CASE WHEN item.cut IS NOT NULL THEN original END;
+    h.acknowledged_position:=(item.cut->>'privacy')::bigint;
+    h.acknowledged_native_enqueue:=(item.cut->>'enqueue')::bigint; h.native_enqueue_revision:=h.acknowledged_native_enqueue;
+    h.relevant_position:=coalesce(item.through_position,h.acknowledged_position);
+    h.acknowledged_observation:=origin.observation; h.acknowledged_execution:=origin.execution;
+    h.acknowledged_settlement:=origin.settlement; h.last_change_generation:=coalesce(item.change_generation,original_generation);
+    h.behind:=item.cut IS NULL OR item.through_position IS NOT NULL; h.baseline_delta:=h.behind;
+    RETURN NEXT h;
+  END LOOP;
+END $$;
+
+
+--
+-- Name: public_filter_legacy_book_dirty_homes(text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_legacy_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE plpgsql STABLE ROWS 9
+    SET enable_seqscan TO 'off'
+    AS $$
+BEGIN
+  IF EXISTS (SELECT FROM search.public_filter_coverage_home h JOIN search.public_filter_coverage_preparation c
+      ON (c.partition_no,c.registration,c.bootstrap)=(h.partition_no,h.registration,h.baseline_bootstrap)
+      WHERE (h.partition_no,h.registration,h.source_home)=(0,registration_id,0) AND c.ack_protocol=1) THEN
+    RAISE EXCEPTION 'A manifest ACK requires its original bootstrap' USING ERRCODE='40001';
+  END IF;
+  RETURN QUERY SELECT h.* FROM search.public_filter_coverage_home h
+    WHERE h.partition_no=0 AND h.registration=registration_id AND h.behind ORDER BY h.source_home LIMIT 9;
+END $$;
+
+
+--
+-- Name: public_filter_legacy_effective_homes(text, uuid, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_legacy_effective_homes(registration_id text, original uuid, point integer DEFAULT NULL::integer, home_limit integer DEFAULT 9) RETURNS SETOF search.public_filter_coverage_home
     LANGUAGE plpgsql STABLE ROWS 9
     SET enable_seqscan TO 'off'
     AS $$
@@ -4399,8 +5016,7 @@ JOIN LATERAL (
 ) c ON c.population_protocol=1 AND c.after_home=4096 AND c.generation=b.coverage_generation
   AND c.root=b.coverage_root AND c.definition=d.read_definition AND c.consumer=r.consumer
 JOIN LATERAL (
-  SELECT last_home.root FROM search.public_filter_coverage_baseline last_home
-  WHERE (last_home.partition_no,last_home.registration,last_home.bootstrap,last_home.source_home)=(0,r.id,b.bootstrap,4095) LIMIT 1
+  SELECT last_home.root FROM search.public_filter_original_home(0,r.id,b.bootstrap,4095) last_home LIMIT 1
 ) last_home ON last_home.root=c.root
 WHERE (SELECT count(*) FROM candidates)=1
   AND (c.ack_protocol=0 OR EXISTS (
@@ -4722,13 +5338,50 @@ END; $$;
 --
 
 CREATE FUNCTION semantic.refresh_canonical_subject_name(r integer, id uuid) RETURNS void
-    LANGUAGE sql
+    LANGUAGE plpgsql
     AS $$
+BEGIN
+  -- Read the heads after any concurrent writer of this Subject finishes.
+  PERFORM 1 FROM semantic.subject WHERE route=r AND subject_id=id FOR NO KEY UPDATE;
   UPDATE semantic.subject SET canonical_name=(
-    SELECT f.body #>> '{}' FROM semantic.current_term_fact f
-    WHERE f.route=r AND f.subject_id=id AND f.kind='label' AND jsonb_typeof(f.body)='string'
-    ORDER BY f.language COLLATE "C",f.slot_id DESC,f.log_seq DESC LIMIT 1
+    SELECT f.body #>> '{}' FROM semantic.term_head h
+    CROSS JOIN LATERAL (
+      -- Each active head points at one slot with at most 33 log entries.
+      SELECT fact.body,fact.language,fact.log_seq FROM semantic.fact
+      WHERE fact.route=h.route AND fact.subject_id=h.subject_id AND fact.slot_id=h.slot_id
+        AND fact.log_seq>=h.first_seq AND fact.operation='assert' AND fact.kind='label'
+        AND jsonb_typeof(fact.body)='string'
+      ORDER BY fact.language COLLATE "C",fact.log_seq DESC LIMIT 1
+    ) f WHERE h.route=r AND h.subject_id=id AND h.active
+    ORDER BY f.language COLLATE "C",h.slot_id DESC,f.log_seq DESC LIMIT 1
   ) WHERE route=r AND subject_id=id;
+END;
+$$;
+
+
+--
+-- Name: refresh_erased_search_count(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.refresh_erased_search_count(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT semantic.search_agent_erased(r,id) THEN RETURN; END IF;
+  IF EXISTS(SELECT 1 FROM semantic.subject s WHERE (s.route,s.subject_id)=(r,id) AND s.visibility='visible')
+     AND (SELECT d.target FROM semantic.redirect d WHERE (d.route,d.subject_id)=(r,id)
+          ORDER BY d.sequence DESC LIMIT 1) IS NULL THEN
+    INSERT INTO semantic.search_erased_visible VALUES(r,id) ON CONFLICT DO NOTHING;
+    IF FOUND THEN
+      UPDATE semantic.partition_subjects SET erased_visible=erased_visible+1 WHERE partition_no=r/16;
+    END IF;
+  ELSE
+    DELETE FROM semantic.search_erased_visible WHERE (route,subject_id)=(r,id);
+    IF FOUND THEN
+      UPDATE semantic.partition_subjects SET erased_visible=erased_visible-1 WHERE partition_no=r/16;
+    END IF;
+  END IF;
+END
 $$;
 
 
@@ -5200,6 +5853,19 @@ END; $_$;
 
 
 --
+-- Name: search_agent_erased(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.search_agent_erased(r integer, id uuid) RETURNS boolean
+    LANGUAGE sql STABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT CASE WHEN get_byte(uuid_send(id),6)>>4=8 THEN coalesce((
+    SELECT true FROM access.erasure e WHERE e.route=r AND semantic.personal_agent_id(e.account_id)=id LIMIT 1
+  ),false) ELSE false END
+$$;
+
+
+--
 -- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -5412,6 +6078,176 @@ $$;
 
 
 --
+-- Name: stamp_subject_access_range_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.stamp_subject_access_range_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.access_revisions:=semantic.subject_access_range_revisions_v1(NEW.first_home,NEW.end_home);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: subject_access_cut_v1(uuid, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_cut_v1(wanted_bootstrap uuid, wanted_home integer) RETURNS TABLE(birth bigint, home integer, epoch integer, generation uuid, command_base bigint, privacy_base bigint, account_revision bigint, claim_revision bigint, enqueue_revision bigint, receipt text, command_head bigint, privacy_head bigint)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT s.birth,h.home,h.epoch,h.generation,(cut->>'command')::bigint,(cut->>'privacy')::bigint,
+    (cut->>'account')::bigint,(cut->>'claim')::bigint,(cut->>'enqueue')::bigint,cut->>'receipt',
+    h.command_base,h.privacy_base
+  FROM core.subject_subscription_v1 s
+  JOIN core.subject_retention_domain d ON d.singleton AND NOT d.fenced AND
+    (s.registration_generation,s.restore_generation)=(d.registration_generation,d.restore_generation)
+  JOIN LATERAL (SELECT * FROM search.generation_publication
+    WHERE (partition_no,job,physical_target,consumer)=(0,s.job,s.physical_target,s.consumer) LIMIT 1) j ON (j.physical_target,j.native_incarnation,j.consumer,j.generation)=
+    (s.physical_target,s.incarnation,s.consumer,s.generation) AND j.family='subjects' AND j.source_home=0
+  JOIN search.public_filter_target t ON (t.partition_no,t.physical_target,t.incarnation)=(0,s.physical_target,s.incarnation)
+  JOIN semantic.public_filter_source src ON (src.partition_no,src.source_id,src.configuration)=(0,s.source_id,s.configuration)
+  JOIN core.partition reg ON reg.partition_no=0 AND reg.write_state='active' AND reg.epoch=src.owner_epoch
+  JOIN LATERAL (SELECT * FROM semantic.public_filter_read_definition
+    WHERE (partition_no,read_definition)=(0,s.definition) LIMIT 1) def ON (def.source_id,def.configuration,def.release_digest)=
+    (s.source_id,s.configuration,s.meaning)
+  CROSS JOIN LATERAL (SELECT * FROM semantic.subject_access_page_v1 p
+    WHERE p.birth=s.birth AND p.first_home<=wanted_home ORDER BY p.first_home DESC LIMIT 1) page
+  JOIN core.subject_retention_page_v1 p ON (p.birth,p.first_home,p.end_home)=(page.birth,page.first_home,page.end_home)
+  CROSS JOIN LATERAL (SELECT page.cuts->(wanted_home-page.first_home) AS cut) entry
+  CROSS JOIN core.subject_retention_heads_v1(wanted_home) h
+  CROSS JOIN LATERAL semantic.subject_access_heads_v1(wanted_home,h.epoch) a
+  LEFT JOIN core.subject_cleanup_v1 permit ON permit.home=wanted_home
+  WHERE s.bootstrap=wanted_bootstrap AND wanted_home>=0 AND wanted_home<page.end_home
+    AND page.captured_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+    AND j.binding=jsonb_build_object('source',jsonb_build_object('id',src.source_id,'configuration',src.configuration,
+      'epoch',src.owner_epoch,'partition',0),'readDefinition',s.definition,'meaning',jsonb_build_object('digest',s.meaning))
+    AND cardinality(def.coverage_keys)=s.key_count AND octet_length(def.coverage_keys::text)<=16384
+    AND def.coverage_keys=ARRAY(SELECT closure.input_key FROM (
+      SELECT k.input_key FROM core.subject_subscription_key_v1 k WHERE k.birth=s.birth LIMIT 65
+    ) closure ORDER BY closure.input_key)
+    AND page.definition_digest=encode(sha256(convert_to(jsonb_build_array(def.capture_digest,def.coverage_keys)::text,
+      'UTF8')),'hex')
+    AND cut @> (p.cuts->(wanted_home-page.first_home))
+    AND (cut->>'home',cut->>'epoch',cut->>'generation')=(h.home::text,h.epoch::text,h.generation::text)
+    AND h.command_base >= (cut->>'command')::bigint AND h.privacy_base >= (cut->>'privacy')::bigint
+    AND a.account_revision >= (cut->>'account')::bigint AND a.claim_revision >= (cut->>'claim')::bigint
+    AND a.enqueue_revision >= (cut->>'enqueue')::bigint
+    AND (a.enqueue_revision > (cut->>'enqueue')::bigint OR (a.account_revision,a.claim_revision)=
+      ((cut->>'account')::bigint,(cut->>'claim')::bigint))
+    AND (permit.home IS NULL OR ((permit.owner_epoch,permit.home_generation,permit.restore_generation)=
+      (h.epoch,h.generation,h.restore) AND permit.command_through <= (cut->>'command')::bigint
+      AND permit.privacy_through <= (cut->>'privacy')::bigint))
+$$;
+
+
+--
+-- Name: subject_access_definition_v1(bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_definition_v1(member_birth bigint) RETURNS text
+    LANGUAGE sql
+    AS $$
+  SELECT encode(sha256(convert_to(jsonb_build_array(def.capture_digest,def.coverage_keys)::text,'UTF8')),'hex')
+  FROM core.subject_subscription_v1 s
+  JOIN search.generation_publication j ON (j.partition_no,j.job,j.physical_target,j.native_incarnation,j.consumer,j.generation)=
+    (0,s.job,s.physical_target,s.incarnation,s.consumer,s.generation)
+  JOIN search.public_filter_target t ON (t.partition_no,t.physical_target,t.incarnation)=(0,s.physical_target,s.incarnation)
+  JOIN semantic.public_filter_source src ON (src.partition_no,src.source_id,src.configuration)=(0,s.source_id,s.configuration)
+  JOIN core.partition reg ON reg.partition_no=0 AND reg.write_state='active' AND reg.epoch=src.owner_epoch
+  JOIN semantic.public_filter_read_definition def ON (def.partition_no,def.read_definition,def.source_id,def.configuration,
+    def.release_digest)=(0,s.definition,s.source_id,s.configuration,s.meaning)
+  WHERE s.birth=member_birth AND j.family='subjects' AND j.source_home=0
+    AND cardinality(def.coverage_keys)=s.key_count AND octet_length(def.coverage_keys::text)<=16384
+    AND def.coverage_keys=ARRAY(SELECT closure.input_key FROM (
+      SELECT k.input_key FROM core.subject_subscription_key_v1 k WHERE k.birth=s.birth LIMIT 65
+    ) closure ORDER BY closure.input_key)
+    AND j.binding=jsonb_build_object('source',jsonb_build_object('id',src.source_id,'configuration',src.configuration,
+      'epoch',src.owner_epoch,'partition',0),'readDefinition',s.definition,'meaning',jsonb_build_object('digest',s.meaning))
+  FOR SHARE OF j,t,src,def
+$$;
+
+
+--
+-- Name: subject_access_heads_v1(integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_heads_v1(wanted_home integer, wanted_epoch integer) RETURNS TABLE(account_revision bigint, claim_revision bigint, enqueue_revision bigint)
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT a.revision,a.claim_revision,coalesce(p.enqueue_revision,0)
+  FROM (SELECT partition_no,revision,claim_revision FROM access.account_discovery_population
+    WHERE partition_no=wanted_home LIMIT 1) a
+  LEFT JOIN LATERAL (SELECT partition_no,owner_epoch,native_revision,native_claim_revision,enqueue_revision
+    FROM semantic.public_filter_privacy_pending
+    WHERE (partition_no,input_key)=(a.partition_no,'["domain","accounts"]') LIMIT 1) p ON true
+  WHERE a.revision>0 AND a.claim_revision>0
+    AND (p.partition_no IS NULL OR (p.owner_epoch,p.native_revision,p.native_claim_revision)=
+      (wanted_epoch,a.revision,a.claim_revision))
+$$;
+
+
+--
+-- Name: subject_access_page_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_access_page_v1 (
+    birth bigint NOT NULL,
+    first_home integer NOT NULL,
+    end_home integer NOT NULL,
+    cuts jsonb NOT NULL,
+    definition_digest text NOT NULL,
+    captured_xid xid8 NOT NULL,
+    access_revisions uuid[],
+    quiet_digest text,
+    command_repair_stamp boolean DEFAULT true,
+    CONSTRAINT subject_access_page_v1_check CHECK (((end_home <= 4096) AND (((end_home - first_home) >= 1) AND ((end_home - first_home) <= 32)))),
+    CONSTRAINT subject_access_page_v1_check1 CHECK (((jsonb_typeof(cuts) = 'array'::text) AND (jsonb_array_length(cuts) = (end_home - first_home))))
+);
+
+
+--
+-- Name: subject_access_range_current_v1(semantic.subject_access_page_v1, integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_range_current_v1(p semantic.subject_access_page_v1, lo integer, hi integer) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT CASE WHEN lo<p.first_home OR hi>p.end_home OR hi<=lo THEN false
+    WHEN p.access_revisions=semantic.subject_access_range_revisions_v1(p.first_home,p.end_home) THEN true
+    ELSE (SELECT count(*)=hi-lo FROM generate_series(lo,hi-1) i
+      CROSS JOIN LATERAL (SELECT p.cuts->(i-p.first_home) AS cut) x
+      CROSS JOIN LATERAL semantic.subject_access_heads_v1(i,(x.cut->>'epoch')::integer) a
+      WHERE a.account_revision>=(x.cut->>'account')::bigint AND a.claim_revision>=(x.cut->>'claim')::bigint
+        AND (a.enqueue_revision>(x.cut->>'enqueue')::bigint OR
+          (a.enqueue_revision,a.account_revision,a.claim_revision)=((x.cut->>'enqueue')::bigint,
+            (x.cut->>'account')::bigint,(x.cut->>'claim')::bigint))) END
+$$;
+
+
+--
+-- Name: subject_access_range_revisions_v1(integer, integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_access_range_revisions_v1(lo integer, hi integer) RETURNS uuid[]
+    LANGUAGE sql STABLE
+    AS $$
+  WITH bounds AS (
+    SELECT lo/32*32 AS start_home,(hi-1)/32*32 AS final_home
+    WHERE lo BETWEEN 0 AND 4095 AND hi BETWEEN 1 AND 4096 AND hi::bigint-lo BETWEEN 1 AND 32
+  )
+  SELECT CASE WHEN count(*)=(final_home-start_home)/32+1 THEN array_agg(r.revision ORDER BY h.home) END
+  FROM bounds CROSS JOIN LATERAL generate_series(start_home,final_home,32) h(home)
+  JOIN LATERAL (
+    SELECT first_home,revision FROM semantic.subject_access_range_revision_v1
+    WHERE first_home>=h.home ORDER BY first_home LIMIT 1
+  ) r ON r.first_home=h.home
+  GROUP BY start_home,final_home
+$$;
+
+
+--
 -- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -5458,6 +6294,104 @@ BEGIN
   IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
   RETURN NEW;
 END $$;
+
+
+--
+-- Name: subject_privacy_fanout_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_privacy_fanout_v1 (
+    partition_no integer NOT NULL,
+    input_key text NOT NULL COLLATE pg_catalog."C",
+    enqueue_revision bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    home_generation uuid NOT NULL,
+    first_position bigint NOT NULL,
+    through_position bigint NOT NULL,
+    membership_revision bigint NOT NULL,
+    after_birth bigint DEFAULT 0 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    captured_by xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT subject_privacy_fanout_v1_check CHECK ((through_position >= first_position)),
+    CONSTRAINT subject_privacy_fanout_v1_check1 CHECK (((after_birth >= 0) AND (after_birth <= membership_revision))),
+    CONSTRAINT subject_privacy_fanout_v1_enqueue_revision_check CHECK ((enqueue_revision > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_first_position_check CHECK ((first_position > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_input_key_check CHECK ((input_key <> '["domain","accounts"]'::text)),
+    CONSTRAINT subject_privacy_fanout_v1_membership_revision_check CHECK ((membership_revision >= 0)),
+    CONSTRAINT subject_privacy_fanout_v1_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT subject_privacy_fanout_v1_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: subject_privacy_member_base_v1(semantic.subject_privacy_fanout_v1, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_privacy_member_base_v1(f semantic.subject_privacy_fanout_v1, member_birth bigint) RETURNS bigint
+    LANGUAGE sql STABLE
+    AS $$
+  SELECT (cut.doc->>'privacy')::bigint
+  FROM core.subject_subscription_v1 s JOIN core.subject_retention_domain d
+    ON d.singleton AND (s.registration_generation,s.restore_generation)=(d.registration_generation,d.restore_generation)
+  CROSS JOIN LATERAL (
+    SELECT p.end_home,p.xmin,p.cuts->(f.partition_no-p.first_home) AS doc
+    FROM core.subject_retention_page_v1 p
+    WHERE p.birth=s.birth AND p.first_home<=f.partition_no
+    ORDER BY p.first_home DESC LIMIT 1
+  ) cut
+  WHERE s.birth=member_birth AND s.birth<=f.membership_revision AND f.partition_no<cut.end_home
+    AND cut.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+    AND (cut.doc->>'home',cut.doc->>'epoch',cut.doc->>'generation')=
+        (f.partition_no::text,f.owner_epoch::text,f.home_generation::text)
+$$;
+
+
+--
+-- Name: subject_quiet_page_current_v1(semantic.subject_access_page_v1); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_quiet_page_current_v1(p semantic.subject_access_page_v1) RETURNS boolean
+    LANGUAGE sql STABLE STRICT
+    AS $$
+  WITH stamp AS MATERIALIZED (
+    SELECT semantic.subject_access_range_revisions_v1(p.first_home,p.end_home) AS revisions
+    WHERE p.quiet_digest IS NOT NULL
+  )
+  SELECT EXISTS (SELECT FROM stamp WHERE cardinality(revisions)=1 AND
+    (p.access_revisions=revisions OR EXISTS (SELECT FROM semantic.subject_quiet_recheck_v1 q
+      WHERE (q.birth,q.first_home,q.revision)=(p.birth,p.first_home,revisions[1]))))
+$$;
+
+
+--
+-- Name: subject_repair_page_current_v1(semantic.subject_access_page_v1); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_repair_page_current_v1(p semantic.subject_access_page_v1) RETURNS boolean
+    LANGUAGE sql STABLE STRICT
+    AS $$
+  WITH stamp AS MATERIALIZED (
+    SELECT semantic.subject_access_range_revisions_v1(p.first_home,p.end_home) AS revisions
+    WHERE p.first_home%32=0 AND p.end_home=p.first_home+32
+  )
+  SELECT EXISTS (SELECT FROM stamp WHERE cardinality(revisions)=1 AND
+    (((p.quiet_digest IS NOT NULL OR p.command_repair_stamp IS TRUE) AND p.access_revisions=revisions) OR EXISTS (SELECT FROM semantic.subject_quiet_recheck_v1 q
+      WHERE (q.birth,q.first_home,q.revision)=(p.birth,p.first_home,revisions[1]))))
+$$;
+
+
+--
+-- Name: subject_source_consumer_v1(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_source_consumer_v1(value jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT CASE jsonb_typeof(value) WHEN 'object' THEN
+    jsonb_build_array('object',(SELECT coalesce(jsonb_agg(jsonb_build_array(k,
+      semantic.subject_source_consumer_v1(v)) ORDER BY k COLLATE "C"),'[]'::jsonb) FROM jsonb_each(value) e(k,v)))
+    ELSE jsonb_build_array('value',value) END
+$$;
 
 
 --
@@ -5919,6 +6853,26 @@ END; $$;
 
 
 --
+-- Name: verify_subject_quiet_recheck_v1(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.verify_subject_quiet_recheck_v1() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p semantic.subject_access_page_v1;
+BEGIN
+  SELECT * INTO STRICT p FROM semantic.subject_access_page_v1 WHERE (birth,first_home)=(NEW.birth,NEW.first_home);
+  IF p.first_home%32<>0 OR p.end_home<>p.first_home+32 THEN
+    RAISE EXCEPTION 'Missing aligned Subject interval'; END IF;
+  SELECT revision INTO STRICT NEW.revision
+    FROM unnest(semantic.subject_access_range_revisions_v1(p.first_home,p.end_home)) revision;
+  IF semantic.capture_subject_access_page_v1(p.birth,p.first_home,p.end_home) IS DISTINCT FROM p.cuts
+    THEN RAISE EXCEPTION 'Subject interval changed'; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: public_filter_bootstrap; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -5944,8 +6898,10 @@ CREATE TABLE semantic.public_filter_bootstrap (
     publication_execution text,
     coverage_publication uuid,
     book_withdrawals jsonb,
+    subscription_protocol smallint DEFAULT 0 NOT NULL,
     CONSTRAINT public_filter_book_withdrawals_check CHECK (((book_withdrawals IS NULL) OR ((coverage_publication IS NOT NULL) AND (snapshot_kind = 'pit'::text) AND (jsonb_typeof(book_withdrawals) = 'array'::text) AND ((jsonb_array_length(book_withdrawals) >= 1) AND (jsonb_array_length(book_withdrawals) <= 8))))),
     CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_check CHECK (((subscription_protocol = 0) OR ((subscription_protocol = 1) AND (snapshot_kind = 'prepared'::text) AND (partition_no = 0)))),
     CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
     CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
     CONSTRAINT public_filter_bootstrap_coverage_after_check CHECK (((coverage_after >= 0) AND (coverage_after <= 4096))),
@@ -7548,33 +8504,6 @@ CREATE TABLE semantic.identity_epoch_effect_receipt (
     CONSTRAINT identity_epoch_effect_receipt_check2 CHECK (((native_transaction_id IS NULL) = (native_position IS NULL))),
     CONSTRAINT identity_epoch_effect_receipt_kind_check CHECK ((kind = ANY (ARRAY['remove'::text, 'add'::text, 'pending-fence'::text, 'published-fence'::text]))),
     CONSTRAINT identity_epoch_effect_receipt_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text])))
-);
-
-
---
--- Name: identity_epoch_group; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.identity_epoch_group (
-    partition_no integer DEFAULT 0 NOT NULL,
-    terminal uuid NOT NULL,
-    observed_count bigint NOT NULL,
-    generation uuid DEFAULT gen_random_uuid() NOT NULL,
-    owner_epoch integer,
-    version bigint DEFAULT 1 NOT NULL,
-    ready boolean DEFAULT false NOT NULL,
-    published_epoch bigint DEFAULT 1 NOT NULL,
-    pending_job uuid,
-    pending_epoch bigint,
-    closure_incarnation uuid DEFAULT gen_random_uuid() NOT NULL,
-    closure_state text DEFAULT 'open'::text NOT NULL,
-    closure_claim uuid,
-    closure_after uuid,
-    closure_close_transaction uuid,
-    closure_seal_transaction uuid,
-    closure_cleanup_complete boolean DEFAULT false NOT NULL,
-    CONSTRAINT identity_epoch_group_closure_state_check CHECK ((closure_state = ANY (ARRAY['open'::text, 'closing'::text, 'drained'::text]))),
-    CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0))
 );
 
 
@@ -9522,6 +10451,8 @@ CREATE TABLE semantic.partition_subjects (
     canonical_generation bigint DEFAULT 1 NOT NULL,
     canonical_delivered_generation bigint DEFAULT 0 NOT NULL,
     canonical_announced_generation bigint DEFAULT 0 NOT NULL,
+    canonical_empty_seed boolean DEFAULT false NOT NULL,
+    erased_visible bigint DEFAULT 0 NOT NULL,
     canonical_populated boolean GENERATED ALWAYS AS ((canonical_count > 0)) STORED NOT NULL,
     canonical_delivery_pending boolean GENERATED ALWAYS AS ((canonical_delivered_generation < canonical_generation)) STORED NOT NULL,
     canonical_announcement_pending boolean GENERATED ALWAYS AS (((canonical_delivered_generation < canonical_generation) AND (canonical_announced_generation < canonical_generation))) STORED NOT NULL,
@@ -9529,9 +10460,22 @@ CREATE TABLE semantic.partition_subjects (
     CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
     CONSTRAINT partition_subjects_canonical_delivery_check CHECK (((canonical_delivered_generation >= 0) AND (canonical_delivered_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_generation_check CHECK ((canonical_generation > 0)),
+    CONSTRAINT partition_subjects_erased_visible_check CHECK ((erased_visible >= 0)),
     CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
 );
+
+
+--
+-- Name: pending_canonical_generation; Type: VIEW; Schema: semantic; Owner: -
+--
+
+CREATE VIEW semantic.pending_canonical_generation AS
+ SELECT partition_no,
+    canonical_generation,
+    canonical_announced_generation
+   FROM semantic.partition_subjects
+  WHERE ((canonical_delivered_generation < canonical_generation) AND ((NOT canonical_empty_seed) OR (canonical_generation > 1) OR (canonical_announced_generation > 0)));
 
 
 --
@@ -9752,6 +10696,7 @@ CREATE TABLE semantic.public_filter_privacy_pending (
     captured_native_revision bigint,
     captured_native_claim_revision bigint,
     captured_enrollment_generation bigint,
+    captured_shared_v1 boolean DEFAULT false NOT NULL,
     CONSTRAINT public_filter_pending_enrollment_window CHECK (((COALESCE(native_captured_enqueue, captured_revision) IS NULL) = (captured_enrollment_generation IS NULL))),
     CONSTRAINT public_filter_pending_native_domain CHECK ((((input_key = '["domain","accounts"]'::text) AND (first_position IS NULL) AND (through_position IS NULL) AND (native_revision IS NOT NULL) AND (native_revision > 0) AND (native_claim_revision IS NOT NULL) AND (native_claim_revision > 0) AND (native_transaction IS NOT NULL)) OR ((input_key <> '["domain","accounts"]'::text) AND (first_position IS NOT NULL) AND (through_position IS NOT NULL) AND (native_revision IS NULL) AND (native_claim_revision IS NULL) AND (native_transaction IS NULL)))),
     CONSTRAINT public_filter_privacy_pendin_captured_enrollment_generati_check CHECK ((captured_enrollment_generation >= 0)),
@@ -9761,7 +10706,8 @@ CREATE TABLE semantic.public_filter_privacy_pending (
     CONSTRAINT public_filter_privacy_pending_check3 CHECK (((captured_through IS NULL) OR (((captured_through >= first_position) AND (captured_through <= through_position)) AND (captured_revision > 0) AND (captured_revision <= enqueue_revision) AND (captured_epoch > 0)))),
     CONSTRAINT public_filter_privacy_pending_enqueue_revision_check CHECK ((enqueue_revision > 0)),
     CONSTRAINT public_filter_privacy_pending_first_position_check CHECK ((first_position > 0)),
-    CONSTRAINT public_filter_privacy_pending_owner_epoch_check CHECK ((owner_epoch > 0))
+    CONSTRAINT public_filter_privacy_pending_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT subject_privacy_capture_v1 CHECK (((NOT captured_shared_v1) OR (captured_revision IS NOT NULL)))
 );
 
 
@@ -10337,6 +11283,16 @@ CREATE SEQUENCE semantic.search_canonical_generation
 
 
 --
+-- Name: search_erased_visible; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.search_erased_visible (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL
+);
+
+
+--
 -- Name: search_relation_probe; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -10417,6 +11373,47 @@ CREATE TABLE semantic.search_selection_state (
 
 
 --
+-- Name: subject; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    type text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    visibility text DEFAULT 'visible'::text NOT NULL,
+    security_revision bigint DEFAULT 0 NOT NULL,
+    current_facts integer DEFAULT 0 NOT NULL,
+    current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
+    projection_pending boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    canonical_name text COLLATE pg_catalog."C",
+    CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
+    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
+    CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: search_subject; Type: VIEW; Schema: semantic; Owner: -
+--
+
+CREATE VIEW semantic.search_subject AS
+ SELECT route,
+    subject_id,
+    type,
+    current_release,
+    security_revision,
+        CASE
+            WHEN semantic.search_agent_erased(route, subject_id) THEN 'hidden'::text
+            ELSE visibility
+        END AS visibility
+   FROM semantic.subject s;
+
+
+--
 -- Name: source_candidate; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -10469,26 +11466,13 @@ CREATE TABLE semantic.statement_disclosure (
 
 
 --
--- Name: subject; Type: TABLE; Schema: semantic; Owner: -
+-- Name: subject_access_range_revision_v1; Type: TABLE; Schema: semantic; Owner: -
 --
 
-CREATE TABLE semantic.subject (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    type text NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    visibility text DEFAULT 'visible'::text NOT NULL,
-    security_revision bigint DEFAULT 0 NOT NULL,
-    current_facts integer DEFAULT 0 NOT NULL,
-    current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
-    projection_pending boolean DEFAULT false NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    canonical_name text COLLATE pg_catalog."C",
-    CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
-    CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
-    CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+CREATE TABLE semantic.subject_access_range_revision_v1 (
+    first_home integer NOT NULL,
+    revision uuid DEFAULT gen_random_uuid() NOT NULL,
+    CONSTRAINT subject_access_range_revision_v1_first_home_check CHECK ((((first_home >= 0) AND (first_home <= 4095)) AND ((first_home % 32) = 0)))
 );
 
 
@@ -10753,6 +11737,47 @@ CREATE TABLE semantic.subject_page_work_home (
     pending integer NOT NULL,
     CONSTRAINT subject_page_work_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT subject_page_work_home_pending_check CHECK ((pending >= 0))
+);
+
+
+--
+-- Name: subject_quiet_recheck_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_quiet_recheck_v1 (
+    birth bigint NOT NULL,
+    first_home integer NOT NULL,
+    revision uuid NOT NULL
+);
+
+
+--
+-- Name: subject_source_preparation_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_source_preparation_v1 (
+    birth bigint NOT NULL,
+    partition_no integer DEFAULT 0 NOT NULL,
+    bootstrap uuid NOT NULL,
+    next_home integer DEFAULT 0 NOT NULL,
+    next_ordinal integer DEFAULT 0 NOT NULL,
+    CONSTRAINT subject_source_preparation_v1_next_home_check CHECK (((next_home >= 0) AND (next_home <= 4096))),
+    CONSTRAINT subject_source_preparation_v1_next_ordinal_check CHECK ((next_ordinal >= 0)),
+    CONSTRAINT subject_source_preparation_v1_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: subject_source_step_v1; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_source_step_v1 (
+    birth bigint NOT NULL,
+    first_home integer NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT subject_source_step_v1_evidence_check CHECK (((jsonb_typeof(evidence) = 'object'::text) AND (octet_length((evidence)::text) <= 65536))),
+    CONSTRAINT subject_source_step_v1_ordinal_check CHECK ((ordinal >= 0))
 );
 
 
@@ -11189,7 +12214,7 @@ ALTER TABLE ONLY semantic.erasure_inbox
 --
 
 ALTER TABLE ONLY semantic.erasure_locator
-    ADD CONSTRAINT erasure_locator_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key);
+    ADD CONSTRAINT erasure_locator_pkey PRIMARY KEY (partition_no, store, record_key, account_id, role);
 
 
 --
@@ -12793,6 +13818,14 @@ ALTER TABLE ONLY semantic.revision
 
 
 --
+-- Name: search_erased_visible search_erased_visible_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.search_erased_visible
+    ADD CONSTRAINT search_erased_visible_pkey PRIMARY KEY (route, subject_id);
+
+
+--
 -- Name: search_relation_probe search_relation_probe_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -12854,6 +13887,22 @@ ALTER TABLE ONLY semantic.source_record
 
 ALTER TABLE ONLY semantic.statement_disclosure
     ADD CONSTRAINT statement_disclosure_pkey PRIMARY KEY (route, candidate_id);
+
+
+--
+-- Name: subject_access_page_v1 subject_access_page_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_access_page_v1
+    ADD CONSTRAINT subject_access_page_v1_pkey PRIMARY KEY (birth, first_home);
+
+
+--
+-- Name: subject_access_range_revision_v1 subject_access_range_revision_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_access_range_revision_v1
+    ADD CONSTRAINT subject_access_range_revision_v1_pkey PRIMARY KEY (first_home);
 
 
 --
@@ -12974,6 +14023,38 @@ ALTER TABLE ONLY semantic.subject_page_work_home
 
 ALTER TABLE ONLY semantic.subject
     ADD CONSTRAINT subject_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: subject_privacy_fanout_v1 subject_privacy_fanout_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_privacy_fanout_v1
+    ADD CONSTRAINT subject_privacy_fanout_v1_pkey PRIMARY KEY (partition_no, input_key, enqueue_revision);
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_quiet_recheck_v1
+    ADD CONSTRAINT subject_quiet_recheck_v1_pkey PRIMARY KEY (birth, first_home);
+
+
+--
+-- Name: subject_source_preparation_v1 subject_source_preparation_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_source_preparation_v1
+    ADD CONSTRAINT subject_source_preparation_v1_pkey PRIMARY KEY (birth);
+
+
+--
+-- Name: subject_source_step_v1 subject_source_step_v1_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_source_step_v1
+    ADD CONSTRAINT subject_source_step_v1_pkey PRIMARY KEY (birth, first_home, ordinal);
 
 
 --
@@ -13308,13 +14389,6 @@ CREATE INDEX erasure_locator_event ON semantic.erasure_locator USING btree (part
 
 
 --
--- Name: erasure_locator_record; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX erasure_locator_record ON semantic.erasure_locator USING btree (partition_no, store, record_key, account_id, role);
-
-
---
 -- Name: erasure_locator_source; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -13388,7 +14462,7 @@ CREATE INDEX fact_erasure_home_lookup ON semantic.fact USING btree (((route / 16
 -- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (erasure_key, route);
+CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (route, erasure_key);
 
 
 --
@@ -13549,7 +14623,7 @@ CREATE INDEX identity_epoch_home_gate_erasure_home_lookup ON semantic.identity_e
 -- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX identity_epoch_home_gate_erasure_key ON semantic.identity_epoch_home_gate USING btree (erasure_key, route);
+CREATE UNIQUE INDEX identity_epoch_home_gate_erasure_key ON semantic.identity_epoch_home_gate USING btree (route, erasure_key);
 
 
 --
@@ -13626,7 +14700,7 @@ CREATE INDEX identity_epoch_mapping_erasure_home_lookup ON semantic.identity_epo
 -- Name: identity_epoch_mapping_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX identity_epoch_mapping_erasure_key ON semantic.identity_epoch_mapping USING btree (erasure_key, route);
+CREATE UNIQUE INDEX identity_epoch_mapping_erasure_key ON semantic.identity_epoch_mapping USING btree (route, erasure_key);
 
 
 --
@@ -14396,7 +15470,7 @@ CREATE INDEX record_retention_source ON semantic.source_candidate USING btree (r
 -- Name: record_source_set_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX record_source_set_erasure_key ON semantic.record_source_set USING btree (erasure_key, route);
+CREATE UNIQUE INDEX record_source_set_erasure_key ON semantic.record_source_set USING btree (route, erasure_key);
 
 
 --
@@ -14410,7 +15484,7 @@ CREATE INDEX record_source_set_fact_origin ON semantic.fact USING btree (route, 
 -- Name: record_source_set_member_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX record_source_set_member_erasure_key ON semantic.record_source_set_member USING btree (erasure_key, route);
+CREATE UNIQUE INDEX record_source_set_member_erasure_key ON semantic.record_source_set_member USING btree (route, erasure_key);
 
 
 --
@@ -14480,7 +15554,7 @@ CREATE INDEX revision_erasure_home_lookup ON semantic.revision USING btree (((ro
 -- Name: revision_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX revision_erasure_key ON semantic.revision USING btree (erasure_key, route);
+CREATE UNIQUE INDEX revision_erasure_key ON semantic.revision USING btree (route, erasure_key);
 
 
 --
@@ -14627,7 +15701,7 @@ CREATE INDEX subject_erasure_home_lookup ON semantic.subject USING btree (((rout
 -- Name: subject_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (erasure_key, route);
+CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (route, erasure_key);
 
 
 --
@@ -14663,6 +15737,20 @@ CREATE INDEX subject_page_owner_dependency_present ON semantic.subject_page_owne
 --
 
 CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING btree (route, state, available_at, subject_id);
+
+
+--
+-- Name: subject_prepared_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_prepared_original ON semantic.public_filter_bootstrap USING btree (partition_no, request_key) WHERE (snapshot_kind = 'prepared'::text);
+
+
+--
+-- Name: subject_retention_privacy_pin; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_retention_privacy_pin ON semantic.public_filter_home_enrollment USING btree (partition_no, source_position);
 
 
 --
@@ -15296,10 +16384,17 @@ CREATE TRIGGER external_claim_immutable_truncate BEFORE TRUNCATE ON semantic.ext
 
 
 --
--- Name: fact fact_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
+-- Name: fact fact_canonical_name_delete; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER fact_canonical_name AFTER DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
+CREATE TRIGGER fact_canonical_name_delete AFTER DELETE ON semantic.fact REFERENCING OLD TABLE AS changed_labels FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_canonical_label_batch();
+
+
+--
+-- Name: fact fact_canonical_name_update; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER fact_canonical_name_update AFTER UPDATE ON semantic.fact REFERENCING NEW TABLE AS changed_labels FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_canonical_label_batch();
 
 
 --
@@ -15327,7 +16422,7 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 -- Name: fact fact_term_head; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER fact_term_head AFTER INSERT ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.capture_term_head();
+CREATE TRIGGER fact_term_head AFTER INSERT ON semantic.fact REFERENCING NEW TABLE AS inserted_facts FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_term_head();
 
 
 --
@@ -15364,9 +16459,18 @@ ALTER TABLE semantic.identity_epoch_control ENABLE ALWAYS TRIGGER identity_basis
 -- Name: identity_epoch_group identity_basis_group; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER identity_basis_group AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_group FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_basis_effect();
+CREATE TRIGGER identity_basis_group AFTER DELETE OR UPDATE ON semantic.identity_epoch_group FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_basis_effect();
 
 ALTER TABLE semantic.identity_epoch_group ENABLE ALWAYS TRIGGER identity_basis_group;
+
+
+--
+-- Name: identity_epoch_group identity_basis_group_insert; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_basis_group_insert AFTER INSERT ON semantic.identity_epoch_group FOR EACH ROW WHEN ((NOT semantic.identity_basis_birth(new.*))) EXECUTE FUNCTION semantic.capture_identity_basis_effect();
+
+ALTER TABLE semantic.identity_epoch_group ENABLE ALWAYS TRIGGER identity_basis_group_insert;
 
 
 --
@@ -16626,7 +17730,7 @@ CREATE TRIGGER public_filter_ack_privacy_loss AFTER DELETE ON semantic.public_fi
 -- Name: public_filter_bootstrap public_filter_bootstrap_baseline_seal; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
+CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((old.subscription_protocol = 0)) EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
 
 
 --
@@ -16840,6 +17944,13 @@ CREATE TRIGGER redirect_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON
 
 
 --
+-- Name: redirect redirect_erased_search_count; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER redirect_erased_search_count AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_erased_search_count();
+
+
+--
 -- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -16973,10 +18084,134 @@ CREATE TRIGGER statement_disclosure_search_canonical_generation AFTER INSERT OR 
 
 
 --
+-- Name: subject_access_page_v1 subject_access_before_bind; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_before_bind BEFORE INSERT ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION semantic.stamp_subject_access_range_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_before_bind;
+
+
+--
+-- Name: subject_access_page_v1 subject_access_bind; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_bind BEFORE INSERT ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION semantic.bind_subject_access_page_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_bind;
+
+
+--
+-- Name: subject_access_page_v1 subject_access_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_immutable BEFORE DELETE OR UPDATE ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_immutable;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_change; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_change AFTER UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((((old.input_key = '["domain","accounts"]'::text) OR (new.input_key = '["domain","accounts"]'::text)) AND ((((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.input_key IS DISTINCT FROM new.input_key)) OR (old.owner_epoch IS DISTINCT FROM new.owner_epoch)) OR (old.native_revision IS DISTINCT FROM new.native_revision)) OR (old.native_claim_revision IS DISTINCT FROM new.native_claim_revision)) OR (old.enqueue_revision IS DISTINCT FROM new.enqueue_revision)))) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_change;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_insert; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_insert AFTER INSERT ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((new.input_key = '["domain","accounts"]'::text)) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_insert;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_remove; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_remove AFTER DELETE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN ((old.input_key = '["domain","accounts"]'::text)) EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_remove;
+
+
+--
+-- Name: public_filter_privacy_pending subject_access_range_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_range_truncate AFTER TRUNCATE ON semantic.public_filter_privacy_pending FOR EACH STATEMENT EXECUTE FUNCTION semantic.change_subject_access_range_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_access_range_truncate;
+
+
+--
+-- Name: subject_access_page_v1 subject_access_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_access_truncate BEFORE TRUNCATE ON semantic.subject_access_page_v1 FOR EACH STATEMENT EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_access_truncate;
+
+
+--
+-- Name: subject_access_range_revision_v1 subject_ack_stamp; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_ack_stamp AFTER INSERT OR DELETE OR UPDATE ON semantic.subject_access_range_revision_v1 FOR EACH ROW EXECUTE FUNCTION search.change_subject_ack_stamp_v1();
+
+ALTER TABLE semantic.subject_access_range_revision_v1 ENABLE ALWAYS TRIGGER subject_ack_stamp;
+
+
+--
+-- Name: subject_access_range_revision_v1 subject_ack_stamp_truncated; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_ack_stamp_truncated AFTER TRUNCATE ON semantic.subject_access_range_revision_v1 FOR EACH STATEMENT EXECUTE FUNCTION search.change_subject_ack_stamp_v1();
+
+ALTER TABLE semantic.subject_access_range_revision_v1 ENABLE ALWAYS TRIGGER subject_ack_stamp_truncated;
+
+
+--
 -- Name: subject subject_canonical_population; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER subject_canonical_population AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_population();
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_changed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_changed AFTER UPDATE ON semantic.public_filter_privacy_head FOR EACH ROW WHEN (((((old.partition_no IS DISTINCT FROM new.partition_no) OR (old.owner_epoch IS DISTINCT FROM new.owner_epoch)) OR (old.population_fenced IS DISTINCT FROM new.population_fenced)) OR (new."position" < old."position"))) EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_changed;
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_rows; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_rows AFTER INSERT OR DELETE ON semantic.public_filter_privacy_head FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_rows;
+
+
+--
+-- Name: public_filter_privacy_head subject_cut_truncated; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_cut_truncated AFTER TRUNCATE ON semantic.public_filter_privacy_head FOR EACH STATEMENT EXECUTE FUNCTION semantic.invalidate_subject_cut_range_v1('partition_no');
+
+ALTER TABLE semantic.public_filter_privacy_head ENABLE ALWAYS TRIGGER subject_cut_truncated;
+
+
+--
+-- Name: subject subject_erased_search_count; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_erased_search_count AFTER INSERT OR DELETE OR UPDATE OF visibility, route, subject_id ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_erased_search_count();
 
 
 --
@@ -17022,10 +18257,55 @@ CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON 
 
 
 --
+-- Name: public_filter_privacy_pending subject_privacy_pending_v1; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_privacy_pending_v1 BEFORE UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW WHEN (((old.input_key <> '["domain","accounts"]'::text) AND ((old.live AND (NOT new.live)) OR ((((old.captured_revision IS DISTINCT FROM new.captured_revision) OR (old.captured_through IS DISTINCT FROM new.captured_through)) OR (old.captured_epoch IS DISTINCT FROM new.captured_epoch)) OR (old.captured_shared_v1 IS DISTINCT FROM new.captured_shared_v1)) OR ((old.captured_revision IS NOT NULL) AND (old.first_position IS DISTINCT FROM new.first_position))))) EXECUTE FUNCTION semantic.guard_subject_privacy_pending_v1();
+
+ALTER TABLE semantic.public_filter_privacy_pending ENABLE ALWAYS TRIGGER subject_privacy_pending_v1;
+
+
+--
+-- Name: subject_access_page_v1 subject_quiet_range; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_quiet_range BEFORE INSERT ON semantic.subject_access_page_v1 FOR EACH ROW EXECUTE FUNCTION semantic.bind_subject_quiet_range_v1();
+
+ALTER TABLE semantic.subject_access_page_v1 ENABLE ALWAYS TRIGGER subject_quiet_range;
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_quiet_recheck BEFORE INSERT OR UPDATE ON semantic.subject_quiet_recheck_v1 FOR EACH ROW EXECUTE FUNCTION semantic.verify_subject_quiet_recheck_v1();
+
+ALTER TABLE semantic.subject_quiet_recheck_v1 ENABLE ALWAYS TRIGGER subject_quiet_recheck;
+
+
+--
 -- Name: subject subject_record_purge_gate; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER subject_record_purge_gate BEFORE DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
+
+
+--
+-- Name: public_filter_privacy_log subject_retention_privacy; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_retention_privacy BEFORE DELETE OR UPDATE ON semantic.public_filter_privacy_log FOR EACH ROW EXECUTE FUNCTION core.guard_subject_retention_v1('privacy');
+
+ALTER TABLE semantic.public_filter_privacy_log ENABLE ALWAYS TRIGGER subject_retention_privacy;
+
+
+--
+-- Name: public_filter_privacy_log subject_retention_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_retention_truncate BEFORE TRUNCATE ON semantic.public_filter_privacy_log FOR EACH STATEMENT EXECUTE FUNCTION core.guard_subject_retention_v1();
+
+ALTER TABLE semantic.public_filter_privacy_log ENABLE ALWAYS TRIGGER subject_retention_truncate;
 
 
 --
@@ -17043,10 +18323,97 @@ CREATE TRIGGER subject_security_revision BEFORE UPDATE ON semantic.subject FOR E
 
 
 --
--- Name: term_head term_head_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
+-- Name: subject_source_preparation_v1 subject_source_cursor; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER term_head_canonical_name AFTER INSERT OR DELETE OR UPDATE ON semantic.term_head FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
+CREATE TRIGGER subject_source_cursor BEFORE INSERT OR UPDATE ON semantic.subject_source_preparation_v1 FOR EACH ROW EXECUTE FUNCTION semantic.guard_subject_source_cursor_v1();
+
+ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject_source_cursor;
+
+
+--
+-- Name: public_filter_bootstrap subject_source_format; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_format BEFORE INSERT ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((new.snapshot_kind = 'prepared'::text)) EXECUTE FUNCTION search.pin_subject_source_format_v1();
+
+
+--
+-- Name: public_filter_bootstrap subject_source_page_prefix; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_page_prefix BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((old.subscription_protocol = 1)) EXECUTE FUNCTION search.require_subject_receiver_prefix_v1();
+
+
+--
+-- Name: subject_source_preparation_v1 subject_source_preparation_original; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_preparation_original BEFORE DELETE ON semantic.subject_source_preparation_v1 FOR EACH ROW EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject_source_preparation_original;
+
+
+--
+-- Name: subject_source_preparation_v1 subject_source_preparation_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_preparation_truncate BEFORE TRUNCATE ON semantic.subject_source_preparation_v1 FOR EACH STATEMENT EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_source_preparation_v1 ENABLE ALWAYS TRIGGER subject_source_preparation_truncate;
+
+
+--
+-- Name: public_filter_bootstrap subject_source_protocol; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_protocol BEFORE UPDATE OF subscription_protocol ON semantic.public_filter_bootstrap FOR EACH ROW WHEN ((new.subscription_protocol <> old.subscription_protocol)) EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: subject_source_step_v1 subject_source_step_original; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_step_original BEFORE DELETE OR UPDATE ON semantic.subject_source_step_v1 FOR EACH ROW EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_source_step_v1 ENABLE ALWAYS TRIGGER subject_source_step_original;
+
+
+--
+-- Name: subject_source_step_v1 subject_source_step_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_source_step_truncate BEFORE TRUNCATE ON semantic.subject_source_step_v1 FOR EACH STATEMENT EXECUTE FUNCTION core.retain_subject_original_v1();
+
+ALTER TABLE semantic.subject_source_step_v1 ENABLE ALWAYS TRIGGER subject_source_step_truncate;
+
+
+--
+-- Name: term_head term_head_canonical_name_delete; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name_delete AFTER DELETE ON semantic.term_head REFERENCING OLD TABLE AS changed_labels FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_canonical_label_batch();
+
+
+--
+-- Name: term_head term_head_canonical_name_insert; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name_insert AFTER INSERT ON semantic.term_head REFERENCING NEW TABLE AS changed_labels FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_canonical_label_batch();
+
+
+--
+-- Name: term_head term_head_canonical_name_move; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name_move AFTER UPDATE ON semantic.term_head FOR EACH ROW WHEN ((((old.kind = 'label'::text) OR (new.kind = 'label'::text)) AND ((new.kind <> 'label'::text) OR ((old.route IS DISTINCT FROM new.route) OR (old.subject_id IS DISTINCT FROM new.subject_id))))) EXECUTE FUNCTION semantic.capture_canonical_subject_name();
+
+
+--
+-- Name: term_head term_head_canonical_name_update; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name_update AFTER UPDATE ON semantic.term_head REFERENCING NEW TABLE AS changed_labels FOR EACH STATEMENT EXECUTE FUNCTION semantic.capture_canonical_label_batch();
 
 
 --
@@ -18534,6 +19901,46 @@ ALTER TABLE ONLY semantic.source_candidate
 
 ALTER TABLE ONLY semantic.statement_disclosure
     ADD CONSTRAINT statement_disclosure_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: subject_access_page_v1 subject_access_page_v1_birth_first_home_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_access_page_v1
+    ADD CONSTRAINT subject_access_page_v1_birth_first_home_fkey FOREIGN KEY (birth, first_home) REFERENCES core.subject_retention_page_v1(birth, first_home);
+
+
+--
+-- Name: subject_quiet_recheck_v1 subject_quiet_recheck_v1_birth_first_home_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_quiet_recheck_v1
+    ADD CONSTRAINT subject_quiet_recheck_v1_birth_first_home_fkey FOREIGN KEY (birth, first_home) REFERENCES semantic.subject_access_page_v1(birth, first_home);
+
+
+--
+-- Name: subject_source_preparation_v1 subject_source_preparation_v1_birth_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_source_preparation_v1
+    ADD CONSTRAINT subject_source_preparation_v1_birth_fkey FOREIGN KEY (birth) REFERENCES core.subject_subscription_v1(birth);
+
+
+--
+-- Name: subject_source_preparation_v1 subject_source_preparation_v1_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_source_preparation_v1
+    ADD CONSTRAINT subject_source_preparation_v1_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: subject_source_step_v1 subject_source_step_v1_birth_first_home_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_source_step_v1
+    ADD CONSTRAINT subject_source_step_v1_birth_first_home_fkey FOREIGN KEY (birth, first_home) REFERENCES semantic.subject_access_page_v1(birth, first_home);
 
 
 --

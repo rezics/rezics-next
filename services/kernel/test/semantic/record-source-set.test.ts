@@ -158,7 +158,37 @@ test('One native bounded source set enrolls every actual old current contributio
     statements: { 'schema:url': [native.cited('schema:url', 'https://example.test/ceiling')] },
   });
   native.status(ceiling, 201);
-  const full = await sourceSet(ceiling.body.subject.id, 1);
+  const ceilingId = ceiling.body.subject.id as string;
+  const owner = [routeOf(ceilingId), ceilingId];
+  const canonicalState = `SELECT s.canonical_name, p.canonical_generation FROM semantic.subject s
+    JOIN semantic.partition_subjects p ON p.partition_no=s.route/16 WHERE s.route=$1 AND s.subject_id=$2`;
+  const before = (await f.db.admin.query(canonicalState, owner)).rows[0];
+  expect(before.canonical_name).toBe('Name 0');
+  const client = await f.db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL track_functions='pl'");
+    // Withdraw the first 510 current heads together. Each signals the home twice.
+    const withdrawn = await client.query(
+      `UPDATE semantic.term_head SET active=false WHERE route=$1 AND subject_id=$2 AND kind='label' AND language<>'en-x-510'`,
+      owner,
+    );
+    expect(withdrawn.rowCount).toBe(510);
+    expect((await client.query(canonicalState, owner)).rows[0]).toEqual({
+      canonical_name: 'Name 510',
+      canonical_generation: String(BigInt(before.canonical_generation) + 1020n),
+    });
+    const refreshes = await client.query(
+      `SELECT calls::int FROM pg_stat_xact_user_functions
+       WHERE funcid='semantic.refresh_canonical_subject_name(integer,uuid)'::regprocedure`,
+    );
+    expect(refreshes.rows).toEqual([{ calls: 1 }]);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+  expect((await f.db.admin.query(canonicalState, owner)).rows[0]).toEqual(before);
+  const full = await sourceSet(ceilingId, 1);
   expect(full.snapshot.members).toBe(512);
   expect(full.members).toHaveLength(512);
   expect(full.members.filter((m) => m.kind === 'contribution')).toHaveLength(1);

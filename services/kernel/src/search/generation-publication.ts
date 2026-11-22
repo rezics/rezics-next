@@ -3,12 +3,25 @@ import {
   PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
   PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
 } from './public-filter-consumer.ts';
-import { advanceNativePublicFilterPreparation, planColdSubjectEnrollment } from './native-bindings.ts';
+import {
+  advanceNativePublicFilterPreparation,
+  captureHeldSubjectRange,
+  planColdSubjectEnrollment,
+  prepareHeldSubjectRange,
+  reconcileHeldSubjectPage,
+  reserveHeldSubjectPreparation,
+} from './native-bindings.ts';
 import {
   bindSearchWriterPublicationReader,
   nativeSourceForHeldPublication,
   readSearchWriterGenerationActions,
 } from './writer-guard.ts';
+import {
+  matchSparseSubjectKeys,
+  readSparseSubjectCut,
+  SPARSE_SUBJECT_KEYS,
+  type SparseSubjectCut,
+} from './generation-publication-sparse.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -52,7 +65,11 @@ import {
   assertNativeGenerationActionsVisible,
   GenerationReconciliationMismatch,
 } from './generations.ts';
-import { encodePublicFilterNativeState, readGenerationPublicationCustody } from './public-filter-custody.ts';
+import {
+  encodePublicFilterNativeState,
+  readGenerationPublicationCustody,
+  readWithPublicationWriterRepair,
+} from './public-filter-custody.ts';
 import {
   classifyGenerationCoverage,
   decodeGenerationPublicationQueried,
@@ -82,6 +99,7 @@ import { validateRefreshResponse } from './write-actions.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 
 export type GenerationPublicationJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
+type HeldLane = 'capture' | 'source';
 export type SearchGenerationPublication = Readonly<{
   prepare(
     consumer: PublicFilterConsumer,
@@ -93,7 +111,7 @@ export type SearchGenerationPublication = Readonly<{
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
-    options?: Readonly<{ enrollSource: boolean }>,
+    options?: Readonly<{ enrollSource: boolean; batchSource?: boolean; heldOffers?: number; heldLane?: HeldLane }>,
   ): Promise<
     | {
         status: 'progress' | 'reconciled';
@@ -102,7 +120,7 @@ export type SearchGenerationPublication = Readonly<{
         sourceAdvanced?: boolean;
         additionalEnrollmentCosts?: readonly SearchPublicFilterCost[];
       }
-    | PublicFilterConsumerUnavailable
+    | (PublicFilterConsumerUnavailable & { additionalEnrollmentCosts?: readonly SearchPublicFilterCost[] })
   >;
   activate(
     job: GenerationPublicationJob,
@@ -135,12 +153,17 @@ export type SearchGenerationPublicationConfig = Readonly<{
   meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
   subjectAckProtocol?: 1;
+  subjectSubscriptionProtocol?: 1;
   creditSearch?: CreditSearchSource;
   registry?: DiscoveryRegistry;
 }>;
 
 const validationBytes = Symbol('validationBytes');
-type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number } & { [validationBytes]: number };
+const enrollmentOffers = Symbol('enrollmentOffers');
+type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number } & {
+  [validationBytes]: number;
+  [enrollmentOffers]?: Meter[];
+};
 const cost = (): Meter => ({
   inputKeys: 0,
   candidates: 0,
@@ -181,6 +204,11 @@ const same = isDeepStrictEqual;
 class Pending extends Error {
   constructor(readonly reason: PublicFilterConsumerUnavailable['reason']) {
     super(reason);
+  }
+}
+class ChangedSparseCut extends Pending {
+  constructor(readonly cut: SparseSubjectCut) {
+    super('source_pending');
   }
 }
 const publicationLifetime = {
@@ -251,6 +279,8 @@ function bindingKey(definition: SearchPublicFilterSourceDefinition) {
   };
 }
 type Job = {
+  subscription_protocol: number;
+  subject_fenced_cut: Buffer | null;
   job: string;
   physical_target: string;
   consumer: PublicFilterConsumer;
@@ -294,7 +324,9 @@ export async function publishSubjectActivationMetadata(search: OpenSearch, index
       throw new Error('Generation activation mapping is missing or malformed');
     return meta;
   };
-  const metadata = { ...(await mapping()), name_sort_format: SUBJECT_SORT_FORMAT, activated_at: activatedAt };
+  const current = await mapping();
+  if (current.name_sort_format === SUBJECT_SORT_FORMAT && current.activated_at === activatedAt) return;
+  const metadata = { ...current, name_sort_format: SUBJECT_SORT_FORMAT, activated_at: activatedAt };
   await observedWrite(
     () => search.request('PUT', `/${index}/_mapping`, { _meta: metadata }),
     async () => same(await mapping(), metadata),
@@ -321,7 +353,14 @@ export function createSearchGenerationPublication(
   const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
   if (!nativeMeaning) requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, readPublicationCompletion, writerGuard, registry } = config;
-  bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion);
+  bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion, async (request, context) => {
+    // Reopen the exact terminal verification under the native Subject maintenance allowance.
+    // An outstanding ordinary write can only be repaired after releasing this fence.
+    const { result, writer } = await readWithPublicationWriterRepair(request.job, () =>
+      readPublicationCompletion(request, context),
+    );
+    return writer && result.status === 'pending' ? { ...result, advanced: false } : result;
+  });
   const meaning = nativeMeaning ? config.meaning : structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
@@ -367,6 +406,7 @@ export function createSearchGenerationPublication(
               : ('unready' as const),
           reason,
           cost: meter,
+          ...(meter[enrollmentOffers]?.length ? { additionalEnrollmentCosts: meter[enrollmentOffers] } : {}),
         };
       }
     });
@@ -512,6 +552,32 @@ export function createSearchGenerationPublication(
       throw new Pending('source_pending');
     return { capture, definition: resolved.definition };
   }
+  // A separately funded receiver turn can fold ready children without
+  // opening another Source observation. A miss releases the lane to repair.
+  async function prepareHeldReceiverAck(job: Job, client: PoolClient, meter: Meter) {
+    const inputLimit = 824;
+    const byteLimit = 848 * 1024;
+    meter.inputKeys += inputLimit;
+    meter.dependencyPoints += inputLimit;
+    meter[validationBytes] += byteLimit;
+    meter.resultWrites += 34;
+    const ranges = Math.floor(inputLimit / 64);
+    meter.frontierWrites += ranges;
+    const ack = await client.query<{
+      points: number;
+      proof_bytes: number;
+      range_writes: number;
+      result_writes: number;
+    }>('SELECT * FROM search.prepare_subject_ack_prefix_v1($1,$2,$3)', [job.job, inputLimit, byteLimit]);
+    const page = ack.rows[0]!;
+    meter.inputKeys -= inputLimit - page.points;
+    meter.dependencyPoints -= inputLimit - page.points;
+    meter[validationBytes] -= byteLimit - page.proof_bytes;
+    meter.resultWrites -= 34 - page.result_writes;
+    meter.frontierWrites -= ranges - page.range_writes;
+    return page.range_writes > 0;
+  }
+
   async function completeSource(
     job: Job,
     client: PoolClient,
@@ -570,6 +636,7 @@ export function createSearchGenerationPublication(
 
   function canEnrollSubject(job: Job) {
     return (
+      job.subscription_protocol !== 1 &&
       !registry &&
       job.family === 'subjects' &&
       !job.fence &&
@@ -596,6 +663,7 @@ export function createSearchGenerationPublication(
       !nativeMeaning ||
       registry ||
       job.source_home !== 0 ||
+      job.subscription_protocol === 1 ||
       job.bootstrap ||
       (capturingOnly && !hasPublicationGuard()) ||
       !advanceNativePublicFilterPreparation ||
@@ -691,6 +759,152 @@ export function createSearchGenerationPublication(
       ],
     );
     return rows.length === 1 ? rows[0]! : null;
+  }
+
+  async function enrollHeldRange(
+    ref: GenerationPublicationJob,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    limit: number,
+    lane?: HeldLane,
+  ) {
+    // Read all three committed edges under the publication session lock. A torn
+    // handoff returns to the existing single-page recovery from its original.
+    meter.inputKeys += 10;
+    meter.dependencyPoints += 10;
+    const {
+      rows: [job],
+    } = await client.query<
+      Job & {
+        birth: string;
+        original: string;
+        next_home: number;
+        next_ordinal: number;
+        end_home: number | null;
+        coverage_after: number;
+      }
+    >(
+      `SELECT j.*,m.birth::text,m.bootstrap AS original,s.next_home,s.next_ordinal,p.end_home,b.coverage_after
+       FROM search.generation_publication j JOIN core.subject_subscription_v1 m ON m.job=j.job
+       JOIN semantic.subject_source_preparation_v1 s USING(birth)
+       JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,m.bootstrap)
+       JOIN search.public_filter_coverage_preparation c ON c.bootstrap=b.bootstrap AND c.ack_protocol=1
+       LEFT JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home)=(m.birth,s.next_home)
+       WHERE (j.partition_no,j.job,j.consumer)=(0,$1,$2::jsonb) AND j.subscription_protocol=1 AND j.pass=1
+         AND j.phase='subject' AND j.fence IS NULL AND NOT j.fenced_pass AND j.observation IS NULL
+         AND j.bootstrap IS NULL AND j.pit IS NULL AND j.previous_uuid IS NULL
+         AND b.state IN ('capturing','begun') AND b.subscription_protocol=1 AND c.subscription_protocol=1
+         AND NOT c.ack_retired AND (b.coverage_after,b.coverage_root)=(c.after_home,c.root)
+         AND b.coverage_after>0 AND ($3::boolean OR b.coverage_after=(SELECT end_home FROM semantic.subject_access_page_v1
+           WHERE birth=m.birth ORDER BY first_home DESC LIMIT 1))
+         AND (b.coverage_after<4096 OR s.next_home<4096)`,
+      [ref.job, ref.consumer, lane === 'source'],
+    );
+    if (
+      !job ||
+      (lane === 'capture' && job.coverage_after === 4096) ||
+      (lane === 'source' && (job.end_home === null || job.next_home >= job.coverage_after))
+    )
+      return;
+    const member = { job: job.job, birth: job.birth, bootstrap: job.original };
+    const offers: Meter[] = [];
+    meter[enrollmentOffers] = offers;
+    const reserve = (inputs: number, writes: number) => {
+      if (offers.length + 1 >= limit) throw new RangeError('Held Subject offer exhausted');
+      const offer = cost();
+      offer.inputKeys = offer.dependencyPoints = inputs;
+      offer.frontierWrites = writes;
+      offer[validationBytes] = 2 * 65536;
+      offers.push(offer);
+      return offer;
+    };
+    let checked: Promise<void> | undefined;
+    const checkTarget = () =>
+      (checked ??= (async () => {
+        const physical = await native(job.consumer, context, validationSearch(context, meter));
+        if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
+        await adopt(job, context, meter, physical);
+      })());
+    if (job.next_home === 0 && job.next_ordinal === 0) await checkTarget();
+    const available = limit - 1;
+    const captureCount =
+      lane === 'source'
+        ? 0
+        : Math.min(Math.floor(available / (lane === 'capture' ? 2 : 4)), Math.ceil((4096 - job.coverage_after) / 32));
+    const sourceCount = Math.min(8, Math.floor((available - 2 * captureCount) / 2));
+    const captured = captureCount
+      ? (async () => {
+          for (let i = 0; i < captureCount; i++)
+            reserve(176 + 18 * Math.min(32, 4096 - job.coverage_after - 32 * i), 2);
+          await captureHeldSubjectRange(client, member, job.coverage_after, captureCount);
+        })()
+      : Promise.resolve();
+    const receive = async () => {
+      await captured;
+      for (let i = 0; i < captureCount; i++) {
+        reserve(192 + 24 * Math.min(32, 4096 - job.coverage_after - 32 * i), 3);
+        // A transaction may accept the committed predecessor and append the next original.
+        const result = await client.query<{ homes: number }>(
+          i === 0
+            ? 'SELECT search.advance_subject_receiver_v1($1,32) AS homes'
+            : `WITH accepted AS MATERIALIZED (SELECT semantic.accept_subject_receiver_page_v1($1) AS homes)
+           SELECT search.advance_subject_receiver_v1($1,32) AS homes FROM accepted WHERE homes>0`,
+          [job.job],
+        );
+        if (!result.rows[0]?.homes) throw new Pending('source_pending');
+      }
+      if (captureCount) await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+    };
+    const settle = async (
+      obligations: readonly { partition: number; position: string; ids: readonly string[] }[],
+      offer: Meter,
+    ) => {
+      try {
+        await checkTarget();
+        for (const { partition, ids, position } of obligations)
+          await reconcile(job, partition, ids, undefined, BigInt(position), context, offer, true);
+        return true;
+      } catch (error) {
+        if (error instanceof Pending && error.reason === 'source_pending') return false;
+        throw error;
+      }
+    };
+    const scan = async () => {
+      if (job.next_home >= job.coverage_after) await captured;
+      if (job.next_ordinal === 0)
+        return prepareHeldSubjectRange(
+          pool,
+          member,
+          job.next_home,
+          sourceCount,
+          context,
+          (homes) => reserve(176 + 18 * homes, 2),
+          settle,
+          (homes) => reserve(176 + 18 * homes, 3),
+        );
+      if (job.end_home === null) throw new Pending('source_pending');
+      const offer = reserve(176 + 18 * (job.end_home - job.next_home), 2);
+      try {
+        await reconcileHeldSubjectPage(
+          pool,
+          { ...member, firstHome: job.next_home, endHome: job.end_home, ordinal: job.next_ordinal },
+          context,
+          async (obligation) => {
+            if (!(await settle([obligation], offer))) throw new Pending('source_pending');
+          },
+        );
+        return true;
+      } catch (error) {
+        if (error instanceof Pending && error.reason === 'source_pending') return false;
+        throw error;
+      }
+    };
+    const [receiver, source] = await Promise.allSettled([receive(), lane === 'capture' ? false : scan()]);
+    if (receiver.status === 'rejected') throw receiver.reason;
+    if (source.status === 'rejected') throw source.reason;
+    if (!captureCount && !source.value) throw new Pending('source_pending');
+    return job;
   }
 
   async function subjectEnrollmentPage(
@@ -849,7 +1063,7 @@ export function createSearchGenerationPublication(
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
     return nativeSourceForHeldPublication(result);
   }
-  async function adoptHeld(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
+  async function adoptHeld(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
     let pin = await held(job, context, meter);
     await adopt(job, context, meter);
     if (!pin) {
@@ -862,14 +1076,85 @@ export function createSearchGenerationPublication(
     const retained = jobPin(job);
     if (retained && !sameGenerationPublicationPin(retained, pin)) throw new Pending('source_pending');
     if (!retained) persistPin(job, pin);
+    if (job.subject_fenced_cut) {
+      const current = await sparseCut(job, client, context, meter);
+      if (!current || current === 'dense') throw new Pending('source_pending');
+      if (!current.digest.equals(job.subject_fenced_cut)) throw new ChangedSparseCut(current);
+    }
     return pin.queried;
   }
+  async function confirmHeldIntent(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    currentAlias: string | null,
+    proofCosts?: Meter[],
+  ): Promise<boolean> {
+    let opened: SparseSubjectCut;
+    try {
+      await adoptHeld(job, client, context, meter);
+      return true;
+    } catch (error) {
+      // An exposed or replaced alias retains its rollback intent.
+      if (!(error instanceof ChangedSparseCut) || currentAlias !== null) throw error;
+      opened = error.cut;
+    }
+    if (proofCosts) {
+      const physical = cost();
+      proofCosts.push(physical);
+      let cut: Buffer | null = null;
+      try {
+        cut = await reconcileSparseSubject(job, client, context, physical, opened);
+      } catch (error) {
+        if (
+          !(error instanceof SearchUnavailableError || (error instanceof Pending && error.reason === 'source_pending'))
+        )
+          throw error;
+      }
+      if (cut) {
+        // Reopen the original Source between matching physical cuts before switching.
+        const confirmation = cost();
+        proofCosts.push(confirmation);
+        job.subject_fenced_cut = cut;
+        try {
+          await adoptHeld(job, client, context, confirmation);
+        } catch (error) {
+          if (!(error instanceof ChangedSparseCut)) throw error;
+          cut = null;
+        }
+        if (cut) {
+          await save(client, job, confirmation);
+          return true;
+        }
+      }
+    }
+    // The absent alias needs no rollback. Continue with the paged physical proof
+    // on this drained fence. A required ordinary write still cancels through restart.
+    if ((await aliasTarget(job, context, meter)) !== null) throw new Pending('source_pending');
+    job.subject_fenced_cut = null;
+    job.home = 0;
+    job.phase = 'subject';
+    await save(client, job, meter);
+    return false;
+  }
   async function save(client: PoolClient, job: Job, meter: Meter) {
+    // A stale publication or a released/replaced writer must never commit a sparse frontier.
+    const gate =
+      job.subject_fenced_cut && job.fence
+        ? ` AND EXISTS (
+         SELECT FROM search.identity_writer_gate g JOIN core.partition p ON p.partition_no=0
+           AND p.write_state='active' AND p.epoch=g.owner_epoch
+         WHERE (g.partition_no,g.physical_target,g.incarnation,g.publication_job,g.publication_fence,
+                g.publication_consumer,g.publication_home) =
+               (0,j.physical_target,j.native_incarnation,j.job,$9::text::uuid,j.consumer,4096)
+           AND g.publication_after IS NULL FOR SHARE OF g,p)`
+        : '';
     const result = await client.query(
-      `UPDATE search.generation_publication SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
+      `UPDATE search.generation_publication AS j SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
        pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,
-       bootstrap=$16,queried=$17,execution=$18,revision=revision+1
-       WHERE partition_no=0 AND job=$1 AND revision=$2 RETURNING revision::text`,
+       bootstrap=$16,queried=$17,execution=$18,subject_fenced_cut=$19,revision=revision+1
+       WHERE j.partition_no=0 AND j.job=$1 AND j.revision=$2${gate} RETURNING j.revision::text`,
       [
         job.job,
         job.revision,
@@ -889,6 +1174,7 @@ export function createSearchGenerationPublication(
         job.bootstrap,
         job.queried,
         job.execution,
+        job.subject_fenced_cut,
       ],
     );
     if (!result.rows[0]) throw new Pending('observation_lost');
@@ -908,6 +1194,9 @@ export function createSearchGenerationPublication(
       enrollment?: boolean | 'sealed',
       additionalEnrollmentCosts?: readonly SearchPublicFilterCost[],
     ) => Promise<T>,
+    batchHeld = false,
+    heldOffers = 16,
+    heldLane?: HeldLane,
   ): Promise<T> {
     const ref = structuredClone(input);
     const target = locator(ref.consumer);
@@ -916,6 +1205,10 @@ export function createSearchGenerationPublication(
     const lockKey = target.family === 'subjects' ? subjectAlias(target.prefix) : ref.job;
     // This is a maintenance session lock, not a command transaction. Native owners acquire their own
     // bounded snapshot connections; do not wrap them in withConnection's single-command checkout scope.
+    // The two enrollment owners may run together. Each has one writer per alias,
+    // and every ordinary publication operation still requires exclusive custody.
+    const aliasMode = heldLane ? '_shared' : '';
+    const laneKey = heldLane ? JSON.stringify([lockKey, heldLane]) : undefined;
     let connection: PoolClient | undefined;
     let released = false;
     let broken: Error | undefined;
@@ -949,19 +1242,193 @@ export function createSearchGenerationPublication(
           withRequestDeadline(context.deadline, async () => {
             mayOwnLock = true;
             const lock = await client.query<{ locked: boolean }>(
-              'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
+              `SELECT pg_try_advisory_lock${aliasMode}(hashtextextended($1,2)) AS locked`,
               [lockKey],
             );
             mayOwnLock = lock.rows[0]?.locked !== false;
             if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
+            let laneLocked = false;
             try {
+              if (laneKey) {
+                // A lost query reply can leave this session owning the lane.
+                laneLocked = true;
+                const lane = await client.query<{ locked: boolean }>(
+                  'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
+                  [laneKey],
+                );
+                laneLocked = lane.rows[0]?.locked !== false;
+                if (lane.rows[0]?.locked !== true) throw new Pending('source_pending');
+              }
+              if (batchHeld && phase === 'step-enroll' && heldOffers >= 5) {
+                const enrolled = await enrollHeldRange(ref, client, context, meter, heldOffers, heldLane);
+                if (enrolled) return work(enrolled, client, null, undefined, true, meter[enrollmentOffers]);
+              }
+              // Only the exclusive owner may recover a torn receipt or change phase.
+              if (heldLane) throw new Pending('source_pending');
               const {
                 rows: [job],
-              } = await client.query<Job>(
-                'SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+              } = await client.query<
+                Job & {
+                  held_birth: string | null;
+                  held_bootstrap: string | null;
+                  coverage_after: number | null;
+                  next_home: number | null;
+                  next_ordinal: number | null;
+                  end_home: number | null;
+                }
+              >(
+                `SELECT * FROM search.generation_publication j
+                 LEFT JOIN LATERAL (
+                   SELECT m.birth::text AS held_birth,m.bootstrap AS held_bootstrap,
+                     s.next_home,s.next_ordinal,p.end_home,b.coverage_after
+                   FROM core.subject_subscription_v1 m
+                   JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,m.bootstrap)
+                   JOIN semantic.subject_source_preparation_v1 s ON (s.birth,s.bootstrap)=(m.birth,m.bootstrap)
+                   LEFT JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home)=(s.birth,s.next_home)
+                   WHERE m.job=j.job LIMIT 1
+                 ) held ON true
+                 WHERE (j.partition_no,j.job)=(0,$1)`,
                 [ref.job],
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
+              const receiveCut = async (homes: number, receiver: Meter) => {
+                // Search's committed comparison and Source's acceptance trigger
+                // each reopen the original interval. Reserve both before dispatch.
+                receiver.inputKeys += 192 + homes * 24;
+                receiver.dependencyPoints += 192 + homes * 24;
+                const page = await client.query<{ homes: number }>(
+                  'SELECT search.advance_subject_receiver_v1($1,$2) AS homes',
+                  [job.job, homes],
+                );
+                const covered = page.rows[0]!.homes;
+                receiver.inputKeys -= (homes - covered) * 24;
+                receiver.dependencyPoints -= (homes - covered) * 24;
+                if (covered) receiver.frontierWrites += 3;
+                return covered;
+              };
+              if (job.subscription_protocol === 1 && job.pass === '1' && job.phase === 'subject') {
+                if (!job.held_birth || job.coverage_after === null || job.next_home === null)
+                  throw new Pending('source_pending');
+                const pin = await client.query<{ ready: boolean }>(
+                  'SELECT search.begin_subject_receiver_v1($1,$2) AS ready',
+                  [job.job, encodePublicFilterNativeState(job.consumer)],
+                );
+                meter.inputKeys += 16;
+                meter.dependencyPoints += 16;
+                if (!pin.rows[0]?.ready) throw new Pending('source_pending');
+                // Recover the same retained page if either owner's previous
+                // reply was lost. A fresh page starts with Source capture below.
+                if (
+                  job.coverage_after < job.next_home ||
+                  (job.coverage_after === job.next_home && job.end_home !== null)
+                ) {
+                  const homes = Math.min(32, Math.floor((1000 - meter.inputKeys - 192) / 24));
+                  if (await receiveCut(homes, meter)) {
+                    await client.query('SELECT semantic.accept_subject_receiver_page_v1($1)', [job.job]);
+                    return work(job, client, null, undefined, true);
+                  }
+                }
+              }
+              if (job.held_birth != null && (job.subscription_protocol !== 1 || job.next_home !== 4096)) {
+                if (
+                  phase === 'activate' ||
+                  job.family !== 'subjects' ||
+                  job.phase !== 'subject' ||
+                  job.pass !== '1' ||
+                  job.fence ||
+                  job.observation ||
+                  job.bootstrap ||
+                  job.pit ||
+                  !job.held_bootstrap ||
+                  job.next_home === null ||
+                  job.next_home === 4096 ||
+                  job.next_ordinal === null
+                )
+                  throw new Pending('source_pending');
+                // Source reopens the job and the original Core/Access page on every ordinal.
+                // After admission, reopen physical custody on the first writer obligation of each turn.
+                let checkedWriterTarget = false;
+                const checkWriterTarget = async () => {
+                  if (checkedWriterTarget) return;
+                  const physical = await native(job.consumer, context, validationSearch(context, meter));
+                  if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
+                  await adopt(job, context, meter, physical);
+                  checkedWriterTarget = true;
+                };
+                if (job.subscription_protocol !== 1 || (job.next_home === 0 && job.next_ordinal === 0))
+                  await checkWriterTarget();
+                // Reserve the capture, original owner checks, 32 inventory keys or
+                // event slots and the closing custody comparison before dispatch.
+                const fixedInputs = 176;
+                const perHomeInputs = 18;
+                const available = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys - 5 * 32;
+                const width = Math.min(32, Math.floor((available - fixedInputs) / perHomeInputs));
+                // A retained short cut can end inside an authority interval.
+                // Close that suffix before capturing further full intervals.
+                const remaining = batchHeld && job.subscription_protocol === 1 ? 32 - (job.next_home % 32) : 32;
+                const endHome = job.end_home ?? Math.min(4096, job.next_home + Math.min(width, remaining));
+                const inputs = fixedInputs + perHomeInputs * (endHome - job.next_home);
+                if (endHome <= job.next_home || inputs > available) throw new Pending('source_pending');
+                meter.inputKeys += inputs;
+                meter.dependencyPoints += inputs;
+                const frontier = {
+                  job: job.job,
+                  bootstrap: job.held_bootstrap,
+                  birth: job.held_birth,
+                  firstHome: job.next_home,
+                  endHome,
+                  ordinal: job.next_ordinal,
+                };
+                const additional: Meter[] = [];
+                await reconcileHeldSubjectPage(
+                  pool,
+                  frontier,
+                  context,
+                  async (obligation) => {
+                    await checkWriterTarget();
+                    await reconcile(
+                      job,
+                      obligation.partition,
+                      obligation.ids,
+                      undefined,
+                      BigInt(obligation.position),
+                      context,
+                      meter,
+                      true,
+                    );
+                  },
+                  batchHeld && job.subscription_protocol === 1 && job.coverage_after === job.next_home
+                    ? () => {
+                        const receiver = cost();
+                        additional.push(receiver);
+                        return receiveCut(endHome - frontier.firstHome, receiver);
+                      }
+                    : undefined,
+                );
+                meter.frontierWrites++;
+                return work(job, client, null, undefined, true, additional);
+              }
+              if (
+                job.subscription_protocol === 1 &&
+                job.next_home === 4096 &&
+                job.phase === 'subject' &&
+                job.pass === '1' &&
+                job.home === 0 &&
+                !job.fence &&
+                !job.pit &&
+                !job.after_id &&
+                !job.previous_uuid
+              ) {
+                const sealed = await client.query(
+                  "SELECT 1 FROM semantic.public_filter_bootstrap WHERE (partition_no,bootstrap)=(0,$1) AND coverage_sealed AND state='begun'",
+                  [job.held_bootstrap],
+                );
+                if (!sealed.rowCount) throw new Pending('source_pending');
+                // The producer reconciled the complete original inventory through finite creation ends.
+                // The engine pass and the subsequent held pass still compare the ordinary physical target.
+                job.phase = 'engine';
+                await save(client, job, meter);
+              }
               const earlyEnrollment =
                 phase === 'step-enroll' && canEnrollSubject(job) && !job.bootstrap && !job.queried && !job.execution;
               const physical =
@@ -1102,10 +1569,24 @@ export function createSearchGenerationPublication(
                   if (result.status === 'rejected' && !(result.reason instanceof Pending)) throw result.reason;
                 return work(job, client, current, capture, true, additionalEnrollmentCosts);
               }
-              return await work(job, client, current, adopted?.capture);
+              const sealed =
+                batchHeld &&
+                job.subscription_protocol === 1 &&
+                job.pass === '1' &&
+                job.phase === 'validate' &&
+                job.next_home === 4096 &&
+                job.coverage_after === 4096;
+              return await work(job, client, current, adopted?.capture, sealed ? 'sealed' : undefined);
             } finally {
+              if (laneLocked) {
+                const released = await client.query<{ unlocked: boolean }>(
+                  'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
+                  [laneKey],
+                );
+                if (!released.rows[0]?.unlocked) throw new Error('Held enrollment lane lock was not released');
+              }
               const unlocked = await client.query<{ unlocked: boolean }>(
-                'SELECT pg_advisory_unlock(hashtextextended($1,2)) AS unlocked',
+                `SELECT pg_advisory_unlock${aliasMode}(hashtextextended($1,2)) AS unlocked`,
                 [lockKey],
               );
               if (unlocked.rows[0]?.unlocked !== true)
@@ -1211,13 +1692,19 @@ export function createSearchGenerationPublication(
     before: Home,
     client: PoolClient,
     meter: Meter,
-    verifyChanged?: () => Promise<boolean>,
+    verifyChanged?: () => Promise<Home | undefined>,
   ) {
     const {
       rows: [old],
     } = await client.query<Home>(
       `SELECT partition_no AS partition,epoch,position::text,account_revision::text,claim_revision::text
-      FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3`,
+      FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3 ${
+        job.subscription_protocol === 1 && job.pass === '1'
+          ? `UNION ALL
+        SELECT home,epoch,command_base::text,'0','0' FROM search.subject_original_physical_homes_v1($2,$1,$1+1)
+        WHERE NOT EXISTS (SELECT FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2 AND pass=$3)`
+          : ''
+      }`,
       [before.partition, job.job, job.pass],
     );
     const changed = old && !same(old, before);
@@ -1225,15 +1712,13 @@ export function createSearchGenerationPublication(
     const sameOwnerAdvance = old && advancedUnderSubjectFence(job, old, before.epoch, BigInt(before.position));
     const startsSubjectHome =
       job.family === 'subjects' && job.phase === 'subject' && !job.after_id && (!job.fenced_pass || sameOwnerAdvance);
-    const replayed =
-      changed &&
-      verifyChanged !== undefined &&
-      old.epoch === before.epoch &&
-      BigInt(old.position) < BigInt(before.position) &&
-      (await verifyChanged());
+    const verified =
+      changed && verifyChanged && old.epoch === before.epoch && BigInt(old.position) < BigInt(before.position)
+        ? await verifyChanged()
+        : undefined;
     const missingCursorWitness =
       !old && job.family === 'subjects' && job.phase === 'subject' && !job.fenced_pass && job.after_id !== null;
-    if (missingCursorWitness || (changed && !startsSubjectHome && !replayed)) {
+    if (missingCursorWitness || (changed && !startsSubjectHome && !verified)) {
       if (sameOwnerAdvance) {
         await rewindSubjectHome(job, before.partition, client, meter);
         return 'rewound';
@@ -1250,24 +1735,25 @@ export function createSearchGenerationPublication(
       throw new Pending('source_pending');
     }
     if (!old || changed) {
+      const witness = verified ?? before;
       const stored = await client.query(
         `INSERT INTO search.generation_publication_home
       (partition_no,job,epoch,position,account_revision,claim_revision,pass) VALUES($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
         account_revision=EXCLUDED.account_revision,claim_revision=EXCLUDED.claim_revision,pass=EXCLUDED.pass`,
         [
-          before.partition,
+          witness.partition,
           job.job,
-          before.epoch,
-          before.position,
-          before.account_revision,
-          before.claim_revision,
+          witness.epoch,
+          witness.position,
+          witness.account_revision,
+          witness.claim_revision,
           job.pass,
         ],
       );
       meter.frontierWrites += stored.rowCount ?? 0;
     }
-    return replayed === true ? 'verified' : 'retained';
+    return verified ? 'verified' : 'retained';
   }
   function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
@@ -1292,14 +1778,36 @@ export function createSearchGenerationPublication(
     position: bigint,
     meter: Meter,
     workContext?: PublicFilterConsumerContext,
-    wholeHome = false,
+    scope: 'keys' | 'original' | 'home' = 'keys',
   ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
     meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
+    const wholeHome = scope === 'home';
+    const started = Date.now();
+    const retryHomeAdvance = () => {
+      // Keep the remaining 32-key original and its physical comparisons funded.
+      // Only the raced home repeats its Source, listing and custody reads.
+      const inputs = 3 * ids.length;
+      if (
+        meter.inputKeys + inputs + 4 * 32 > PUBLIC_FILTER_PREPARATION_INPUT_LIMIT ||
+        !workContext ||
+        Date.now() + (Date.now() - started) >= workContext.deadline
+      )
+        return false;
+      meter.inputKeys += inputs;
+      return true;
+    };
     const work = workContext && (() => validationWork(workContext, meter));
     const actions =
       wholeHome && !ids.length
         ? []
-        : await readSearchWriterGenerationActions(writerGuard, partition, ids, position, work);
+        : await readSearchWriterGenerationActions(
+            writerGuard,
+            partition,
+            ids,
+            position,
+            work,
+            scope === 'original' ? retryHomeAdvance : undefined,
+          );
     if (!actions) {
       return 'writer-pending';
     }
@@ -1326,26 +1834,33 @@ export function createSearchGenerationPublication(
     ids: readonly string[],
     context: PublicFilterConsumerContext,
     meter: Meter,
-  ): Promise<boolean> {
+  ): Promise<Home | undefined> {
     // A complete Source page can fit in this turn only if there is room for a lookahead
     // key, the exact writer comparison and the remaining turn's ordinary engine keys.
     const inputLimit = ids.length + 1;
-    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return false;
+    if (inputLimit > PAGE || meter.inputKeys + inputLimit + 4 * PAGE > 1000) return;
     const page = await sourceKeys.read({ partition: before.partition, after: null, inputLimit }, context);
     add(meter, page.cost);
+    const originalPass = job.subscription_protocol === 1 && job.pass === '1' && !job.fenced_pass;
     if (
       page.status !== 'eligible' ||
       !page.complete ||
       page.partition !== before.partition ||
       page.epoch !== before.epoch ||
-      page.position !== BigInt(before.position) ||
+      (originalPass ? page.position < BigInt(before.position) : page.position !== BigInt(before.position)) ||
       !same([...page.ids].sort(), [...ids].sort())
     ) {
-      return false;
+      return;
     }
     check(context);
     const verified = await verifySubjectKeys(job, before.partition, ids, page.position, meter);
-    return verified === 'matched' && same(before, await head(before.partition, context));
+    if (verified !== 'matched') return;
+    const witness = { ...before, position: page.position.toString() };
+    const after = await head(before.partition, context);
+    // Validation reopens every original home. Preserve exactly the verified Source
+    // position so any concurrent command still owes that later comparison.
+    if (originalPass && after.epoch === witness.epoch && BigInt(after.position) >= page.position) return witness;
+    return same(witness, after) ? witness : undefined;
   }
   async function reconcile(
     job: Job,
@@ -1367,15 +1882,17 @@ export function createSearchGenerationPublication(
         position,
         meter,
         checkingEnrollment ? context : undefined,
+        checkingEnrollment ? 'original' : 'keys',
       );
       if (verified === 'matched') return;
-      // Subject population first waits for ordinary settlement to avoid competing for its initial write.
-      // A settled copy can still lag a native projection that finished preparing after that write.
-      // Repair the mismatch through the ordinary writer while the generation remains open.
-      if (checkingEnrollment || job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
-        throw new Pending('source_pending');
+      if (checkingEnrollment || job.fenced_pass) throw new Pending('source_pending');
       // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
+        if (job.phase === 'subject' && verified === 'writer-pending') {
+          // Recover only a retained ordinary dispatch. The next page read must verify the changed home.
+          if (await writerGuard.recoverRelayDispatch?.(partition, ids, context)) meter.resultWrites++;
+          throw new Pending('source_pending');
+        }
         await writerGuard.write(partition, ids, position);
       } catch (error) {
         if (error instanceof IdentityEpochStoreError && error.code === 'identity_epoch_unavailable')
@@ -1487,7 +2004,7 @@ export function createSearchGenerationPublication(
       return false;
     }
     try {
-      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context, true);
+      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context, 'home');
       if (result !== 'matched') return false;
     } catch (error) {
       if (error instanceof SearchUnavailableError) return false;
@@ -1517,25 +2034,48 @@ export function createSearchGenerationPublication(
     // An empty Subject home without writer custody can be witnessed at its current position.
     // The completed engine pass accounted for existing keys. Occupied homes and homes that
     // may own an engine copy still replay on any change.
+    const originalHomes = job.subscription_protocol === 1 && job.pass === '1';
     const query = `WITH homes AS (
          SELECT h.partition_no AS partition,h.epoch,h.position,h.account_revision,h.claim_revision,
                 p.epoch AS current_epoch,p.position AS current_position,p.write_state
-           FROM search.generation_publication_home h
+           FROM ${
+             originalHomes
+               ? `(
+             SELECT partition_no,job,pass,epoch,position,account_revision,claim_revision
+               FROM search.generation_publication_home WHERE partition_no >= $1 AND partition_no < $2 AND job=$3 AND pass=$4
+             UNION ALL SELECT home,$3,$4,epoch,command_base,0,0 FROM search.subject_original_physical_homes_v1($3,$1,$2) original
+               WHERE NOT EXISTS (SELECT FROM search.generation_publication_home changed
+                 WHERE (changed.partition_no,changed.job,changed.pass)=(original.home,$3,$4))
+           )`
+               : 'search.generation_publication_home'
+           } h
            LEFT JOIN core.partition p ON p.partition_no=h.partition_no
           WHERE h.partition_no >= $1 AND h.partition_no < $2 AND h.job=$3 AND h.pass=$4
        ),
        refreshed AS (
-         UPDATE search.generation_publication_home h
-            SET position=homes.current_position
+         ${
+           originalHomes
+             ? `INSERT INTO search.generation_publication_home AS h
+               (partition_no,job,pass,epoch,position,account_revision,claim_revision)
+              SELECT homes.partition,$3,$4,homes.epoch,homes.current_position,homes.account_revision,homes.claim_revision`
+             : `UPDATE search.generation_publication_home h SET position=homes.current_position`
+         }
            FROM homes
            LEFT JOIN semantic.partition_subjects s ON s.partition_no=homes.partition
-          WHERE $5::text IS NOT NULL AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition
+          WHERE $5::text IS NOT NULL
+            ${originalHomes ? '' : 'AND h.job=$3 AND h.pass=$4 AND h.partition_no=homes.partition'}
             AND homes.epoch=homes.current_epoch AND homes.write_state='active'
             AND homes.position<homes.current_position AND coalesce(s.visible,0)=0
             AND NOT EXISTS (
               SELECT 1 FROM search.identity_writer w
               WHERE w.physical_target=$5 AND w.partition_no=homes.partition
             )
+          ${
+            originalHomes
+              ? `ON CONFLICT (partition_no,job) DO UPDATE SET position=EXCLUDED.position
+             WHERE h.pass=EXCLUDED.pass AND h.epoch=EXCLUDED.epoch AND h.position<EXCLUDED.position`
+              : ''
+          }
          RETURNING h.partition_no
        )
        SELECT homes.partition,homes.epoch,
@@ -1664,6 +2204,73 @@ export function createSearchGenerationPublication(
     }
     await recheckTarget();
     await save(client, job, meter);
+  }
+
+  function sparseCut(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+    // One lookahead over raw keys and their owners, five four-lane clocks,
+    // the receiver root and fixed job, membership and admission points.
+    const inputs = 2 * (SPARSE_SUBJECT_KEYS + 1) + 32;
+    if (meter.inputKeys + inputs > PUBLIC_FILTER_PREPARATION_INPUT_LIMIT) throw new Pending('dependency_unavailable');
+    meter.inputKeys += inputs;
+    meter.dependencyPoints += inputs;
+    // The bounded SQL statement, fixed-width native rows and digest operands.
+    meter[validationBytes] += SUBJECT_VALIDATION_SQL_BYTES + (SPARSE_SUBJECT_KEYS + 1) * SUBJECT_VALIDATION_ROW_BYTES;
+    return readSparseSubjectCut(client, validationSearch(context, meter), fence(job));
+  }
+
+  async function reconcileSparseSubject(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    opened?: SparseSubjectCut,
+  ) {
+    const before = opened ?? (await sparseCut(job, client, context, meter));
+    if (before === 'dense') return null;
+    if (!before) throw new Pending('source_pending');
+    const transport = validationSearch(context, meter);
+    const refresh = await transport.request('POST', `/${job.physical_target}/_refresh`);
+    validateRefreshResponse(refresh.status, refresh.body);
+    const visible = new Set<string>();
+    let matched = true;
+    for (const [partition, rows] of Map.groupBy(before.keys, (row) => row.home)) {
+      const page = await sourceKeys.read({ partition, after: null, inputLimit: rows.length + 1 }, context);
+      add(meter, page.cost);
+      const { epoch, position } = rows[0]!;
+      if (
+        page.status !== 'eligible' ||
+        !page.complete ||
+        page.partition !== partition ||
+        page.epoch !== epoch ||
+        page.position !== BigInt(position)
+      )
+        throw new Pending('source_pending');
+      if (!page.ids.length) continue;
+      meter.inputKeys += 3 * page.ids.length;
+      const actions = await readSearchWriterGenerationActions(writerGuard, partition, page.ids, page.position, () =>
+        validationWork(context, meter),
+      );
+      if (!actions) throw new Pending('source_pending');
+      for (const action of actions) if (action.op === 'index') visible.add(action.id);
+      meter.engineSearches++;
+      try {
+        meter.inputKeys += await assertNativeGenerationActionsVisible(transport, job.physical_target, actions);
+      } catch (error) {
+        if (!(error instanceof GenerationReconciliationMismatch)) throw error;
+        matched = false;
+        break;
+      }
+    }
+    if (matched)
+      matched = await matchSparseSubjectKeys(transport, job.physical_target, visible, (count) => {
+        meter.engineSearches++;
+        meter.engineIteratorSteps++;
+        meter.inputKeys += count;
+      });
+    const current = await sparseCut(job, client, context, meter);
+    if (current === 'dense') return null;
+    if (!current || !before.digest.equals(current.digest)) throw new Pending('source_pending');
+    return matched ? current.digest : null;
   }
 
   async function advance(
@@ -1842,46 +2449,52 @@ export function createSearchGenerationPublication(
       const sources = (job.family === 'discovery' ? ['id', 'owner', 'kind'] : ['id']).map((field) => ({
         [field]: { terms: { field, missing_bucket: true } },
       }));
-      let response: { status: number; body: unknown };
-      try {
-        response = await engine<unknown>(context, meter, 'POST', '/_search', {
-          // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
-          // Keep one metadata-only hit and use only the composite buckets for reconciliation.
-          size: 1,
-          _source: false,
-          track_total_hits: false,
-          pit: { id: job.pit, keep_alive: '5m' },
-          aggs: {
-            keys: {
-              composite: { size: PAGE, sources, ...(job.engine_after ? { after: job.engine_after } : {}) },
-              aggs: { row: { top_hits: { size: 1, version: true } } },
+      const readPage = async (size: number, withHits: boolean) => {
+        let response: { status: number; body: unknown };
+        try {
+          response = await engine<unknown>(context, meter, 'POST', '/_search', {
+            // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
+            // Keep one metadata-only hit and use only the composite buckets for reconciliation.
+            size: 1,
+            _source: false,
+            track_total_hits: false,
+            pit: { id: job.pit, keep_alive: '5m' },
+            aggs: {
+              keys: {
+                composite: { size, sources, ...(job.engine_after ? { after: job.engine_after } : {}) },
+                ...(withHits && { aggs: { row: { top_hits: { size: 1, version: true } } } }),
+              },
             },
-          },
-        });
-      } catch (error) {
-        if (error instanceof OpenSearchError && error.status === 404) {
-          // An expired enumeration PIT restarts this finite pass, never skips to its old frontier.
-          job.pit = null;
-          job.engine_after = null;
-          await save(client, job, meter);
-          throw new Pending('observation_lost');
+          });
+        } catch (error) {
+          if (error instanceof OpenSearchError && error.status === 404) {
+            // An expired enumeration PIT restarts this finite pass, never skips to its old frontier.
+            job.pit = null;
+            job.engine_after = null;
+            await save(client, job, meter);
+            throw new Pending('observation_lost');
+          }
+          throw error;
         }
-        throw error;
-      }
-      assertCompleteSearch(response.body);
-      if (object(response.body) && response.body.pit_id !== undefined) {
-        if (typeof response.body.pit_id !== 'string' || !response.body.pit_id) throw new Pending('source_pending');
-        job.pit = response.body.pit_id;
-      }
-      if (!object(response.body) || !object(response.body.aggregations) || !object(response.body.aggregations.keys))
-        throw new Pending('source_pending');
-      const page = response.body.aggregations.keys;
-      if (!Array.isArray(page.buckets) || page.buckets.length > PAGE) throw new Pending('source_pending');
-      // Composite after_key is native enumeration state. No returned hit length or total certifies exhaustion.
-      const next = page.after_key;
-      if (next !== undefined && (!object(next) || same(next, job.engine_after))) throw new Pending('source_pending');
-      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryUnionKey[] }>();
-      for (const bucket of page.buckets) {
+        assertCompleteSearch(response.body);
+        if (object(response.body) && response.body.pit_id !== undefined) {
+          if (typeof response.body.pit_id !== 'string' || !response.body.pit_id) throw new Pending('source_pending');
+          job.pit = response.body.pit_id;
+        }
+        if (!object(response.body) || !object(response.body.aggregations) || !object(response.body.aggregations.keys))
+          throw new Pending('source_pending');
+        const page = response.body.aggregations.keys;
+        if (!Array.isArray(page.buckets) || page.buckets.length > size) throw new Pending('source_pending');
+        // Composite after_key is native enumeration state. No returned hit length or total certifies exhaustion.
+        const next = page.after_key;
+        if (next !== undefined && (!object(next) || same(next, job.engine_after))) throw new Pending('source_pending');
+        meter.inputKeys += page.buckets.length;
+        meter.engineIteratorSteps++;
+        return { buckets: page.buckets, after: next };
+      };
+      const page = await readPage(PAGE, true);
+      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryUnionKey[]; first: number }>();
+      for (const [index, bucket] of page.buckets.entries()) {
         if (
           !object(bucket) ||
           bucket.doc_count !== 1 ||
@@ -1914,13 +2527,11 @@ export function createSearchGenerationPublication(
           if (hit._source.partition !== partition) throw new Pending('source_pending');
         }
         const groupKey = `${partition}:${key?.owner ?? 'semantic'}`;
-        const group = grouped.get(groupKey) ?? { partition, ids: [], keys: [] };
+        const group = grouped.get(groupKey) ?? { partition, ids: [], keys: [], first: index };
         group.ids.push(id);
         if (key) group.keys.push(key);
         grouped.set(groupKey, group);
       }
-      meter.inputKeys += page.buckets.length;
-      meter.engineIteratorSteps++;
       for (const group of grouped.values()) {
         const coverage = classifyGenerationCoverage(
           job.family === 'discovery' ? group.keys.map((key) => key.id) : group.ids,
@@ -1928,9 +2539,37 @@ export function createSearchGenerationPublication(
         );
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
-        const verifyChanged =
-          job.family === 'subjects' ? () => verifyChangedEngineHome(job, before, group.ids, context, meter) : undefined;
-        const remembered = await remember(job, before, client, meter, verifyChanged);
+        const verifyChanged = async () => {
+          const witness = await verifyChangedEngineHome(job, before, group.ids, context, meter);
+          if (
+            !witness &&
+            job.subscription_protocol === 1 &&
+            job.pass === '1' &&
+            group.first > 0 &&
+            meter.inputKeys + group.first <= PUBLIC_FILTER_PREPARATION_INPUT_LIMIT
+          ) {
+            // Earlier groups passed their complete writer comparisons on this PIT.
+            // Ask the engine for the cursor of their contiguous prefix before rewinding.
+            const prefix = await readPage(group.first, false);
+            if (
+              prefix.after &&
+              prefix.buckets.length === group.first &&
+              prefix.buckets.every(
+                (bucket, i) => object(bucket) && bucket.doc_count === 1 && same(bucket.key, page.buckets[i].key),
+              )
+            ) {
+              job.engine_after = prefix.after;
+            }
+          }
+          return witness;
+        };
+        const remembered = await remember(
+          job,
+          before,
+          client,
+          meter,
+          job.family === 'subjects' ? verifyChanged : undefined,
+        );
         if (remembered === 'rewound') return;
         if (remembered === 'verified') continue;
         const discoveryKeys =
@@ -1939,10 +2578,15 @@ export function createSearchGenerationPublication(
             : undefined;
         if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
         await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
-        if (!same(before, await head(group.partition, context))) throw new Pending('source_pending');
+        const observed = await head(group.partition, context);
+        if (!same(before, observed)) {
+          if (advancedUnderSubjectFence(job, before, observed.epoch, BigInt(observed.position)))
+            return rewindSubjectHome(job, before.partition, client, meter);
+          throw new Pending('source_pending');
+        }
       }
-      job.engine_after = (next as Record<string, unknown> | undefined) ?? null;
-      if (next === undefined) {
+      job.engine_after = page.after ?? null;
+      if (page.after === undefined) {
         await discardPit(job, context, meter);
         job.phase = 'validate';
         job.home = 0;
@@ -2022,6 +2666,23 @@ export function createSearchGenerationPublication(
     await save(client, job, meter);
     bookPreparationTiming?.mark('writerFence');
   }
+  async function prepareIntent(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    queried: GenerationPublicationPin['queried'],
+  ) {
+    if (!job.observation) job.observation = queried.snapshot.observation;
+    const previous = await aliasTarget(job, context, meter);
+    if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
+    if (job.family === 'subjects') await publicationRefresh(job, context, meter, false);
+    job.previous_target = previous;
+    job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
+    job.activated_at = config.clock().toISOString();
+    job.phase = 'intent';
+    await save(client, job, meter);
+  }
   async function release(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     if (!job.fence) return;
     const result = await writerGuard.releasePublication(fence(job), context);
@@ -2072,6 +2733,7 @@ export function createSearchGenerationPublication(
     job.previous_uuid = null;
     // Indexed bounded invalidation: old home rows are replaced lazily as their native home is revisited.
     job.fenced_pass = false;
+    job.subject_fenced_cut = null;
     job.pass = (BigInt(job.pass) + 1n).toString();
     await save(client, job, meter);
   }
@@ -2114,7 +2776,7 @@ export function createSearchGenerationPublication(
         )
           throw new Pending('registration_missing');
         const ackProtocol =
-          config.subjectAckProtocol === 1 &&
+          (config.subjectAckProtocol === 1 || config.subjectSubscriptionProtocol === 1) &&
           nativeMeaning &&
           !registry &&
           target.family === 'subjects' &&
@@ -2124,42 +2786,63 @@ export function createSearchGenerationPublication(
           capture.catalogueCoverage === true
             ? 1
             : 0;
+        const shared = config.subjectSubscriptionProtocol === 1 && ackProtocol === 1;
         const id = randomUUID();
         const job = await withBoundedReadConnection(
           pool,
           context.deadline,
           async (client) => {
-            const result = await client.query<Job>(
-              `INSERT INTO search.generation_publication
-          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol)
+            if (shared) await client.query('BEGIN');
+            try {
+              const result = await client.query<Job>(
+                `INSERT INTO search.generation_publication
+          (job,physical_target,consumer,prefix,generation,family,native_incarnation,kinds,source_home,binding,activated_at,ack_protocol,subscription_protocol)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
             CASE WHEN $12::smallint=1
-              AND to_regprocedure('semantic.public_filter_ack_origin(text,uuid)') IS NOT NULL THEN 1 ELSE 0 END)
+              AND to_regprocedure('semantic.public_filter_ack_origin(text,uuid)') IS NOT NULL THEN 1 ELSE 0 END,$13)
           ON CONFLICT(partition_no,physical_target,consumer) DO NOTHING RETURNING *`,
-              [
-                id,
-                input.physicalTarget,
-                input,
-                target.prefix,
-                target.generation,
-                target.family,
-                target.incarnation,
-                kinds.map(({ kind, owner }) => `${owner}:${kind}`),
-                resolved.definition.source.partition,
-                bindingKey(resolved.definition),
-                config.clock().toISOString(),
-                ackProtocol,
-              ],
-            );
-            return (
-              result.rows[0] ??
-              (
-                await client.query<Job>(
-                  'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
-                  [input.physicalTarget, input],
-                )
-              ).rows[0]
-            );
+                [
+                  id,
+                  input.physicalTarget,
+                  input,
+                  target.prefix,
+                  target.generation,
+                  target.family,
+                  target.incarnation,
+                  kinds.map(({ kind, owner }) => `${owner}:${kind}`),
+                  resolved.definition.source.partition,
+                  bindingKey(resolved.definition),
+                  config.clock().toISOString(),
+                  ackProtocol,
+                  shared ? 1 : 0,
+                ],
+              );
+              if (shared) {
+                if (result.rowCount) {
+                  const birth = await reserveHeldSubjectPreparation(client, { job: id, bootstrap: randomUUID() });
+                  const membership = await client.query<{ key_count: number }>(
+                    'SELECT key_count FROM core.subject_subscription_v1 WHERE birth=$1',
+                    [birth],
+                  );
+                  meter.inputKeys += 96;
+                  meter.dependencyPoints += 96;
+                  meter.frontierWrites += 5 + membership.rows[0]!.key_count;
+                }
+                await client.query('COMMIT');
+              }
+              return (
+                result.rows[0] ??
+                (
+                  await client.query<Job>(
+                    'SELECT * FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1 AND consumer=$2',
+                    [input.physicalTarget, input],
+                  )
+                ).rows[0]
+              );
+            } catch (error) {
+              if (shared) await client.query('ROLLBACK');
+              throw error;
+            }
           },
           publicationLifetime,
         );
@@ -2170,6 +2853,15 @@ export function createSearchGenerationPublication(
     },
     step(input, context, options) {
       const phase = options?.enrollSource === true ? 'step-enroll' : 'step';
+      const offers = options?.heldOffers ?? 16;
+      requireValue(Number.isSafeInteger(offers) && offers >= 1 && offers <= 16);
+      if (options?.heldLane !== undefined)
+        requireValue(
+          (options.heldLane === 'capture' || options.heldLane === 'source') &&
+            phase === 'step-enroll' &&
+            options.batchSource === true &&
+            offers >= 5,
+        );
       return run(context, (meter) =>
         locked(
           input,
@@ -2237,6 +2929,9 @@ export function createSearchGenerationPublication(
               ...(sourceAdvanced ? { sourceAdvanced } : {}),
             };
           },
+          options?.batchSource && offers >= 3,
+          offers,
+          options?.heldLane,
         ),
       );
     },
@@ -2286,12 +2981,24 @@ export function createSearchGenerationPublication(
                 // Resume under the same alias lock, with the same deadline and a fresh meter.
                 const additionalSourceCosts: SearchPublicFilterCost[] = [];
                 let longest = Date.now() - started;
+                let drainReceiver = job.subscription_protocol === 1;
                 while (additionalSourceCosts.length + 1 < SUBJECT_SETTLEMENT_TURNS) {
                   const nextStarted = Date.now();
                   if (nextStarted + 2 * longest >= context.deadline) break;
                   const nextMeter = cost();
-                  const next = await completeSource(job, client, context, nextMeter, capture);
                   additionalSourceCosts.push(nextMeter);
+                  if (drainReceiver) {
+                    drainReceiver = await prepareHeldReceiverAck(job, client, nextMeter);
+                    longest = Math.max(longest, Date.now() - nextStarted);
+                    continue;
+                  }
+                  const next = await completeSource(job, client, context, nextMeter, capture);
+                  if (next.complete && job.subscription_protocol === 1) {
+                    // This invocation holds the alias lock and just verified the original Source.
+                    // Retain the writer fence before yielding that completed settlement turn.
+                    await installFence(job, client, context, nextMeter);
+                    break;
+                  }
                   if (!next.sourceAdvanced || next.complete) break;
                   longest = Math.max(longest, Date.now() - nextStarted);
                 }
@@ -2317,36 +3024,82 @@ export function createSearchGenerationPublication(
                 const retained = jobPin(job);
                 if (!retained || !sameGenerationPublicationPin(retained, source)) throw new Pending('source_pending');
               } else await held(job, context, meter);
-              // Revisit the real finite key population under the continuously held writer/copy barrier.
+              // Fencing starts at the completed first-pass frontier. Home zero in fencing
+              // retains one inconclusive sparse comparison for a fresh activation turn.
+              const retryingSparse = job.home === 0;
+              if (!retryingSparse) bookPreparationTiming?.mark('writerDrain');
+              let proofCost = meter;
+              let cut: Buffer | null = null;
+              if (
+                source &&
+                !registry &&
+                job.subscription_protocol === 1 &&
+                current === null &&
+                (options?.batchSource ||
+                  meter.inputKeys + 12 * SPARSE_SUBJECT_KEYS + 80 < PUBLIC_FILTER_PREPARATION_INPUT_LIMIT)
+              ) {
+                proofCost = options?.batchSource ? cost() : meter;
+                try {
+                  cut = await reconcileSparseSubject(job, client, context, proofCost);
+                } catch (error) {
+                  if (
+                    !(error instanceof SearchUnavailableError) &&
+                    !(error instanceof Pending && error.reason === 'source_pending')
+                  )
+                    throw error;
+                  if (!retryingSparse) {
+                    job.home = 0;
+                    await save(client, job, meter);
+                    return {
+                      ...preparing('activate', true),
+                      ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
+                    };
+                  }
+                }
+              }
               job.fenced_pass = true;
               job.pass = (BigInt(job.pass) + 1n).toString();
-              job.phase = 'subject';
-              job.home = 0;
               job.after_id = null;
               job.after_route = null;
-              await save(client, job, meter);
-              bookPreparationTiming?.mark('writerDrain');
-              return preparing('step', true);
+              job.subject_fenced_cut = cut;
+              if (source && cut) {
+                job.home = 4096;
+                await prepareIntent(job, client, context, proofCost, source.queried);
+              } else {
+                job.phase = 'subject';
+                job.home = 0;
+                await save(client, job, meter);
+              }
+              return {
+                ...preparing(cut ? 'activate' : 'step', true),
+                ...(proofCost === meter ? {} : { additionalSourceCosts: [proofCost] }),
+              };
             }
             if (job.phase !== 'intent') {
-              const queried = await adoptHeld(job, context, meter);
-              if (!queried) throw new Pending('source_pending');
-              if (!job.observation) job.observation = queried.snapshot.observation;
-              const previous = await aliasTarget(job, context, meter);
-              if (newerSubjectAlias(job, previous)) throw new Pending('source_pending');
-              if (job.family === 'subjects') await publicationRefresh(job, context, meter, false);
-              job.previous_target = previous;
-              job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
-              job.activated_at = config.clock().toISOString();
-              job.phase = 'intent';
-              await save(client, job, meter);
+              const queried = await adoptHeld(job, client, context, meter);
+              await prepareIntent(job, client, context, meter, queried);
               return preparing('activate', true);
             }
             if (newerSubjectAlias(job, job.previous_target)) throw new Pending('source_pending');
             const before = await aliasTarget(job, context, meter);
             if (newerSubjectAlias(job, before)) throw new Pending('source_pending');
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
-            if (before !== job.physical_target || job.family === 'subjects') await adoptHeld(job, context, meter);
+            const proofCosts: Meter[] = [];
+            if (before !== job.physical_target || job.family === 'subjects') {
+              const ready = await confirmHeldIntent(
+                job,
+                client,
+                context,
+                meter,
+                before,
+                options?.batchSource ? proofCosts : undefined,
+              );
+              if (!ready)
+                return {
+                  ...preparing('step', true),
+                  ...(proofCosts.length ? { additionalSourceCosts: proofCosts } : {}),
+                };
+            }
             if (job.family === 'subjects') {
               await publicationRefresh(job, context, meter, false);
               const activationSearch: OpenSearch = {
@@ -2375,9 +3128,13 @@ export function createSearchGenerationPublication(
               );
               // The retained intent and fence own confirmation on the next metered turn.
               bookPreparationTiming?.mark('aliasWrite');
-              if (job.family === 'subjects') return preparing('activate', true);
+              if (job.family === 'subjects')
+                return {
+                  ...preparing('activate', true),
+                  ...(proofCosts.length ? { additionalSourceCosts: proofCosts } : {}),
+                };
             }
-            if (job.family === 'discovery') await adoptHeld(job, context, meter);
+            if (job.family === 'discovery') await adoptHeld(job, client, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             bookPreparationTiming?.mark('aliasConfirmed');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.

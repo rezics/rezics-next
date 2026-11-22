@@ -22,6 +22,7 @@ export type SearchSourcePublicationInput = Omit<
 
 export type SearchSourcePublicationApplication = Readonly<{
   activeRelease: SearchSemanticSourcePort['activeRelease'];
+  hasVerifiedReleaseDigest: SearchSemanticSourcePort['hasVerifiedReleaseDigest'];
   createPublicFilterSourceBinding: SearchSemanticSourcePort['createPublicFilterSourceBinding'];
   createSubjectSourceKeyPages: SearchSemanticSourcePort['createSubjectSourceKeyPages'];
   publicFilterSource: SearchSemanticSourcePort['publicFilterSource'];
@@ -38,6 +39,7 @@ export function createSearchSourcePublicationApplication(
 ): SearchSourcePublicationApplication {
   return Object.freeze({
     activeRelease: port.activeRelease,
+    hasVerifiedReleaseDigest: port.hasVerifiedReleaseDigest,
     createPublicFilterSourceBinding: port.createPublicFilterSourceBinding,
     createSubjectSourceKeyPages: port.createSubjectSourceKeyPages,
     publicFilterSource: port.publicFilterSource,

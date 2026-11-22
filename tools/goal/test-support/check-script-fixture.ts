@@ -6,12 +6,20 @@ import { git as repositoryGit } from '../src/merge.ts';
 const checkScriptCache = new Map<string, { commit: string; files: Map<string, string> }>();
 
 /** Copy the actual worker-check runtime closure from one immutable development commit. */
-export function checkScriptFixture(ref = 'refs/heads/dev') {
+export function checkScriptFixture(integrationBranch = 'dev') {
   const repositoryRoot = resolve(import.meta.dir, '../../..');
+  const ref = `refs/heads/${integrationBranch}`;
   let cached = checkScriptCache.get(ref);
   if (!cached) {
+    const branches = repositoryGit(repositoryRoot, 'for-each-ref', '--format=%(refname)', ref).split('\n');
+    // A native check can carry only the pinned source when no dev merge base was available.
+    const unscopedSnapshot =
+      integrationBranch === 'dev' &&
+      !branches.includes(ref) &&
+      repositoryGit(repositoryRoot, 'rev-parse', '--is-shallow-repository') === 'true' &&
+      repositoryGit(repositoryRoot, 'remote') === '';
     cached = {
-      commit: repositoryGit(repositoryRoot, 'rev-parse', '--verify', `${ref}^{commit}`),
+      commit: repositoryGit(repositoryRoot, 'rev-parse', '--verify', `${unscopedSnapshot ? 'HEAD' : ref}^{commit}`),
       files: new Map(),
     };
     checkScriptCache.set(ref, cached);

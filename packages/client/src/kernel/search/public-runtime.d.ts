@@ -5,11 +5,11 @@ import type { Pool } from 'pg';
 import type { DiscoveryRegistry } from './discovery.ts';
 import type { DiscoveryProducerEntry } from './discovery-api.ts';
 import { type DiscoveryTarget } from './account-discovery.ts';
-import type { SearchGenerationPublication } from './generation-publication.ts';
+import type { GenerationPublicationJob, SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { type PublicSuggestionOperations } from './public-suggestion.ts';
-import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicDiscoveryConsumerOperations, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
@@ -24,6 +24,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     clock: KernelClock;
     creditSearch?: CreditSearchSource;
     subjectAckProtocol?: 1;
+    subjectSubscriptionProtocol?: 1;
     discoveryProducers?: DiscoveryProducerEntry;
     /** Composition-bound Access observation; omitted fixtures keep throwing through. */
     facetAccess?: FacetAccessObservationPort;
@@ -37,10 +38,14 @@ export type DefaultPublicFilterRuntime = Readonly<{
     openDiscovery(registry: DiscoveryRegistry, scope: DiscoveryTarget, digest: string, context: PublicFilterConsumerContext, queried?: PublicFilterQueriedObservation, enrollmentOnly?: boolean): Promise<PublicDiscoveryConsumerOperations>;
     prepareDefaultHome(target: DiscoveryTarget, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerJob | undefined>;
     publication: SearchGenerationPublication;
+    enrollPublication(job: GenerationPublicationJob, context: PublicFilterConsumerContext, active: () => boolean): Promise<{
+        status: 'progress' | 'reconciled';
+        sourceAdvanced?: boolean;
+    } | Pick<PublicFilterConsumerUnavailable, 'status' | 'reason'>>;
     preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;
-        snapshot: 'pit' | 'prepared';
+        snapshot: 'pit' | 'prepared' | 'bounded-relevance';
     }>, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<BoundPublicRequest>;
     /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
     resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<PublicFilterConsumerOperations>;
@@ -49,6 +54,8 @@ export type DefaultPublicFilterRuntime = Readonly<{
         capture: PublicFilterConsumerCapture;
     }>>;
     repair(job: PublicFilterConsumerJob, context: PublicFilterConsumerContext): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+    releaseExhausted(operations: PublicFilterConsumerOperations, queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, dispose: () => Promise<void>): Promise<void>;
+    closeRetainedObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
     /** Typed currentness and aggregate proofs over retained capture/query/repair. */
     privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
     /** Trusted native facet composition; omitted generation or meaning stays closed. */
@@ -80,6 +87,7 @@ export declare function readPublicSearchPage<T>(options: {
     capture?: PublicFilterConsumerCapture;
     /** Existing durable preparation delivery, when installed by the host. */
     prepare?: (job: PublicFilterConsumerJob) => Promise<void>;
+    releaseExhausted?: DefaultPublicFilterRuntime['releaseExhausted'];
     /** A trusted planner choice. Prepared is the conservative default, not a claim of readiness. */
     snapshot?: 'pit' | 'prepared';
     check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;

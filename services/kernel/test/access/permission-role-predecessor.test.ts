@@ -242,12 +242,23 @@ test('future start and finite end invalidate the frontier until default bounded 
   const resource = { route: 0x4680, id: newId(0x4680) };
   const roles = ['semantic.context.owner'];
   try {
-    await db.admin.query(
+    const grant = await db.admin.query<{ erasure_key: string }>(
       `INSERT INTO access.resource_role_grant
       (route,resource_id,subject_id,grant_role,valid,transaction_id)
-      VALUES ($1,$2,$3,$4,'[2050-01-01,2050-01-02)'::tstzrange,$5)`,
+      VALUES ($1,$2,$3,$4,'[2050-01-01,2050-01-02)'::tstzrange,$5) RETURNING erasure_key`,
       [resource.route, resource.id, newId(0), roles[0], newId(0)],
     );
+    const otherRoute = resource.route + 16;
+    const otherResource = [otherRoute, newId(otherRoute), grant.rows[0]!.erasure_key];
+    await expect(
+      db.admin.query('INSERT INTO access.current_resource_role_due VALUES ($1,$2,now(),$3)', otherResource),
+    ).rejects.toMatchObject({ code: '23503' });
+    await expect(
+      db.admin.query(
+        "INSERT INTO access.current_resource_role_key VALUES ($1,$2,'semantic.context.owner','identity',$2,'',$3)",
+        otherResource,
+      ),
+    ).rejects.toMatchObject({ code: '23503' });
     while (
       !(
         await db.admin.query<{ complete: boolean }>(

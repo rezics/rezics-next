@@ -224,6 +224,7 @@ export type PrivacyReductionLogEntry = Readonly<{
     impacts: readonly PrivacyReductionImpact[];
 }>;
 export type PrivacyReductionLogRequest = Readonly<{
+    retentionProtocol?: 0 | 1;
     partition: PublicFilterHome;
     epoch: Partition['epoch'];
     after: bigint;

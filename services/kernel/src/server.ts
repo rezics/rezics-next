@@ -14,7 +14,6 @@ import { createWriteRateStage, type WriteRateStageOptions } from './access/write
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
 import type { Pool } from 'pg';
 import { createKernel } from './http/kernel.ts';
-import { Admission, ADMISSION_LIMITS } from './http/admission.ts';
 import type { KeyRing } from './tokens/seal.ts';
 import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce/config.ts';
 import { createStripePort } from './commerce/stripe.ts';
@@ -57,6 +56,7 @@ import {
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { composeLibraryDomain } from './composition/library.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
+import { Admission, ADMISSION_LIMITS } from './http/admission.ts';
 import { installNativeHistory } from './composition/history.ts';
 import type { SearchNativePorts } from './search/composition.ts';
 import type { KernelRuntimeDefaults } from './composition/runtime-defaults.ts';
@@ -67,6 +67,8 @@ export type { KernelRuntimeDefaults, KernelRuntimeOverrides } from './compositio
 export type ServerConfig = {
   moneyPolicy?: CommerceMoneyPolicy;
   databaseUrl: string;
+  httpPermits?: number;
+  httpPoolSize?: number;
   poolAcquireTimeoutMillis: number;
   normalQueueLimit?: number;
   /** Test override for verifying that the server pool survives its idle eviction interval. */
@@ -90,9 +92,19 @@ export type ServerConfig = {
   auth?: AuthenticationConfig;
 };
 
+function readHttpLimit(value: string | number | undefined, name: string, fallback: number, max: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value === 'string' && !/^\d+$/.test(value)) throw new ConfigError(name);
+  const size = Number(value);
+  if (!Number.isSafeInteger(size) || size < 1 || size > max) throw new ConfigError(name);
+  return size;
+}
+
 export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const databaseUrl = required(env, 'DATABASE_URL');
   const poolAcquireTimeoutMillis = readPoolAcquireTimeoutMillis(env);
+  const httpPermits = readHttpLimit(env.KERNEL_HTTP_PERMITS, 'KERNEL_HTTP_PERMITS', ADMISSION_LIMITS.permits, 128);
+  const httpPoolSize = readHttpLimit(env.KERNEL_HTTP_POOL_SIZE, 'KERNEL_HTTP_POOL_SIZE', KERNEL_POOL_MAX, 100);
   const routeKey = decodeKey(required(env, 'KERNEL_ROUTE_KEY'), 'KERNEL_ROUTE_KEY', 32);
   const defaults = createKernelRuntimeDefaults({ env });
   createWriteRateStage(defaults.writeRate, defaults.rateAttribution); // Validate trusted transport configuration at startup.
@@ -124,6 +136,8 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   if ((economyMarket || economyTestFunding) && economyNode === undefined) throw new ConfigError('KERNEL_ECONOMY_NODE');
   return {
     databaseUrl,
+    httpPermits,
+    httpPoolSize,
     poolAcquireTimeoutMillis,
     ...(normalQueueLimit === undefined ? {} : { normalQueueLimit }),
     hostname,
@@ -166,13 +180,20 @@ async function fillPool(pool: Pool): Promise<void> {
 }
 
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
+  const httpPermits = readHttpLimit(config.httpPermits, 'KERNEL_HTTP_PERMITS', ADMISSION_LIMITS.permits, 128);
+  const httpPoolSize = readHttpLimit(config.httpPoolSize, 'KERNEL_HTTP_POOL_SIZE', KERNEL_POOL_MAX, 100);
   composeRatingDependencies();
   installNativeHistory();
   let defaults: KernelRuntimeDefaults;
-  const pool = createPool(config.databaseUrl, {
+  const poolOptions = {
     connectionTimeoutMillis: config.poolAcquireTimeoutMillis,
-    min: KERNEL_POOL_MAX,
     ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
+  };
+  const pool = createPool(config.databaseUrl, { ...poolOptions, max: httpPoolSize, min: httpPoolSize });
+  const healthPool = createPool(config.databaseUrl, {
+    ...poolOptions,
+    max: ADMISSION_LIMITS.reserved,
+    min: ADMISSION_LIMITS.reserved,
   });
   const receiptKeys = readReceiptKeyRing(process.env, config.receiptKeys ?? configuredReceiptKeys(pool));
   configureReceiptKeys(pool, receiptKeys);
@@ -205,6 +226,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   };
   const activeRequests = new Set<Promise<void>>();
   async function initialize() {
+    await fillPool(healthPool);
     await fillPool(pool);
     const searchNativePorts =
       config.searchNativePorts ?? (await import('./composition/search-native.ts')).composeSearchNativePorts();
@@ -310,6 +332,8 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       rating: createNativeRatingCapabilities({ clock: defaults.clock }),
       moneyPolicy,
       pool,
+      healthPool,
+      admission: new Admission({ ...ADMISSION_LIMITS, permits: httpPermits }),
       routeKey: config.routeKey,
       subjectReading: defaults.subjectReading,
       tokens: defaults.tokens,
@@ -337,6 +361,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             prefix: searchConfig.prefix,
             clock: defaults.clock,
             facetAccess: defaults.facetAccess,
+            ...(searchConfig.subjectSubscriptionProtocol === 1 ? { subjectSubscriptionProtocol: 1 } : {}),
             ...(creditSearch === undefined ? {} : { creditSearch }),
           });
           const producers = createDiscoveryProducerEntry({
@@ -466,7 +491,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               }
             }
           } finally {
-            await pool.end();
+            await Promise.all([pool.end(), healthPool.end()]);
           }
         }
       })());

@@ -49,18 +49,200 @@ Observation, repair, ACK and serving use their existing authority checks.
 
 ## Shared subscription design
 
-The next cold enrollment protocol opens a versioned retention hold for the native creation and privacy streams
+Cold Source preparation opens a versioned retention hold for the native creation and privacy streams
 before sampling any home. It registers the definition's keys once and persists a gapless cover of original home
-cuts in bounded immutable pages. Cleanup will honor outstanding holds, and privacy maintenance will retain each
-pending interval until its captured subscriber set is accounted for. The receiver will independently verify
-the same native evidence before committing its own ACK. Persisted preparations retain their original protocol.
+cuts in bounded immutable pages. Core cleanup honors outstanding holds. Privacy maintenance owns disposition
+of each captured interval, and the receiver independently verifies the native evidence before its ACK.
+Each persisted preparation retains its original protocol.
+
+### Core retention boundary
+
+On a co-located installation, the offline `core.enable_subject_retention_v1()` checks all 4096 active
+homes under the placement lock. The migration starts in legacy mode. Enabling the Core guard makes
+missing cleanup permission pending. Search admission still requires the privacy and receiver protocols.
+
+At home 0, commit `core.open_subject_subscription_v1(job, bootstrap)` before taking the first cut.
+Its returned `birth` identifies the original job, Source configuration, definition, meaning, consumer,
+target generation, incarnation and at most 64 canonical compiler keys (16 KiB together). Privacy captures `core.subject_membership_revision_v1()` in the interval
+transaction. It checks store and registration lineage and holds the membership and restore locks until commit. Seek `core.subject_subscription_key_v1(input_key,birth)`
+through that revision and resolve each birth in `core.subject_subscription_v1`. A key captured before
+birth belongs to the later subscriber's original population.
+
+`core.capture_subject_retention_page_v1(birth, first_home, end_home)` persists the next half-open interval
+of 1–32 homes. Each ordered entry binds home, epoch, home generation and the command and privacy positions
+as decimal strings. Retrying the original interval checks current lineage and returns its original cuts.
+Source must bind its Access revisions and enqueue carry to the same snapshot before using a page for enrollment.
+
+Maintenance calls `core.advance_subject_cleanup_v1(home)`. A call examines at most 32 births under the
+membership revision. An unresolved home returns pending. Each issued pair of inclusive positions is capped
+by original cuts and native legacy pins. A live privacy key holds both grants at the previous issued
+positions until its interval is accounted for. The local mutation checks the grant, both finite heads, restore
+generation, physical store and home lineage. The guard covers the outbox, privacy log and the write-basis
+transaction/epoch/position join. Acting-human provenance can still be cleared independently. A restore or
+placement fence invalidates the grant. Distributed placements require routed owner coordination before admission.
+Memberships and pages remain immutable through delivery and ACK. Closing them requires the future native
+retirement proof covering outstanding fanout, readers, copies and repairs.
+
+The native two-home fixture measured the following PostgreSQL user-table tuple visits and writes
+with seven compiler keys. Each operation below is one SQL call. The write count excludes row locks,
+index maintenance and WAL. Tuple visits exclude empty seeks and system catalogs. The guarded outbox update includes its local retention trigger.
+
+| Operation | Tuple visits | Row writes |
+| --- | ---: | ---: |
+| Open membership / resolve original on retry | 16 / 16 | 9 / 0 |
+| Capture two homes / recover original page | 25 / 29 | 1 / 0 |
+| Issue permit before membership birth | 7 | 1 |
+| Request permit for unresolved home | 8 | 0 |
+| Issue permit at saved base / repeat | 10 / 11 | 1 / 0 |
+| Minimize one permitted / held outbox slot | 23 / 7 | 1 / 0 |
+
+The ordinary create and hide each appended two original event slots and one write basis. Hide added one
+privacy-log entry. Both commands recorded zero scans and zero writes on the retention tables. The added
+legacy minimum indexes track checkpoint position and home enrollment position on their respective paths.
+
+### Source and Access preparation on the shared hold
+
+`openHeldSubjectPreparation` takes the cold job and its original bootstrap UUID. Under the publication
+lock it opens the Core membership and reserves the ordinary prepared Source request in one transaction.
+A different bootstrap or a previously started preparation fails admission. Source pins this version by
+membership birth. Production admission remains with the publication owner.
+
+`semantic.capture_subject_access_page_v1(birth, first_home, end_home)` captures the Core and Access
+pages together. It holds the Account population rows through commit and reads the Account revision,
+claim revision and original Account-domain enqueue for each native cut. An existing Core page without
+its Access companion cannot acquire a later Access observation. The single-home reader
+`semantic.subject_access_cut_v1(bootstrap, home)` returns the original tuple and current heads only
+under the original membership, definition, registration, store and active owner. The Subject path reads
+Account metadata while enumerating only Subject originals.
+
+A committed page admits Source inventory by route and original ID, including hidden and redirected rows.
+Each step reads at most 32 keys plus a lookahead. Source captures finite command ends after inventory or
+closes a fresh empty inventory and unchanged command interval together. The creation reader walks every outbox slot through those ends, including unrelated
+events. The saved envelopes carry the owner epoch, event ID, position, sequence, count, type, original
+subject, payload digest and native write-basis transaction where present. The page receipt binds the home
+generation and both stream bases. An uncertain commit reopens the same birth, interval and ordinal.
+
+For a job with an explicit held preparation, the ordinary publication step consumes these original IDs
+and positions through its writer and physical generation comparison. Only a successful comparison and a
+fresh check of the page can advance the Source reconciliation cursor. A fresh capture commits before the same
+turn seeks the first original key. When a step has no writer obligations, its evidence and cursor
+advance share the transaction that checked every home. A fresh
+inventory with writer obligations leaves its ordinal for the next funded comparison. For an empty interval,
+Search can adopt the committed cut before Source starts its inventory. Source verifies that independent
+receiver transaction and closes the interval when every command head still equals its original base.
+Occupied and advanced intervals keep the separate finite-window step after inventory commit. Changes after its finite end belong to the subsequent
+publication revalidation and held traversal. The physical fixture checks
+the pending writer, the settled resident Book, the withdrawn Book and continuation into a fresh page.
+[PostgreSQL and OpenSearch fixture](../../test/semantic/public-filter-held-publication.test.ts)
+
+Privacy fanout resolves the membership's original home with `subject_access_cut_v1`. A missing page stays
+pending. The saved privacy base distinguishes original inventory from later delivery. The privacy owner
+compares stored log epochs and records the shared interval disposition before clearing its live key.
+The receiver owns adoption and ACK. The publication owner owns the fence, alias and activation, and
+retirement owns release of the original membership and pages.
+
+### Two-home Source preparation cost
+
+The [interrupted Source fixture](../../test/semantic/public-filter-held-subject.test.ts) uses seven compiler keys, one resident Book and one initially empty home.
+After the inventory connection is terminated, ordinary commands create and hide a Book behind its saved cursor.
+The statement count includes Source transaction control. PostgreSQL user-table tuple visits and row writes
+include the fixture’s native verification of each writer obligation during the cursor handoff. A rolled-back
+in-flight Account update, stale compiler closure and deliberately torn outbox group exercise refusal separately.
+
+| Phase | Statements | Tuple visits | Row writes |
+| --- | ---: | ---: | ---: |
+| Open membership and reserve Source bootstrap | 6 | 28 | 11 |
+| Capture the two-home page | 1 | 54 | 2 |
+| Scan original keys | 7 | 59 | 1 |
+| Resolve original membership and bootstrap | 4 | 19 | 0 |
+| Resolve original page | 1 | 54 | 0 |
+| Recover inventory after disconnect | 5 | 61 | 0 |
+| Advance Source cursor after inventory handoff | 7 | 124 | 1 |
+| Save both finite creation ends | 6 | 61 | 1 |
+| Recover finite ends after a later append | 5 | 71 | 0 |
+| Advance Source cursor after window handoff | 6 | 65 | 1 |
+| Replay four creation and visibility slots | 6 | 91 | 1 |
+| Advance Source cursor after event handoff | 6 | 151 | 1 |
+
+### Shared Subject receiver pages
+
+A cold job may explicitly select subscription protocol 1 with the terminal manifest ACK protocol.
+The job and its producer membership commit together. Search pins the registration generation and derives its
+own root from the original bootstrap and consumer. It reopens the committed Core and Access cut for each page
+of at most 32 homes, preserving the Subject enqueue carry and the per-home receipt and predecessor. A fresh
+page inserts one Search page and updates one Search cursor. Source checks that page on a separate transaction
+and updates one cursor. A lost receiver reply resumes the same page. Ordinary job creation selects protocol 0.
+
+During a batched cold delivery, capture starts at the accepted receiver edge and can continue while a
+writer holds the Source cursor. Adjacent Core and Access pages commit together before inventory.
+Each receiver page commits before Source accepts it. Acceptance and adoption of the following page
+can share a transaction. Source inventories committed intervals together, compares occupied homes
+through the ordinary writer, then reopens each page to advance the ordered prefix and save finite ends.
+A retry starts with the outstanding original at the frontier before comparing later pages again.
+An empty interval whose command heads still match its cut can save its complete window behind a waiting writer.
+The frontier still visits those receipts in order. If a home advances during a writer comparison, an available
+offer can reread that home's projection and settlement once, including its physical winner before advancing.
+A window can close unrelated singleton commands in one or more homes with their original event and write-basis
+evidence. Other groups continue through the saved event cursor. After the receiver seals, the Source lane
+can finish any retained inventory or event ordinal against that same committed page.
+
+After the original inventory and creation bridge finish, the first engine traversal uses the original command
+position for untouched homes. A changed position still requires the existing writer comparison. Search compares
+each verified creation window with its own page, the original Core and Access tuple, and the current owner.
+The existing range parents, fenced repair settlement and independently committed manifest authorize Source's
+terminal ACK. The held traversal, alias readback and observation retirement use their existing fences.
+
+A held Subject repair can cover up to sixteen aligned 32-home cuts. Source seeks the first live Subject
+and up to 97 positive command heads. It compares these heads against the immutable command bases in
+their pages. A zero-base empty capture or the original complete, empty Source inventory binds each
+page to its Core and Access cut. For each of at most 64 post-base positions, Source seeks two outbox slots
+and the editorial basis. A complete, irrelevant singleton contributes its original identity, payload digest
+and basis to the step digest. Every other group stays on the ordinary bridge.
+
+The independent reader reopens the same pages, finite ends and event groups. A later append belongs to
+the writer. Both scans together use a 640-input allowance within the existing 768-input repair reservation.
+For N pages and K original membership keys, each anchor and page scan costs at most 34 + K + 5N inputs.
+The producer pays for its ordered inventory seek, membership and positive heads with one cut lookup per
+touched page. The reader looks up only the retained positive differences. Each captured position costs
+three points per scan. A declined probe can leave a zero-home successor for a separately funded detailed
+scan. A stale replay rechecks one page under its placement, privacy and cleanup authority before retrying.
+Retained zero-base steps keep their original digest and replay protocol. Older nonzero pages without
+the command-repair stamp use the detailed comparison.
+
+Held repair processes other inventory and finite command windows in ordered intervals of 32 homes.
+An empty raw Subject seek can close the contiguous prefix whose native outbox groups contain only
+irrelevant single-slot events. Source and its independent reader compare the original positions, payload
+digests and write bases. An original key, relevant command, missing slot or multi-slot group goes through
+the existing projection or creation bridge. A saved execution resumes the ordering in its original receipt.
+
+The Access page samples the revisions of the 32-home groups it intersects. Changes to Account population,
+claims or their enqueue carry rotate the affected group revision in the writer transaction. A matching
+revision reuses the captured Access comparison. A changed revision or an older page requires the native
+home comparisons. Each reader still checks placement, store, restore generation and both stream bounds.
+
+The receiver may compare a complete aligned compact span of 64 to 512 homes against its independently
+adopted receiver pages and the verified Source step. It binds their adjacent roots under the current
+witness. After tree descent, a compact comparison reserves 201 + 8N keyed inputs and 88 + 8N KiB.
+This includes reopening the verified step and at most 64 captured command ends.
+Folding two children reserves 64 inputs and 64 KiB. Other leaves use the original per-home comparison
+as their ordered window closes. After a stale stamp, the receiver sizes the aligned leaf from the remaining
+key and byte allowances. A later offer can join its committed children under their current witnesses. The
+comparison decodes each packed Source step once and compares its homes with independently adopted receiver
+pages. Final assembly reopens the current witnesses and rebuilds stale leaves before linking the root to the
+terminal settlement.
+
+A post-base captured privacy interval inserts its exact intake under the receiver registration lock. A new
+high water updates the registration generation and upserts one dirty home in the same transaction. Delivery of a
+second key already covered by that high water retains its own intake. Original ACK readback preserves later dirty
+homes. Population and Book reads seek the birth/home and registration/change indexes and resolve each requested
+original from its page. The Book withdrawal exception still requires the original moderation and physical proof.
 
 ## Subject receiver ACK protocol
 
 The original Search preparation pins its ACK protocol at insertion. Production defaults to version 0.
 Version 1 is reserved for a cold catalogue Subject job. Its receiver compares the original verified
 creation windows, including empty homes, against enrollment, the retained creation checkpoint, Search
-baseline and current coverage. A funded comparison waits for a complete leaf of at most 32 homes. Parents
+baseline and current coverage. A funded comparison waits for a complete verified interval. Parents
 bind the two adjacent child revisions. A complete root covers homes 0 through 4095 before Source closes the terminal.
 
 Receiver changes update the affected subtree clocks synchronously. Loss of an original enrollment,
@@ -83,6 +265,29 @@ Dirty reads seek the registration’s delta index. Book capture checks up to nin
 eight withdrawals. A missing cut yields pending. The changed-generation seek remains independent at population
 start and final. Discovery uses its materialized ACK protocol. Ordinary v1 selection awaits composed serving,
 writer admission, copy erasure and target retirement qualification.
+
+## Shared Subject privacy fanout
+
+The pending-row capture freezes `core.subject_membership_revision_v1()` in the original transaction.
+`semantic.subject_privacy_fanout_v1` retains the original `(partition_no, input_key, enqueue_revision)`,
+owner epoch, home generation, inclusive first and through positions, membership revision and accepted birth
+prefix. The same SQL mutation guard applies to an older maintainer. A capture already open at activation
+precedes the first shared birth. Account enqueue and per-home enrollment keep their original protocols.
+
+For a matching `core.subject_subscription_key_v1(input_key,birth)` at or below the cutoff, Search resolves
+the immutable cut with `semantic.subject_privacy_member_base_v1(fanout, birth)`. A missing or mismatched cut
+keeps the interval live. A cut at or above the interval's through position covers that interval in original
+population repair. For a later interval, Search records the home behind in the same transaction that inserts
+`search.subject_privacy_intake_v1(birth, partition_no, input_key, enqueue_revision, privacy_base)`.
+Search retries the same identity and uses that retained intake in its shared-home reads and repair.
+The SQL intake guard checks the original committed interval, exact cut and current lineage. Semantic advances
+over post-base work only after that receiver transaction commits. Intake grants no population or physical ACK.
+
+The maintainer pages by matching birth with one bounded lookahead, sharing the limit with the legacy traversal.
+The SQL CAS requires a completed disposition for the original home, epoch, generation, key, range and enqueue
+revision. A concurrent enqueue preserves the live barrier and its later first position. Shared replay requests
+set `retentionProtocol: 1` on `readPrivacyReductionPage` and check the epoch stored in every log row.
+Shared Search admission stays closed until its readers and repair consume this intake.
 
 ## Serving from published catalogue coverage
 

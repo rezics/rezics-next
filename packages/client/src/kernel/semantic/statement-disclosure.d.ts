@@ -6,6 +6,9 @@ export type StatementReader = {
     account: string;
     moderator: (client: CommandTransaction) => Promise<boolean>;
 };
+/** A newly entered reader evaluates its own proof on the first source snapshot.
+ * An inherited managed reader may already have evaluated a different snapshot. */
+export declare function withSubjectStatementReader<T>(readAs: (<V>(read: () => Promise<V>) => Promise<V>) | undefined, read: (needsAudienceRefresh: boolean) => Promise<T>): Promise<T>;
 /** Prepare audience evidence outside the source checkout after every freshness wait. */
 export declare function refreshStatementReaderAuthorization(): Promise<void>;
 /** Restrict disclosure throughout nested hydration without changing caller authority. */

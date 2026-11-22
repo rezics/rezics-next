@@ -451,6 +451,7 @@ export function createSearchWorkModule(
             prefix: searchConfig.prefix,
             clock: context.clock,
             facetAccess: defaults.facetAccess,
+            ...(searchConfig.subjectSubscriptionProtocol === 1 ? { subjectSubscriptionProtocol: 1 } : {}),
             ...(searchConfig.subjectAckProtocol === undefined
               ? {}
               : { subjectAckProtocol: searchConfig.subjectAckProtocol }),

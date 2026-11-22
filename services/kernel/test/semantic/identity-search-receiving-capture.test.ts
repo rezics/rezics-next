@@ -320,17 +320,17 @@ test('capture reservation scales with complete roles and actual original request
   expect(a).toEqual({
     candidateKeys: 0,
     identityMetadataRows: 0,
-    nativeRows: 393,
-    nativePoints: 393,
+    nativeRows: 427,
+    nativePoints: 495,
     witnessKeys: 0,
-    statements: 354,
-    bytes: 121180,
-    emptySeeks: 198,
+    statements: 388,
+    bytes: 129884,
+    emptySeeks: 300,
   });
-  expect(b.nativeRows - a.nativeRows).toBe(10);
-  expect(b.nativePoints - a.nativePoints).toBe(10);
-  expect(b.bytes - a.bytes).toBe(3072);
-  expect(a.bytes).toBe(2048 + 34 * 3072 + 512 + 92 + 5 * 2816);
+  expect(b.nativeRows - a.nativeRows).toBe(11);
+  expect(b.nativePoints - a.nativePoints).toBe(13);
+  expect(b.bytes - a.bytes).toBe(3328);
+  expect(a.bytes).toBe(2048 + 34 * 3328 + 512 + 92 + 5 * 2816);
 });
 
 test('the actual original finite frame refuses a deferred capture with two seeks left and rolls back', async () => {

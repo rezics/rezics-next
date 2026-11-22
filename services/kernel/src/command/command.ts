@@ -118,6 +118,7 @@ export type PrincipalCommandReceipt = { kind: string; key: string; digest: Uint8
 export type PrincipalCommandOptions = PrincipalCommandIdentity & {
   partition: number;
   deadline?: number;
+  serializationRetryGroup?: symbol;
   receipt?: PrincipalCommandReceipt;
   authorization?: CommandAuthorization | undefined;
   /** Trusted service configuration only, never a request timestamp. */
@@ -464,6 +465,13 @@ function observeCommitResponse(client: PoolClient) {
   };
 }
 
+export class AppliedCommandResponseError extends Error {
+  constructor(cause: unknown) {
+    super('Committed command response failed', { cause });
+    this.name = 'AppliedCommandResponseError';
+  }
+}
+
 /** A sent COMMIT may be durable even when its native response is lost. */
 export class CommandCommitUncertainError extends Error {
   readonly partition: number;
@@ -563,6 +571,7 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
 export type LegacyCommandOptions = {
   partition: number;
   deadline?: number;
+  serializationRetryGroup?: symbol;
   basis?: CommandBasis;
   receipt?: CommandReceipt;
   authorization?: CommandAuthorization | undefined;
@@ -769,6 +778,7 @@ async function executeCommand<T>(
   const deadline = dispatch || publisher ? declaredDeadline : Math.min(declaredDeadline, deadlineFor(2_147_483_647));
   if (!Number.isSafeInteger(deadline)) throw new TypeError('Invalid command deadline');
   let contentionAttempts = 0;
+  let retryGroup: symbol | undefined;
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
   const coordinatesBirth =
@@ -783,6 +793,7 @@ async function executeCommand<T>(
     if (singleAttempt.getStore() && singleAttemptCount++ > 0)
       throw new CommandUnavailableError('contention', partition);
     let time: AuthoritativeTime | undefined;
+    let confirmedEffect = false;
     try {
       let evidence: unknown;
       let attempt: CommandAttempt | undefined;
@@ -803,7 +814,9 @@ async function executeCommand<T>(
       };
       if (!coordinatesBirth) await prepare();
       dispatch?.checkpoint();
-      const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
+      const gate = await measureCommandPhase('gate_wait', () =>
+        enterCommandGate(pool, partition, deadline, retryGroup),
+      );
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
       const ordinary = !dispatch && !publisher;
@@ -855,15 +868,14 @@ async function executeCommand<T>(
         Object.defineProperty(tx, transactionCallbacks, { value: state });
         if (dispatch) selectedCallbacks.set(state, { tx, dispatch });
         if (publisher) publisherCallbacks.add(state);
-        const commit = async () => {
+        const commit = async (hasEffect: boolean) => {
           if (ordinary) {
             commitPending = true;
             commitResponse = observeCommitResponse(client);
           }
+          let result;
           try {
-            const result = await client.query('COMMIT');
-            commitPending = false;
-            return result;
+            result = await client.query('COMMIT');
           } catch (error) {
             if (commitResponse?.rejected(error)) {
               commitPending = false;
@@ -874,6 +886,10 @@ async function executeCommand<T>(
           } finally {
             commitResponse?.stop();
           }
+          commitPending = false;
+          if (ordinary && result.command === 'ROLLBACK') throw new Error('Command transaction rolled back at COMMIT');
+          confirmedEffect = ordinary && hasEffect && result.command === 'COMMIT';
+          return result;
         };
         let checkBirthReceipt = false;
         try {
@@ -935,7 +951,7 @@ async function executeCommand<T>(
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               if (row.payloadState === 'minimized') throw new CommandResultErasedError();
               receiptOwners.delete(tx);
-              await measureCommandPhase('commit', commit);
+              await measureCommandPhase('commit', () => commit(true));
               sealEventTypes();
               return {
                 value: row.response as T,
@@ -950,7 +966,7 @@ async function executeCommand<T>(
           if (mode === 'receipt-only') throw authorization!.denied();
           if (receiptPreflight || checkBirthReceipt) {
             receiptOwners.delete(tx);
-            await measureCommandPhase('commit', commit);
+            await measureCommandPhase('commit', () => commit(false));
             sealEventTypes();
             return checkBirthReceipt ? retryBirthAfterReceiptMiss : receiptNotFound;
           }
@@ -1122,7 +1138,7 @@ async function executeCommand<T>(
           // The remaining Source and History checks can still roll back until COMMIT is sent.
           if (coordinatesBirth && !noEffect) await client.query('SET CONSTRAINTS ALL IMMEDIATE');
           await measureCommandPhase('commit', () =>
-            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(),
+            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(!noEffect || receipt !== null),
           );
           sealEventTypes();
           return {
@@ -1162,6 +1178,8 @@ async function executeCommand<T>(
             discardConnection(client, rollbackError as Error);
             throw rollbackError;
           }
+          if (error instanceof Error && 'code' in error && error.code === '40001')
+            retryGroup = options.serializationRetryGroup;
           throw error;
         } finally {
           releaseCommandHistory(tx);
@@ -1190,6 +1208,7 @@ async function executeCommand<T>(
       await measureCommandPhase('writable_wait', () => waitForWritable(pool, partition, deadline));
     } catch (error) {
       if (time) times.delete(time);
+      if (confirmedEffect) throw new AppliedCommandResponseError(error);
       if (dispatch) {
         // Preserve native single-attempt classifications without retrying or
         // dropping the original failure/uncertain COMMIT evidence.

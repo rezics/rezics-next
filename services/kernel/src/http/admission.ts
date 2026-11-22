@@ -1,13 +1,16 @@
 import { ProblemError } from './problem.ts';
 
-export const ADMISSION_LIMITS = { permits: 8, reserved: 2, queue: 32 } as const;
+export const ADMISSION_LIMITS = { permits: 8, reserved: 2, bearer: 4, queue: 32 } as const;
 
 export type AdmissionLane = 'normal' | 'reserved';
 export type JobContext = { deadline: number; signal?: AbortSignal };
 
-type Limits = { permits: number; reserved: number; queue: number; normalQueue?: number };
+type AdmissionWork = AdmissionLane | 'bearer';
+
+type HeldNormalJob = { context: JobContext; pending?: Promise<unknown> };
+type Limits = { permits: number; reserved: number; bearer?: number; queue: number; normalQueue?: number };
 type Waiter = {
-  lane: AdmissionLane;
+  lane: AdmissionWork;
   context: JobContext;
   resolve: (release: () => void) => void;
   reject: (reason: unknown) => void;
@@ -26,16 +29,22 @@ function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
 }
 
+export function requireLiveJob(context: JobContext): void {
+  if (context.signal?.aborted) throw abortReason(context.signal);
+  if (context.deadline <= Date.now()) throw overloaded();
+}
+
 export class Admission {
-  private readonly limits: Limits;
-  private readonly active = { normal: 0, reserved: 0 };
+  private readonly limits: Limits & { bearer: number };
+  private readonly active = { normal: 0, reserved: 0, bearer: 0 };
   private readonly queue: Waiter[] = [];
+  private readonly normalJobs = new WeakMap<AdmissionYield, HeldNormalJob>();
 
   constructor(limits: Limits = ADMISSION_LIMITS) {
-    this.limits = { ...limits };
+    this.limits = { ...limits, bearer: limits.bearer ?? ADMISSION_LIMITS.bearer };
   }
 
-  get running(): Readonly<{ normal: number; reserved: number }> {
+  get running(): Readonly<Record<AdmissionWork, number>> {
     return { ...this.active };
   }
 
@@ -43,17 +52,51 @@ export class Admission {
     return this.queue.length;
   }
 
+  /** Untouched credentials need no account checkout when their next native stage cannot even queue. */
+  async verify<T>(context: JobContext, requiresNormal: boolean, verify: () => Promise<T>): Promise<T> {
+    if (!requiresNormal) return this.run('bearer', context, verify);
+    this.requireNormalCapacity(context);
+    return this.run('bearer', context, () => {
+      // The normal lane can fill while this credential is waiting for a verifier.
+      this.requireNormalCapacity(context);
+      return verify();
+    });
+  }
+
+  private requireNormalCapacity(context: JobContext): void {
+    requireLiveJob(context);
+    if (!this.available('normal') && this.queue.length >= this.limits.queue && this.lastQueuedBearer() === -1)
+      throw overloaded();
+  }
+
+  /** A sequential Access preparation may use the enclosing native job's live permit. */
+  async prepare<T>(context: JobContext, job: () => Promise<T>, permit?: AdmissionYield): Promise<T> {
+    const held = permit && this.normalJobs.get(permit);
+    if (!held || held.context !== context || held.pending) return this.run('normal', context, job);
+    requireLiveJob(context);
+    const pending = Promise.resolve().then(job);
+    held.pending = pending;
+    try {
+      return await pending;
+    } finally {
+      delete held.pending;
+    }
+  }
+
   async run<T>(
-    lane: AdmissionLane,
+    lane: AdmissionWork,
     context: JobContext,
     job: (yieldPermit: AdmissionYield) => T | Promise<T>,
   ): Promise<T> {
     let release = await this.acquire(lane, context);
     let active = true;
     let finished = false;
+    const held: HeldNormalJob | undefined = lane === 'normal' ? { context } : undefined;
     const yieldPermit: AdmissionYield = async <Value>(wait: () => Promise<Value>) => {
       if (finished || !active) throw new Error('Admission permit is no longer active');
+      if (held?.pending) throw new Error('Cannot yield during Access preparation');
       active = false;
+      this.normalJobs.delete(yieldPermit);
       release();
       let result: Value | undefined;
       let failure: unknown;
@@ -77,6 +120,7 @@ export class Admission {
           }
           release = acquired;
           active = true;
+          if (held) this.normalJobs.set(yieldPermit, held);
         } catch (error) {
           if (!failed) {
             failure = error;
@@ -90,10 +134,13 @@ export class Admission {
       if (failed) throw failure;
       return result as Value;
     };
+    if (held) this.normalJobs.set(yieldPermit, held);
     try {
       return await job(yieldPermit);
     } finally {
       finished = true;
+      this.normalJobs.delete(yieldPermit);
+      if (held?.pending) await held.pending.catch(() => {});
       if (active) {
         active = false;
         release();
@@ -101,16 +148,13 @@ export class Admission {
     }
   }
 
-  private acquire(lane: AdmissionLane, context: JobContext): Promise<() => void> {
-    if (context.signal?.aborted) return Promise.reject(abortReason(context.signal));
-    if (context.deadline <= Date.now()) return Promise.reject(overloaded());
-
-    const hasEarlier = this.queue.some((waiter) => waiter.lane === lane);
-    if (!hasEarlier && this.active[lane] < this.capacity(lane)) {
+  private async acquire(lane: AdmissionWork, context: JobContext): Promise<() => void> {
+    requireLiveJob(context);
+    const available = this.available(lane);
+    if (available) {
       this.active[lane]++;
-      return Promise.resolve(this.release(lane));
+      return this.release(lane);
     }
-    if (this.queue.length >= this.limits.queue) return Promise.reject(overloaded());
     const normalQueue = this.limits.normalQueue;
     if (
       lane === 'normal' &&
@@ -119,6 +163,14 @@ export class Admission {
       this.queue.filter((waiter) => waiter.lane === 'normal').length >= normalQueue
     ) {
       return Promise.reject(overloaded());
+    }
+    if (this.queue.length >= this.limits.queue) {
+      // An untouched bearer can retry. Keep room for work that already authenticated.
+      const lastBearer = lane === 'bearer' ? -1 : this.lastQueuedBearer();
+      if (lastBearer === -1) throw overloaded();
+      const [displaced] = this.queue.splice(lastBearer, 1);
+      this.clear(displaced!);
+      displaced!.reject(overloaded());
     }
 
     return new Promise((resolve, reject) => {
@@ -138,17 +190,21 @@ export class Admission {
     });
   }
 
-  private capacity(lane: AdmissionLane): number {
-    return lane === 'normal' ? this.limits.permits : this.limits.reserved;
+  private lastQueuedBearer(): number {
+    return this.queue.findLastIndex((waiter) => waiter.lane === 'bearer');
   }
 
-  private release(lane: AdmissionLane): () => void {
+  private available(lane: AdmissionWork): boolean {
+    return this.active[lane] < this.limits[lane === 'normal' ? 'permits' : lane];
+  }
+
+  private release(lane: AdmissionWork): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
       this.active[lane]--;
-      this.drain();
+      this.drain(lane);
     };
   }
 
@@ -163,13 +219,12 @@ export class Admission {
     this.queue.splice(index, 1);
     this.clear(waiter);
     waiter.reject(reason);
-    this.drain();
   }
 
-  private drain(): void {
-    for (let index = 0; index < this.queue.length;) {
+  private drain(lane: AdmissionWork): void {
+    for (let index = 0; index < this.queue.length && this.available(lane);) {
       const waiter = this.queue[index]!;
-      if (this.active[waiter.lane] >= this.capacity(waiter.lane)) {
+      if (waiter.lane !== lane) {
         index++;
         continue;
       }
@@ -183,8 +238,8 @@ export class Admission {
         waiter.reject(overloaded());
         continue;
       }
-      this.active[waiter.lane]++;
-      waiter.resolve(this.release(waiter.lane));
+      this.active[lane]++;
+      waiter.resolve(this.release(lane));
     }
   }
 }

@@ -39,6 +39,7 @@ export const CATALOGUE_ACTIVATED = 'com.rezics.definitions.catalogue.activated.v
 
 export const SUBJECT_MERGED = 'com.rezics.subject.merged.v1' as const;
 export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
+export const SEMANTIC_ERASURE_PROGRESS = 'com.rezics.semantic.erasure.progress.v1' as const;
 export const CANONICAL_GENERATION_COMMITTED = 'com.rezics.semantic.canonical-generation.committed.v1' as const;
 export const CANONICAL_GENERATION_CONTINUATION = 'com.rezics.semantic.canonical-generation.continuation.v1' as const;
 export const CANONICAL_GENERATION_REBUILD_CONTINUED =
@@ -222,7 +223,7 @@ export const SEMANTIC_EVENTS = {
     { position: Type.String({ pattern: '^[0-9]+$' }) },
     { additionalProperties: false },
   ),
-  'com.rezics.semantic.erasure.progress.v1': Type.Object({ accountId: UUID }, { additionalProperties: false }),
+  [SEMANTIC_ERASURE_PROGRESS]: Type.Object({ accountId: UUID }, { additionalProperties: false }),
   [IDENTITY_EPOCH_HOME_AVAILABLE]: Type.Object(
     { partition: Type.Integer({ minimum: 0, maximum: 4095 }), after: UUID },
     { additionalProperties: false },

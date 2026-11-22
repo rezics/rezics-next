@@ -37,6 +37,8 @@ import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenan
 import {
   beginPublicFilterCoverageBaseline,
   adoptPublicFilterCoverageBaselinePage,
+  adoptPublicFilterRegistrationBaselinePage,
+  readPublicFilterRegistrationReceiptPrefix,
   adoptColdEnrollment,
   coldEnrollmentFunding,
   prepareColdEnrollment,
@@ -48,6 +50,7 @@ import {
   readPublicFilterCreationEvent,
   readPublicFilterCreationEvents,
   publicFilterCreationAction,
+  readHeldQuietCommands,
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
@@ -70,12 +73,19 @@ import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairSourceScan from './public-filter-source-binding-repair-source-scan.sql';
+import { readHeldCommandRange } from './public-filter-held-command-range.ts';
+import { readHeldQuietRange } from './public-filter-held-quiet-range.ts';
+import {
+  heldRepairHomes,
+  readHeldRepairHomes,
+  readHeldSubjectOriginals,
+} from './public-filter-held-subject-originals.ts';
 import repairAccountScan from './public-filter-source-binding-repair-account-scan.sql';
 import repairWindowScan from './public-filter-source-binding-repair-window-scan.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
-import type { Pool, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
 import { planPublicFilterEnrollment } from './public-filter-preparation-budget.ts';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
@@ -565,6 +575,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         inputLimit: number;
         /** Separate home-scan allowance for the original Subject publication. */
         homeLimit?: number;
+        /** Also fund one bounded scan of immutable held cut pages. */
+        compactSubjectCuts?: true;
         scanOnly?: true;
       }>,
       context: PublicFilterConsumerContext,
@@ -673,6 +685,7 @@ type NativePreparationInput =
       inputLimit?: number;
       subjectEnrollment?: SubjectEnrollment;
       coldEnrollment?: ColdEnrollmentRequest;
+      recovery?: PublicSourceBootstrapRecovery;
     }>;
 type FreshPitTransfer = (
   queried: PublicFilterQueriedObservation,
@@ -848,7 +861,9 @@ export function advanceNativePublicFilterPreparation(
 ): Promise<NativePreparationResult | null>;
 export function advanceNativePublicFilterPreparation(
   binding: PublicFilterSourceBinding,
-  input: Exclude<NativePreparationInput, { bootstrap: string }> | { bootstrap: string; inputLimit?: number },
+  input:
+    | Exclude<NativePreparationInput, { bootstrap: string }>
+    | { bootstrap: string; inputLimit?: number; recovery?: PublicSourceBootstrapRecovery },
   context: PublicFilterConsumerContext,
 ): Promise<NativePublicFilterPreparation | null>;
 export async function advanceNativePublicFilterPreparation(
@@ -923,6 +938,49 @@ function decode<T>(value: string): T {
   return unpack(JSON.parse(value)) as T;
 }
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+/** Claim the ordinary prepared request identity in the membership transaction.
+ * A concurrent old-format begin uses the same unique capturing index.
+ */
+export async function reserveHeldSubjectBootstrap(
+  db: CommandTransaction,
+  member: { birth: string; bootstrap: string; consumer: PublicFilterConsumer },
+) {
+  const { birth, bootstrap, consumer } = member;
+  if (!consumer.readDefinition) throw new BindingError('definition_missing');
+  const requestKey = hash(encode({ consumer, snapshot: 'prepared' }));
+  const original = await db.query<{ bootstrap: string; read_definition: string; consumer: string; admitted: boolean }>(
+    `SELECT b.bootstrap,b.read_definition,b.consumer,
+       EXISTS (SELECT FROM semantic.subject_source_preparation_v1 s WHERE (s.birth,s.bootstrap)=($2,b.bootstrap)) AS admitted
+     FROM semantic.public_filter_bootstrap b WHERE b.partition_no=0 AND b.request_key=$1 AND b.snapshot_kind='prepared'
+     LIMIT 2`,
+    [requestKey, birth],
+  );
+  if (original.rows.length) {
+    const row = original.rows[0]!;
+    if (
+      original.rows.length !== 1 ||
+      !row.admitted ||
+      row.bootstrap !== bootstrap ||
+      row.read_definition !== consumer.readDefinition ||
+      row.consumer !== encode(consumer)
+    )
+      throw new BindingError('binding_mismatch');
+    return;
+  }
+  const [row] = await nativeSourceQuery(db, beginBootstrap, {
+    bootstrap,
+    read_definition: consumer.readDefinition,
+    request_key: requestKey,
+    consumer: encode(consumer),
+    snapshot_kind: 'prepared',
+    mixed: false,
+  });
+  if (row?.bootstrap !== bootstrap) throw new BindingError('binding_mismatch');
+  await db.query('INSERT INTO semantic.subject_source_preparation_v1(birth,bootstrap) VALUES($1,$2)', [
+    birth,
+    bootstrap,
+  ]);
+}
 function packRepairLocatorDigests(locators: readonly PublicFilterRepairLocator[], inputLimit: number): Buffer {
   if (locators.length > Math.min(256, inputLimit)) throw new BindingError('owner_unavailable');
   const digests = locators.map((locator) => hash(encode(locator)));
@@ -1216,6 +1274,15 @@ export function createNativePublicFilterSourceBinding(
     };
     return { row, definition, bootstrap };
   }
+  // One continuation of this exact recovery can reuse its immutable definition and
+  // starting cursor. Adoption still locks and compares the live native frontier.
+  const pendingCuts = new WeakMap<
+    PublicSourceBootstrapRecovery,
+    {
+      deadline: number;
+      cut: Awaited<ReturnType<typeof loadBootstrap>>;
+    }
+  >();
   function requirePopulationBaseline(row: NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>) {
     if (
       row.account_after !== 4096 ||
@@ -1254,6 +1321,10 @@ export function createNativePublicFilterSourceBinding(
   type Joined = Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, { status: 'joined' }>;
   type RepairState = {
     owner?: 'semantic' | 'accounts';
+    heldBirth?: string;
+    /** Inventory and command closure advance together on new held executions. */
+    heldPageStart?: number;
+    detailedHeldScan?: true;
     partition: number;
     after: { route: number; id: string } | null;
     subject: string | null;
@@ -1289,7 +1360,13 @@ export function createNativePublicFilterSourceBinding(
       };
     } | null;
     account?: AccountDiscoveryRepairObservation;
-    scan?: Readonly<{ kind: 'semantic' | 'accounts'; homes: number; digest: string }>;
+    scan?: Readonly<{
+      kind: 'semantic' | 'accounts';
+      homes: number;
+      digest: string;
+      heldHead?: string;
+      heldHeads?: readonly string[];
+    }>;
     bridgeEvents?: Readonly<{ count: number; digest: string } | { envelopes: string }>;
     windowBatch?: Readonly<{
       from: number;
@@ -1297,6 +1374,8 @@ export function createNativePublicFilterSourceBinding(
       examined: number;
       digest: string;
       packed: string;
+      originalCuts?: true;
+      commandEnds?: string;
       through?: readonly string[];
     }>;
   };
@@ -1316,12 +1395,21 @@ export function createNativePublicFilterSourceBinding(
   const repairHomeBatchLimit = 128;
   const preparationInputLimit = 1000;
   async function scanSemanticHomes(
+    bootstrap: string,
+    context: PublicFilterConsumerContext,
     state: RepairState,
     inputLimit: number,
     db: Pool,
     cost: BindingCost,
-    retainedAdvance?: string,
-  ): Promise<Readonly<{ next: RepairState; receipt: NonNullable<RepairRecord['scan']> }>> {
+    retained?: RepairRecord,
+    compactSubjectCuts = false,
+  ): Promise<
+    Readonly<{
+      next: RepairState;
+      receipt: NonNullable<RepairRecord['scan']>;
+      windowBatch?: RepairRecord['windowBatch'];
+    }>
+  > {
     if (
       state.phase !== 'scan' ||
       state.owner === 'accounts' ||
@@ -1331,19 +1419,210 @@ export function createNativePublicFilterSourceBinding(
       state.projection !== null
     )
       throw new BindingError('binding_mismatch');
-    const limit = Math.min(inputLimit, repairHomeBatchLimit, 4096 - state.partition);
-    const through = state.partition + limit - 1;
-    // Reserve the maximum bounded seek work before dispatch. Successful reads
-    // refund homes the recursive query did not reach; failed reads retain it.
-    cost.inputKeys += limit;
-    const rows = await nativeSourceQuery(db, repairSourceScan, {
-      partition_no: state.partition,
-      through,
-      after_route: state.after?.route ?? state.partition * 16,
-      after_id: state.after?.id ?? '00000000-0000-0000-0000-000000000000',
+    const { detailedHeldScan, ...cursor } = state;
+    if (detailedHeldScan) state = cursor;
+    const requestDetailedScan = () => ({
+      next: { ...state, detailedHeldScan: true as const },
+      receipt: {
+        kind: 'semantic' as const,
+        homes: 0,
+        digest: hash(encode({ input: state, inputLimit, detailedHeldScan: true })),
+      },
     });
-    if (rows.length < 1 || rows.length > limit) throw new BindingError('binding_mismatch');
-    cost.inputKeys -= limit - rows.length;
+    if (
+      !detailedHeldScan &&
+      state.heldBirth !== undefined &&
+      state.partition === state.heldPageStart &&
+      state.after === null &&
+      state.partition % heldRepairHomes === 0 &&
+      (retained ? retained.windowBatch?.originalCuts === true || retained.next.detailedHeldScan : compactSubjectCuts)
+    ) {
+      // A declined funded attempt advances no cursor and closes no window.
+      // Its successor can use the full ordinary offer even after a lost reply.
+      if (retained?.next.detailedHeldScan) return requestDetailedScan();
+      const before = cost.inputKeys;
+      const interval = { bootstrap, birth: state.heldBirth, start: state.partition };
+      const saved = retained?.windowBatch;
+      const commands =
+        !saved || saved.commandEnds !== undefined
+          ? await readHeldCommandRange(
+              db,
+              interval,
+              context.deadline,
+              cost,
+              saved && { count: saved.count, commandEnds: saved.commandEnds! },
+            )
+          : undefined;
+      const pages = commands?.digests ?? (await readHeldQuietRange(db, { ...interval, retainedHomes: saved!.count }));
+      if (pages.length) {
+        const homes = pages.length * heldRepairHomes;
+        const end = state.partition + homes;
+        const digest = hash(
+          encode({
+            input: state,
+            inputLimit,
+            pages,
+            ...(commands && { commandEnds: commands.commandEnds, envelopes: commands.envelopes }),
+          }),
+        );
+        return {
+          next: {
+            ...state,
+            owner: 'semantic',
+            partition: end,
+            heldPageStart: end === 4096 ? end - heldRepairHomes : end,
+            phase: end === 4096 ? 'window' : 'scan',
+          },
+          receipt: { kind: 'semantic', homes, digest },
+          windowBatch: {
+            from: state.partition,
+            count: homes,
+            examined: homes,
+            digest,
+            originalCuts: true,
+            packed: '',
+            ...(commands && { commandEnds: commands.commandEnds }),
+          },
+        };
+      }
+      if (!retained && cost.inputKeys - before > 8) return requestDetailedScan();
+    }
+    const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
+    const limit = Math.min(inputLimit, repairHomeBatchLimit, pageEnd - state.partition);
+    let heldHead: string | undefined;
+    let heldHeads: readonly string[] | undefined;
+    let windowBatch: RepairRecord['windowBatch'];
+    async function scan() {
+      if (state.heldBirth !== undefined) {
+        if (!retained || retained.scan?.heldHeads) {
+          const birth = state.heldBirth;
+          const read = (client: Pick<PoolClient, 'query'>) =>
+            readHeldRepairHomes(
+              client,
+              {
+                bootstrap,
+                birth,
+                partition: state.partition,
+                after: state.after,
+                limit: Math.min(limit, heldRepairHomes),
+                inventory: true,
+              },
+              context,
+              retained?.scan?.heldHeads
+                ? {
+                    heads: retained.scan.heldHeads,
+                    key: retained.next.subject === null ? null : retained.next.after,
+                  }
+                : undefined,
+              cost,
+            );
+          // The committed physical inventory already precedes this repair. When the
+          // fresh ordered seek is empty, its snapshot can also compare the finite
+          // command groups from the held cut. Any relevant or incomplete group
+          // leaves the remaining homes to the ordinary creation bridge.
+          const compact =
+            state.partition === state.heldPageStart &&
+            !state.after &&
+            (!retained || retained.windowBatch !== undefined);
+          const page = compact
+            ? await withReadTransaction(
+                db,
+                async (client) => {
+                  const homes = await read(client);
+                  if (homes.at(-1)?.id || state.partition + homes.length !== pageEnd) return homes;
+                  const candidates = retained?.windowBatch ? homes.slice(0, retained.windowBatch.count) : homes;
+                  const quiet = await readHeldQuietCommands(client, candidates, Math.min(96, inputLimit), cost);
+                  const count = candidates.findIndex((home) => !quiet.has(home.partition));
+                  const closed = count < 0 ? candidates : candidates.slice(0, count);
+                  if (closed.length) {
+                    windowBatch = {
+                      from: state.partition,
+                      count: closed.length,
+                      examined: closed.length,
+                      packed: packClosedCreationWindows(
+                        closed.map((h) => ({
+                          partition: h.partition,
+                          epoch: h.epoch,
+                          receipt: h.receipt,
+                          base: BigInt(h.base),
+                          through: BigInt(h.head),
+                          position: BigInt(h.base) + 1n,
+                          sequence: 0,
+                          eventCount: null,
+                        })),
+                      ),
+                      through: closed.map((h) => h.head),
+                      digest: hash(
+                        encode({
+                          input: state,
+                          inputLimit,
+                          closed,
+                          commands: closed.map((h) => quiet.get(h.partition)),
+                        }),
+                      ),
+                    };
+                  }
+                  return homes;
+                },
+                context.deadline,
+              )
+            : await read(db);
+          heldHeads = page.map((row) => row.head);
+          return page.map((row) => ({
+            partition_no: row.partition,
+            epoch: row.epoch,
+            write_state: 'active',
+            route: row.route,
+            subject_id: row.id,
+            receipt: row.receipt,
+          }));
+        }
+        const saved = retained?.scan?.heldHead;
+        if (retained && !saved) throw new BindingError('binding_mismatch');
+        const original = await readHeldSubjectOriginals(
+          db,
+          {
+            bootstrap,
+            birth: state.heldBirth,
+            partition: state.partition,
+            after: state.after,
+            inputLimit: 1,
+          },
+          context,
+          retained && saved
+            ? {
+                key: retained.next.subject === null ? null : retained.next.after,
+                commandHead: saved,
+              }
+            : undefined,
+        );
+        heldHead = saved ?? original.commandHead;
+        const key = original.originals[0];
+        return [
+          {
+            partition_no: state.partition,
+            epoch: original.epoch,
+            write_state: 'active',
+            route: key?.route ?? null,
+            subject_id: key?.id ?? null,
+            receipt: original.receipt,
+          },
+        ];
+      }
+      // Reserve the maximum bounded seek work before dispatch and refund the
+      // homes skipped by the recursive query on success.
+      cost.inputKeys += limit;
+      const rows = await nativeSourceQuery(db, repairSourceScan, {
+        partition_no: state.partition,
+        through: state.partition + limit - 1,
+        after_route: state.after?.route ?? state.partition * 16,
+        after_id: state.after?.id ?? '00000000-0000-0000-0000-000000000000',
+      });
+      if (rows.length < 1 || rows.length > limit) throw new BindingError('binding_mismatch');
+      cost.inputKeys -= limit - rows.length;
+      return rows;
+    }
+    const rows = await scan();
     for (const [index, row] of rows.entries()) {
       if (row.partition_no !== state.partition + index) throw new BindingError('binding_mismatch');
       if (row.epoch === null || row.write_state !== 'active') throw new BindingError('owner_unavailable');
@@ -1369,7 +1648,7 @@ export function createNativePublicFilterSourceBinding(
         subject: last.subject_id,
         after: { route: last.route, id: last.subject_id },
         phase: 'advance',
-        advance: retainedAdvance ?? randomUUID(),
+        advance: retained?.next.advance ?? randomUUID(),
         version: null,
         projection: null,
       };
@@ -1381,12 +1660,30 @@ export function createNativePublicFilterSourceBinding(
         epoch: null,
       };
     }
+    if (state.heldPageStart !== undefined && next.phase === 'scan' && next.partition === pageEnd) {
+      const through = state.heldPageStart + (windowBatch?.count ?? 0);
+      next =
+        through === pageEnd && pageEnd < 4096
+          ? { ...next, owner: 'semantic', heldPageStart: pageEnd }
+          : { ...next, partition: through, owner: 'semantic', phase: 'window' };
+    }
     return {
       next,
+      windowBatch,
       receipt: {
         kind: 'semantic',
         homes: rows.length,
-        digest: hash(encode({ input: state, inputLimit, rows })),
+        digest: hash(
+          encode({
+            input: state,
+            inputLimit,
+            rows,
+            ...(heldHead !== undefined && { heldHead }),
+            ...(heldHeads && { heldHeads }),
+          }),
+        ),
+        ...(heldHead !== undefined && { heldHead }),
+        ...(heldHeads && { heldHeads }),
       },
     };
   }
@@ -1521,14 +1818,15 @@ export function createNativePublicFilterSourceBinding(
       cost.inputKeys++;
       const window = await readPublicFilterCreationWindow(
         db,
-        { bootstrap: nativeId(bootstrap), partition: state.partition },
+        { bootstrap: nativeId(bootstrap), partition: state.partition, heldBirth: state.heldBirth },
         context,
         retained?.next.bridge,
       );
       return { next: { ...state, epoch: window.epoch, phase: 'bridge', bridge: window } };
     }
     const window = state.bridge;
-    if (state.phase !== 'bridge' || !window || state.epoch !== window.epoch) throw new BindingError('binding_mismatch');
+    if (state.phase !== 'bridge' || !window || state.epoch !== window.epoch || state.heldBirth !== window.heldBirth)
+      throw new BindingError('binding_mismatch');
     // A verified window batch retains its range start in the successor. Only
     // the first advance may still have that cursor instead of the open home.
     const home = window.partition;
@@ -1656,6 +1954,126 @@ export function createNativePublicFilterSourceBinding(
         digest: hash(encode({ input: state, inputLimit, prefix })),
         packed: packClosedCreationWindows(windows),
         through: windows.map(({ through }) => String(through)),
+      },
+    };
+  }
+  async function scanHeldCreationWindows(
+    bootstrap: string,
+    state: RepairState,
+    inputLimit: number,
+    db: Pool,
+    context: PublicFilterConsumerContext,
+    cost: BindingCost,
+    retained?: RepairRecord,
+  ) {
+    const batch = retained?.windowBatch;
+    // Saved two-pass executions keep their original 16-home command pages.
+    // Ordered executions can consume the remainder of this held interval.
+    const inspectEvents = !batch || batch.through !== undefined;
+    const pageEnd = state.heldPageStart === undefined ? 4096 : state.heldPageStart + heldRepairHomes;
+    const limit = Math.min(
+      inputLimit,
+      state.heldPageStart === undefined && inspectEvents ? 16 : heldRepairHomes,
+      pageEnd - state.partition,
+    );
+    if (
+      !state.heldBirth ||
+      state.owner !== 'semantic' ||
+      state.phase !== 'window' ||
+      state.epoch !== null ||
+      state.subject !== null ||
+      state.after ||
+      state.projection ||
+      state.bridge ||
+      state.resumeBridge ||
+      (batch && (batch.from !== state.partition || batch.examined > limit))
+    )
+      throw new BindingError('binding_mismatch');
+    const heads =
+      batch &&
+      Array.from({ length: batch.examined }, (_, index) => {
+        const partition = state.partition + index;
+        const window = creationWindowFromBatch(batch, partition) ?? retained?.next.bridge;
+        if (!window || window.partition !== partition) throw new BindingError('binding_mismatch');
+        return String(window.through);
+      });
+    const birth = state.heldBirth;
+    const { rows, quiet } = await withReadTransaction(
+      db,
+      async (client) => {
+        const rows = await readHeldRepairHomes(
+          client,
+          {
+            bootstrap: nativeId(bootstrap),
+            birth,
+            partition: state.partition,
+            limit,
+            after: null,
+            inventory: false,
+          },
+          context,
+          heads ? { heads, key: null } : undefined,
+          cost,
+        );
+        const quiet = inspectEvents
+          ? await readHeldQuietCommands(
+              client,
+              rows,
+              Math.min(inputLimit, state.heldPageStart === undefined ? 32 : 96),
+              cost,
+            )
+          : null;
+        return { rows, quiet };
+      },
+      context.deadline,
+    );
+    const closed: PublicFilterCreationWindow[] = [];
+    let open: PublicFilterCreationWindow | undefined;
+    for (const row of rows) {
+      const base = BigInt(row.base),
+        through = BigInt(row.head);
+      const window = {
+        partition: row.partition,
+        epoch: row.epoch,
+        receipt: row.receipt,
+        heldBirth: state.heldBirth,
+        base,
+        through,
+        position: base + 1n,
+        sequence: 0,
+        eventCount: null,
+      };
+      if (through !== base && !quiet?.has(row.partition)) {
+        // Bind the nonempty closed prefix separately so its per-home through
+        // positions are independently decodable by the receiver. Old compact
+        // pages can include the first open home in the same receipt.
+        if (!inspectEvents || closed.length === 0) open = window;
+        break;
+      }
+      closed.push(window);
+    }
+    const commandProof = inspectEvents && !open;
+    const examined = closed.length + Number(!!open);
+    return {
+      next: open
+        ? { ...state, partition: open.partition, epoch: open.epoch, phase: 'bridge' as const, bridge: open }
+        : state.heldPageStart !== undefined && state.partition + examined === pageEnd && pageEnd < 4096
+          ? { ...state, heldPageStart: pageEnd, partition: pageEnd, phase: 'scan' as const }
+          : { ...state, partition: state.partition + examined },
+      batch: {
+        from: state.partition,
+        count: closed.length,
+        examined,
+        packed: packClosedCreationWindows(closed),
+        ...(commandProof && { through: closed.map((w) => String(w.through)) }),
+        digest: hash(
+          encode({
+            input: state,
+            inputLimit,
+            rows: rows.slice(0, examined),
+            ...(commandProof && { commands: closed.map((w) => quiet!.get(w.partition) ?? []) }),
+          }),
+        ),
       },
     };
   }
@@ -2022,6 +2440,15 @@ export function createNativePublicFilterSourceBinding(
       },
     };
   }
+  // A single-home bridge keeps its historical window successor for ACK decoding.
+  function atHeldBridgePageEnd(state: RepairState) {
+    return (
+      state.phase === 'window' &&
+      state.heldPageStart !== undefined &&
+      state.partition < 4096 &&
+      state.partition === state.heldPageStart + heldRepairHomes
+    );
+  }
   function terminalRepairState(state: RepairState): boolean {
     return (
       state.partition === 4096 &&
@@ -2056,7 +2483,14 @@ export function createNativePublicFilterSourceBinding(
   async function repairNative(
     bootstrap: PublicSourceBootstrap,
     joined: Joined & { cut: Awaited<ReturnType<typeof loadBootstrap>> },
-    request: { execution: string; frontier: string | null; inputLimit: number; homeLimit?: number; scanOnly?: true },
+    request: {
+      execution: string;
+      frontier: string | null;
+      inputLimit: number;
+      homeLimit?: number;
+      compactSubjectCuts?: true;
+      scanOnly?: true;
+    },
     db: Pool,
     cost: BindingCost,
     context: PublicFilterConsumerContext,
@@ -2069,10 +2503,12 @@ export function createNativePublicFilterSourceBinding(
     )
       throw new BindingError('binding_mismatch');
     const chain = repairChain(bootstrap, joined);
+    const heldBirth = joined.cut.row.held_birth ?? undefined;
     const originalSubject = boundSubjectPublication(joined.cut, {
       execution: request.execution,
       queried: joined.queried,
     });
+    if (heldBirth !== undefined && !originalSubject) throw new BindingError('binding_mismatch');
     const keys = { bootstrap: id, execution: request.execution, predecessor: request.frontier ?? '' };
     const link = originalSubject ? await nativeSourceQuery(db, repairLink, { ...keys, binding: chain.binding }) : null;
     async function readVerifiedFrontier(step: string) {
@@ -2150,7 +2586,10 @@ export function createNativePublicFilterSourceBinding(
         epoch: null,
         projection: null,
         claimInputs: true,
+        ...(heldBirth !== undefined && { heldBirth }),
+        ...(heldBirth !== undefined && joined.cut.row.subscription_protocol === 1 && { heldPageStart: 0 }),
       };
+    if (state.heldBirth !== heldBirth) throw new BindingError('binding_mismatch');
     const mixed = 'representation' in bootstrap.definition.capture;
     const scansHomes =
       state.partition < 4096 &&
@@ -2181,6 +2620,7 @@ export function createNativePublicFilterSourceBinding(
     // predecessor. Return that immutable intent and let the independent reader
     // reopen current Source authority and check the original range.
     if (
+      heldBirth === undefined &&
       link &&
       old &&
       replay &&
@@ -2220,8 +2660,8 @@ export function createNativePublicFilterSourceBinding(
           const root = await db.query(
             `/* semantic.native-keyed:21:24 */
              SELECT 1 FROM search.public_filter_ack_range WHERE (partition_no,job,binding,first_home,width,witness)=
-               (0,$1,$2,0,4096,search.public_filter_ack_range_witness($3,0,4096,search.public_filter_ack_witness(ARRAY['','@ack-retention','@accounts','@source'])))`,
-            [request.execution, chain.binding, chain.bootstrap],
+               (0,$1,$2,0,4096,search.public_filter_ack_range_witness($3,0,4096,search.public_filter_ack_basis_v1($4)))`,
+            [request.execution, chain.binding, chain.bootstrap, joined.cut.row.subscription_protocol === 1],
           );
           if (!root.rowCount) throw new BindingError('owner_unavailable');
         }
@@ -2247,7 +2687,21 @@ export function createNativePublicFilterSourceBinding(
           phase: 'window',
         };
       }
-    } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
+    } else if (atHeldBridgePageEnd(state)) {
+      next = { ...state, heldPageStart: state.partition, phase: 'scan' };
+    } else if (state.phase === 'window' && heldBirth !== undefined && (!replay || replay.windowBatch)) {
+      const scanned = await scanHeldCreationWindows(
+        bootstrap.id,
+        state,
+        inputLimit,
+        db,
+        context,
+        cost,
+        replay ?? undefined,
+      );
+      next = scanned.next;
+      windowBatch = scanned.batch;
+    } else if (state.phase === 'window' && heldBirth === undefined && (!replay || replay.windowBatch)) {
       const accounts = mixed;
       const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined && !mixed;
       const prefix = scanPrefix
@@ -2285,10 +2739,10 @@ export function createNativePublicFilterSourceBinding(
         cost,
         {
           inputLimit,
-          batch: request.homeLimit !== undefined || mixed,
+          batch: heldBirth !== undefined || request.homeLimit !== undefined || mixed,
           subjectRange:
             boundSubjectPublication(joined.cut, { execution: request.execution, queried: joined.queried }) &&
-            (request.homeLimit !== undefined || replay !== null),
+            (heldBirth !== undefined || request.homeLimit !== undefined || replay !== null),
           ...(replay ? { retained: replay } : {}),
         },
       );
@@ -2300,9 +2754,21 @@ export function createNativePublicFilterSourceBinding(
         next = scanned.next;
         scan = scanned.receipt;
       } else {
-        const scanned = await scanSemanticHomes(state, inputLimit, db, cost, replay?.next.advance);
+        const scanned = await scanSemanticHomes(
+          id,
+          context,
+          state,
+          inputLimit,
+          db,
+          cost,
+          replay ?? undefined,
+          request.compactSubjectCuts === true &&
+            joined.cut.row.ack_protocol === 1 &&
+            joined.cut.row.subscription_protocol === 1,
+        );
         next = scanned.next;
         scan = scanned.receipt;
+        windowBatch = scanned.windowBatch;
       }
     } else {
       const owner = await readPartition(db, state.partition);
@@ -3094,7 +3560,7 @@ export function createNativePublicFilterSourceBinding(
                     WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='begun' AND b.queried IS NULL
                       AND r.state='active' AND r.consumer_bootstrap=$3 AND r.consumer=$4
                       AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o
-                        WHERE (o.partition_no,o.registration)=(0,r.id) AND o.state='open' AND o.prepared_build IS NULL
+                        WHERE (o.partition_no,o.registration)=(0,r.id) AND o.state='open'
                           AND md5(o.covered)=md5($5) AND o.covered=$5)`,
                     [
                       id,
@@ -3370,6 +3836,7 @@ export function createNativePublicFilterSourceBinding(
       let committed: Awaited<ReturnType<typeof loadBootstrap>> | undefined;
       let readingCommitted = false;
       if (cut.row.state === 'capturing') {
+        if (cut.row.held_birth != null) throw new BindingError('owner_unavailable');
         const baseline = {
           bootstrap: inserted.bootstrap,
           registration: registration.registration,
@@ -3380,16 +3847,19 @@ export function createNativePublicFilterSourceBinding(
         const catalogue = 'catalogueCoverage' in capture && capture.catalogueCoverage === true;
         const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys, catalogue);
         const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
-        const grouped = baseline.accounts || catalogue ? ports.access.newAccountEnrollment : undefined;
+        const grouped = ports.access.newAccountEnrollment;
+        const registrationPage = !baseline.accounts && !catalogue;
         if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
           if (cut.row.coverage_generation === null) await beginPublicFilterCoverageBaseline(db, baseline, deadline);
-          const page = planPublicFilterEnrollment({
+          const offer = {
             inputBudget: Math.min(preparationInputLimit, inputLimit) - cost.inputKeys,
             keyCount: compilerKeys.length,
             homesLeft: 4096 - cut.row.account_after,
-            ...(grouped ? { probeInputsPerHome: grouped.probeInputsPerHome } : {}),
-          });
+          };
+          const withProbe = { ...offer, probeInputsPerHome: grouped?.probeInputsPerHome ?? 0 };
+          let page = planPublicFilterEnrollment(registrationPage ? offer : withProbe);
+          let missedProbeInputs = 0;
           const receipts: AccountDiscoveryEnrollment[] = [];
           const nativeInput = {
             bootstrap: inserted.bootstrap,
@@ -3407,17 +3877,37 @@ export function createNativePublicFilterSourceBinding(
             const remaining = page.homes - receipts.length;
             const count = Math.min(remaining, grouped?.groupSize ?? 3);
             const partitions = Array.from({ length: count }, (_, i) => start + i);
-            const fresh =
-              grouped && count > 1 && compilerKeys.length <= page.keyLimit
-                ? await grouped.enroll(db, { ...nativeInput, partitions }, { deadline })
-                : null;
-            if (fresh) {
-              receipts.push(...fresh);
-              continue;
+            if (grouped && count > 1 && compilerKeys.length <= page.keyLimit) {
+              const fresh = await grouped.enroll(db, { ...nativeInput, partitions }, { deadline });
+              if (fresh) {
+                receipts.push(...fresh);
+                continue;
+              }
+              // A retained pin, receipt or unavailable home costs the probe as
+              // well as its single-home retry. Keep both inside the original offer.
+              if (registrationPage) {
+                // A lost registration commit can leave this page's exact original
+                // receipts in Access. Resume only their contiguous pinned prefix.
+                const original = await readPublicFilterRegistrationReceiptPrefix(
+                  db,
+                  { ...baseline, keys: compilerKeys },
+                  { start, end: start + count },
+                  deadline,
+                );
+                if (original.length) {
+                  receipts.push(...original);
+                  break;
+                }
+                missedProbeInputs += count * (grouped.probeInputsPerHome + 4);
+                page = planPublicFilterEnrollment({ ...offer, inputBudget: offer.inputBudget - missedProbeInputs });
+              }
             }
+            const fallbackHomes = Math.min(count, page.homes - receipts.length);
             const batch: PromiseSettledResult<AccountDiscoveryEnrollment>[] = [];
-            for (let offset = 0; offset < count; offset += 3) {
-              const ready = await Promise.allSettled(partitions.slice(offset, offset + 3).map(enrollment));
+            for (let offset = 0; offset < fallbackHomes; offset += 3) {
+              const ready = await Promise.allSettled(
+                partitions.slice(offset, Math.min(offset + 3, fallbackHomes)).map(enrollment),
+              );
               batch.push(...ready);
               if (ready.some((result) => result.status === 'rejected' || !result.value.complete)) break;
             }
@@ -3434,19 +3924,23 @@ export function createNativePublicFilterSourceBinding(
             }
             if (receipts.length !== start - cut.row.account_after + count) break;
           }
-          committed = await adoptPublicFilterCoverageBaselinePage(
-            db,
-            baseline,
-            receipts,
-            deadline,
-            existing?.enrollmentRegistration
-              ? async (client) => {
-                  if (failure || receipts.length !== page.homes) return;
-                  readingCommitted = true;
-                  return loadBootstrap('0:' + inserted.bootstrap, client, resolved.definition);
-                }
-              : undefined,
-          );
+          if (registrationPage) {
+            await adoptPublicFilterRegistrationBaselinePage(db, baseline, receipts, deadline);
+          } else {
+            committed = await adoptPublicFilterCoverageBaselinePage(
+              db,
+              baseline,
+              receipts,
+              deadline,
+              existing?.enrollmentRegistration
+                ? async (client) => {
+                    if (failure || receipts.length !== page.homes) return;
+                    readingCommitted = true;
+                    return loadBootstrap('0:' + inserted.bootstrap, client, resolved.definition);
+                  }
+                : undefined,
+            );
+          }
           if (failure) throw failure.reason;
         } catch (error) {
           if (readingCommitted || ports.access.classifyUnavailability(error) !== 'contention') throw error;
@@ -3974,6 +4468,11 @@ export function createNativePublicFilterSourceBinding(
           throw new BindingError('owner_unavailable');
         const step = row.step;
         const record = decode<RepairRecord>(row.state);
+        if (
+          record.input.heldBirth !== (cut.row.held_birth ?? undefined) ||
+          (record.input.heldBirth !== undefined && !originalSubject)
+        )
+          throw new BindingError('binding_mismatch');
         const receiptDigests = unpackRepairLocatorDigests(row.repair_locator_digests, row.input_limit);
         // Resolve the actual native predecessor, not an asserted matching cursor.
         // Its immutable successor binds the next input even on a crash/replay.
@@ -3995,6 +4494,11 @@ export function createNativePublicFilterSourceBinding(
           if (!predecessorState || encode(decode<RepairRecord>(predecessorState).next) !== encode(record.input))
             throw new BindingError('binding_mismatch');
         } else if (
+          (record.input.heldPageStart !== undefined &&
+            (!originalSubject ||
+              cut.row.subscription_protocol !== 1 ||
+              !record.input.heldBirth ||
+              record.input.heldPageStart !== 0)) ||
           record.input.partition !== 0 ||
           record.input.owner !== undefined ||
           record.input.phase !== 'scan' ||
@@ -4072,6 +4576,9 @@ export function createNativePublicFilterSourceBinding(
                   epoch: null,
                   phase: 'window',
                 };
+        } else if (atHeldBridgePageEnd(record.input)) {
+          if (record.output || record.account || receiptDigests.length) throw new BindingError('binding_mismatch');
+          expected = { ...record.input, heldPageStart: record.input.partition, phase: 'scan' };
         } else if (record.output) {
           if (
             record.input.phase !== 'project' ||
@@ -4183,18 +4690,28 @@ export function createNativePublicFilterSourceBinding(
             if (record.windowBatch.through !== undefined && !accounts && !boundSubjectPublication(cut, input))
               throw new BindingError('binding_mismatch');
             const scanned =
-              record.windowBatch.through === undefined
-                ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
-                : await scanIrrelevantCreationPrefix(
+              record.input.heldBirth !== undefined
+                ? await scanHeldCreationWindows(
                     input.bootstrap,
                     record.input,
                     row.input_limit,
                     db,
                     { deadline },
                     cost,
-                    accounts,
-                    record.windowBatch,
-                  );
+                    record,
+                  )
+                : record.windowBatch.through === undefined
+                  ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
+                  : await scanIrrelevantCreationPrefix(
+                      input.bootstrap,
+                      record.input,
+                      row.input_limit,
+                      db,
+                      { deadline },
+                      cost,
+                      accounts,
+                      record.windowBatch,
+                    );
             if (!scanned) throw new BindingError('owner_unavailable');
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
@@ -4240,9 +4757,18 @@ export function createNativePublicFilterSourceBinding(
               expected = scanned.next;
               expectedScan = scanned.receipt;
             } else {
-              const scanned = await scanSemanticHomes(state, row.input_limit, db, cost, record.next.advance);
+              const scanned = await scanSemanticHomes(
+                bootstrapId,
+                { deadline },
+                state,
+                row.input_limit,
+                db,
+                cost,
+                record,
+              );
               expected = scanned.next;
               expectedScan = scanned.receipt;
+              expectedWindowBatch = scanned.windowBatch;
             }
           } else {
             const owner = await readPartition(db, state.partition);
@@ -4342,9 +4868,7 @@ export function createNativePublicFilterSourceBinding(
         const closedWindow = closedCreationBridge(record);
         const closedHome =
           closedWindow?.partition ??
-          (record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
-            ? record.windowBatch.from
-            : undefined);
+          (record.windowBatch && record.windowBatch.count > 0 ? record.windowBatch.from : undefined);
         const page = {
           step,
           predecessor: row.predecessor,
@@ -4398,7 +4922,11 @@ export function createNativePublicFilterSourceBinding(
               repairs,
               account: record.account ?? null,
               ...(subject ? { subject } : {}),
-              ...(!scope && subjectPublication && record.scan?.kind === 'semantic' && subjectHomeScan(record.next)
+              ...(!scope &&
+              record.input.heldBirth === undefined &&
+              subjectPublication &&
+              record.scan?.kind === 'semantic' &&
+              subjectHomeScan(record.next)
                 ? {
                     nextScan: {
                       // Two full home reads, two exact custody joins, and keyed
@@ -4543,11 +5071,14 @@ export function createNativePublicFilterSourceBinding(
     async adopt(request, context) {
       const input = structuredClone(request),
         deadline = context.deadline;
-      const joined = await binding.join({ queried: input.queried }, { deadline });
+      const joined = await joinNativeCut({ queried: input.queried }, { deadline }, 'serve');
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
-        const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
+        const cut =
+          input.bootstrap === joined.cut.bootstrap.id
+            ? joined.cut
+            : await loadBootstrap(input.bootstrap, db, joined.definition);
         if (
           encode(joined.covered) !== encode(cut.bootstrap.covered) ||
           joined.definition.readDefinition !== cut.definition.readDefinition ||
@@ -4853,8 +5384,12 @@ export function createNativePublicFilterSourceBinding(
         deadline = context.deadline;
       return run({ deadline }, async (cost, db) => {
         const cut = await loadBootstrap(id, db);
-        if (cut.row.state === 'aborting' || cut.row.state === 'aborted' || cut.row.state === 'capturing')
-          return { status: 'pending' as const, cost };
+        if (cut.row.state === 'capturing') {
+          const pending = { status: 'pending' as const, cost };
+          pendingCuts.set(pending, { deadline, cut });
+          return pending;
+        }
+        if (cut.row.state === 'aborting' || cut.row.state === 'aborted') return { status: 'pending' as const, cost };
         // Search may have committed retain/open before the caller crashed before adoption.
         // Resolve its actual owner record; an absent/uncertain observation never proves no physical effect.
         const native = await ports.search.readGenerationPublicationCustody(
@@ -5229,6 +5764,7 @@ export function createNativePublicFilterSourceBinding(
           context.deadline,
         );
         if (
+          row.held_birth != null ||
           row.coverage_generation === null ||
           bootstrap.snapshot !== 'prepared' ||
           !('catalogueCoverage' in definition.capture) ||
@@ -5293,7 +5829,12 @@ export function createNativePublicFilterSourceBinding(
       // Finish the original Source read before Search registration or Access enrollment takes a checkout.
       const expected = input.subjectEnrollment;
       const read = async (client: CommandTransaction) => {
-        const cut = await loadBootstrap(input.bootstrap, client);
+        const recovered = input.recovery && pendingCuts.get(input.recovery);
+        if (input.recovery) pendingCuts.delete(input.recovery);
+        const cut =
+          !expected && recovered?.deadline === context.deadline && recovered.cut.bootstrap.id === input.bootstrap
+            ? recovered.cut
+            : await loadBootstrap(input.bootstrap, client);
         const { row, definition, bootstrap } = cut;
         if (row.state !== 'capturing' && row.state !== 'begun') throw new BindingError('observation_lost');
         if (
@@ -5491,14 +6032,23 @@ export function createNativePublicFilterSourceBinding(
       }
       if (cut.row.ack_protocol === 1) {
         if (!boundSubjectPublication(cut, publication)) throw new BindingError('binding_mismatch');
-        const points = Math.min(160 + 20 * 32, preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0));
+        const held = cut.row.subscription_protocol === 1;
+        const reserve = held ? 24 : 0;
+        const points = Math.min(
+          reserve + 160 + 20 * 32,
+          preparationInputLimit - cost.inputKeys - (spent?.inputKeys ?? 0),
+        );
         // Leave room for this statement, its three arguments and its four scalar results.
-        const bytes = Math.min((64 + 24 * 32) * 1024, 4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0) - 1024);
+        const bytes = Math.min(
+          ((held ? 80 : 64) + 24 * 32) * 1024,
+          4 * 1024 * 1024 - cost.bytes - (spent?.bytes ?? 0) - 1024,
+        );
         if (points >= 180 && bytes >= 88 * 1024) {
           // A lost reply can include the home markers, their clock and one range.
           const homes = Math.min(32, Math.floor((points - 160) / 20), Math.floor((bytes - 64 * 1024) / (24 * 1024)));
-          const writes = homes + 2;
-          cost.frontierWrites++;
+          const ranges = held ? Math.floor(points / 64) : 1;
+          const writes = Math.max(homes + 2, 2 * ranges);
+          cost.frontierWrites += ranges;
           cost.bytes += bytes;
           const prepared = await db.query<{
             points: number;
@@ -5507,7 +6057,7 @@ export function createNativePublicFilterSourceBinding(
             result_writes: number;
           }>(
             `/* semantic.native-keyed:${points}:${points}:${writes} */
-             SELECT * FROM search.prepare_public_filter_ack_batch($1,$2,$3)`,
+             SELECT * FROM search.${held ? 'prepare_subject_ack_prefix_v1' : 'prepare_public_filter_ack_batch'}($1,$2,$3)`,
             [publication.job, points, bytes],
           );
           const batch = prepared.rows[0]!;
@@ -5516,7 +6066,7 @@ export function createNativePublicFilterSourceBinding(
           cost.rows -= unused;
           cost.dependencyPoints -= unused;
           cost.bytes -= bytes - batch.proof_bytes;
-          cost.frontierWrites -= 1 - batch.range_writes;
+          cost.frontierWrites -= ranges - batch.range_writes;
           cost.resultWrites -= writes - batch.result_writes;
           if (batch.range_writes > 0) {
             return {

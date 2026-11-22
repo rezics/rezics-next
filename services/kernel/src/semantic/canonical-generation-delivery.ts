@@ -11,6 +11,7 @@ import {
   CANONICAL_GENERATION_CONTINUATION,
   CANONICAL_GENERATION_DELIVERED,
   CANONICAL_GENERATION_REBUILD_CONTINUED,
+  SEMANTIC_ERASURE_PROGRESS,
   SEMANTIC_EVENTS,
 } from './events.ts';
 
@@ -71,7 +72,8 @@ function nativeHome(event: CloudEvent): number {
 }
 
 /** One keyset seek over the existing <=4096 home counters, including retained empty homes.
- * This is delivery inventory, not a second name/population observer or a coverage certificate.
+ * The pending view excludes the installation seed and stays writable so announcement
+ * rechecks the same eligibility under the home command.
  * The connection is released before the caller starts any command or foreign work.
  */
 export async function readCanonicalGenerationDeliveryPage(
@@ -111,6 +113,24 @@ export async function readCanonicalGenerationDeliveryPage(
   };
 }
 
+/** Announce the retained native generation in the same command as its marker. Recovery also
+ * redelivers announced generations until the receiver commits the delivered watermark. */
+export async function canonicalGenerationAnnouncement(
+  tx: CommandTransaction,
+  partition: number,
+  unannouncedOnly: boolean,
+) {
+  const announced = await tx.query<{ generation: string }>(
+    `UPDATE semantic.pending_canonical_generation SET canonical_announced_generation=canonical_generation
+     WHERE partition_no=$1
+       ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
+     RETURNING canonical_generation::text AS generation`,
+    [partition],
+  );
+  const row = announced.rows[0];
+  return row ? [{ type: CANONICAL_GENERATION_COMMITTED, data: { partition, generation: row.generation } }] : [];
+}
+
 /** Source-only recovery entry. Each emitted notification uses runCommand's real home envelope.
  * The generation is re-read under that command; a sequence increment or an old event cannot
  * supply it. The native log retains the keyset continuation, so there is no second cursor table.
@@ -134,26 +154,8 @@ export async function resumeCanonicalGenerationDelivery(
   );
   const announce = (home: CanonicalGenerationDelivery) =>
     runCommand(pool, { partition: home.partition }, async (tx) => {
-      // Commit the notification marker and its native event together. Startup recovery
-      // redelivers every outstanding generation, including an exhausted receiver workflow.
-      const announced = await tx.query<{ generation: string }>(
-        `UPDATE semantic.partition_subjects SET canonical_announced_generation=canonical_generation
-         WHERE partition_no=$1 AND canonical_delivered_generation<canonical_generation
-           ${request.unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
-         RETURNING canonical_generation::text AS generation`,
-        [home.partition],
-      );
-      const row = announced.rows[0];
-      if (!row) return noEffect(null);
-      return {
-        value: null,
-        events: [
-          {
-            type: CANONICAL_GENERATION_COMMITTED,
-            data: { partition: home.partition, generation: row.generation },
-          },
-        ],
-      };
+      const events = await canonicalGenerationAnnouncement(tx, home.partition, request.unannouncedOnly === true);
+      return events.length ? { value: null, events } : noEffect(null);
     });
   const concurrency = Math.min(CANONICAL_GENERATION_SOURCE_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1));
   for (let offset = 0; offset < page.homes.length; offset += concurrency) {
@@ -229,6 +231,7 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
     ...Object.keys(SEMANTIC_EVENTS).filter(
       (type) =>
         type !== contextDirectoryChanged &&
+        type !== SEMANTIC_ERASURE_PROGRESS &&
         !type.startsWith('com.rezics.semantic.canonical-generation.') &&
         !type.startsWith('com.rezics.semantic.erasure.locator-'),
     ),
